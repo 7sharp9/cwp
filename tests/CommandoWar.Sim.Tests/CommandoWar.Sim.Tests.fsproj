@@ -8,6 +8,10 @@
   <ItemGroup>
     <Compile Include="BaselineTests.fs" />
     <Compile Include="SimulationTests.fs" />
+    <Compile Include="RandomTests.fs" />
+    <Compile Include="CanonicalHashTests.fs" />
+    <Compile Include="ReplayTests.fs" />
+    <Compile Include="BenchmarkTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

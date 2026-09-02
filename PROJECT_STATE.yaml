@@ -8,8 +8,8 @@ project:
   updated: 2026-09-02
 
 active_work:
-  selected_task: TASK-002
-  task_file: tasks/TASK-002-SIMULATION-SKELETON.md
+  selected_task: TASK-003
+  task_file: tasks/TASK-003-DETERMINISM-HARNESS.md
   owner: Dave
   blocked: false
   blockers: []

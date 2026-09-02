@@ -18,13 +18,18 @@ type AgentState =
       Destination: Cell option }
 
 /// Minimal authoritative world state: an integer tick, the logical grid
-/// bounds, and the agents ordered by ascending id. Fields are added only
-/// when an implemented behaviour requires them
+/// bounds, the agents ordered by ascending id, and the deterministic random
+/// stream. Fields are added only when an implemented behaviour requires them
 /// (docs/04_SIMULATION_SPEC.md section 10).
 type WorldState =
     { Tick: int64
       Bounds: GridBounds
-      Agents: AgentState[] }
+      Agents: AgentState[]
+      /// The authoritative deterministic random stream. It is threaded through
+      /// every step and is part of the canonical state hash. No gameplay phase
+      /// draws from it yet (TASK-003 wires the stream; gameplay draws arrive
+      /// with later combat and appraisal tasks).
+      Random: RandomState }
 
 [<RequireQualifiedAccess>]
 module Agent =

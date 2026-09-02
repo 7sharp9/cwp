@@ -11,14 +11,19 @@
   <ItemGroup>
     <Compile Include="Baseline.fs" />
     <Compile Include="Ids.fs" />
+    <Compile Include="Random.fs" />
     <Compile Include="Grid.fs" />
     <Compile Include="Domain.fs" />
     <Compile Include="Commands.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Snapshot.fs" />
+    <Compile Include="Canonical.fs" />
+    <Compile Include="Hashing.fs" />
     <Compile Include="Phases.fs" />
     <Compile Include="Movement.fs" />
     <Compile Include="Simulation.fs" />
+    <Compile Include="Replay.fs" />
+    <Compile Include="Divergence.fs" />
   </ItemGroup>
 
 </Project>

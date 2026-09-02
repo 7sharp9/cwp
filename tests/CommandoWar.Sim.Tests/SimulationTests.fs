@@ -6,7 +6,7 @@ open CommandoWar.Sim
 // --- Construction helpers --------------------------------------------------
 
 let private bounds: GridBounds = { Width = 8; Height = 8 }
-let private world () = Setup.sixAgentWorld bounds
+let private world () = Setup.sixAgentWorld bounds 1UL
 let private agent (i: int) = AgentId.ofInt i
 let private cmd (id: int) (target: AgentId) (dest: Cell) = Command.moveTo (CommandId.ofInt id) 0L target dest
 let private stepWith cmds state = Simulation.step SimConfig.standard cmds state
@@ -155,7 +155,7 @@ let ``every tick executes the full documented phase order`` () =
 [<Fact>]
 let ``World.create rejects an agent placed outside the grid`` () =
     let result =
-        World.create { Width = 4; Height = 4 } [ Agent.create (AgentId.ofInt 0) Friendly { X = 10; Y = 0 } ]
+        World.create { Width = 4; Height = 4 } 0UL [ Agent.create (AgentId.ofInt 0) Friendly { X = 10; Y = 0 } ]
 
     match result with
     | Error(AgentOutOfBounds(id, pos)) ->
@@ -168,6 +168,7 @@ let ``World.create rejects duplicate agent ids`` () =
     let result =
         World.create
             bounds
+            0UL
             [ Agent.create (AgentId.ofInt 1) Friendly { X = 0; Y = 0 }
               Agent.create (AgentId.ofInt 1) Friendly { X = 1; Y = 1 } ]
 

@@ -2,8 +2,9 @@ namespace CommandoWar.Sim
 
 /// Non-authoritative host configuration. `TicksPerSecond` is a scheduling
 /// hint for hosts and does not affect authoritative outcomes
-/// (docs/03_ARCHITECTURE.md section 6). Seed and scenario configuration
-/// arrive with the determinism harness task (backlog TASK-003).
+/// (docs/03_ARCHITECTURE.md section 6). The deterministic seed lives on
+/// `WorldState.Random` (set at construction), not here; scenario
+/// configuration arrives with later content tasks.
 type SimConfig = { TicksPerSecond: int }
 
 [<RequireQualifiedAccess>]
@@ -19,7 +20,13 @@ type StepResult =
       Snapshot: RenderSnapshot
       /// The phases executed this tick, in execution order. Diagnostic:
       /// lets tests and replay assert the phase schedule was honoured.
-      PhaseTrace: Phase[] }
+      PhaseTrace: Phase[]
+      /// Canonical authoritative-state hash of `State`, computed after the
+      /// Output phase (docs/04_SIMULATION_SPEC.md section 12.11). The
+      /// authoritative outputs above are finalised before this is computed and
+      /// do not depend on its value; it is a read-only checkpoint for replay
+      /// and divergence diagnosis.
+      StateHash: StateHash }
 
 /// Why a headless world could not be constructed.
 type WorldError =
@@ -30,10 +37,10 @@ type WorldError =
 [<RequireQualifiedAccess>]
 module World =
 
-    /// Builds a validated world at tick 0. Agents are sorted by ascending
-    /// id. Fails explicitly on an empty grid, duplicate ids, or an agent
-    /// placed outside the grid.
-    let create (bounds: GridBounds) (agents: AgentState list) : Result<WorldState, WorldError> =
+    /// Builds a validated world at tick 0 with a SplitMix64 random stream
+    /// seeded by `seed`. Agents are sorted by ascending id. Fails explicitly
+    /// on an empty grid, duplicate ids, or an agent placed outside the grid.
+    let create (bounds: GridBounds) (seed: uint64) (agents: AgentState list) : Result<WorldState, WorldError> =
         if bounds.Width <= 0 || bounds.Height <= 0 then
             Error(EmptyGrid bounds)
         else
@@ -49,19 +56,25 @@ module World =
             | None ->
                 match sorted |> List.tryFind (fun a -> not (GridBounds.contains a.Position bounds)) with
                 | Some a -> Error(AgentOutOfBounds(a.Id, a.Position))
-                | None -> Ok { Tick = 0L; Bounds = bounds; Agents = List.toArray sorted }
+                | None ->
+                    Ok
+                        { Tick = 0L
+                          Bounds = bounds
+                          Agents = List.toArray sorted
+                          Random = SplitMix64.create seed }
 
 [<RequireQualifiedAccess>]
 module Setup =
 
     /// A deterministic six-agent friendly world for headless tests and the
-    /// framework spikes. Agents 0..5 occupy column x = 0, rows y = 0..5, so
-    /// the grid must be at least 1 wide and 6 tall.
-    let sixAgentWorld (bounds: GridBounds) : WorldState =
+    /// framework spikes, with a SplitMix64 stream seeded by `seed`. Agents
+    /// 0..5 occupy column x = 0, rows y = 0..5, so the grid must be at least
+    /// 1 wide and 6 tall.
+    let sixAgentWorld (bounds: GridBounds) (seed: uint64) : WorldState =
         let agents =
             [ for i in 0..5 -> Agent.create (AgentId.ofInt i) Friendly { X = 0; Y = i } ]
 
-        match World.create bounds agents with
+        match World.create bounds seed agents with
         | Ok world -> world
         | Error err -> invalidArg (nameof bounds) $"grid too small for the six-agent world: {err}"
 
@@ -76,6 +89,10 @@ module Simulation =
         { Tick: int64
           Bounds: GridBounds
           mutable Agents: AgentState[]
+          /// The deterministic stream for this tick. No phase draws from it
+          /// yet; a future gameplay phase reassigns it after each draw so the
+          /// advanced state is carried forward.
+          mutable Random: RandomState
           mutable EventsRev: DomainEvent list
           mutable Snapshot: RenderSnapshot
           mutable TraceRev: Phase list }
@@ -184,6 +201,7 @@ module Simulation =
             { Tick = nextTick
               Bounds = state.Bounds
               Agents = state.Agents
+              Random = state.Random
               EventsRev = []
               Snapshot = { Tick = nextTick; Agents = [||] }
               TraceRev = [] }
@@ -191,10 +209,17 @@ module Simulation =
         for phase in Phases.order do
             runPhase ordered acc phase
 
-        { State =
+        let finalState =
             { state with
                 Tick = nextTick
-                Agents = acc.Agents }
+                Agents = acc.Agents
+                Random = acc.Random }
+
+        // Hashing runs strictly after the phase loop. `finalState` is already
+        // fully determined; the hash is a read-only checkpoint and no
+        // authoritative output depends on its value.
+        { State = finalState
           Events = acc.EventsRev |> List.rev |> List.toArray
           Snapshot = acc.Snapshot
-          PhaseTrace = acc.TraceRev |> List.rev |> List.toArray }
+          PhaseTrace = acc.TraceRev |> List.rev |> List.toArray
+          StateHash = Hashing.canonicalHasher.Hash finalState }

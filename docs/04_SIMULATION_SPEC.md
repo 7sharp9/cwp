@@ -64,6 +64,8 @@ Requirements:
 
 Prefer independent named streams only when they prevent unrelated features from perturbing one another. Do not create a stream per entity without evidence that it improves replay stability or testability.
 
+Realised by TASK-003: `SplitMix64` version 1 in `src/CommandoWar.Sim/Random.fs`, exposed through `IDeterministicRandom`. Single 64-bit additive counter, wrapping arithmetic, seed initialises the counter directly. State (`RandomState`) is a value record carrying the algorithm, its version, the counter word, and a draw counter. One stream, held on `WorldState.Random`; no gameplay draws yet.
+
 ## 6. Identity and ordering
 
 - Every entity receives a stable ID at creation.
@@ -309,6 +311,8 @@ A replay file records:
 
 Playback rejects incompatible versions clearly. It does not guess migrations.
 
+Realised by TASK-003: `src/CommandoWar.Sim/Replay.fs`. `ReplayRecord` (format version 1) carries the canonical-format version, provenance metadata, seed, tick-0 initial state, tick count, and a `CommandLog` (version 1) of `RecordedCommand { Tick; Sequence; Command; Issuer }`. `Replay.run` rejects unsupported replay, command-log, and canonical-format versions, a non-tick-0 initial state, a seed inconsistent with the initial stream, and out-of-range or non-monotonic commands, each with a typed `ReplayError`.
+
 ## 17. State hashing
 
 The hash input must be canonical:
@@ -321,6 +325,8 @@ The hash input must be canonical:
 - derived caches either excluded or normalised.
 
 A divergence report should identify the first bad tick. Component-level subhashes are desirable once the world grows.
+
+Realised by TASK-003: `Canonical.encode` (`src/CommandoWar.Sim/Canonical.fs`, format version 1) produces a big-endian fixed-width byte image of `WorldState` only, agents sorted ascending by id, `Destination` carrying an explicit present/absent tag; events, snapshots, and phase traces are excluded. `Hashing.hash` (`Hashing.fs`) is FNV-1a-64 over that image, exposed through `IStateHasher`; it is not a cryptographic primitive. `Simulation.step` records `StepResult.StateHash` after the Output phase without any authoritative output depending on it. `Divergence.compare` reports the first tick whose hash differs, the expected and actual hash, the first differing canonical section, and the random draw count on each side.
 
 ## 18. Save state
 
