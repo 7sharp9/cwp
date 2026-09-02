@@ -1,0 +1,62 @@
+project:
+  working_name: Commando War spiritual successor
+  public_title: null
+  status: discovery
+  current_phase: P0_governance_and_feasibility
+  current_gate: G0_project_control_ready
+  framework_decision: pending_ADR_0001
+  updated: 2026-09-02
+
+active_work:
+  selected_task: TASK-001
+  task_file: tasks/TASK-001-REPOSITORY-BASELINE.md
+  owner: Dave
+  blocked: false
+  blockers: []
+
+sources_of_truth:
+  product: docs/00_PROJECT_CHARTER.md
+  decisions: decisions/
+  backlog: docs/11_BACKLOG.md
+  simulation: docs/04_SIMULATION_SPEC.md
+  agent_ai: docs/05_COMMAND_AND_AGENT_AI.md
+  progress: docs/12_PROGRESS_LEDGER.md
+  risks: docs/10_RISK_REGISTER.md
+
+gates:
+  G0_project_control_ready: in_review
+  G1_framework_selected: pending
+  G2_deterministic_core_proven: pending
+  G3_command_loop_proven_headless: pending
+  G4_vertical_slice_feature_complete: pending
+  G5_external_playtest_passed: pending
+  G6_production_go_no_go: pending
+
+fixed_constraints:
+  - Desktop-first
+  - Original title and assets
+  - Framework-independent F# authoritative simulation
+  - Integer fixed-tick authoritative time
+  - Recorded commands, deterministic random source, and replay evidence
+  - One mission before campaign, vehicles, multiplayer, modding, or research expansion
+  - Coding agents work from bounded task files
+
+candidate_stack_as_researched_2026_09_02:
+  dotnet: verify_installed_SDK_before_scaffolding
+  godot_dotnet: 4.7.2
+  monogame: 3.8.5.1
+  raylib: 6.0
+  mibo: 4.5.3
+  tiled: 1.12.2
+
+prohibited_before_G5:
+  - Mibo.Adaptive
+  - Runtime LLMs
+  - Multiplayer
+  - Vehicles
+  - General-purpose mod scripting
+  - Procedural campaign generation
+  - Pairwise social relationship simulation
+  - General HTN or GOAP planner
+  - Full ECS migration
+  - Research study instrumentation beyond ordinary telemetry and replay

@@ -1,0 +1,15 @@
+Commando War spiritual-successor project pack
+Validation date: 2026-09-02
+
+Checks performed:
+- all expected project-control, design, ADR, and task files exist;
+- all project-local file references resolve, excluding intentional wildcard references;
+- exactly one backlog task is active;
+- PROJECT_STATE.yaml selects the same active task;
+- all initial TASK-001 through TASK-006 files appear in the backlog;
+- no duplicate task or ADR identifiers were found;
+- no empty document or missing final newline was found;
+- no Godot, Mibo, MonoGame, raylib, or Tiled code was generated;
+- no implementation, build, test, benchmark, or playtest success is claimed.
+
+Result: structural documentation checks passed.

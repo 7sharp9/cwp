@@ -1,0 +1,244 @@
+# Test and Verification Strategy
+
+Status: draft  
+Primary objective: make simulation failures reproducible, localisable, and difficult to hide
+
+## 1. Testing principles
+
+- Test authoritative behaviour below the graphical client whenever possible.
+- Prefer small deterministic scenarios over mocks of the whole game.
+- Record seeds, commands, content versions, and state hashes in failure output.
+- Do not approve a task based only on a successful manual run.
+- Do not use broad exception catches, retries, timing sleeps, or ignored assertions to stabilise tests.
+- A test that depends on framework frame rate is not a simulation test.
+- Golden data is acceptable only when its meaning and update procedure are explicit.
+
+## 2. Test layers
+
+### 2.1 Domain unit tests
+
+Use for pure or tightly bounded rules:
+
+- command validation;
+- cover lookup;
+- grid neighbourhoods;
+- line-segment and visibility rules;
+- morale and stress transitions;
+- appraisal stage outcomes;
+- objective state transitions;
+- leadership succession;
+- canonical ordering and serialization.
+
+### 2.2 Property tests
+
+Use FsCheck or an equivalent F# property-testing library for invariants such as:
+
+- no living agent occupies an invalid cell after a completed movement phase;
+- an entity cannot occupy two vehicles or cells at once;
+- dead agents do not issue or accept new commands;
+- every accepted commitment references existing entities and areas;
+- path output begins and ends at the expected cells when a path exists;
+- state serialization followed by deserialization preserves canonical state;
+- identical initial state, commands, and random stream produce identical hashes;
+- appraisal never returns `Accepted` after a hard feasibility failure;
+- objective completion is monotonic where the objective definition requires it.
+
+Randomly generated cases must print the reduced counterexample and seed.
+
+### 2.3 Deterministic scenario tests
+
+Create named, compact maps for behaviours that cross modules:
+
+- exposed-road refusal;
+- suppression reverses refusal;
+- covered route adapts accepted order;
+- stale enemy report decays;
+- radio loss prevents immediate knowledge propagation;
+- leader death transfers authority;
+- destroyed crossing invalidates route;
+- two agents reserve a choke point without permanent deadlock;
+- enemy does not target an unobserved player position;
+- extraction completes only for the required agents.
+
+Each scenario should specify:
+
+- content version;
+- initial authoritative state;
+- command schedule;
+- random seed;
+- expected significant events;
+- expected final hash or targeted assertions;
+- a concise explanation of what regression it catches.
+
+### 2.4 Replay tests
+
+Maintain a small replay corpus:
+
+- shortest successful mission path;
+- canonical refusal and correction;
+- leader death and succession;
+- mission failure by squad loss;
+- deliberately invalid or truncated replay;
+- a long synthetic stress run.
+
+Replay verification must identify:
+
+- first divergent tick;
+- expected and actual state hash;
+- first differing canonical state section;
+- command consumed at the tick;
+- random draw count;
+- simulation and content versions.
+
+Do not promise replay compatibility across arbitrary future versions. Version the format and fail explicitly when migration is unavailable.
+
+### 2.5 Content tests
+
+- schema and version validation;
+- reference integrity;
+- bounds and traversability checks;
+- duplicate IDs;
+- required objective and extraction markers;
+- unknown terrain or object classes;
+- scenario-specific smoke load;
+- equivalent fixture import for both framework spikes.
+
+### 2.6 Client contract tests
+
+The client boundary should be testable without asserting pixels:
+
+- input adapter produces the expected typed command;
+- snapshot adapter does not mutate authoritative state;
+- interpolation does not alter simulation coordinates;
+- domain event maps to the expected presentation request;
+- pause stops command-time progression according to the selected rule;
+- one client frame may consume zero, one, or several fixed simulation ticks correctly;
+- invalid content reaches a visible failure state.
+
+### 2.7 Visual smoke tests
+
+After framework selection, use a small set of captured reference scenes for regressions in:
+
+- isometric projection;
+- depth sorting;
+- selection and route overlays;
+- roof or high-occluder handling;
+- text legibility at supported scales;
+- known-threat distinction;
+- reason panel layout.
+
+Do not use image snapshots as a substitute for behavioural assertions.
+
+### 2.8 Performance and allocation tests
+
+Benchmark at least:
+
+- empty fixed tick;
+- 50-agent movement;
+- 50-agent perception;
+- line-of-sight batch;
+- pathfinding through open, blocked, and choke-point maps;
+- appraisal batch;
+- state hash and replay serialization;
+- full synthetic 50-agent tick.
+
+Record median, tail latency, allocation, runtime, build configuration, machine, and commit. Reject benchmarks that mix debug overlays or editor overhead with the core result unless that is the explicit subject.
+
+## 3. Determinism verification
+
+### Required controls
+
+- integer tick count as authoritative time;
+- project-owned deterministic random generator;
+- golden random vectors;
+- stable iteration order for all authoritative collections;
+- canonical sorting before hashing or serialization;
+- explicit numeric rules;
+- no framework physics or random source;
+- no wall-clock reads in the simulation;
+- no dependence on dictionary or hash-set enumeration order;
+- no asynchronous mutation of authoritative state.
+
+### Initial contract
+
+The first contract is deterministic replay for the same:
+
+- source revision;
+- target framework and runtime version;
+- architecture and operating environment;
+- content version;
+- initial state;
+- command stream;
+- seed.
+
+Cross-platform lockstep is not claimed. Strengthening that contract requires an ADR and cross-target evidence.
+
+## 4. Framework-spike verification
+
+Both client spikes must use:
+
+- the same compiled simulation assembly where practical;
+- the same map dimensions and logical content;
+- the same six agents;
+- the same movement command;
+- the same tick rate;
+- the same snapshot fields;
+- the same tick and state-hash overlay;
+- the same content-change exercise;
+- release-build packaging evidence.
+
+Record failures rather than compensating with candidate-specific simulation changes.
+
+## 5. Test execution order for agents
+
+1. Run tests closest to the changed module.
+2. Run affected deterministic scenarios.
+3. Run replay tests if authoritative state changed.
+4. Run the full headless suite.
+5. Run client or content tests if the boundary changed.
+6. Run benchmarks only when performance-sensitive code changed or a task requires evidence.
+
+The completion report must list exact commands and outcomes. “Tests pass” is insufficient.
+
+## 6. Continuous integration
+
+Before framework selection, CI should build and test only the framework-neutral projects plus any explicitly disposable spike projects.
+
+After selection, the minimum matrix should include:
+
+- restore with locked or pinned dependencies;
+- release build;
+- headless unit and property tests;
+- deterministic scenario and replay tests;
+- selected client compile;
+- content validation;
+- package smoke test where the environment supports it.
+
+Do not expand the matrix to unsupported platforms without a delivery requirement.
+
+## 7. Defect evidence
+
+A simulation defect report should include:
+
+- scenario or replay ID;
+- source revision;
+- content version;
+- seed;
+- command sequence or attached replay;
+- first incorrect tick if known;
+- expected behaviour;
+- actual events and state hash;
+- relevant appraisal or perception trace;
+- smallest reproduction found.
+
+A client defect report should additionally include framework version, renderer/backend, resolution, scaling mode, and input device.
+
+## 8. Completion standard
+
+A task that changes authoritative behaviour is complete only when:
+
+- the intended behaviour has a focused test;
+- a relevant invariant or regression test exists where practical;
+- deterministic replay remains valid or its intentional format change is documented;
+- test commands and outputs are recorded in the progress ledger;
+- no failing test is disabled or weakened without an explicit decision.
