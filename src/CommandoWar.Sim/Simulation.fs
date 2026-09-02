@@ -37,7 +37,7 @@ module World =
         if bounds.Width <= 0 || bounds.Height <= 0 then
             Error(EmptyGrid bounds)
         else
-            let sorted = agents |> List.sortBy (fun a -> AgentId.value a.Id)
+            let sorted = agents |> List.sortBy (fun a -> a.Id)
 
             let duplicate =
                 sorted
@@ -108,31 +108,30 @@ module Simulation =
     // on the tick the destination is reached, and clears the destination.
     let private navigationAndMovement (s: StepState) =
         let agents = Array.copy s.Agents
-        s.Agents <- agents
 
         for idx in 0 .. agents.Length - 1 do
-            match agents.[idx].Destination with
+            let a = agents.[idx]
+
+            match a.Destination with
             | None -> ()
+            | Some dest when a.Position = dest ->
+                agents.[idx] <- { a with Destination = None }
+                emit (MovementCompleted(a.Id, a.Position)) s
             | Some dest ->
-                let id = agents.[idx].Id
-                let pos = agents.[idx].Position
+                let next = PlaceholderMovement.nextCell a.Position dest
+                let arrived = next = dest
+                agents.[idx] <- { a with Position = next; Destination = (if arrived then None else Some dest) }
+                emit (MovementStepped(a.Id, a.Position, next)) s
 
-                if pos = dest then
-                    agents.[idx] <- { agents.[idx] with Destination = None }
-                    emit (MovementCompleted(id, pos)) s
-                else
-                    let next = PlaceholderMovement.nextCell pos dest
-                    agents.[idx] <- { agents.[idx] with Position = next }
-                    emit (MovementStepped(id, pos, next)) s
+                if arrived then
+                    emit (MovementCompleted(a.Id, next)) s
 
-                    if next = dest then
-                        agents.[idx] <- { agents.[idx] with Destination = None }
-                        emit (MovementCompleted(id, next)) s
+        s.Agents <- agents
 
     // --- Phase: output -----------------------------------------------------
-    // Build the render snapshot from authoritative state. Events are already
-    // in stable order; they are reversed to chronological order after the
-    // fold completes.
+    // Build the render snapshot from authoritative state. Agents are already
+    // held in ascending id order; the sort is a cheap defensive guarantee for
+    // the contract. Events are reversed to chronological order after the run.
     let private output (s: StepState) =
         s.Snapshot <-
             { Tick = s.Tick
@@ -143,15 +142,16 @@ module Simulation =
                       Side = a.Side
                       Position = a.Position
                       Destination = a.Destination })
-                |> Array.sortBy (fun a -> AgentId.value a.Id) }
+                |> Array.sortBy (fun a -> a.Id) }
 
-    let private runPhase (commands: PlayerCommand list) (s: StepState) (phase: Phase) : StepState =
+    // Runs one phase against the accumulator and appends it to the trace.
+    // No-op phases are listed individually (no wildcard) so that adding a
+    // phase forces a decision here.
+    let private runPhase (commands: PlayerCommand list) (s: StepState) (phase: Phase) : unit =
         match phase with
         | CommandIntake -> commandIntake commands s
         | NavigationAndMovement -> navigationAndMovement s
         | Output -> output s
-        // Explicit no-ops for this milestone. Listed individually (no
-        // wildcard) so that adding a phase forces a decision here.
         | Communication
         | Perception
         | TacticalKnowledge
@@ -162,7 +162,6 @@ module Simulation =
         | Mission -> ()
 
         s.TraceRev <- phase :: s.TraceRev
-        s
 
     /// Advances the world by exactly one integer tick. Runs every phase in
     /// `Phases.order`, processing commands at `CommandIntake` and resolving
@@ -179,7 +178,7 @@ module Simulation =
                 state.Tick + 1L
 
         let ordered =
-            commands |> Array.toList |> List.sortBy (fun c -> CommandId.value c.Id)
+            commands |> Array.toList |> List.sortBy (fun c -> c.Id)
 
         let acc =
             { Tick = nextTick
@@ -189,12 +188,13 @@ module Simulation =
               Snapshot = { Tick = nextTick; Agents = [||] }
               TraceRev = [] }
 
-        let final = List.fold (runPhase ordered) acc Phases.order
+        for phase in Phases.order do
+            runPhase ordered acc phase
 
         { State =
             { state with
                 Tick = nextTick
-                Agents = final.Agents }
-          Events = final.EventsRev |> List.rev |> List.toArray
-          Snapshot = final.Snapshot
-          PhaseTrace = final.TraceRev |> List.rev |> List.toArray }
+                Agents = acc.Agents }
+          Events = acc.EventsRev |> List.rev |> List.toArray
+          Snapshot = acc.Snapshot
+          PhaseTrace = acc.TraceRev |> List.rev |> List.toArray }

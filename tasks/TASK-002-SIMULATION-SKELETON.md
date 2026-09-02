@@ -122,6 +122,12 @@ additional `PhaseTrace` diagnostic field; `SimConfig` currently holds only
 matches. Placeholder movement (`PlaceholderMovement.nextCell`) is isolated for
 replacement by B-010/B-011.
 
+Post-review (2026-09-02): idiom pass applied (phase runner is a `for` loop, not
+a `List.fold` over a mutated accumulator; sorts use the id types' structural
+comparison). Known future hot paths, adequate for the &lt;64-agent budget and
+left unchanged until profiled: per-command linear agent lookup, per-accepted-
+command `Array.copy` of the agent array, reversed-list accumulation in `step`.
+
 ## Rollback or removal
 
 The placeholder movement implementation must be isolated so production navigation can replace it without changing host contracts unnecessarily.

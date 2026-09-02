@@ -225,6 +225,14 @@ This file is append-only except for correcting factual errors. It records what w
 - State hashing and replay are not implemented (TASK-003 scope).
 - `PROJECT_STATE.yaml` left unchanged: TASK-002 is `review`, not `done`; gate `G1` and task selection remain Dave's to advance, consistent with the TASK-001 precedent.
 - Clean-build was run in the working tree (existing `bin/`/`obj/`), not a fresh clone.
+- Data-structure choices are adequate for the &lt;64-agent budget but were flagged in review as future hot paths, not to be changed until profiled (docs/04_SIMULATION_SPEC.md section 19): agent lookup in `commandIntake` is a linear `Array.tryFindIndex` per command; each accepted command does an `Array.copy` of the agent array; per-tick command/event/trace lists are built reversed then `List.rev |> List.toArray`. A dense id-indexed agent store or a batched update map would replace these when a benchmark justifies it.
+
+### Post-review idiom pass (2026-09-02, after Dave's review)
+
+- `Simulation.step` now iterates `Phases.order` with a `for` loop instead of `List.fold` over a mutable accumulator (the fold was threading a value it also mutated in place). `runPhase` returns `unit`.
+- `navigationAndMovement` builds one record per moved agent instead of up to three successive copy-updates.
+- Sorts use the id types' built-in structural comparison (`sortBy (fun a -> a.Id)`) rather than projecting through `AgentId.value` / `CommandId.value`.
+- Re-verified: `dotnet build CommandoWar.slnx -c Release` -> `0 Warning(s) 0 Error(s)`; `dotnet test CommandoWar.slnx -c Release` -> `Passed! Failed: 0, Passed: 15`.
 
 ### Documents updated
 
@@ -235,5 +243,5 @@ This file is append-only except for correcting factual errors. It records what w
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: pending (implementation looks good; idiom pass and future-perf note requested and applied)
 - Notes: TASK-003 must not be activated without Dave's review.
