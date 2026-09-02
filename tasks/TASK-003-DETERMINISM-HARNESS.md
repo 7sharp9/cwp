@@ -1,6 +1,6 @@
 # TASK-003: Establish Determinism, Hash, and Replay Harness
 
-Status: review  
+Status: done  
 Owner: Dave  
 Phase: P1/P2  
 Gate: G1 prerequisite and G2 foundation  

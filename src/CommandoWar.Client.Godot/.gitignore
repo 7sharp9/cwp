@@ -1,0 +1,12 @@
+# Godot 4 editor + .NET build artifacts for the disposable spike.
+.godot/
+.mono/
+data_*/
+*.import
+
+# Godot export output
+/export/
+
+# Editor-generated classic solution (this spike uses the committed .slnx +
+# `dotnet build` on the .csproj; Godot regenerates a .sln on editor build).
+CommandoWar.Client.Godot.sln

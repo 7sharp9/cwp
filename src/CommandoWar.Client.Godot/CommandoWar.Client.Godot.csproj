@@ -1,0 +1,20 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+
+  <PropertyGroup>
+    <!-- Must match CommandoWar.Sim (net10.0): a C# project cannot reference a
+         higher-TFM F# assembly. Godot 4.7.2 templates default to net8.0; net10.0
+         builds and runs under the repo-pinned SDK 10.0.303 (see spike notes). -->
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>disable</Nullable>
+    <RootNamespace>CommandoWar.Client.Godot</RootNamespace>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The client references the simulation. The simulation never references
+         a client (ADR-0002). This is the only edge that crosses the boundary. -->
+    <ProjectReference Include="..\CommandoWar.Sim\CommandoWar.Sim.fsproj" />
+  </ItemGroup>
+
+</Project>

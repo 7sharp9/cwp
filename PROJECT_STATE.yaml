@@ -8,8 +8,8 @@ project:
   updated: 2026-09-02
 
 active_work:
-  selected_task: TASK-003
-  task_file: tasks/TASK-003-DETERMINISM-HARNESS.md
+  selected_task: TASK-004
+  task_file: tasks/TASK-004-GODOT-SPIKE.md
   owner: Dave
   blocked: false
   blockers: []

@@ -1,0 +1,11 @@
+# CommandoWar framework-spike shared command log (format v1).
+# Consumed by `cwheadless replay` / `cwheadless compare` and by both
+# framework-spike hosts (TASK-004 Godot, TASK-005 Mibo) against the shared
+# fixture defined in src/CommandoWar.Headless/Fixture.fs
+# (32 x 32 grid, seed 20260902, 40 ticks).
+#
+# Grammar: <tick> <agentId> move <x> <y>
+version 1
+
+# tick 1: agent 3 (starts at column 0, row 3) is ordered to cell (20, 14).
+1 3 move 20 14

@@ -144,17 +144,64 @@ Selected candidate: `TBD`
 
 ## Decision evidence template
 
+Godot column filled by TASK-004 (`docs/12_PROGRESS_LEDGER.md`, 2026-09-02).
+Mibo column pending TASK-005. These are observations, not scores, and not the
+decision.
+
 | Driver | Weight | Godot result | Mibo result | Notes |
-|---|---:|---:|---:|---|
-| map and content authoring speed | 20 | | | |
-| UI, animation, audio, and presentation productivity | 15 | | | |
-| simulation isolation and headless testing | 15 | | | |
-| F# development and debugging quality | 12 | | | |
-| architectural and glue-code burden | 12 | | | |
-| runtime and packaging maturity | 10 | | | |
-| observability and debugging | 8 | | | |
-| dependency and maintenance risk | 5 | | | |
-| backend portability | 3 | | | |
+|---|---:|---|---|---|
+| map and content authoring speed | 20 | Greybox authored directly in the `.tscn` scene (tile string + typed `Marker2D` nodes). Data edit -> visible authoritative hash ~0.38 s headless; 1 file, 0 code, 0 conversion steps. Editor hot-reload / inspector drag-edit NOT measured this session (no GUI). | | Text-authoring understates Godot's editor; number is a lower bound. |
+| UI, animation, audio, and presentation productivity | 15 | Overlay + failure panel built in ~30 lines with `CanvasLayer`/`Label`/`ColorRect`. Isometric render hand-drawn via `_Draw` (no TileSet atlas invested). Animation/audio not exercised. | | Partial: only the overlay and greybox render were needed. |
+| simulation isolation and headless testing | 15 | Host consumes the byte-identical `CommandoWar.Sim.dll`; `--headless --selfcheck` reproduces the shared fixture's 41-hash sequence exactly (final `0x838D3AE7DBFB735D`). No Godot type crosses the boundary. | | Strong: boundary held; shared `cwheadless` reference works for both spikes. |
+| F# development and debugging quality | 12 | C#/F# interop works; module functions reached as `AgentIdModule.ofInt` etc., `World.create` via `ListModule.OfArray`, `FSharpOption` via `get_IsSome`. Mixed-language solution; no F# debugging done in-editor. | | Interop is a small, contained tax in `SimFacade.cs`. |
+| architectural and glue-code burden | 12 | ~150 lines is the entire sim boundary (`SimFacade.cs`); ~170 reusable content DTO/validation; ~80 Godot import; ~330 host (scheduling+input+render+overlay). Client TFM forced to `net10.0` (off Godot's `net8.0` default). | | Glue is modest and mostly framework-neutral. |
+| runtime and packaging maturity | 10 | Editor + headless run fine (Vulkan). **Self-contained export blocked**: `4.7.2.stable.mono` Windows export templates not installed; `--export-pack` yields a `.pck` but no embedded .NET. Runs outside the editor via `--path`. | | Blocker is a one-time template install, not a design problem. |
+| observability and debugging | 8 | On-screen tick / `StateHash` / random-draw / rate / interp-alpha overlay; per-tick hash stream in headless; `S` dumps a `cwheadless`-format command log; divergence localised by `cwheadless compare`. | | Strong for the diagnostics this task needed. |
+| dependency and maintenance risk | 5 | 3 auto-referenced `Godot.*` `4.7.2` packages + the MSBuild SDK; offline feed pinned. Large engine, but mature and MIT. | | Low. |
+| backend portability | 3 | Not applicable to Godot (single renderer). | | - |
+
+### TASK-004 Godot spike results (evidence, not decision)
+
+What was proven:
+
+- C# creates and steps the unmodified F# session through one facade
+  (`SimFacade.cs`); the `CommandoWar.Sim.dll` in the host output is byte-identical
+  to the library build.
+- A 32x32 isometric greybox is authored in a Godot scene (`Greybox.tscn`) and
+  converted to framework-neutral DTOs at load; six agents render from snapshot
+  value-views.
+- Click / scripted input produces the existing `Command.moveTo` and a
+  deterministic state change; the host's per-tick `StateHash` sequence is
+  identical to `cwheadless fixture` for all 40 ticks (final
+  `0x838D3AE7DBFB735D`).
+- Host-owned fixed-step scheduling is visibly independent of render rate
+  (overlay: 6 Hz sim vs 59 fps render, adjustable at runtime).
+- Invalid authored content (`GreyboxInvalid.tscn`) reaches a visible, actionable
+  failure listing every error in one pass and does not start the simulation.
+- The client never catches a `Simulation.step` exception; the only catch is the
+  content-load `ContentException`.
+
+Friction / gaps recorded:
+
+- Full self-contained packaging is blocked on the missing `4.7.2.stable.mono`
+  export templates (exact error in the ledger); demonstrated running outside the
+  editor UI instead.
+- The Godot editor GUI (visual TileMap painting, inspector editing, scene
+  hot-reload, F5 run, the debugger, the profiler, asset re-import) was **not
+  exercised** in this session - it needs an interactive display. Content
+  authoring and iteration were done as text edits + headless relaunch, which
+  understates Godot's core claimed advantage. A fair authoring-speed comparison
+  needs an interactive pass.
+- Client project must target `net10.0` (F# reference), off Godot 4.7.2's
+  `net8.0` template default.
+- Mixed C#/F# interop is a small contained cost in the facade.
+
+Expected cost to extend this host to the Bridgehead vertical slice: the sim
+boundary (`SimFacade`) and content validation (`SpikeContent`) largely carry
+over; the new work is a real TileSet/atlas pipeline, the developer/tactical
+overlays (docs/06 section 11), selection + command-preview UX, isometric depth
+sorting with occluders, and the export-template setup. None of that touched the
+simulation in the spike.
 
 ### Qualitative decision
 

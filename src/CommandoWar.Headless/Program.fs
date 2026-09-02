@@ -1,0 +1,228 @@
+module CommandoWar.Headless.Program
+
+open System
+open System.IO
+open CommandoWar.Sim
+open CommandoWar.Headless
+
+/// Exit codes. Kept explicit so a script (or a framework spike's comparison
+/// step) can branch on the outcome.
+[<RequireQualifiedAccess>]
+module Exit =
+    let ok = 0
+    let usage = 1
+    let replayError = 2
+    let diverged = 3
+
+let private hx (h: StateHash) = sprintf "0x%016X" h.Value
+
+let private describeReplayError (e: ReplayError) : string =
+    match e with
+    | UnsupportedReplayVersion(found, supported) -> $"unsupported replay format version {found}, supported {supported}"
+    | UnsupportedCommandLogVersion(found, supported) -> $"unsupported command-log version {found}, supported {supported}"
+    | UnsupportedCanonicalFormat(found, supported) -> $"unsupported canonical format {found}, supported {supported}"
+    | InitialStateNotAtTickZero tick -> $"initial state is at tick {tick}, expected 0"
+    | SeedInconsistentWithInitialState(seed, word) -> $"recorded seed {seed} is inconsistent with initial stream word {word}"
+    | InvalidTickCount n -> $"invalid tick count {n}"
+    | NonMonotonicCommandLog(index, struct (pt, ps), struct (ct, cs)) ->
+        $"command log not strictly ascending at index {index}: ({pt},{ps}) then ({ct},{cs})"
+    | CommandOutsideReplayRange(index, tick, tickCount) ->
+        $"command {index} at tick {tick} is outside the replay range 1..{tickCount}"
+
+let private agentLine (a: AgentState) =
+    let dest =
+        match a.Destination with
+        | Some c -> $"-> ({c.X},{c.Y})"
+        | None -> "at rest"
+    sprintf "    agent %d  (%d,%d)  %s" (AgentId.value a.Id) a.Position.X a.Position.Y dest
+
+let private printOutcomeTail (outcome: ReplayOutcome) =
+    let final = outcome.FinalState
+    let finalHash = Hashing.hash final
+    printfn "final tick   : %d" final.Tick
+    printfn "final hash   : %s (format %d)" (hx finalHash) finalHash.Format
+    printfn "random draws : %d" final.Random.Draws
+    printfn "events       : %d" outcome.Events.Length
+    printfn "final agents :"
+    for a in final.Agents |> Array.sortBy (fun a -> a.Id) do
+        printfn "%s" (agentLine a)
+
+/// Reads a command-log file and parses it, or prints an actionable error and
+/// returns None.
+let private loadLog (path: string) : RecordedCommand[] option =
+    if not (File.Exists path) then
+        eprintfn "error: command-log file not found: %s" path
+        None
+    else
+        match CommandLogFile.parse Fixture.Issuer (File.ReadAllText path) with
+        | Ok cmds -> Some cmds
+        | Error e ->
+            eprintfn "error: %s: %s" path (CommandLogFile.describeError e)
+            None
+
+let private optTicks (rest: string list) : Result<int64, string> =
+    match rest with
+    | [] -> Ok Fixture.TickCount
+    | [ "--ticks"; n ] ->
+        match Int64.TryParse n with
+        | true, v when v >= 0L -> Ok v
+        | _ -> Error $"invalid --ticks value '{n}'"
+    | _ -> Error "expected optional '--ticks N'"
+
+// --- subcommands ---------------------------------------------------------------
+
+let private cmdStep (args: string list) : int =
+    match args with
+    | [ n ] ->
+        match Int32.TryParse n with
+        | true, ticks when ticks >= 0 ->
+            let mutable state = Fixture.initialState ()
+            printfn "# step %d tick(s) from the shared fixture (grid %dx%d, seed %d), no commands"
+                ticks Fixture.bounds.Width Fixture.bounds.Height Fixture.Seed
+            printfn "tick=%d hash=%s format=%d" state.Tick (hx (Hashing.hash state)) (Hashing.hash state).Format
+            for _ in 1 .. ticks do
+                let r = Simulation.step SimConfig.standard [||] state
+                state <- r.State
+                printfn "tick=%d hash=%s format=%d" r.State.Tick (hx r.StateHash) r.StateHash.Format
+            Exit.ok
+        | _ ->
+            eprintfn "error: step requires a non-negative integer tick count"
+            Exit.usage
+    | _ ->
+        eprintfn "usage: cwheadless step <N>"
+        Exit.usage
+
+let private cmdReplay (args: string list) : int =
+    match args with
+    | path :: rest ->
+        match optTicks rest with
+        | Error msg ->
+            eprintfn "error: %s" msg
+            Exit.usage
+        | Ok ticks ->
+            match loadLog path with
+            | None -> Exit.usage
+            | Some cmds ->
+                let record =
+                    Replay.record
+                        { Build = "cwheadless"; Scenario = Path.GetFileName path }
+                        (Fixture.initialState ())
+                        ticks
+                        (CommandLog.create cmds)
+
+                match Replay.run SimConfig.standard record with
+                | Error e ->
+                    eprintfn "replay error: %s" (describeReplayError e)
+                    Exit.replayError
+                | Ok outcome ->
+                    printfn "# replay of %s against the shared fixture, %d tick(s), %d command(s)"
+                        path ticks cmds.Length
+                    for cp in outcome.TickHashes do
+                        printfn "tick=%d hash=%s format=%d" cp.Tick (hx cp.Hash) cp.Hash.Format
+                    printfn ""
+                    printOutcomeTail outcome
+                    Exit.ok
+    | _ ->
+        eprintfn "usage: cwheadless replay <command-log> [--ticks N]"
+        Exit.usage
+
+let private cmdCompare (args: string list) : int =
+    match args with
+    | pathA :: pathB :: rest ->
+        match optTicks rest with
+        | Error msg ->
+            eprintfn "error: %s" msg
+            Exit.usage
+        | Ok ticks ->
+            match loadLog pathA, loadLog pathB with
+            | Some a, Some b ->
+                match Divergence.diagnose SimConfig.standard (Fixture.initialState ()) a b ticks with
+                | Error e ->
+                    eprintfn "replay error: %s" (describeReplayError e)
+                    Exit.replayError
+                | Ok report ->
+                    printfn "# compare %s (reference) vs %s (candidate), %d tick(s)" pathA pathB ticks
+                    match report with
+                    | Match n ->
+                        printfn "MATCH: %d tick(s) compared, all authoritative hashes identical" n
+                        Exit.ok
+                    | TruncatedRun(lastAgreed, expTicks, actTicks) ->
+                        printfn "TRUNCATED: agreed through tick %d, then lengths differ (reference %d, candidate %d)"
+                            lastAgreed expTicks actTicks
+                        Exit.diverged
+                    | Diverged(p, expTicks, actTicks) ->
+                        printfn "DIVERGED at tick %d" p.Tick
+                        printfn "  reference hash : %s" (hx p.Expected)
+                        printfn "  candidate hash : %s" (hx p.Actual)
+                        printfn "  first section  : %s" (defaultArg p.Section "(unavailable)")
+                        printfn "  random draws   : reference %d, candidate %d" p.ExpectedRandomDraws p.ActualRandomDraws
+                        printfn "  run lengths    : reference %d, candidate %d" expTicks actTicks
+                        Exit.diverged
+            | _ -> Exit.usage
+    | _ ->
+        eprintfn "usage: cwheadless compare <command-log-a> <command-log-b> [--ticks N]"
+        Exit.usage
+
+let private cmdFixture () : int =
+    let initial = Fixture.initialState ()
+    match Fixture.run () with
+    | Error e ->
+        eprintfn "replay error: %s" (describeReplayError e)
+        Exit.replayError
+    | Ok outcome ->
+        printfn "# CommandoWar framework-spike shared fixture"
+        printfn "# framework-neutral reference. Regenerate with: cwheadless fixture"
+        printfn ""
+        printfn "grid              : %d x %d" Fixture.bounds.Width Fixture.bounds.Height
+        printfn "seed              : %d (0x%016X)" Fixture.Seed Fixture.Seed
+        printfn "prng              : %s v%d" SplitMix64.Name SplitMix64.Version
+        printfn "canonical format  : %d" Canonical.FormatVersion
+        printfn "state hash        : %s over canonical encoding" Hashing.Algorithm
+        printfn "replay format     : %d   command-log format : %d" Replay.FormatVersion CommandLog.Version
+        printfn "tick count        : %d" Fixture.TickCount
+        printfn "agents (tick 0)   : 6 friendly at column x=0, rows y=0..5"
+        printfn "command           : tick %d, agent %d -> (%d,%d)  [CommandId 1]"
+            Fixture.CommandIssueTick (AgentId.value Fixture.MovedAgent) Fixture.MoveTarget.X Fixture.MoveTarget.Y
+        printfn "initial hash      : %s" (hx (Hashing.hash initial))
+        printfn ""
+        printfn "per-tick authoritative state hash:"
+        printfn ""
+        printfn "| tick | state hash          |"
+        printfn "|-----:|---------------------|"
+        for cp in outcome.TickHashes do
+            printfn "| %4d | %s |" cp.Tick (hx cp.Hash)
+        printfn ""
+        printOutcomeTail outcome
+        Exit.ok
+
+let private usage () =
+    printfn "cwheadless - framework-neutral headless reference for CommandoWar.Sim"
+    printfn ""
+    printfn "usage:"
+    printfn "  cwheadless step <N>                              step N ticks from the fixture, print tick + hash"
+    printfn "  cwheadless replay <command-log> [--ticks N]      replay a command log against the fixture"
+    printfn "  cwheadless compare <log-a> <log-b> [--ticks N]   report the first authoritative divergence"
+    printfn "  cwheadless fixture                               emit the pinned shared fixture + per-tick hashes"
+    printfn ""
+    printfn "exit codes: %d ok, %d usage/IO, %d replay error, %d divergence detected"
+        Exit.ok Exit.usage Exit.replayError Exit.diverged
+    printfn ""
+    printfn "command-log format (v%d), one directive per line:" CommandLogFile.Version
+    printfn "  # comment"
+    printfn "  version 1"
+    printfn "  <tick> <agentId> move <x> <y>"
+
+[<EntryPoint>]
+let main argv =
+    match Array.toList argv with
+    | [] | [ "help" ] | [ "--help" ] | [ "-h" ] ->
+        usage ()
+        Exit.ok
+    | "step" :: rest -> cmdStep rest
+    | "replay" :: rest -> cmdReplay rest
+    | "compare" :: rest -> cmdCompare rest
+    | [ "fixture" ] -> cmdFixture ()
+    | other :: _ ->
+        eprintfn "error: unknown subcommand '%s'" other
+        usage ()
+        Exit.usage

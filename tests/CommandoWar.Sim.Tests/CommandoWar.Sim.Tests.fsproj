@@ -12,6 +12,7 @@
     <Compile Include="CanonicalHashTests.fs" />
     <Compile Include="ReplayTests.fs" />
     <Compile Include="BenchmarkTests.fs" />
+    <Compile Include="FixtureTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +24,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CommandoWar.Sim\CommandoWar.Sim.fsproj" />
+    <!-- Framework-neutral: the headless reference shares the spike fixture that
+         FixtureTests.fs pins. No graphical or host dependency is introduced. -->
+    <ProjectReference Include="..\..\src\CommandoWar.Headless\CommandoWar.Headless.fsproj" />
   </ItemGroup>
 
 </Project>

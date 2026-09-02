@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>cwheadless</AssemblyName>
+    <RootNamespace>CommandoWar.Headless</RootNamespace>
+    <!-- Same baseline discipline as the simulation library: this is the shared
+         framework-neutral reference for both framework spikes. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors />
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="CommandLogFile.fs" />
+    <Compile Include="Fixture.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CommandoWar.Sim\CommandoWar.Sim.fsproj" />
+  </ItemGroup>
+
+</Project>
