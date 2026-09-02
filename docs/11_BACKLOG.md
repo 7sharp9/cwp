@@ -21,7 +21,7 @@ A backlog row is not sufficient authority for an agent to implement work. A `rea
 | ID | Phase | Task | Size | Dependencies | Status | Task file |
 |---|---|---|---|---|---|---|
 | TASK-001 | P0 | Establish repository and build baseline | S | project pack | done | `tasks/TASK-001-REPOSITORY-BASELINE.md` |
-| TASK-002 | P1 | Create framework-neutral simulation skeleton | S | TASK-001 | active | `tasks/TASK-002-SIMULATION-SKELETON.md` |
+| TASK-002 | P1 | Create framework-neutral simulation skeleton | S | TASK-001 | review | `tasks/TASK-002-SIMULATION-SKELETON.md` |
 | TASK-003 | P1/P2 | Establish deterministic random, hash, and replay harness | M | TASK-002 | ready after dependency | `tasks/TASK-003-DETERMINISM-HARNESS.md` |
 | TASK-004 | P1 | Implement disposable Godot .NET framework spike | M | TASK-003 | ready after dependency | `tasks/TASK-004-GODOT-SPIKE.md` |
 | TASK-005 | P1 | Implement disposable Mibo plus raylib framework spike | M | TASK-003 | ready after dependency | `tasks/TASK-005-MIBO-SPIKE.md` |
