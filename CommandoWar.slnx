@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CommandoWar.Sim/CommandoWar.Sim.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CommandoWar.Sim.Tests/CommandoWar.Sim.Tests.fsproj" />
+  </Folder>
+</Solution>

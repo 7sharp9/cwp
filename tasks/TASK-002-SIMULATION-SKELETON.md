@@ -1,7 +1,7 @@
 # TASK-002: Create Framework-Neutral Simulation Skeleton
 
-Status: proposed  
-Owner: unassigned  
+Status: active  
+Owner: Dave  
 Phase: P1  
 Gate: G1 prerequisite  
 Size: S

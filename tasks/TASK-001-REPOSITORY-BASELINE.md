@@ -1,6 +1,6 @@
 # TASK-001: Establish Repository and Build Baseline
 
-Status: active  
+Status: done  
 Owner: Dave  
 Phase: P0  
 Gate: G0  
@@ -64,13 +64,13 @@ The project currently has a design pack but no inspected code baseline. All late
 
 ## Acceptance criteria
 
-- [ ] The existing repository was inspected and preserved.
-- [ ] One documented command restores and builds the relevant solution from a clean checkout state, subject to ordinary package availability.
-- [ ] One documented command runs the test suite successfully.
-- [ ] The F# simulation library is referenced by tests and contains no graphical or host framework dependency.
-- [ ] Target framework and SDK choices reflect installed and supported tools rather than invented versions.
-- [ ] No gameplay or client framework was introduced.
-- [ ] Task, backlog, state, and progress ledger are consistent.
+- [x] The existing repository was inspected and preserved. Only new baseline files were added; no existing file was moved or rewritten except an additive README section.
+- [x] One documented command restores and builds the relevant solution from a clean checkout state, subject to ordinary package availability: `dotnet build CommandoWar.slnx -c Release`.
+- [x] One documented command runs the test suite successfully: `dotnet test CommandoWar.slnx -c Release` (2 passed).
+- [x] The F# simulation library is referenced by tests and contains no graphical or host framework dependency (only `FSharp.Core`).
+- [x] Target framework and SDK choices reflect installed and supported tools rather than invented versions: `net10.0`, SDK `10.0.303` (both verified via `dotnet --info`).
+- [x] No gameplay or client framework was introduced.
+- [x] Task, backlog, state, and progress ledger are consistent.
 
 ## Required verification
 

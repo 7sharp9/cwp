@@ -112,3 +112,29 @@ The project has succeeded at the first meaningful level when an external player 
 - replay the same command stream and seed with the same authoritative result.
 
 A technically sophisticated simulation without that player experience is not success.
+
+## Repository baseline
+
+Established by TASK-001. The repository is a standard .NET solution.
+
+| Concern | Value |
+|---|---|
+| Solution | `CommandoWar.slnx` |
+| Pinned SDK | .NET SDK `10.0.303` via `global.json` (`rollForward: latestPatch`) |
+| Target framework | `net10.0` (installed and LTS; supported to November 2028) |
+| Simulation library | `src/CommandoWar.Sim/` (F#, no host or framework dependency) |
+| Tests | `tests/CommandoWar.Sim.Tests/` (F#, xUnit) |
+
+A graphical framework is deliberately not selected yet; see ADR-0001.
+
+### Restore, build, and test
+
+From a clean checkout with the pinned SDK installed:
+
+```text
+dotnet build CommandoWar.slnx -c Release
+dotnet test CommandoWar.slnx -c Release
+```
+
+`dotnet build` performs an implicit restore. Package restore needs network access on
+first run. `dotnet test` builds and then runs the full suite.

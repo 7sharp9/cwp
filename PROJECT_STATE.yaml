@@ -2,14 +2,14 @@ project:
   working_name: Commando War spiritual successor
   public_title: null
   status: discovery
-  current_phase: P0_governance_and_feasibility
-  current_gate: G0_project_control_ready
+  current_phase: P1_framework_selection
+  current_gate: G1_framework_selected
   framework_decision: pending_ADR_0001
   updated: 2026-09-02
 
 active_work:
-  selected_task: TASK-001
-  task_file: tasks/TASK-001-REPOSITORY-BASELINE.md
+  selected_task: TASK-002
+  task_file: tasks/TASK-002-SIMULATION-SKELETON.md
   owner: Dave
   blocked: false
   blockers: []
@@ -24,8 +24,8 @@ sources_of_truth:
   risks: docs/10_RISK_REGISTER.md
 
 gates:
-  G0_project_control_ready: in_review
-  G1_framework_selected: pending
+  G0_project_control_ready: passed
+  G1_framework_selected: in_progress
   G2_deterministic_core_proven: pending
   G3_command_loop_proven_headless: pending
   G4_vertical_slice_feature_complete: pending
