@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Disposable TASK-005 spike host. NOT part of CommandoWar.slnx: keeping it in
+    its own solution means `dotnet test CommandoWar.slnx` stays framework-neutral
+    (docs/09 section 6). Removable without touching the simulation, its tests,
+    the command logs, or the shared fixture.
+
+    Pinned per ADR-0003 (2026-09-02 amendment): Mibo 4.1.0 is the last release
+    whose Mibo.Core does NOT depend on the prohibited Mibo.Adaptive package.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>cwmibo</AssemblyName>
+    <RootNamespace>CommandoWar.Client.Mibo</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Content.fs" />
+    <Compile Include="SimBridge.fs" />
+    <Compile Include="Program.fs" />
+    <None Include="content\greybox.cwmap" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="content\greybox-invalid.cwmap" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The simulation boundary. SimBridge.fs is the only module that opens it. -->
+    <ProjectReference Include="..\CommandoWar.Sim\CommandoWar.Sim.fsproj" />
+    <!-- The shared logical fixture constants (seed, target, tick count, hashes).
+         Reused unchanged; this host reproduces the scenario from authored content. -->
+    <ProjectReference Include="..\CommandoWar.Headless\CommandoWar.Headless.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mibo.Raylib" Version="4.1.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,6 +1,6 @@
 # ADR-0003: Conditional and Limited Use of Mibo
 
-Status: accepted as spike policy, production adoption pending ADR-0001  
+Status: accepted as spike policy (amended 2026-09-02), production adoption pending ADR-0001  
 Date: 2026-09-02  
 Decision owner: Dave
 

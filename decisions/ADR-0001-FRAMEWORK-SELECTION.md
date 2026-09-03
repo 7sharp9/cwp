@@ -144,21 +144,21 @@ Selected candidate: `TBD`
 
 ## Decision evidence template
 
-Godot column filled by TASK-004 (`docs/12_PROGRESS_LEDGER.md`, 2026-09-02).
-Mibo column pending TASK-005. These are observations, not scores, and not the
-decision.
+Godot column filled by TASK-004; Mibo column filled by TASK-005
+(`docs/12_PROGRESS_LEDGER.md`, 2026-09-02). These are observations, not scores,
+and not the decision.
 
 | Driver | Weight | Godot result | Mibo result | Notes |
 |---|---:|---|---|---|
-| map and content authoring speed | 20 | Greybox authored directly in the `.tscn` scene (tile string + typed `Marker2D` nodes). Data edit -> visible authoritative hash ~0.38 s headless; 1 file, 0 code, 0 conversion steps. Editor hot-reload / inspector drag-edit NOT measured this session (no GUI). | | Text-authoring understates Godot's editor; number is a lower bound. |
-| UI, animation, audio, and presentation productivity | 15 | Overlay + failure panel built in ~30 lines with `CanvasLayer`/`Label`/`ColorRect`. Isometric render hand-drawn via `_Draw` (no TileSet atlas invested). Animation/audio not exercised. | | Partial: only the overlay and greybox render were needed. |
-| simulation isolation and headless testing | 15 | Host consumes the byte-identical `CommandoWar.Sim.dll`; `--headless --selfcheck` reproduces the shared fixture's 41-hash sequence exactly (final `0x838D3AE7DBFB735D`). No Godot type crosses the boundary. | | Strong: boundary held; shared `cwheadless` reference works for both spikes. |
-| F# development and debugging quality | 12 | C#/F# interop works; module functions reached as `AgentIdModule.ofInt` etc., `World.create` via `ListModule.OfArray`, `FSharpOption` via `get_IsSome`. Mixed-language solution; no F# debugging done in-editor. | | Interop is a small, contained tax in `SimFacade.cs`. |
-| architectural and glue-code burden | 12 | ~150 lines is the entire sim boundary (`SimFacade.cs`); ~170 reusable content DTO/validation; ~80 Godot import; ~330 host (scheduling+input+render+overlay). Client TFM forced to `net10.0` (off Godot's `net8.0` default). | | Glue is modest and mostly framework-neutral. |
-| runtime and packaging maturity | 10 | Editor + headless run fine (Vulkan). **Self-contained export blocked**: `4.7.2.stable.mono` Windows export templates not installed; `--export-pack` yields a `.pck` but no embedded .NET. Runs outside the editor via `--path`. | | Blocker is a one-time template install, not a design problem. |
-| observability and debugging | 8 | On-screen tick / `StateHash` / random-draw / rate / interp-alpha overlay; per-tick hash stream in headless; `S` dumps a `cwheadless`-format command log; divergence localised by `cwheadless compare`. | | Strong for the diagnostics this task needed. |
-| dependency and maintenance risk | 5 | 3 auto-referenced `Godot.*` `4.7.2` packages + the MSBuild SDK; offline feed pinned. Large engine, but mature and MIT. | | Low. |
-| backend portability | 3 | Not applicable to Godot (single renderer). | | - |
+| map and content authoring speed | 20 | Greybox authored directly in the `.tscn` scene (tile string + typed `Marker2D` nodes). Data edit -> visible authoritative hash ~0.38 s headless; 1 file, 0 code, 0 conversion steps. Editor hot-reload / inspector drag-edit NOT measured this session (no GUI). | Greybox is a hand-edited `.cwmap` text file (size / seed / 32 terrain rows / marker lines). Data edit -> visible authoritative hash ~1.2 s warm (incremental build + content copy + 40-tick headless). 1 file, 0 code, 0 conversion steps. **Tiled not used** (out of trimmed scope); Mibo has no content hot-reload, iteration is edit -> relaunch. | Both numbers are text-edit lower bounds. Godot's editor and Tiled were both un-exercised; the authoring-tool comparison is still open. |
+| UI, animation, audio, and presentation productivity | 15 | Overlay + failure panel built in ~30 lines with `CanvasLayer`/`Label`/`ColorRect`. Isometric render hand-drawn via `_Draw` (no TileSet atlas invested). Animation/audio not exercised. | Overlay + failure panel are ~15 lines of `buffer.AddText`. Iso render hand-drawn with `buffer.AddTriangle`/`AddFillCircle`/`AddLine` command-buffer calls (more verbose than Godot `_Draw`; `Mibo.Color` vs `Raylib_cs.Color` split between draw commands and the clear color). No TileSet/atlas, animation, or audio. | Both hand-drew the greybox. Mibo's 2D command API is complete but lower-level; no scene/atlas tooling at all. |
+| simulation isolation and headless testing | 15 | Host consumes the byte-identical `CommandoWar.Sim.dll`; `--headless --selfcheck` reproduces the shared fixture's 41-hash sequence exactly (final `0x838D3AE7DBFB735D`). No Godot type crosses the boundary. | Host consumes the byte-identical `CommandoWar.Sim.dll` (md5 `82418ff...`); `--selfcheck` reproduces the 41-hash sequence exactly via both explicit dispatch and Mibo `withFixedStep`. `HeadlessRunner` (Step/StepN/StepUntil, virtual time) is a first-class part of the framework. No Mibo/raylib type crosses the boundary. | Both strong. Mibo's headless story is native rather than a `--headless` flag on a windowed engine. |
+| F# development and debugging quality | 12 | C#/F# interop works; module functions reached as `AgentIdModule.ofInt` etc., `World.create` via `ListModule.OfArray`, `FSharpOption` via `get_IsSome`. Mixed-language solution; no F# debugging done in-editor. | No interop tax: `Agent.create`, `Command.moveTo`, `Simulation.step`, `Hashing.hash`, DU `match` on `EventBody` used directly. Single-language solution; the shared `CommandoWar.Headless` F# project (`Fixture`) is reused by `ProjectReference`. Learning Mibo's API needed reflection dumps + the `mibo-2d` template + the repo's `HeadlessTests.fs` (docs site has gaps; `program.md`/`headless.md` are thin). | The C#/F# boundary tax is genuinely gone. It is replaced by a smaller, one-time cost of learning a sparsely documented framework. |
+| architectural and glue-code burden | 12 | ~150 lines is the entire sim boundary (`SimFacade.cs`); ~170 reusable content DTO/validation; ~80 Godot import; ~330 host (scheduling+input+render+overlay). Client TFM forced to `net10.0` (off Godot's `net8.0` default). | `SimBridge.fs` 117 (entire sim boundary); `Content.fs` 192 (framework-neutral `.cwmap` parser + validator; larger because Godot parsed its own `.tscn`); `Program.fs` 403 = self-check MVU program ~90 + windowed host (model/msg/update/view/wiring/CLI) ~310. 712 total F#, ~vs Godot's ~730. `net10.0` is Mibo 4.x's own default. | Comparable total. Mibo's host layer is a little larger (verbose command-buffer view, hand-rolled self-check program); its glue is all one language. |
+| runtime and packaging maturity | 10 | Editor + headless run fine (Vulkan). **Self-contained export blocked**: `4.7.2.stable.mono` Windows export templates not installed. Runs outside the editor via `--path`. | `dotnet publish -c Release -r win-x64 --self-contained` **works out of the box**: ~84 MB folder, `cwmibo.exe` launches from any working directory and reproduces the final hash. Windowed run opens a real raylib/OpenGL window (INFO log clean), takes `TakeScreenshot`, quits cleanly (no deferred-quit quirk). | Mibo wins packaging outright: ordinary `dotnet publish`, no engine-specific export step or templates. |
+| observability and debugging | 8 | On-screen tick / `StateHash` / random-draw / rate / interp-alpha overlay; per-tick hash stream in headless; `S` dumps a `cwheadless`-format command log; divergence localised by `cwheadless compare`. | On-screen tick / `StateHash` + format / random-draw / sim-rate (fixed vs measured) / render-fps overlay; per-tick hash stream in `--selfcheck`; accepted-command-log in `cwheadless` format; `cwheadless compare` still localises divergence. No interpolation-alpha (view renders exact cells). Mibo has a `FrameProfiler` (4.5.0) not available on 4.1.0. | Parity for the diagnostics this task needed. Standard .NET debugger applies to the whole host (one language). |
+| dependency and maintenance risk | 5 | 3 auto-referenced `Godot.*` `4.7.2` packages + the MSBuild SDK; offline feed pinned. Large engine, but mature and MIT. | `Mibo.Core` + `Mibo.Raylib` + `Raylib-cs` + `FSharp.UMX`, zlib-licensed. **Current stable Mibo cannot be used**: `Mibo.Core` >= 4.2.0 hard-depends on the prohibited `Mibo.Adaptive` (folded into the core assembly, 2026-08-11), so this spike is pinned to 4.1.0, already ~5 minor versions behind after ~3 weeks. 1.0 -> 4.5.3 in ~3 months; adaptive engine still shipping freeze fixes. See ADR-0003 2026-09-02 amendment. | Materially worse than ADR-0003 assumed. This is the decisive negative for Mibo and stands independent of the ergonomic results. |
+| backend portability | 3 | Not applicable to Godot (single renderer). | `Mibo.MonoGame` backend exists (same `Program`/`view` shape) but also depends on `Mibo.Core` >= 4.2.0, so it hits the same `Mibo.Adaptive` block; the MonoGame smoke test is out of the trimmed scope. | Portability is real in principle, unusable in practice on the current release line, and has no demonstrated product value. |
 
 ### TASK-004 Godot spike results (evidence, not decision)
 
@@ -202,6 +202,71 @@ over; the new work is a real TileSet/atlas pipeline, the developer/tactical
 overlays (docs/06 section 11), selection + command-preview UX, isometric depth
 sorting with occluders, and the export-template setup. None of that touched the
 simulation in the spike.
+
+### TASK-005 Mibo spike results (evidence, not decision)
+
+What was proven:
+
+- F# creates and steps the unmodified F# session through one module
+  (`SimBridge.fs`); the `CommandoWar.Sim.dll` in the host output is byte-identical
+  to the library build (md5 `82418ffbdf316b2f2e5124105b6f9e5e`). No interop tax.
+- A 32x32 isometric greybox is authored as a hand-edited `.cwmap` text file,
+  parsed and validated by a framework-neutral module (`Content.fs`), and only
+  then handed to the simulation; six agents render from snapshot value-views.
+- Scripted input produces the existing `Command.moveTo` and a deterministic
+  state change; the host's per-tick `StateHash` sequence is identical to
+  `cwheadless fixture` for the initial state and all 40 ticks (final
+  `0x838D3AE7DBFB735D`, 33 events, random draws 0), via both explicit dispatch
+  and Mibo's `withFixedStep` facility.
+- `Program.withFixedStep` (authoritative) is visibly independent of
+  `Program.withTick` (render): screenshot overlay shows sim 6 Hz vs render
+  60 fps.
+- Invalid authored content (`greybox-invalid.cwmap`) reaches a visible,
+  actionable failure listing every error in one pass, each naming the marker /
+  kind / cell / reason, and does not start the simulation (exit 2).
+- The host never catches a `Simulation.step` exception; there is no `try` around
+  the step. `Content.load` returns a `Result`; a deliberate hash mismatch exits
+  non-zero (1).
+- `dotnet publish -c Release -r win-x64 --self-contained` succeeds with no
+  engine-specific step; the ~84 MB `cwmibo.exe` reproduces the final hash from
+  an unrelated working directory.
+- `Mibo.Adaptive` appears nowhere in the restore graph, `deps.json`, or output;
+  the host uses only classic-MVU `Program` / `HeadlessProgram` / `HeadlessRunner`.
+
+Friction / gaps recorded:
+
+- **The current stable Mibo cannot be used.** `Mibo.Core` >= 4.2.0 hard-depends
+  on the prohibited `Mibo.Adaptive` package (the adaptive integration was folded
+  into the core assembly on 2026-08-11). The spike is pinned to `Mibo.Core` /
+  `Mibo.Raylib` 4.1.0, the last clean release, already ~5 minor versions and
+  ~3 weeks behind. See `decisions/ADR-0003-MIBO-ADOPTION.md` 2026-09-02
+  amendment. This is the decisive negative and is independent of ergonomics.
+- Mibo's docs are thin: `program.md` / `headless.md` cover the basics but omit
+  most of the API surface used here. The working API was recovered from
+  reflection dumps of `Mibo.Core.dll` / `Mibo.Raylib.dll`, the `mibo-2d`
+  template, and the repo's `HeadlessTests.fs`.
+- Tiled and any Mibo content hot-reload were **not exercised**: Tiled authoring
+  is out of the trimmed scope, the map is a hand-edited text file, and Mibo has
+  no content hot-reload (edit -> relaunch, ~1.2 s warm). Godot's editor was
+  equally un-exercised in TASK-004, so the authoring-tool comparison remains
+  open on both sides.
+- Interactive mouse input was not literally exercised (headless session); the
+  `LeftClick` handler shares the exact `QueueMove -> Command.moveTo` path that
+  `--selfcheck` verifies end to end.
+- Mibo's 2D command-buffer API is complete but lower-level than Godot's `_Draw`,
+  and it splits colour types (`Mibo.Color` for draw commands, `Raylib_cs.Color`
+  for the renderer clear colour). `withFixedStep` rate is fixed at construction;
+  runtime rate adjustment would need a host-owned accumulator.
+- No source-level workaround was needed inside the host once the 4.1.0 pin was
+  in place. No simulation change was needed.
+
+Expected cost to extend this host to the Bridgehead vertical slice: `SimBridge`
+and `Content` carry over; the new work is a real sprite/atlas pipeline, the
+developer/tactical overlays (docs/06 section 11), selection + command-preview
+UX, isometric depth sorting with occluders, and a UI layer (Mibo has none) plus
+either a Tiled importer or a richer text format. None of that touched the
+simulation in the spike. The standing risk is riding a fast-moving pinned-old
+dependency or accepting the coupled `Mibo.Adaptive` package.
 
 ### Qualitative decision
 

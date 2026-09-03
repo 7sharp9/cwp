@@ -1,7 +1,7 @@
 # TASK-005: Disposable Mibo plus raylib Framework Spike (trimmed)
 
-Status: proposed
-Owner: unassigned
+Status: review
+Owner: Dave
 Phase: P1
 Gate: G1
 Size: S
@@ -152,30 +152,99 @@ and do not attempt package-exclusion workarounds for `Mibo.Adaptive`.
 
 ## Acceptance criteria
 
-- [ ] The unmodified simulation project builds and runs through the Mibo host;
+- [x] The unmodified simulation project builds and runs through the Mibo host;
       the consumed `CommandoWar.Sim.dll` is byte-identical to the library build.
-- [ ] Mibo classic MVU is used; `Mibo.Core` and `Mibo.Raylib` are pinned to
+      Host `Build succeeded. 0 Warning(s) 0 Error(s)`. `CommandoWar.Sim.dll` in
+      the host output and in the library build share md5
+      `82418ffbdf316b2f2e5124105b6f9e5e`. `git status` shows no change under
+      `src/CommandoWar.Sim` or `tests/`.
+- [x] Mibo classic MVU is used; `Mibo.Core` and `Mibo.Raylib` are pinned to
       4.1.0; no `Mibo.Adaptive` package appears in the restore graph,
       `*.deps.json`, or host output, and no `Mibo.Adaptive` API is referenced.
-- [ ] Six agents render from simulation snapshots on the greybox map.
-- [ ] A user input produces the existing typed move command and a deterministic
+      `dotnet list package --include-transitive` = `Mibo.Raylib 4.1.0`,
+      `Mibo.Core 4.1.0`, `Raylib-cs 8.0.0` (no `Mibo.Adaptive`);
+      `cwmibo.deps.json` has no `adaptive` library; no `Mibo.Adaptive.dll` in
+      `bin/`. Host uses `Program.mkProgram` / `HeadlessProgram.mkHeadless` /
+      `HeadlessRunner` (classic MVU); no `AdaptiveProgram` / `AdaptiveHeadless`.
+- [x] Six agents render from simulation snapshots on the greybox map.
+      `Program.view` draws the 32x32 iso greybox + 6 agents from
+      `SimBridge.Sim.Agents` (value views of `RenderSnapshot`);
+      `docs/evidence/task-005-mibo-overlay.png`.
+- [x] A user input produces the existing typed move command and a deterministic
       state change; agent 3 reaches (20,14) at tick 31.
-- [ ] Tick and state hash are visible and the host's 41-hash sequence (initial +
+      `LeftClick` and `--selfcheck` both call `SimBridge.Sim.QueueMove ->
+      Command.moveTo`; accepted-command-log `1 3 move 20 14`; per-tick hashes
+      change deterministically; tick 31 hash `0x25315447F9D0E230` (arrival),
+      matching `cwheadless replay content/fixtures/spike-fixture.cwlog`.
+- [x] Tick and state hash are visible and the host's 41-hash sequence (initial +
       ticks 1..40) is identical to `cwheadless fixture`, final
-      `0x838D3AE7DBFB735D`.
-- [ ] Fixed authoritative tick rate and render rate are visibly separate.
-- [ ] One invalid content object produces an actionable loading failure that
-      names it; the simulation does not start.
-- [ ] A deliberate hash mismatch produces a non-zero process exit.
-- [ ] No Mibo, raylib, or Tiled type enters `CommandoWar.Sim` or
-      `CommandoWar.Headless` (`dotnet list package --include-transitive`,
-      `deps.json` libraries, and a source scan).
-- [ ] Host line count and approximate infrastructure surface are recorded next
-      to the Godot spike's.
-- [ ] Framework versions and any workarounds are explicit.
-- [ ] No production framework decision is claimed; ADR-0001 stays `proposed`,
+      `0x838D3AE7DBFB735D`. `--selfcheck` prints `tick=N hash=0x...` for the
+      initial state + ticks 1..40; `diff` against `cwheadless fixture` shows no
+      difference; initial `0xF2F3DF0D820AD9AC`, final `0x838D3AE7DBFB735D`
+      (format 1), 33 events, random draws 0. Overlay screenshot shows tick +
+      state hash + format.
+- [x] Fixed authoritative tick rate and render rate are visibly separate.
+      `Program.withFixedStep` (authoritative, `FixedTick`) is independent of
+      `Program.withTick` (`RenderTick`, measurement only). Screenshot overlay:
+      sim 6 Hz fixed / 6 steps/s measured vs render 60 fps.
+- [x] One invalid content object produces an actionable loading failure that
+      names it; the simulation does not start. `--selfcheck --invalid` -> exit 2,
+      one line per problem, each naming the marker, kind, cell and reason
+      (e.g. `FriendlySpawn #4 at (6,10) lies on an impassable (wall) cell`);
+      no `tick=` lines emitted.
+- [x] A deliberate hash mismatch produces a non-zero process exit.
+      `--selfcheck --expect 0xDEADBEEFDEADBEEF` -> `MISMATCH ...`, exit 1. No
+      raylib/Mibo deferred-quit quirk: the headless path is a plain `exit N`
+      from `main`; the windowed `Cmd.signalExit` quits cleanly (`--screenshot`
+      exits 0 the same frame it captures).
+- [x] No Mibo, raylib, or Tiled type enters `CommandoWar.Sim` or
+      `CommandoWar.Headless`. `dotnet list package` for `CommandoWar.Sim` =
+      `FSharp.Core 10.1.303` only; `CommandoWar.Sim.deps.json` libraries =
+      `CommandoWar.Sim`, `FSharp.Core`; source scan of `src/CommandoWar.Sim`
+      and `src/CommandoWar.Headless` for `mibo|raylib|tiled|monogame|godot|
+      Vector2|System.Drawing` matches only two doc-comment lines in `Fixture.fs`.
+- [x] Host line count and approximate infrastructure surface are recorded next
+      to the Godot spike's. `Content.fs` 192, `SimBridge.fs` 117, `Program.fs`
+      403 (712 total F#); vs Godot `SimFacade.cs` ~150 + `SpikeContent.cs` ~170
+      + `GreyboxScene.cs`/`SpikeMarker.cs` ~80 + `MainNode.cs` ~330. See
+      ADR-0001 evidence table and the ledger.
+- [x] Framework versions and any workarounds are explicit. `Mibo.Core` /
+      `Mibo.Raylib` `4.1.0`, `Raylib-cs` `8.0.0`, SDK `10.0.303`, `net10.0`.
+      The 4.1.0 pin is the workaround for the `Mibo.Adaptive` coupling
+      (ADR-0003 amendment); no source-level workarounds were needed.
+- [x] No production framework decision is claimed; ADR-0001 stays `proposed`,
       `Selected candidate: TBD`; only the Mibo evidence column and a
-      spike-results section are filled.
+      spike-results section are filled. `PROJECT_STATE.yaml` `framework_decision`
+      and gates unchanged.
+
+## Completion notes (2026-09-02)
+
+Host (own solution `src/CommandoWar.Client.Mibo/CommandoWar.Client.Mibo.slnx`,
+**not** in `CommandoWar.slnx`): F# `net10.0`, `Mibo.Raylib` 4.1.0.
+`SimBridge.fs` is the only module that opens `CommandoWar.Sim`; `Content.fs` is
+the framework-neutral `.cwmap` parser + validator; `Program.fs` has the Mibo
+classic-MVU headless self-check (`HeadlessProgram` / `HeadlessRunner`) and the
+windowed raylib classic-MVU host (`Program.mkProgram` / `RaylibGame`).
+`content/greybox.cwmap` reproduces `Setup.sixAgentWorld { 32; 32 } 20260902`
+exactly; `content/greybox-invalid.cwmap` carries three seeded errors.
+
+Both the headless self-check (explicit dispatch) and the Mibo `withFixedStep`
+path reproduce the shared fixture's 41-hash sequence; windowed screenshot at
+`docs/evidence/task-005-mibo-overlay.png`. `dotnet publish -r win-x64
+--self-contained` succeeds (~84 MB) and the exe reproduces the final hash from
+an unrelated working directory.
+
+Evidence written to `decisions/ADR-0001-FRAMEWORK-SELECTION.md` (Mibo column +
+"TASK-005 Mibo spike results" section) without deciding the ADR. Full command
+log in `docs/12_PROGRESS_LEDGER.md`.
+
+Deviations: Tiled editor and any Mibo hot-reload NOT exercised (Tiled authoring
+is out of the trimmed scope; the map is a hand-edited text file; Mibo has no
+content hot-reload, iteration is edit -> relaunch, ~1.2 s warm). Interactive
+mouse input not literally exercised (headless session); the click path shares
+the exact `QueueMove -> Command.moveTo` code that `--selfcheck` verifies end to
+end. `withFixedStep` rate is fixed at program construction; runtime rate
+adjustment (the Godot spike's `1`/`2` keys) would need a host-owned accumulator.
 
 ## Required verification
 

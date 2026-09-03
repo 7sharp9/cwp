@@ -1,6 +1,6 @@
 # TASK-004: Disposable Godot .NET Framework Spike
 
-Status: review  
+Status: done  
 Owner: Dave  
 Phase: P1  
 Gate: G1  

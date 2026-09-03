@@ -1,0 +1,6 @@
+# .NET build artifacts for the disposable spike.
+bin/
+obj/
+
+# raylib screenshot scratch file
+mibo-shot.png

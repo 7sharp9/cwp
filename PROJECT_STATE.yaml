@@ -8,8 +8,8 @@ project:
   updated: 2026-09-02
 
 active_work:
-  selected_task: TASK-004
-  task_file: tasks/TASK-004-GODOT-SPIKE.md
+  selected_task: TASK-005
+  task_file: tasks/TASK-005-MIBO-SPIKE.md
   owner: Dave
   blocked: false
   blockers: []
