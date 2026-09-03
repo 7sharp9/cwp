@@ -1,7 +1,8 @@
 # ADR-0001: Presentation Framework Selection
 
-Status: proposed  
+Status: accepted  
 Date opened: 2026-09-02  
+Date accepted: 2026-09-03  
 Decision owner: Dave
 
 ## Context
@@ -138,9 +139,16 @@ Do not maintain both production hosts after the decision. Preserve spike evidenc
 
 ## Decision
 
-Pending TASK-004, TASK-005, and TASK-006.
+Accepted 2026-09-03 on the TASK-006 evidence (`docs/12_PROGRESS_LEDGER.md`,
+2026-09-03) and Dave's acceptance in that session.
 
-Selected candidate: `TBD`
+Selected candidate: `A. Godot .NET plus F# simulation`
+
+Godot .NET for content, presentation, input, UI, and packaging; the
+framework-independent F# `CommandoWar.Sim` behind a thin C# facade
+(ADR-0002 unchanged). Headless execution stays on the project-owned `cwheadless`
+runner, not on Godot. Weighted evidence score 4.13 vs Mibo 3.62; see the scored
+driver table and the "Qualitative decision" block below.
 
 ## Decision evidence template
 
@@ -268,19 +276,180 @@ either a Tiled importer or a richer text format. None of that touched the
 simulation in the spike. The standing risk is riding a fast-moving pinned-old
 dependency or accepting the coupled `Mibo.Adaptive` package.
 
+### Scored decision-driver table (TASK-006)
+
+Evidence-based score per driver, 1 (poor) to 5 (strong), against the predeclared
+weights above. Weights are unchanged from the pre-spike declaration. Scores are
+derived from the filled evidence table, the two spike-results sections, the
+ADR-0003 2026-09-02 amendment, and the TASK-006 re-verification
+(`docs/12_PROGRESS_LEDGER.md`, 2026-09-03). Observation notes are kept; they say
+what the score rests on and, where relevant, what it does not.
+
+| Driver | Weight | Godot | Mibo | Basis |
+|---|---:|---:|---:|---|
+| map and content authoring speed | 20 | 4.5 | 3.0 | Godot ships a mature visual scene / TileMap / inspector editor (confirmed this session to open the spike project headless without error); Mibo ships none and a Tiled path is unbuilt. Even un-tooled, Godot's edit->visible-hash loop (~0.38 s) beat Mibo's (~1.2 s, edit->relaunch, no hot-reload). Godot docked 0.5 because the editor iteration loop itself is still not measured on this project; Mibo at 3.0 because a hand-edited text file works but there is no editor, no hot-reload, and the importer is future work. |
+| UI, animation, audio, and presentation productivity | 15 | 4.5 | 2.5 | Godot: overlay + failure panel ~30 lines of `CanvasLayer`/`Label`/`ColorRect`; full scene UI, `AnimationPlayer`, audio, import present (unexercised). Mibo: overlay ~15 lines but a lower-level command-buffer 2D API, split colour types, and no UI / animation / audio / atlas tooling at all - the code-first route owns every one of those for the slice. |
+| simulation isolation and headless testing | 15 | 4.5 | 5.0 | Both consume the byte-identical `CommandoWar.Sim.dll` and reproduce the 41-hash fixture exactly; no framework type crosses the boundary; 54 framework-neutral tests stay green. Mibo's headless runner (Step/StepN/StepUntil, virtual time) is a native first-class facility; Godot's is a `--headless` flag on a windowed engine plus the project-owned `cwheadless`, and it has a one-frame deferred-quit wrinkle. Mibo's edge is real but low-leverage: the project already owns `cwheadless` and keeps it either way. |
+| F# development and debugging quality | 12 | 3.5 | 4.5 | Mibo: zero interop tax - `Agent.create`, `Simulation.step`, DU `match` used directly; single-language solution and debugger; shared `CommandoWar.Headless` reused by `ProjectReference`. Docked 0.5 for a recurring onboarding tax: thin docs, working API recovered from reflection dumps. Godot: C#/F# interop works but is a standing cost (`AgentIdModule.ofInt`, `ListModule.OfArray`, `FSharpOption.get_IsSome`), two idioms, two debugging stories; contained to the ~150-line facade. |
+| architectural and glue-code burden | 12 | 4.0 | 3.5 | Spike totals are comparable: Godot ~730 lines, Mibo 712 F#. Mibo's host layer is marginally larger (verbose command-buffer view, hand-rolled self-check program) but all one language. The divergence is forward-looking: across the vertical slice the Godot editor absorbs scene wiring, UI layout, and animation state that the Mibo route must write and own as code. |
+| runtime and packaging maturity | 10 | 3.0 | 4.5 | Mibo: `dotnet publish -r win-x64 --self-contained` works out of the box (~84 MB, runs from any cwd, reproduces the hash), no engine-specific step. Godot: self-contained export blocked - the `4.7.2.stable.mono` export templates are not installed (confirmed again this session: the directory exists but is empty) and no `export_presets.cfg` is committed; the app runs outside the editor via `--path`. Godot's blocker is a known one-time fix; Mibo's advantage is measured and current. |
+| observability and debugging | 8 | 4.5 | 4.0 | Parity for what this task needed: both show tick / hash / draws / rate overlays, a per-tick hash stream, a `cwheadless`-format command log, and `cwheadless compare` divergence localisation. Godot adds an editor debugger / profiler / remote scene inspector (unexercised but real). Mibo: standard single-language .NET debugging; `FrameProfiler` exists in 4.5.0 but not in the pinned 4.1.0. |
+| dependency and maintenance risk | 5 | 4.5 | 1.5 | Godot: 3 auto-referenced `Godot.*` 4.7.2 packages + the MSBuild SDK, offline feed pinned; large but mature, MIT, steady cadence. Mibo: `Mibo.Core` >= 4.2.0 hard-depends on the prohibited `Mibo.Adaptive` (folded into core 2026-08-11); the spike is pinned to 4.1.0, already ~5 minor versions and ~3 weeks behind and widening; 1.0 -> 4.5.3 in ~3 months; the adaptive engine still ships correctness fixes. This is a production-eligibility gate, not just a score, and it is independent of ergonomics (ADR-0003 amendment). |
+| backend portability | 3 | 3.0 | 3.0 | Godot: single renderer, not applicable, and the charter is desktop-first single-renderer with no second-backend requirement. Mibo: `Mibo.MonoGame` exists with the same `Program`/`view` shape but depends on `Mibo.Core` >= 4.2.0 and hits the same `Mibo.Adaptive` block, so the portability is real in principle and unusable in practice on the current release line, with no demonstrated product value. The pre-spike edge for Mibo here is removed by the evidence. |
+| **weighted total out of 5** | **100** | **4.13** | **3.62** | Godot `412.5/100`; Mibo `362/100`. |
+
+The gap (~0.5) tracks the pre-spike provisional (4.45 vs 3.83). Both absolute
+scores fell because the evidence exposed real friction on each side: Godot's
+packaging is blocked, Mibo's dependency coupling is worse than ADR-0003
+originally assumed. The conclusion is robust to the one soft cell: scoring
+Godot's content-authoring at 3.5 instead of 4.5 (i.e. assuming the unmeasured
+editor loop is no better than a code relaunch) still leaves Godot ahead,
+3.93 vs 3.62.
+
+**Observed vs asserted vs preference.** Observed this session and in the spikes:
+both hosts reproduce the fixture and hold the boundary; Godot's un-tooled edit
+loop is faster (~0.38 s vs ~1.2 s); Mibo packages out of the box and Godot does
+not; Mibo has no interop tax in code and Godot's is small and contained; host
+line counts are within 3%; the `Mibo.Adaptive` coupling is confirmed (no usable
+release past 4.1.0). Asserted, not measured: Godot's editor iteration loop
+(hot-reload, inspector drag, F5, debugger, profiler) - the tool demonstrably
+exists and opens the project, but its productivity on this project is a
+structural argument, not a result; Mibo's Tiled authoring path, never built.
+Set aside as preference: the appeal of an all-F# stack, and any editor
+familiarity - neither moves a score.
+
 ### Qualitative decision
 
-- Chosen route:
-- Decisive evidence:
-- Weaknesses accepted:
-- Losing route removal plan:
-- Review trigger:
+Accepted by Dave on 2026-09-03.
+
+- **Chosen route:** Candidate A - Godot .NET for content, presentation, and
+  packaging, with the framework-independent F# `CommandoWar.Sim` behind a thin
+  C# facade. Headless execution stays on the project-owned `cwheadless` runner,
+  not on Godot.
+
+- **Decisive evidence:**
+  1. The project is content- and UX-iteration-bound before it is
+     rendering-bound (the `docs/02` thesis). Neither spike contradicted it -
+     both hand-drew the greybox and neither hit a rendering-API limit. The
+     highest-weighted drivers are therefore authoring and presentation, and
+     Godot leads both by a wide margin because it ships mature integrated
+     tooling where the Mibo route must build a UI layer, a sprite/atlas and
+     animation pipeline, isometric depth sorting with occluders, a Tiled
+     importer, and the `docs/06` section 11 developer overlays as owned code.
+  2. Mibo carries a confirmed production-eligibility problem: current
+     `Mibo.Core` cannot be adopted without the prohibited `Mibo.Adaptive`
+     package. Selecting Mibo means either waiting on an upstream re-separation
+     that may not come, or a new ADR that accepts the coupled experimental
+     package against its still-open correctness fixes. Godot has no equivalent
+     constraint.
+  3. The C#/F# boundary tax that argued against Godot before the spike is real
+     but small and contained: one ~150-line facade, module-function access, and
+     `FSharpOption` interop. No Godot type reached the simulation and the
+     54-test suite stayed framework-neutral.
+
+- **Why Godot is more likely to ship the Bridgehead vertical slice:** the slice
+  needs selection and command-preview UX, player-facing reason and disposition
+  UI, developer overlays, isometric depth ordering with occluders, placeholder
+  art with a real atlas, a content importer and greybox map, and a playtest
+  build. On the Godot route most of that is editor and scene work against
+  existing systems. On the Mibo route it is all new host code plus a UI
+  framework Mibo does not provide, carried on a dependency that is already
+  pinned-stale. Same simulation either way; the slice cost differs almost
+  entirely in presentation and tooling, which is where Godot's lead sits.
+
+- **The honest case for Mibo, and the condition under which it would win:** Mibo
+  is a genuinely good result, not a straw man. It reproduced the fixture through
+  two independent paths, packaged with no ceremony, removed the language
+  boundary entirely, and cost no more host code than Godot for the spike scope.
+  Its headless story is cleaner than Godot's. If the `Mibo.Adaptive` coupling
+  were resolved upstream **and** the first real Godot editor-authoring task
+  showed the editor loop is not materially faster than a code relaunch, the
+  decision would be close enough to turn on preference and Mibo would be
+  defensible. Neither of those conditions holds today, and one of them is
+  outside the project's control.
+
+- **Weaknesses accepted:**
+  1. **Godot's editor iteration loop is still unmeasured on this project** -
+     only confirmed to open the spike headless without error. Godot's single
+     largest claimed advantage remains a structural argument.
+  2. **Self-contained packaging is blocked** - the `4.7.2.stable.mono` export
+     templates are absent and no export preset is committed. The app runs
+     outside the editor via `--path`. Exact unblock steps are in the TASK-004
+     ledger.
+  3. **Mixed C#/F# solution** - two idioms and two debugging stories, contained
+     to the host; the simulation stays single-language F#.
+  4. **`net10.0` client is off Godot 4.7.2's `net8.0` template default**, forced
+     by the F# reference. Builds and runs clean.
+
+- **Losing route removal plan (Mibo):** keep `src/CommandoWar.Client.Mibo/` as
+  spike evidence only; add a "Rejected route" note to its README; it is already
+  absent from `CommandoWar.slnx` and stays out of the default build, test, CI,
+  and task assumptions; update `decisions/ADR-0003` to record that Mibo is not
+  adopted and that headless execution stays on `cwheadless`; do not build any
+  Godot/Mibo/MonoGame/raylib abstraction. Do not delete the spike source, the
+  shared fixture, `cwheadless`, or the tests.
+
+- **Review triggers:**
+  1. The first Bridgehead authoring task (B-025) must record an actual editor
+     edit->visible-result measurement. If it is not materially better than the
+     code-first relaunch loop, reopen ADR-0001.
+  2. Before the first external-playtest build (B-036): install the
+     `4.7.2.stable.mono` export templates, commit an export preset, and produce
+     a real `--export-release` executable. If that fails for a reason other than
+     the missing templates, reopen the packaging question.
+  3. If Godot forces a type or lifecycle assumption into `CommandoWar.Sim` or
+     its contracts, that is an ADR-0002 compliance failure: stop and fix.
+  4. If a Godot 4.x breaking change lands before the vertical slice that the
+     pinned 4.7.2 cannot absorb, run a dependency review.
+
+- **Named follow-up - keep the C#/F# boundary low-impedance:** the accepted
+  weakness "mixed C#/F# solution" is the one Dave has called the priority to
+  contain. The production client must keep C# as a thin, dumb host-and-glue
+  layer with the real client logic (view-model preparation, input-to-command
+  mapping, overlay state, replay-relevant messages) in F#. The spike's
+  `SimFacade.cs` (~150 lines, the only C# touching the sim) is the shape to
+  hold; `MainNode.cs` (~330 lines of host loop + render + input + overlay) is
+  the part to push toward F#. Open question for a dedicated task before P4
+  client work: can F# define Godot node subclasses directly on Godot 4.7.2
+  (the editor script integration and source generators are Roslyn/C#-specific),
+  or is a minimal C# node shim per scene the idiomatic and stable answer. This
+  is a boundary-design task, not vertical-slice work, and it may produce an
+  ADR-0004 or an ADR-0002 amendment. It does not reopen this decision.
+
+- **Pinned versions:** Godot `4.7.2.stable.mono.official.ed1daf0bf`; .NET SDK
+  `10.0.303` (`rollForward: latestPatch`), target `net10.0`; `Godot.NET.Sdk` /
+  `GodotSharp` / `Godot.SourceGenerators` `4.7.2`. Editor path
+  `C:\Users\Dave\Documents\GitHub\Godot_v4.7.2-stable_mono_win64\` (not on
+  `PATH`). The offline `Tools/nupkgs` feed in the client `nuget.config` pins the
+  `Godot.*` restore.
 
 ## Consequences after acceptance
 
-- Update `PROJECT_STATE.yaml` with the selected route.
-- Move G1 to passed only after evidence review.
-- Update `docs/02_TECHNOLOGY_DECISION.md` to remove obsolete provisional language.
-- Pin selected dependencies.
-- Remove the losing host from default build, CI, and task assumptions.
-- Do not abstract over both frameworks unless a later accepted ADR demonstrates a product requirement.
+Applied 2026-09-03:
+
+- `PROJECT_STATE.yaml`: `framework_decision: godot_dotnet_fsharp_sim (ADR-0001)`;
+  `gates.G1_framework_selected: passed`; `current_gate: G2_deterministic_core_proven`;
+  `current_phase: P2_deterministic_core`. G1 evidence checklist in
+  `docs/08_ROADMAP_AND_GATES.md` section 4 is satisfied, with the editor-iteration
+  measurement recorded as a known limitation and review trigger 1.
+- `docs/02_TECHNOLOGY_DECISION.md`: provisional "do not commit the production
+  client yet" language replaced with the recorded decision.
+- `decisions/ADR-0003-MIBO-ADOPTION.md`: 2026-09-03 note - Mibo is not adopted;
+  its review trigger "ADR-0001 chooses Godot" has fired; headless execution stays
+  on `cwheadless`.
+- `src/CommandoWar.Client.Mibo/README.md`: "Rejected route" note added. The host
+  is retained as spike evidence only, stays out of `CommandoWar.slnx` and every
+  default build / test / CI path, and is not a task assumption.
+- Godot dependency versions pinned (see "Pinned versions" above).
+- No abstraction over both frameworks. `CommandoWar.Sim` is unchanged and stays
+  framework-neutral (ADR-0002).
+
+Open, tracked as review triggers / follow-up above:
+
+- Godot self-contained packaging is blocked on the absent `4.7.2.stable.mono`
+  export templates (accepted weakness 2; review trigger 2; unblock steps in the
+  TASK-004 ledger). An in-session `--export-release` attempt on 2026-09-03 failed
+  at `export_presets.cfg` absent, then would fail on the empty template
+  directory; the app runs outside the editor via `--path`.
+- The editor-iteration measurement (review trigger 1).
+- The low-impedance C#/F# boundary design task (named follow-up above).

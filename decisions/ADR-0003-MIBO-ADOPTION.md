@@ -1,6 +1,6 @@
 # ADR-0003: Conditional and Limited Use of Mibo
 
-Status: accepted as spike policy (amended 2026-09-02), production adoption pending ADR-0001  
+Status: spike complete; Mibo not adopted (ADR-0001 chose Godot, 2026-09-03). Amended 2026-09-02, 2026-09-03  
 Date: 2026-09-02  
 Decision owner: Dave
 
@@ -168,3 +168,27 @@ months, an experimental incremental-computation engine folded into the core
 package, that engine still shipping correctness fixes) are concrete evidence for
 the ADR-0001 "dependency and maintenance risk" driver. This stands regardless of
 the spike's ergonomic results and belongs in the ADR-0001 Mibo column.
+
+## 2026-09-03 note: Mibo not adopted
+
+ADR-0001 was accepted on 2026-09-03 and selected Godot .NET. This fires the
+ADR-0003 review trigger "ADR-0001 chooses Godot".
+
+Consequences:
+
+- Mibo is removed from the default production build and CI. It was never in
+  `CommandoWar.slnx`; `src/CommandoWar.Client.Mibo/` is retained as TASK-005
+  spike evidence only and is not a build, test, CI, or task target.
+- Headless execution stays on the project-owned `cwheadless` runner
+  (`src/CommandoWar.Headless/`), as this ADR's "Production adoption" section
+  already required for the Godot outcome. Mibo's `HeadlessRunner` is not used.
+- `CommandoWar.Sim` remains framework-neutral (ADR-0002). No Godot/Mibo/
+  MonoGame/raylib abstraction is built.
+- The Mibo.Adaptive prohibition (this ADR, `PROJECT_STATE.yaml`
+  `prohibited_before_G5`) is unaffected and stays in force.
+- The TASK-005 spike evidence, the shared fixture, and `cwheadless` are
+  preserved for audit; nothing is deleted.
+
+Reopening Mibo as a production option would require a new ADR with measured
+failure evidence against the Godot route, per this ADR's rollback rule and
+ADR-0001.

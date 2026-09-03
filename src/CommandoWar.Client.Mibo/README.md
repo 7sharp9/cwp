@@ -1,5 +1,16 @@
 # CommandoWar Mibo + raylib framework spike (TASK-005)
 
+## Rejected route (2026-09-03)
+
+ADR-0001 selected **Godot .NET** as the production client. Mibo is not adopted.
+This host is kept as spike evidence for the decision audit only. It is not
+production code, not in `CommandoWar.slnx`, and not a build, test, CI, or task
+target. Headless execution is on the project-owned `cwheadless` runner
+(`src/CommandoWar.Headless/`), not Mibo's `HeadlessRunner`. See
+`decisions/ADR-0001-FRAMEWORK-SELECTION.md`, the `decisions/ADR-0003` 2026-09-03
+note, and the 2026-09-03 progress-ledger entry. Do not resume work here without
+a new ADR carrying measured failure evidence against the Godot route.
+
 **Disposable.** This host exists only to produce ADR-0001 evidence. It is not
 production code and must be removable without touching `CommandoWar.Sim`,
 `CommandoWar.Sim.Tests`, `CommandoWar.Headless`, `content/`, or the shared

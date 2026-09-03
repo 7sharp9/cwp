@@ -1,6 +1,6 @@
 # TASK-006: Evaluate Framework Spikes and Accept ADR-0001
 
-Status: proposed  
+Status: done  
 Owner: Dave  
 Phase: P1  
 Gate: G1  
@@ -64,15 +64,51 @@ Maintaining multiple clients would multiply work and conceal indecision. The pro
 
 ## Acceptance criteria
 
-- [ ] Both candidates were judged against equivalent minimum behaviour and content work.
-- [ ] Every weighted driver contains evidence-based scores and notes.
-- [ ] The qualitative decision explains why the winner is more likely to ship the vertical slice.
-- [ ] Language preference and editor preference are distinguished from observed productivity.
-- [ ] One and only one production client route is selected, or the project explicitly stops.
-- [ ] Accepted weaknesses, dependency versions, and review triggers are recorded.
-- [ ] The losing host is absent from default production build and CI paths.
-- [ ] ADR-0001, state, backlog, progress ledger, and technology document agree.
-- [ ] No vertical-slice feature was implemented as part of the decision.
+- [x] Both candidates were judged against equivalent minimum behaviour and
+      content work. Equivalence confirmed in the 2026-09-03 ledger entry; every
+      non-equivalent dimension (editor vs text authoring, Mibo 4.1.0 pin,
+      packaging) recorded in ADR-0001.
+- [x] Every weighted driver contains evidence-based scores and notes. ADR-0001
+      "Scored decision-driver table (TASK-006)": 9 drivers, predeclared weights
+      unchanged, per-candidate score + basis note. Godot 4.13, Mibo 3.62.
+- [x] The qualitative decision explains why the winner is more likely to ship
+      the vertical slice. ADR-0001 "Qualitative decision" block (recommendation,
+      pending acceptance).
+- [x] Language preference and editor preference are distinguished from observed
+      productivity. ADR-0001 "Observed vs asserted vs preference" paragraph.
+- [x] One and only one production client route is selected. **Godot .NET plus
+      F# simulation** (ADR-0001 accepted 2026-09-03).
+- [x] Accepted weaknesses, dependency versions, and review triggers are
+      recorded. ADR-0001 "Qualitative decision" block + "Pinned versions".
+- [x] The losing host is absent from default production build and CI paths.
+      `src/CommandoWar.Client.Mibo/` is not in `CommandoWar.slnx` or any default
+      build/test/CI path; "Rejected route" note added to its README;
+      `decisions/ADR-0003` 2026-09-03 note records Mibo not adopted.
+- [x] ADR-0001, state, backlog, progress ledger, and technology document agree.
+      ADR-0001 `accepted` + Selected candidate; `docs/02` decision recorded;
+      `PROJECT_STATE.yaml` `framework_decision` / `gates.G1` (`passed`) /
+      `current_gate` (`G2`) / `current_phase` (`P2`) moved; backlog + ledger
+      updated.
+- [x] No vertical-slice feature was implemented as part of the decision. No P2
+      task activated; no `CommandoWar.Sim` / test / fixture change.
+
+## Progress notes (2026-09-03)
+
+Precondition applied (TASK-005 accepted as evidence; TASK-006 activated). Both
+spikes re-verified this session: 54 tests green and framework-neutral; both
+hosts build `0/0`, reproduce the 41-hash fixture headless (`MATCH`, exit 0),
+render windowed with fixture-correct hashes, and fail invalid content with
+actionable errors and exit 2; `CommandoWar.Sim` package tree is `FSharp.Core`
+only; the Mibo host carries no `Mibo.Adaptive`; the Godot editor opens the spike
+project headless without error. The Godot editor GUI content-edit exercise could
+not be driven (no interactive display) and is accepted as a known limitation on
+Dave's instruction, recorded as ADR-0001 review trigger 1. Godot self-contained
+packaging remains blocked on absent export templates (accepted weakness 2,
+review trigger 2).
+
+The completed decision matrix and the Godot recommendation are in
+`decisions/ADR-0001-FRAMEWORK-SELECTION.md`. Remaining steps are gated on Dave's
+acceptance of the evidence in this session.
 
 ## Required verification
 

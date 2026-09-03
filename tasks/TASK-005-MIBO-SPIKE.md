@@ -1,6 +1,6 @@
 # TASK-005: Disposable Mibo plus raylib Framework Spike (trimmed)
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P1
 Gate: G1

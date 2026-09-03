@@ -1,21 +1,33 @@
 # Technology Decision: Godot, MonoGame, raylib, and Mibo
 
-Status: provisional analysis; final decision pending ADR-0001  
-Evidence date: 2026-09-02
+Status: decided; see ADR-0001 (accepted 2026-09-03)  
+Evidence date: 2026-09-02; decision date: 2026-09-03
 
 ## Decision summary
 
-Do not commit the production client yet.
+**Godot .NET for content, presentation, input, UI, and packaging, with the
+framework-independent F# `CommandoWar.Sim` behind a thin C# facade.** Headless
+execution stays on the project-owned `cwheadless` runner.
 
-The current shipping-oriented default remains:
+This was decided by the TASK-004 and TASK-005 spikes and ADR-0001. Both
+disposable hosts drove the byte-identical simulation and reproduced the shared
+41-hash fixture exactly. Godot won on the weighted evidence (4.13 vs 3.62)
+because the project is content- and UX-iteration-bound before it is
+rendering-bound, and Godot ships the scene / tilemap / inspector / animation /
+debugger tooling that the code-first route would have to build. Mibo's real
+advantages (no C#/F# interop tax, native headless stepping, out-of-the-box
+`dotnet publish`) were genuine but lower-leverage, and current Mibo cannot be
+adopted without the prohibited `Mibo.Adaptive` package (ADR-0003 2026-09-02
+amendment).
 
-> Godot .NET for content and presentation, with a framework-independent F# simulation behind a narrow C# facade.
+The analysis below is the pre-spike research snapshot, kept for context. Where
+it is provisional or hedged, ADR-0001 and the 2026-09-03 progress-ledger entry
+are authoritative.
 
-Mibo changes the decision enough to require a direct spike:
-
-> For an F#-first prototype or research instrument, Mibo classic MVU with raylib and Tiled may be the better first host.
-
-The wrong compromise is to combine Godot, Mibo's rendering runtime, MonoGame, and raylib in one production path. Mibo is either the code-first client framework or it is not a runtime dependency. The simulation remains independent in either case.
+Mibo is **not** a runtime dependency. `src/CommandoWar.Client.Mibo/` is retained
+as spike evidence only, outside `CommandoWar.slnx` and every default build, test,
+and CI path. Do not combine Godot with Mibo's rendering runtime, MonoGame, or
+raylib in one production path, and do not build an abstraction over them.
 
 ## Verified current facts
 
