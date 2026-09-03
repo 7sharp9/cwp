@@ -27,7 +27,8 @@ A backlog row is not sufficient authority for an agent to implement work. A `rea
 | TASK-005 | P1 | Implement disposable Mibo plus raylib framework spike (trimmed; pinned to Mibo 4.1.0 per ADR-0003 2026-09-02 amendment) | S | TASK-004, ADR-0003 amendment | done | `tasks/TASK-005-MIBO-SPIKE.md` |
 | TASK-006 | P1 | Evaluate spikes and accept framework ADR | S | TASK-004, TASK-005 | done | `tasks/TASK-006-FRAMEWORK-DECISION.md` |
 | TASK-007 | P2 | Design the low-impedance Godot C#/F# client boundary | S | TASK-006 | done | `tasks/TASK-007-GODOT-FSHARP-BOUNDARY.md` |
-| TASK-008 | P2 | Define and validate the initial scenario DTO and content version | S | TASK-007 | review | `tasks/TASK-008-SCENARIO-DTO-AND-CONTENT-VERSION.md` |
+| TASK-008 | P2 | Define and validate the initial scenario DTO and content version | S | TASK-007 | done | `tasks/TASK-008-SCENARIO-DTO-AND-CONTENT-VERSION.md` |
+| TASK-009 | P2 | Restructure the progress ledger into a summary index plus per-entry detail files | S | TASK-008 | active | `tasks/TASK-009-PROGRESS-LEDGER-RESTRUCTURE.md` |
 
 ## 3. Planned simulation work
 
@@ -35,7 +36,7 @@ These items are not implementation-ready. Create and review a task file before s
 
 | ID | Phase | Work item | Size | Dependencies | Gate | Status |
 |---|---|---|---|---|---|---|
-| B-007 | P2 | Define and validate initial scenario DTO and content version | S | TASK-006 | G2 | active (`tasks/TASK-008-SCENARIO-DTO-AND-CONTENT-VERSION.md`) |
+| B-007 | P2 | Define and validate initial scenario DTO and content version | S | TASK-006 | G2 | done (`tasks/TASK-008-SCENARIO-DTO-AND-CONTENT-VERSION.md`) |
 | B-008 | P2 | Implement terrain grid, elevation, passability, and directional cover | M | B-007 | G2 | proposed |
 | B-009 | P2 | Implement deterministic line of sight and opacity | M | B-008 | G2 | proposed |
 | B-010 | P2 | Implement deterministic grid pathfinding with stable tie-breaking | M | B-008 | G2 | proposed |

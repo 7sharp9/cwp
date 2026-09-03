@@ -1,6 +1,6 @@
 # TASK-008: Define and validate the initial scenario DTO and content version
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); realises backlog B-007

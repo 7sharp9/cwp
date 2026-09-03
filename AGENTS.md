@@ -69,7 +69,10 @@ Every completed task must update:
 - its own task file;
 - the matching row in `docs/11_BACKLOG.md`;
 - `PROJECT_STATE.yaml` if the active task, phase, gate, or decision changed;
-- `docs/12_PROGRESS_LEDGER.md` with commands, results, and unresolved concerns.
+- `docs/12_PROGRESS_LEDGER.md`: add a row to the index table, and add a detail
+  file under `docs/ledger/` (named `YYYY-MM-DD-<ID>-<slug>.md`, keeping the
+  entry heading as its title) holding the commands, results, and unresolved
+  concerns. Refresh the index "Pinned facts" block if any pinned value changed.
 
 Update an ADR only when the task explicitly makes or supersedes a decision.
 
@@ -83,6 +86,7 @@ Report:
 - tests and commands run, with results;
 - acceptance criteria evidence;
 - risks or unresolved questions;
-- documentation updated.
+- documentation updated, including the new `docs/12_PROGRESS_LEDGER.md` index
+  row and its `docs/ledger/` detail file (and any "Pinned facts" change).
 
 Do not offer or begin the next task.
