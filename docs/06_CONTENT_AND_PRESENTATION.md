@@ -117,9 +117,15 @@ with the map, an out-of-map or duplicated cell or cover feature, an unknown
 terrain or cover class, a negative elevation / cost / cover level, and a
 deployment sitting on an impassable cell (docs/07 section 3, docs/03 section
 17). An absent layer is legal and means empty terrain. Traversal links,
-static-object gameplay data, destruction state, and any consumer of these
-values (line of sight, pathfinding, movement) are later tasks (B-009 to
-B-011, B-019).
+static-object gameplay data, and destruction state are later tasks (B-011,
+B-019).
+
+TASK-012 gave the High occlusion row its first consumer: `Sight`
+(`src/CommandoWar.Sim/Sight.fs`) reads `Terrain.opaque` and `Terrain.elevation`
+for deterministic point-to-point line of sight (`docs/04` section 9). It is
+still authored-and-queried only, with no tick phase calling it (Perception,
+backlog B-015, is the first). Pathfinding and movement over the Terrain and
+Elevation rows (B-010, B-011) remain later tasks.
 
 - `FriendlySpawn`
 - `EnemySpawn`

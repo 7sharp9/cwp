@@ -1,6 +1,6 @@
 # TASK-011: Headless diagnostic visualisation and the framework-neutral diagnostic frame
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); realises backlog B-012a

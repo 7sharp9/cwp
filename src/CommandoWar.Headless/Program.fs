@@ -195,18 +195,37 @@ let private cmdFixture () : int =
         printOutcomeTail outcome
         Exit.ok
 
+let private parseCell (s: string) : Cell option =
+    match s.Split(',') with
+    | [| xs; ys |] ->
+        match Int32.TryParse xs, Int32.TryParse ys with
+        | (true, x), (true, y) -> Some { X = x; Y = y }
+        | _ -> None
+    | _ -> None
+
+/// Parses an `AX,AY:BX,BY` line-of-sight spec for `--los`.
+let private parseLos (s: string) : (Cell * Cell) option =
+    match s.Split(':') with
+    | [| l; r |] ->
+        match parseCell l, parseCell r with
+        | Some a, Some b -> Some(a, b)
+        | _ -> None
+    | _ -> None
+
 let private cmdRender (args: string list) : int =
-    // render <fixture|demo|command-log> [--tick N] [--layer NAME] [--format ascii|svg|html] [--out PATH]
+    // render <fixture|demo|los|command-log> [--tick N] [--layer NAME]
+    //        [--los AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]
     match args with
     | [] ->
         eprintfn
-            "usage: cwheadless render <fixture|demo|command-log> [--tick N] [--layer NAME] [--format ascii|svg|html] [--out PATH]"
+            "usage: cwheadless render <fixture|demo|los|command-log> [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
         Exit.usage
     | target :: rest ->
         let mutable tick: int64 option = None
         let mutable layerName: string option = None
         let mutable format = "ascii"
         let mutable out: string option = None
+        let mutable losSpecs: (Cell * Cell) list = []
         let mutable optErr: string option = None
 
         let rec parseOpts xs =
@@ -221,6 +240,12 @@ let private cmdRender (args: string list) : int =
             | "--layer" :: v :: t ->
                 layerName <- Some v
                 parseOpts t
+            | "--los" :: v :: t ->
+                match parseLos v with
+                | Some pair ->
+                    losSpecs <- losSpecs @ [ pair ]
+                    parseOpts t
+                | None -> optErr <- Some $"invalid --los value '{v}', expected AX,AY:BX,BY"
             | "--format" :: v :: t ->
                 match v with
                 | "ascii"
@@ -241,26 +266,42 @@ let private cmdRender (args: string list) : int =
             eprintfn "error: %s" m
             Exit.usage
         | None ->
-            let frames: DiagnosticFrame[] option =
+            // Each target resolves to its diagnostic frames plus the terrain
+            // `--los` rays are traced over.
+            let resolved: (DiagnosticFrame[] * Terrain) option =
                 match target with
                 | "fixture" ->
-                    Some(DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount)
+                    let w = Fixture.initialState ()
+                    Some(DiagnosticRender.runFrames w (Fixture.commandLog ()) Fixture.TickCount, w.Terrain)
                 | "demo" ->
-                    Some(
-                        DiagnosticRender.runFrames
-                            (DemoScenario.initialState ())
-                            (DemoScenario.commandLog ())
-                            DemoScenario.TickCount
-                    )
+                    let w = DemoScenario.initialState ()
+                    Some(DiagnosticRender.runFrames w (DemoScenario.commandLog ()) DemoScenario.TickCount, w.Terrain)
+                | "los" ->
+                    let w = LosDemo.initialState ()
+                    Some(DiagnosticRender.runFrames w [||] LosDemo.TickCount, w.Terrain)
                 | path ->
                     match loadLog path with
                     | None -> None
                     | Some cmds ->
-                        Some(DiagnosticRender.runFrames (Fixture.initialState ()) cmds Fixture.TickCount)
+                        let w = Fixture.initialState ()
+                        Some(DiagnosticRender.runFrames w cmds Fixture.TickCount, w.Terrain)
 
-            match frames with
+            match resolved with
             | None -> Exit.usage
-            | Some frames ->
+            | Some(frames, terrain) ->
+                let losOverlays: Overlay[] =
+                    losSpecs
+                    |> List.map (fun (a, b) ->
+                        let r = Sight.trace terrain a b
+                        SightRay(a, b, r.Path, r.Blocker))
+                    |> List.toArray
+
+                let attach (f: DiagnosticFrame) =
+                    if Array.isEmpty losOverlays then
+                        f
+                    else
+                        { f with Overlays = Array.append f.Overlays losOverlays }
+
                 let emit (text: string) =
                     match out with
                     | Some p ->
@@ -273,7 +314,7 @@ let private cmdRender (args: string list) : int =
                     if tick.IsSome then
                         eprintfn "note: --tick is ignored for --format html (all %d frames are embedded)" frames.Length
 
-                    emit (DiagnosticRender.Html frames)
+                    emit (DiagnosticRender.Html(frames |> Array.map attach))
                     Exit.ok
                 | _ ->
                     let idx = defaultArg (tick |> Option.map int) 0
@@ -291,11 +332,13 @@ let private cmdRender (args: string list) : int =
                             Exit.usage
                         | _ ->
                             let selected =
-                                match layerName with
-                                | None -> baseFrame
-                                | Some name ->
-                                    { baseFrame with
-                                        Layers = baseFrame.Layers |> Array.filter (fun l -> l.Name = name) }
+                                attach (
+                                    match layerName with
+                                    | None -> baseFrame
+                                    | Some name ->
+                                        { baseFrame with
+                                            Layers = baseFrame.Layers |> Array.filter (fun l -> l.Name = name) }
+                                )
 
                             let text =
                                 if format = "svg" then
@@ -314,8 +357,8 @@ let private usage () =
     printfn "  cwheadless replay <command-log> [--ticks N]      replay a command log against the fixture"
     printfn "  cwheadless compare <log-a> <log-b> [--ticks N]   report the first authoritative divergence"
     printfn "  cwheadless fixture                               emit the pinned shared fixture + per-tick hashes"
-    printfn "  cwheadless render <target> [opts]                render diagnostic frames (target: fixture | demo | <command-log>)"
-    printfn "        [--tick N] [--layer NAME] [--format ascii|svg|html] [--out PATH]"
+    printfn "  cwheadless render <target> [opts]                render diagnostic frames (target: fixture | demo | los | <command-log>)"
+    printfn "        [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
     printfn ""
     printfn "exit codes: %d ok, %d usage/IO, %d replay error, %d divergence detected"
         Exit.ok Exit.usage Exit.replayError Exit.diverged

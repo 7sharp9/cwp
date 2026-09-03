@@ -248,9 +248,10 @@ task's stop-and-ask alternative was not taken).
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-04)
 - Notes: additive terrain model + authored layer + one-pass validation +
   total bounds-checked queries; no tick phase consumes terrain;
   `Canonical.encode` and all five pinned files unmoved (ADR-0002 amendment
   records why); `ScenarioContent.Version` 2, version 1 rejected; 102 tests
-  green.
+  green. Accepted at TASK-012 start; `git status` scope check plus one
+  `dotnet test` (`Passed: 115`) confirmed the tree still clean and green.

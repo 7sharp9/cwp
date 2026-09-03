@@ -84,6 +84,26 @@ module DiagnosticRender =
         let single =
             if frame.Layers.Length = 1 then Some frame.Layers.[0] else None
 
+        // Line-of-sight overlays drawn onto the composite grid: `*` on a
+        // traced cell, `x` on a blocking cell. Empty unless a caller supplied
+        // a `SightRay` overlay (e.g. `cwheadless render --los`).
+        let sightRays =
+            frame.Overlays
+            |> Array.choose (function
+                | SightRay(_, _, cells, blk) -> Some(cells, blk)
+                | Cells _ -> None)
+
+        let onRay (x: int) (y: int) =
+            sightRays
+            |> Array.exists (fun (cells, _) -> cells |> Array.exists (fun c -> c.X = x && c.Y = y))
+
+        let blockerAt (x: int) (y: int) =
+            sightRays
+            |> Array.exists (fun (_, blk) ->
+                match blk with
+                | Some c -> c.X = x && c.Y = y
+                | None -> false)
+
         let elevation = layer LayerName.Elevation frame
         let passable = layer LayerName.Passability frame
         let opaque = layer LayerName.Opacity frame
@@ -97,6 +117,8 @@ module DiagnosticRender =
         let glyph (x: int) (y: int) : char =
             match agentAt frame x y with
             | Some a -> sideGlyph a.Side
+            | None when blockerAt x y -> 'x'
+            | None when onRay x y -> '*'
             | None ->
                 match single with
                 | Some l ->
@@ -205,13 +227,22 @@ module DiagnosticRender =
                     | None -> "at rest"
                 line (sprintf "  agent %d  %s  %s  %s" (AgentId.value a.Id) side (cellText a.Cell) dest)
 
-        // Overlays (always empty at this stage; rendered if a future system adds one).
+        // Overlays (empty unless a caller supplies one: a test, or
+        // `cwheadless render --los`). `Diagnostics.frame` never emits one.
         if frame.Overlays.Length > 0 then
             line ""
             line "overlays:"
-            for Cells(label, cells) in frame.Overlays do
-                let cs = cells |> Array.map cellText |> String.concat " "
-                line (sprintf "  %s: %s" label cs)
+            for o in frame.Overlays do
+                match o with
+                | Cells(label, cells) ->
+                    let cs = cells |> Array.map cellText |> String.concat " "
+                    line (sprintf "  %s: %s" label cs)
+                | SightRay(a, b, _, blocked) ->
+                    let status =
+                        match blocked with
+                        | Some c -> sprintf "blocked at %s" (cellText c)
+                        | None -> "clear"
+                    line (sprintf "  sight %s -> %s: %s" (cellText a) (cellText b) status)
 
         line ""
 
@@ -350,6 +381,51 @@ module DiagnosticRender =
                     "  <circle cx=\"%d\" cy=\"%d\" r=\"5\" fill=\"%s\" stroke=\"#ffffff\" stroke-width=\"1\"/>"
                     cx cy colour
             )
+
+        // Overlays: line-of-sight rays (dashed line, traced-cell dots, a red
+        // cross on the blocker) and generic labelled cell sets. Empty unless a
+        // caller supplied one; existing renders are byte-identical without it.
+        for o in frame.Overlays do
+            match o with
+            | Cells(_, cells) ->
+                for c in cells do
+                    line (
+                        sprintf
+                            "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"#6b46c1\" fill-opacity=\"0.3\"/>"
+                            (c.X * s) (c.Y * s) s s
+                    )
+            | SightRay(a, b, cells, blocked) ->
+                line (
+                    sprintf
+                        "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#6b46c1\" stroke-width=\"2\" stroke-dasharray=\"4,3\"/>"
+                        (a.X * s + mid) (a.Y * s + mid) (b.X * s + mid) (b.Y * s + mid)
+                )
+
+                for c in cells do
+                    line (
+                        sprintf "  <circle cx=\"%d\" cy=\"%d\" r=\"2\" fill=\"#6b46c1\"/>" (c.X * s + mid) (c.Y * s + mid)
+                    )
+
+                match blocked with
+                | Some c ->
+                    line (
+                        sprintf
+                            "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#c53030\" stroke-width=\"3\"/>"
+                            (c.X * s) (c.Y * s) s s
+                    )
+
+                    line (
+                        sprintf
+                            "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#c53030\" stroke-width=\"2\"/>"
+                            (c.X * s) (c.Y * s) (c.X * s + s) (c.Y * s + s)
+                    )
+
+                    line (
+                        sprintf
+                            "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#c53030\" stroke-width=\"2\"/>"
+                            (c.X * s + s) (c.Y * s) (c.X * s) (c.Y * s + s)
+                    )
+                | None -> ()
 
         // Footer.
         let footerText (dy: int) (str: string) =

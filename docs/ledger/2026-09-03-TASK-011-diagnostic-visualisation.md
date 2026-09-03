@@ -143,6 +143,10 @@
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: TASK-010 finalisation is still outstanding and was deliberately left
-  for Dave (precondition of this task).
+- Accepted: yes (2026-09-04)
+- Notes: framework-neutral `DiagnosticFrame` observer + deterministic
+  ASCII/SVG/HTML renderers + `cwheadless render` verb + terrain-demo goldens +
+  the "visually inspectable" standing rule; `Canonical.encode` and the pinned
+  fixture hashes unmoved; 115 tests green. Accepted together with TASK-010 at
+  TASK-012 start; `git status` scope check plus one `dotnet test`
+  (`Passed: 115`) confirmed.

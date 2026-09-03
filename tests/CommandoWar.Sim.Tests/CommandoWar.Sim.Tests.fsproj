@@ -14,6 +14,7 @@
     <Compile Include="BenchmarkTests.fs" />
     <Compile Include="FixtureTests.fs" />
     <Compile Include="TerrainTests.fs" />
+    <Compile Include="SightTests.fs" />
     <Compile Include="ScenarioTests.fs" />
     <Compile Include="DiagnosticsTests.fs" />
   </ItemGroup>

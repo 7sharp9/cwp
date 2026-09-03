@@ -1,6 +1,6 @@
 # TASK-010: Implement the authoritative terrain grid
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); realises backlog B-008

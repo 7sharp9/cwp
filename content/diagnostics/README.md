@@ -24,6 +24,8 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `demo.ascii.txt` | The terrain-demo scenario (`src/CommandoWar.Headless/DemoScenario.fs`, 12 x 8) at tick 0: a diagonal elevation ridge, an impassable 2 x 2 block, a movement-cost patch, an opaque wall, and three directional cover edges. Exercises every layer of the ASCII renderer. |
 | `demo.svg` | SVG of the terrain-demo scenario at tick 0: hatched impassable cells, dark-bordered opaque cells, elevation shading, cover triangles, agents. |
 | `demo.html` | Self-contained scrubber: one SVG per tick for the 21-frame demo run (ticks 0..20), with a slider and Prev / Next. Inline CSS and JS, no external references. |
+| `los.ascii.txt` | The line-of-sight demo (`src/CommandoWar.Headless/LosDemo.fs`, 12 x 12) at tick 0 with five `--los` rays: a clear ray, a ray blocked by the opaque wall at `(5,4)`, a ray grazing the corner of the lone wall `(9,3)` (visible), a ray blocked by the ridge peak `(3,7)`, and a ray blocked by the `(9,7)`/`(8,8)` solid corner. `*` = traced cell, `x` = blocking cell. |
+| `los.svg` | SVG of the same LOS demo frame: each ray a dashed line with traced-cell dots and a red cross on its blocker. |
 
 ## Regeneration
 
@@ -39,10 +41,16 @@ $R render fixture --tick 40 --format svg   --out content/diagnostics/fixture-tic
 $R render demo --format ascii --out content/diagnostics/demo.ascii.txt
 $R render demo --format svg   --out content/diagnostics/demo.svg
 $R render demo --format html  --out content/diagnostics/demo.html
+
+LOS="--los 1,1:10,1 --los 1,4:10,4 --los 7,2:10,5 --los 1,7:6,7 --los 6,5:11,10"
+$R render los $LOS --format ascii --out content/diagnostics/los.ascii.txt
+$R render los $LOS --format svg   --out content/diagnostics/los.svg
 ```
 
-`render` also accepts a command-log path in place of `fixture` / `demo` (replayed
-against the shared fixture initial state), an optional `--layer <name>` to render
-a single terrain layer (`elevation`, `passability`, `movement-cost`, `opacity`),
-and `--tick N` to pick the frame for the `ascii` / `svg` formats (`html` always
-embeds every tick).
+`render` also accepts a command-log path in place of `fixture` / `demo` / `los`
+(replayed against the shared fixture initial state), an optional `--layer <name>`
+to render a single terrain layer (`elevation`, `passability`, `movement-cost`,
+`opacity`), `--tick N` to pick the frame for the `ascii` / `svg` formats (`html`
+always embeds every tick), and a repeatable `--los AX,AY:BX,BY` to attach a
+line-of-sight ray overlay (computed via `Sight.trace` over the target's terrain)
+to the rendered frame.

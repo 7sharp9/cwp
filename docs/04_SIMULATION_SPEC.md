@@ -153,9 +153,34 @@ Realised by TASK-010 (cover data only): directional low cover is authored and
 stored per cell per cardinal direction as an integer level
 (`Terrain.cover : Terrain -> Cell -> Direction -> int`,
 `src/CommandoWar.Sim/Terrain.fs`), and the opacity flag that a sight
-algorithm will read is `Terrain.opaque`. The line-of-sight algorithm itself,
-its corner rules, and any consumer of these values are B-009; nothing
-evaluates cover or traces a ray yet.
+algorithm will read is `Terrain.opaque`.
+
+Realised by TASK-012 (line of sight): `src/CommandoWar.Sim/Sight.fs`.
+`Sight.trace : Terrain -> Cell -> Cell -> LineOfSight` (and `Sight.visible`,
+defined from it) is a pure, total, integer-only query over `Terrain` opacity
+and elevation returning `{ Visible; Path: Cell[]; Blocker: Cell option }`.
+
+- **Algorithm:** the classic integer supercover grid walk
+  (`decision = (1 + 2*ix)*ny - (1 + 2*iy)*nx`; `< 0` step x, `> 0` step y,
+  `= 0` a single diagonal step). No floating point, no `System.Math`.
+- **Corner rule:** a diagonal step is blocked only when *both* shared-edge
+  neighbours of that step are `Terrain.opaque` (no sight through a solid
+  inner corner; sight passes a single wall cell at a diagonal corner).
+- **Elevation rule:** an intermediate cell blocks when it is `Terrain.opaque`
+  OR its elevation is strictly greater than the elevation of *both* endpoints
+  (a ridge occludes). Endpoint elevation otherwise neither grants nor denies
+  sight; eye-height / height-field reasoning is deferred.
+- **Symmetry:** `Sight.visible t a b = Sight.visible t b a` for every pair
+  (the supercover set is direction-independent; the blocking rule is over
+  sets identical in both directions). Pinned by a property test and golden
+  examples (`SightTests.fs`, `content/diagnostics/los.*`).
+- **Totality:** an out-of-bounds endpoint sees nothing (`Visible = false`,
+  `Blocker = None`).
+
+No tick phase consumes it: like `Terrain` and the `Objective` algebra it is
+authored and queryable but not evaluated. Perception (phase 12.3, backlog
+B-015) is the first consumer. `Canonical.encode` and `Canonical.FormatVersion`
+are unchanged; `Sight.fs` is a leaf nothing authoritative references.
 
 ## 10. World state
 

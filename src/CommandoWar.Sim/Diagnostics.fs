@@ -81,22 +81,27 @@ type EventMarker =
     { Kind: string
       Cells: Cell[] }
 
-/// Open extension point for overlays that later tactical systems will attach.
+/// Open extension point for overlays that later tactical systems attach.
 /// Every renderer draws an overlay through the cells it names, so a new
 /// system adds a case here and a branch in each renderer:
 ///
-///   * B-009 line of sight  -> a ray case (origin, target, first blocker);
+///   * B-009 line of sight  -> `SightRay` (realised by TASK-012);
 ///   * B-010 pathfinding     -> a planned-path case (agent, ordered cells);
 ///   * B-011 reservation     -> a reserved-cell case (cell, agent, until tick);
 ///   * B-019 combat          -> a fire-line case (shooter, target).
 ///
-/// NONE of those exist yet: no such case is defined, `Diagnostics.frame` and
-/// `Diagnostics.frameOf` never produce an overlay, and
-/// `DiagnosticFrame.Overlays` is always empty until one of the systems above
-/// lands. `Cells` is the one non-speculative shape: a labelled set of cells,
-/// used by hand-built frames in tests and as the generic thing a renderer
-/// can always fall back to.
-type Overlay = Cells of label: string * cells: Cell[]
+/// B-010 / B-011 / B-019 do not exist yet: no such case is defined.
+/// `Diagnostics.frame` and `Diagnostics.frameOf` never produce an overlay of
+/// any kind; `DiagnosticFrame.Overlays` is populated only by a caller (a test,
+/// or `cwheadless render --los`). `Cells` is the generic non-speculative
+/// shape: a labelled set of cells a renderer can always fall back to.
+type Overlay =
+    /// A labelled set of cells.
+    | Cells of label: string * cells: Cell[]
+    /// A traced line of sight: origin, target, the traced cell path
+    /// (`Sight.trace`'s `Path`), and the first blocking cell when the target
+    /// is not visible. Supplied by a caller; `Diagnostics` never emits one.
+    | SightRay of from: Cell * target: Cell * cells: Cell[] * blocked: Cell option
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw

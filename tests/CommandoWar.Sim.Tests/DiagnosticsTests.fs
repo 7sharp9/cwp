@@ -152,6 +152,29 @@ let ``a hand-built Overlay renders through the ASCII renderer`` () =
     Assert.Contains("probe: (1,1) (2,2)", ascii)
 
 [<Fact>]
+let ``a hand-built SightRay overlay renders through the ASCII and SVG renderers`` () =
+    let f = Diagnostics.frame (DemoScenario.initialState ())
+
+    let withRay =
+        { f with
+            Overlays =
+                [| SightRay(
+                       { X = 0; Y = 0 },
+                       { X = 4; Y = 0 },
+                       [| { X = 0; Y = 0 }; { X = 1; Y = 0 }; { X = 2; Y = 0 }; { X = 3; Y = 0 }; { X = 4; Y = 0 } |],
+                       Some { X = 2; Y = 0 }
+                   ) |] }
+
+    let ascii = DiagnosticRender.Ascii withRay
+    Assert.Contains("overlays:", ascii)
+    Assert.Contains("sight (0,0) -> (4,0): blocked at (2,0)", ascii)
+
+    let svg = DiagnosticRender.Svg withRay
+    Assert.Contains("stroke-dasharray=\"4,3\"", svg)
+    // Byte-identical without the overlay (regression guard for the goldens).
+    Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
+
+[<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =
     let frames = demoFrames ()
     let mid = frames.[8]
