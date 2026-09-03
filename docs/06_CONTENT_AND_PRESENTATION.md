@@ -68,6 +68,21 @@ type ObjectiveDefinition =
 
 The bridge-demolition interaction may initially be represented as `ReachArea` followed by a fixed-duration plant action and `DestroyTarget`. Do not add a general interaction scripting language.
 
+### Realised by TASK-008
+
+The framework-neutral scenario model, its one-pass validator, and the
+content-format version constant are `src/CommandoWar.Sim/Scenario.fs`, inside
+the simulation library (`docs/03_ARCHITECTURE.md` section 8 lists `Scenario.fs`
+there). The pipeline is `RawScenario` (loosely typed authored input) ->
+`Scenario.validate` -> `Scenario` -> `World.ofScenario`. The content-format
+version is `ScenarioContent.Version` (currently 1), independent of the
+canonical-state and replay format versions. The objective algebra
+(`Objective`: `ReachArea` / `HoldArea` / `DestroyTarget` / `ExtractAgents` /
+`AllOf` / `Optional`) is a data-only type; evaluation is deferred (B-032).
+Per-cell terrain, cover, and opacity are not in the model yet (B-008); the
+scenario carries map dimensions and marker positions only. See
+`docs/04_SIMULATION_SPEC.md` section 21.
+
 ## 4. Map contract
 
 The simulation uses a logical two-dimensional grid with an explicit level or elevation value. The renderer projects that grid into an isometric view.

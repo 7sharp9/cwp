@@ -63,6 +63,22 @@ module World =
                           Agents = List.toArray sorted
                           Random = SplitMix64.create seed }
 
+    /// Builds the authoritative world at tick 0 from a validated scenario
+    /// (docs/04_SIMULATION_SPEC.md section 21). Friendly then enemy deployments
+    /// become agents ordered ascending by id and are handed to `create`, which
+    /// owns the empty-grid, duplicate-id, and in-bounds guards. The scenario's
+    /// objectives, areas, targets, and rules are not consumed here: per-cell
+    /// terrain, line of sight, and pathfinding are out of scope (backlog B-008
+    /// to B-010) and objective evaluation is deferred (B-032).
+    let ofScenario (scenario: Scenario) (seed: uint64) : Result<WorldState, WorldError> =
+        let agents =
+            Array.append scenario.FriendlyDeployments scenario.EnemyDeployments
+            |> Array.sortBy (fun d -> d.Agent)
+            |> Array.map (fun d -> Agent.create d.Agent d.Side d.Cell)
+            |> Array.toList
+
+        create scenario.Map seed agents
+
 [<RequireQualifiedAccess>]
 module Setup =
 

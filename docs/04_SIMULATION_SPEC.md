@@ -359,3 +359,49 @@ At minimum:
 - state hash is independent of presentation state;
 - every refusal and adaptation contains at least one structured reason;
 - same replay inputs reproduce recorded checkpoints within the supported boundary.
+
+## 21. Authored scenario and content version
+
+An authored scenario is framework-neutral typed data: a scenario id, map
+dimensions, friendly and enemy deployments (agent id, side, cell), an objective
+algebra, objective and extraction areas, static targets, and scenario-wide
+rules. It carries positions and references only. Per-cell terrain, line of
+sight, and pathfinding are not part of it (sections 7 to 9; backlog B-008 to
+B-010), and objective evaluation and mission success/failure are deferred
+(backlog B-032) so the objective algebra is a data-only type at this stage.
+
+The authored input is versioned by a content-format version that is independent
+of the canonical-state format version (section 17) and the replay container
+version (section 16): it versions the authored shape and the validation
+contract, not the state encoding. An unsupported version is a typed error, not
+a guessed migration.
+
+Validation is one pass over the raw input and returns either a validated
+scenario or the full list of faults. Each fault names the offending object and,
+where relevant, the expected value; no silent default is supplied for invalid
+data. It reports: an unsupported content version; a blank scenario id;
+non-positive map dimensions; a duplicate, negative, out-of-map, or
+cell-sharing deployment; a duplicate or blank area or target id; an area or
+target marker outside the map; a duplicate or negative objective id; an unknown
+objective class; an objective referencing a missing area or target; an
+extraction selecting an unknown agent; and a missing required marker (no
+friendly deployment, no objective, no extraction area).
+
+A validated scenario builds the authoritative world by deploying its agents
+(friendly then enemy, ordered ascending by id) through the same construction
+path as any other world.
+
+Realised by TASK-008: `src/CommandoWar.Sim/Scenario.fs`.
+`ScenarioContent.Version` = 1, independent of `Canonical.FormatVersion` and
+`Replay.FormatVersion`. `Scenario.validate : RawScenario -> Result<Scenario,
+ScenarioError list>` collects every fault in one pass (`ScenarioError`, 20
+explicit cases in the `ReplayError` style). The `Objective` algebra is
+`ReachArea` / `HoldArea` / `DestroyTarget` / `ExtractAgents` / `AllOf` /
+`Optional`, data only, with evaluation deferred. `World.ofScenario : Scenario
+-> uint64 -> Result<WorldState, WorldError>` reuses `World.create`. A pinning
+test builds the six-agent shared fixture as a `Scenario`, runs it through
+`World.ofScenario` with seed 20260902 to the pinned initial hash
+`0xF2F3DF0D820AD9AC`, and steps 40 ticks with the fixture command to the pinned
+final hash `0x838D3AE7DBFB735D`, tying B-007 to the existing determinism
+evidence without changing the fixture, `Canonical.encode`, or
+`Setup.sixAgentWorld`.

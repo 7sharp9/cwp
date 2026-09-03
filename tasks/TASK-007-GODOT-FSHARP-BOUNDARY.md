@@ -1,6 +1,6 @@
 # TASK-007: Design the low-impedance Godot C#/F# client boundary
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (does not move the gate; unblocks P4 client work)
@@ -182,6 +182,17 @@ Deviations: interactive Godot editor GUI and interactive debugger not drivable
 in-session (same limitation class as TASK-004/006); the disposable proof's
 screenshot projection is crude (agents overlap at the origin) - it is evidence
 of the pattern, not a rendering result.
+
+## Acceptance (2026-09-03)
+
+Accepted by Dave. `decisions/ADR-0004-GODOT-FSHARP-BOUNDARY.md` moved
+`proposed -> accepted`. Review trigger 1 (an F# breakpoint is hit from an
+editor / F5-launched run; hot-reloading the C# shim does not sever the F# host
+reference) and the interactive-debugger check are carried forward to the first
+P4 client task (B-026 / B-027). The disposable proof under
+`src/_scratch/godot-fsharp-boundary/` is retained as ADR evidence and is
+removable wholesale. See the "2026-09-03 - TASK-007 acceptance" note in
+`docs/12_PROGRESS_LEDGER.md`.
 
 ## Required verification
 

@@ -1,7 +1,8 @@
 # ADR-0004: Low-Impedance Godot C#/F# Client Boundary
 
-Status: proposed
+Status: accepted
 Date: 2026-09-03
+Date accepted: 2026-09-03 (Dave)
 Decision owner: Dave
 Task: TASK-007
 

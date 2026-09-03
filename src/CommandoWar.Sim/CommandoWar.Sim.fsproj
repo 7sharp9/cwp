@@ -15,6 +15,7 @@
     <Compile Include="Grid.fs" />
     <Compile Include="Domain.fs" />
     <Compile Include="Commands.fs" />
+    <Compile Include="Scenario.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Snapshot.fs" />
     <Compile Include="Canonical.fs" />
