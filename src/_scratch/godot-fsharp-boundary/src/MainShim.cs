@@ -50,6 +50,28 @@ public partial class MainShim : Node2D
             return;
         }
 
+        if (args.Contains("--forward-test"))
+        {
+            // Simulate what a Myriad-generated C# forwarder + Godot's own
+            // generator produce: F# owns the members, C# forwards, Godot sees
+            // real [Export] / [Signal].
+            var n = new GeneratedStyleNode();
+            n.Waypoints = 7;                       // as if set from the inspector
+            n.Label = "north-ridge";
+            AddChild(n);                           // -> _Ready -> forwards to F#
+            var names = new List<string>();
+            foreach (Godot.Collections.Dictionary d in n.GetPropertyList())
+                names.Add(d["name"].AsString());
+            GD.Print($"[forward-test] Waypoints in property list: {names.Contains("Waypoints")}");
+            GD.Print($"[forward-test] Label in property list:     {names.Contains("Label")}");
+            GD.Print($"[forward-test] HasSignal(PatrolCompleted):  {n.HasSignal("PatrolCompleted")}");
+            n.Connect("PatrolCompleted", Callable.From((int lap) => GD.Print($"[forward-test] received PatrolCompleted({lap})")));
+            n.EmitSignal("PatrolCompleted", 3);
+            GD.Print($"[forward-test] round-trip: set Waypoints=7 via property -> F# logic reads {n.Waypoints}");
+            _pendingExit = 0;
+            return;
+        }
+
         if (args.Contains("--trace-test"))
         {
             var probe = ClientHost.Create();

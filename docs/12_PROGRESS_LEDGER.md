@@ -1320,10 +1320,12 @@ unchanged
   the question-1 experiment). `ClientCore` references `CommandoWar.Sim` +
   `CommandoWar.Headless` (`Fixture`) + the `GodotSharp` 4.7.2 package.
 - Answered TASK-007 questions 1-5 with recorded evidence (below).
-- Wrote `decisions/ADR-0004-GODOT-FSHARP-BOUNDARY.md` (`proposed`): thin C# shim
-  per scene entry point over an F# client-core library; F# types are not scene
-  entry points; per-concern split table; interop idiom; ADR-0002 compliance
-  check; four review triggers.
+- Wrote `decisions/ADR-0004-GODOT-FSHARP-BOUNDARY.md` (`proposed`): a thin C#
+  host over an F# client-core library - form 1, one generic `FSharpSceneHost`
+  for the whole client (preferred, no per-scene C#); form 2, a per-scene shim
+  only where typed inspector `[Export]` / `[Signal]` is needed. F# types are
+  not scene entry points; per-concern split table; interop idiom; a "Myriad and
+  the shim" section; ADR-0002 compliance check; four review triggers.
 - Updated `docs/03_ARCHITECTURE.md` section 14 and `docs/10_RISK_REGISTER.md`
   R-004.
 
@@ -1379,6 +1381,34 @@ unchanged
   `SimHost.AgentViews : AgentView[]` (both `[<CLIMutable>]`),
   `ClientHost.SelfCheck(System.Nullable<uint64>)`. Per-concern C#/F# table in
   ADR-0004.
+- Follow-up (Dave asked whether F# can be "more core" / whether Myriad helps):
+  added `src/FSharpSceneHost.cs` (~35 lines, one generic `Node2D` for the whole
+  client) + `ClientCore/Scene.fs` (`IClientScene`, `FixtureSelfCheckScene`) +
+  `scenes/SceneHost.tscn`. Command: `<godot> --headless --path .
+  --main-scene res://scenes/SceneHost.tscn` -> `[fixture-scene] Ready`,
+  `tick=0 hash=0xF2F3DF0D820AD9AC` ... `final tick=40
+  hash=0x838D3AE7DBFB735D`, `MATCH`, `[fixture-scene] ExitTree`, exit 0. The
+  generic host resolved `CwClientCore.FixtureSelfCheckScene` from `[Export]
+  SceneType` and forwarded lifecycle - **zero scene-specific C#**. ADR-0004
+  "The split" now lists this as form 1 (preferred); a per-scene shim (form 2)
+  only where typed inspector `[Export]` / `[Signal]` is genuinely needed.
+- Follow-up 2 (Dave asked: can F# hold the members + `[Export]` / `[Signal]` /
+  `[GlobalClass]` intent, with Myriad emitting only the C# forwarder?): added
+  `ClientCore/NodeLogic.fs` (`PatrolMarkerLogic`, `[<GodotExport>]` /
+  `[<GodotSignal>]` markers) + `src/GeneratedStyleNode.cs` (hand-written to be
+  exactly what such a Myriad plugin would emit: `[Export]` properties + a
+  `[Signal]` delegate forwarding to a composed F# instance; `[GlobalClass]`).
+  Command: `<godot> --headless --path . -- --forward-test` ->
+  `[patrol-logic] OnReady #1  Waypoints=7  Label=north-ridge`;
+  `Waypoints in property list: True`; `Label in property list: True`;
+  `HasSignal(PatrolCompleted): True`; `received PatrolCompleted(3)`;
+  `set Waypoints=7 via property -> F# logic reads 7`. Godot's own generator
+  builds the full bridge over a pure-forwarding C# stub; the inspector /
+  `.tscn` round-trip works; the Myriad plugin would never touch
+  `godot_variant` / `NativeVariantPtrArgs`. ADR-0004 "Myriad and the shim"
+  option 1 is now **proven feasible** with this evidence; option 2 (reimplement
+  Godot's generators in F#) stays a research project pinned to the engine
+  interop ABI.
 
 ### Evidence - question 5 (debugging)
 
@@ -1446,7 +1476,9 @@ unchanged
 - `docs/10_RISK_REGISTER.md` (R-004 mitigation)
 - `docs/11_BACKLOG.md` (TASK-007 row added, `active -> review`)
 - `PROJECT_STATE.yaml` (`active_work` -> TASK-007; note removed)
-- `src/_scratch/godot-fsharp-boundary/` (new, disposable, not in any `.slnx`)
+- `src/_scratch/godot-fsharp-boundary/` (new, disposable, not in any `.slnx`;
+  includes follow-up 1 `FSharpSceneHost.cs` / `Scene.fs` / `SceneHost.tscn` and
+  follow-up 2 `NodeLogic.fs` / `GeneratedStyleNode.cs`)
 - `docs/evidence/task-007-godot-fsharp-boundary.png` (new)
 - `docs/12_PROGRESS_LEDGER.md` (this entry)
 

@@ -14,6 +14,8 @@
   <ItemGroup>
     <Compile Include="Boundary.fs" />
     <Compile Include="Host.fs" />
+    <Compile Include="Scene.fs" />
+    <Compile Include="NodeLogic.fs" />
     <Compile Include="FSharpNode.fs" />
   </ItemGroup>
 

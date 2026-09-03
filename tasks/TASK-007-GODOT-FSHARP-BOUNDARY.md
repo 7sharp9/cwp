@@ -153,6 +153,22 @@ primitives, `System.Nullable<T>`, `[<CLIMutable>]` records, and
 `Godot.InputEvent` (into F# client methods) cross. Per-concern table in
 ADR-0004.
 
+**Follow-up 1 (Dave asked whether F# can be "more core"):** the per-scene shim
+collapses to one generic `FSharpSceneHost.cs` (~35 lines) for the whole client
+that resolves an F# `IClientScene` from an `[Export] SceneType` -
+`scenes/SceneHost.tscn` reproduces `0x838D3AE7DBFB735D` with zero scene-specific
+C#. ADR-0004 makes this form 1 (preferred).
+
+**Follow-up 2 (Dave asked whether F# can hold `[Export]`/`[Signal]`/
+`[GlobalClass]` with Myriad emitting only the C# forwarder):** proven feasible.
+`ClientCore/NodeLogic.fs` holds the members + `[<GodotExport>]` /
+`[<GodotSignal>]` markers; `src/GeneratedStyleNode.cs` (hand-written as a Myriad
+plugin would emit it) forwards to a composed F# instance. `--forward-test`:
+`[Export]`s appear in `GetPropertyList()`, the `[Signal]` is registered,
+`Connect`/`EmitSignal` round-trips, an inspector-set value is read back in F#.
+Godot's own generator does all the ABI-bound work over the forwarder. ADR-0004
+"Myriad and the shim" option 1.
+
 **Question 5:** C#->F# exception stack traces are readable with exact F#
 file/line (`--trace-test`). Interactive F# breakpoints from an editor-launched
 run were not verified in-session (no interactive debugger); recorded as

@@ -28,6 +28,27 @@ shared fixture.
 3. **C#->F# stack traces (question 5).** `--trace-test` raises inside F# and
    catches in C#; `ex.ToString()` carries F# file/line frames.
 
+4. **The per-scene shim collapses to ONE C# file (follow-up).**
+   `src/FSharpSceneHost.cs` is a single generic `Node2D` that resolves an F#
+   `CwClientCore.IClientScene` implementation named by an `[Export] SceneType`
+   and forwards every lifecycle call. Every `.tscn` uses it as the root and
+   names its F# scene type; no scene-specific C# is ever written.
+   `scenes/SceneHost.tscn` + `ClientCore/Scene.fs` (`FixtureSelfCheckScene`)
+   reproduce `0x838D3AE7DBFB735D` through it. What you give up vs. a per-scene
+   C# shim: per-member `[Export]` inspector fields, `[Signal]`, and editor
+   "attach script" - the F# scene wires itself with `GetNode`.
+
+5. **F# as the source of truth, Myriad-emits-the-forwarder is feasible
+   (follow-up 2).** `ClientCore/NodeLogic.fs` (`PatrolMarkerLogic`) holds the
+   members and `[<GodotExport>]` / `[<GodotSignal>]` intent;
+   `src/GeneratedStyleNode.cs` is hand-written to be exactly what a Myriad
+   plugin would emit - `[Export]` properties and a `[Signal]` delegate that
+   forward to a composed F# instance. `--forward-test` shows Godot drives it
+   normally: `[Export]`s in the property list (inspector + `.tscn` round-trip),
+   signal registered, `Connect`/`EmitSignal` round-trip, inspector-set value
+   read back in F#. So the C# is 100% mechanical forwarding and Godot's own
+   generator does the ABI-bound work.
+
 ## Layout
 
 ```
@@ -37,7 +58,12 @@ Main.tscn                    root = MainShim
 ClientCore/ClientCore.fsproj Microsoft.NET.Sdk F# lib; refs CommandoWar.Sim + GodotSharp pkg
 ClientCore/Boundary.fs       [<CLIMutable>] view records; the C#<->F# shapes (NO Godot types)
 ClientCore/Host.fs           SimHost + ClientHost: the real client logic (NO Godot types)
+ClientCore/Scene.fs          IClientScene + FixtureSelfCheckScene (follow-up 1)
+ClientCore/NodeLogic.fs      PatrolMarkerLogic + [<GodotExport>]/[<GodotSignal>] markers (follow-up 2)
 ClientCore/FSharpNode.fs     the F# Node2D subclass - the question-1 experiment (Godot types)
+src/FSharpSceneHost.cs       one generic C# host for the whole client (follow-up 1)
+src/GeneratedStyleNode.cs    hand-written "what Myriad would emit" forwarder (follow-up 2)
+scenes/SceneHost.tscn        uses FSharpSceneHost, names the F# scene by [Export]
 nuget.config                 additive offline Godot feed (GodotSharp 4.7.2)
 ```
 
@@ -61,6 +87,12 @@ dotnet build GodotFSharpBoundary.csproj -c Debug
 
 # question-5: C#->F# exception stack trace
 "$GODOT" --headless --path . -- --trace-test
+
+# follow-up 1: one generic C# host, F# scene resolved by [Export] name, zero per-scene C#
+"$GODOT" --headless --path . --main-scene res://scenes/SceneHost.tscn   # MATCH 0x838D3AE7DBFB735D
+
+# follow-up 2: F# owns members + [<GodotExport>]/[<GodotSignal>]; C# forwarder (as Myriad would emit)
+"$GODOT" --headless --path . -- --forward-test   # [Export]s in property list, signal registered, round-trip
 
 # windowed still with the F#-owned overlay
 "$GODOT" --path . -- --screenshot <abs-path>.png

@@ -83,6 +83,22 @@ exit 0; a deliberate `--expect` mismatch exits 1. All stepping, the fixture
 command, selection, the overlay string, and the self-check body are in F#
 (`ClientCore/Host.fs`).
 
+The per-scene shim then collapses to **one generic C# class for the whole
+client**. `src/FSharpSceneHost.cs` (~35 lines) is a `Node2D` that resolves an
+F# `CwClientCore.IClientScene` implementation named by an `[Export] SceneType`
+string and forwards `_Ready` / `_Process` / `_UnhandledInput` / `_Draw` /
+`_ExitTree` to it. `scenes/SceneHost.tscn` sets
+`SceneType = "CwClientCore.FixtureSelfCheckScene"`; running it as the main
+scene (`--main-scene res://scenes/SceneHost.tscn`) prints
+`tick=0 hash=0xF2F3DF0D820AD9AC` ... `final tick=40 hash=0x838D3AE7DBFB735D`,
+`MATCH`, `[fixture-scene] ExitTree`, exit 0. No scene-specific C# exists.
+
+What the generic host gives up versus a per-scene C# shim: per-member
+`[Export]` inspector fields, `[Signal]`, and editor "attach script". The F#
+scene wires itself with `GetNode` and a passed host `Node2D`. If typed,
+inspector-wired `[Export]` refs per scene become worthwhile, the recovery path
+is Myriad, not a hand-written per-scene shim (see "Myriad and the shim" below).
+
 ### Question 4 - the interop idiom
 
 `ClientCore/Host.fs` puts the sim facade (`SimHost`) in F#. The spike's
@@ -120,13 +136,29 @@ should behave as C# breakpoints do. Recorded as review trigger 1.
 
 ### The split
 
-The production Godot client is **a thin C# shim per scene entry point over an
-F# client-core library.**
+The production Godot client is **a thin C# host over an F# client-core
+library.** Two forms, in order of preference:
 
-- **C# shim** (`<Name>Shim : Node2D | Control | Node`, one per scene entry
-  point): the scene root, script attached in the editor the normal way.
-  `[Export]` fields, editor integration, and hot-reload live here because only
-  C# gets the source generator. It holds:
+1. **One generic C# host for the whole client** (`FSharpSceneHost : Node2D`,
+   ~35 lines, written once). Every `.tscn` entry point uses it as its root and
+   sets `[Export] SceneType` to the F# `IClientScene` implementation. The host
+   resolves the type and forwards lifecycle calls. No per-scene C#. Proven in
+   the disposable proof. Cost: the F# scene wires itself with `GetNode`; no
+   per-member `[Export]`, `[Signal]`, or editor "attach script".
+
+2. **A per-scene C# shim** only where a scene genuinely needs typed,
+   inspector-wired `[Export]` refs or `[Signal]`. Same "no logic in C#" rule.
+   If several scenes need this, prefer generating the shim with Myriad over
+   hand-writing it (see "Myriad and the shim").
+
+Both forms sit over the same F# client-core library and obey the same rules
+below. Start every scene on form 1; move a scene to form 2 (or Myriad) only
+when its wiring demonstrably needs it.
+
+- **C# shim / host** (`Node2D | Control | Node`): the scene root, script
+  attached in the editor the normal way. `[Export]` fields, editor
+  integration, and hot-reload live here because only C# gets the source
+  generator. It holds:
   - `[Export]` node / `PackedScene` / `Resource` refs the scene wires;
   - `[Export]` tuning scalars;
   - one field referencing the F# host object;
@@ -188,6 +220,63 @@ larger only because it also carries the question-1 probe harness).
   mutable-in-principle from C#. The boundary treats them as write-once view
   models (the same caveat the TASK-004 spike recorded for `AgentState[]`).
 
+## Myriad and the shim
+
+Godot's C# integration is generator-bound: `Godot.SourceGenerators` (Roslyn,
+C#-only) emits, per script class, `[ScriptPath]` + `[assembly: AssemblyHasScripts]`,
+the `InvokeGodotClassMethod` / `HasGodotClassMethod` virtual-dispatch bridge,
+`GetGodotPropertyList` and the property get/set bridges for `[Export]`, the
+signal bridges, and the hot-reload serialization hooks. Godot's C++ side gates
+virtual invocation on `HasGodotClassMethod`, which is why an F# node with no
+generated bridge is never called (question 1 evidence).
+
+Myriad (F# source generator, Dave-owned) could close this in two ways:
+
+1. **F# is the source of truth; Myriad emits a mechanical C# forwarder;
+   Godot's own generator runs over that.** The F# type carries the logic, the
+   members, and lightweight attributes describing Godot intent
+   (`[<GodotExport>]`, `[<GodotSignal "name">]`, `[<GodotGlobalClass>]`,
+   `[<GodotTool>]`). A Myriad plugin reads them and writes
+   `partial class <Name> : Node2D` whose `[Export]` properties get/set-forward
+   to a composed F# instance, whose `[Signal]` delegates forward, and whose
+   lifecycle overrides forward. Godot's own `Godot.SourceGenerators` then
+   produces every ABI-bound bridge (`InvokeGodotClassMethod`,
+   `GetGodotPropertyList`, the signal bridge, hot-reload hooks) over the
+   forwarder. **The Myriad plugin never touches `godot_variant` /
+   `NativeVariantPtrArgs` / the marshalling helpers** - that risk stays with
+   Godot's generator, which absorbs it across engine upgrades.
+
+   **Proven** in the disposable proof: `src/GeneratedStyleNode.cs` is
+   hand-written to be exactly what such a plugin would emit from
+   `ClientCore/NodeLogic.fs` (`PatrolMarkerLogic`). `--forward-test` shows
+   Godot drives the stub's `_Ready` (forwards to F# `OnReady`, which reads the
+   `[Export]` values set through the forwarding properties), `Waypoints` and
+   `Label` appear in `GetPropertyList()` (inspector + `.tscn` round-trip),
+   `HasSignal("PatrolCompleted") = True`, and `Connect` + `EmitSignal`
+   round-trips. Set-via-property then F# reads it back: 7 -> 7.
+
+   Friction (bounded, not blocking): the F# author declares signal shape via an
+   attribute payload rather than C#'s inline `delegate` syntax; `[Export]`
+   members must use CLR-friendly types (same discipline as the interop idiom
+   above); hot-reload preserves only `[Export]` state (same as pure C#); the
+   `.cs` is a build artefact, so "attach script" means attaching a generated
+   file (`[<GodotGlobalClass>]` -> Create Node dialog avoids this). Effort: a
+   few hundred lines of Myriad plugin plus a per-`[Export]`-type test matrix.
+   This is the path to reach for if form 1's generic host proves insufficient.
+
+2. **Myriad reimplements the Godot generators in F#**, so F# types are native
+   Godot scripts with no C# at all. This pins a Dave-owned generator to Godot's
+   interop ABI (`godot_variant` layout, `NativeVariantPtrArgs`, the marshalling
+   helpers - all "public but unstable"), to be re-checked every Godot minor
+   upgrade, with F# `ref struct` friction in the dispatch signatures. High
+   effort, ongoing maintenance. Only justified if forms 1 and Myriad-path-1
+   both fail, or if Godot stabilises a managed-type registration API.
+
+Neither is needed for the vertical slice: the generic C# host (form 1) already
+puts all logic in F# with one C# file for the whole client. Myriad-path-1 is
+the first upgrade to reach for and is proven feasible; Myriad-path-2 is a
+research project. See review trigger 2.
+
 ## ADR-0002 compliance
 
 - `CommandoWar.Sim` package tree is `FSharp.Core` only; source scan of
@@ -214,12 +303,16 @@ direction, ownership split, and allow/forbid lists are unchanged and satisfied.
 1. The first P4 client task (B-026 / B-027) must confirm an F# breakpoint is hit
    from an editor / F5-launched run, and that hot-reloading the C# shim does not
    sever the F# host reference. If either fails, reopen this ADR.
-2. If Godot gains an F#-capable script registration path, or Myriad
-   (Dave-owned) gains a Godot registration-metadata emitter, re-evaluate
-   whether the shim can shrink further or be removed. This does not reopen
+2. If the generic C# host (form 1) proves insufficient for a real scene -
+   several scenes need typed inspector-wired `[Export]` refs, `[Signal]`, or
+   `[GlobalClass]` - build the Myriad plugin that emits the dumb C# forwarder
+   per F# node (Myriad-path-1), rather than hand-writing per-scene shims. Only
+   consider Myriad-path-2 (F#-native Godot scripts) if that also fails or if
+   Godot ships a stable managed-type registration API. Neither reopens
    ADR-0001.
-3. If any scene's C# shim exceeds ~60 lines or grows a branch on game state,
-   that logic leaked - move it to F# and record why the boundary was unclear.
+3. If any per-scene C# shim (form 2) exceeds ~60 lines or grows a branch on
+   game state, that logic leaked - move it to F# and record why the boundary
+   was unclear.
 4. If a `[<CLIMutable>]` view record is mutated by C# and that mutation is
    observed as authoritative, that is an ADR-0002 compliance failure: stop and
    fix.
