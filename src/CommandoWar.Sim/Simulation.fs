@@ -37,10 +37,16 @@ type WorldError =
 [<RequireQualifiedAccess>]
 module World =
 
-    /// Builds a validated world at tick 0 with a SplitMix64 random stream
-    /// seeded by `seed`. Agents are sorted by ascending id. Fails explicitly
-    /// on an empty grid, duplicate ids, or an agent placed outside the grid.
-    let create (bounds: GridBounds) (seed: uint64) (agents: AgentState list) : Result<WorldState, WorldError> =
+    /// Shared construction core for `create` and `ofScenario`. Applies the
+    /// empty-grid, duplicate-id, and in-bounds guards, then builds the world
+    /// at tick 0 with the given terrain and a SplitMix64 stream seeded by
+    /// `seed`. Agents are sorted by ascending id.
+    let private build
+        (bounds: GridBounds)
+        (terrain: Terrain)
+        (seed: uint64)
+        (agents: AgentState list)
+        : Result<WorldState, WorldError> =
         if bounds.Width <= 0 || bounds.Height <= 0 then
             Error(EmptyGrid bounds)
         else
@@ -60,16 +66,28 @@ module World =
                     Ok
                         { Tick = 0L
                           Bounds = bounds
+                          Terrain = terrain
                           Agents = List.toArray sorted
                           Random = SplitMix64.create seed }
 
+    /// Builds a validated world at tick 0 with a SplitMix64 random stream
+    /// seeded by `seed` and empty (flat, fully passable, transparent,
+    /// uncovered) terrain for `bounds`. Agents are sorted by ascending id.
+    /// Fails explicitly on an empty grid, duplicate ids, or an agent placed
+    /// outside the grid.
+    let create (bounds: GridBounds) (seed: uint64) (agents: AgentState list) : Result<WorldState, WorldError> =
+        build bounds (Terrain.empty bounds) seed agents
+
     /// Builds the authoritative world at tick 0 from a validated scenario
     /// (docs/04_SIMULATION_SPEC.md section 21). Friendly then enemy deployments
-    /// become agents ordered ascending by id and are handed to `create`, which
-    /// owns the empty-grid, duplicate-id, and in-bounds guards. The scenario's
-    /// objectives, areas, targets, and rules are not consumed here: per-cell
-    /// terrain, line of sight, and pathfinding are out of scope (backlog B-008
-    /// to B-010) and objective evaluation is deferred (B-032).
+    /// become agents ordered ascending by id; the scenario's validated
+    /// terrain grid (`scenario.Terrain`, empty when the scenario authored no
+    /// terrain layer) becomes `WorldState.Terrain`. Both are handed to the
+    /// shared construction core, which owns the empty-grid, duplicate-id, and
+    /// in-bounds guards. The scenario's objectives, areas, targets, and rules
+    /// are not consumed here, and no tick phase reads the terrain yet: line of
+    /// sight and pathfinding are out of scope (backlog B-009, B-010) and
+    /// objective evaluation is deferred (B-032).
     let ofScenario (scenario: Scenario) (seed: uint64) : Result<WorldState, WorldError> =
         let agents =
             Array.append scenario.FriendlyDeployments scenario.EnemyDeployments
@@ -77,7 +95,7 @@ module World =
             |> Array.map (fun d -> Agent.create d.Agent d.Side d.Cell)
             |> Array.toList
 
-        create scenario.Map seed agents
+        build scenario.Map scenario.Terrain seed agents
 
 [<RequireQualifiedAccess>]
 module Setup =

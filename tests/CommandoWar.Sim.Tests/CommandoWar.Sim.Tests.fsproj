@@ -13,6 +13,7 @@
     <Compile Include="ReplayTests.fs" />
     <Compile Include="BenchmarkTests.fs" />
     <Compile Include="FixtureTests.fs" />
+    <Compile Include="TerrainTests.fs" />
     <Compile Include="ScenarioTests.fs" />
   </ItemGroup>
 

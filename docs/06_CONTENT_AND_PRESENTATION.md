@@ -79,9 +79,10 @@ version is `ScenarioContent.Version` (currently 1), independent of the
 canonical-state and replay format versions. The objective algebra
 (`Objective`: `ReachArea` / `HoldArea` / `DestroyTarget` / `ExtractAgents` /
 `AllOf` / `Optional`) is a data-only type; evaluation is deferred (B-032).
-Per-cell terrain, cover, and opacity are not in the model yet (B-008); the
-scenario carries map dimensions and marker positions only. See
-`docs/04_SIMULATION_SPEC.md` section 21.
+TASK-010 added the optional authored terrain layer (per-cell elevation,
+passability, movement cost, opacity, directional cover) and bumped
+`ScenarioContent.Version` to 2; see section 4 "Realised by TASK-010" and
+`docs/04_SIMULATION_SPEC.md` sections 7, 9, and 21.
 
 ## 4. Map contract
 
@@ -102,7 +103,23 @@ The simulation uses a logical two-dimensional grid with an explicit level or ele
 
 Decorative layers must not silently affect movement, cover, or visibility.
 
-### Initial marker classes
+### Realised by TASK-010
+
+The authoritative side of the Terrain, Elevation, Low cover, and High
+occlusion rows is `src/CommandoWar.Sim/Terrain.fs` (`Terrain`, a dense
+row-major integer grid) plus the authored input path
+`RawScenario.TerrainLayer : RawTerrainLayer option` -> `Scenario.validate` ->
+`Scenario.Terrain`. A `RawTerrainCell` carries a class (`"passable"` /
+`"impassable"`), an elevation level, an entry cost, and the high-occlusion
+(`Opaque`) flag; a `RawCoverFeature` carries a cardinal direction and an
+integer low-cover level. Validation rejects a layer whose dimensions disagree
+with the map, an out-of-map or duplicated cell or cover feature, an unknown
+terrain or cover class, a negative elevation / cost / cover level, and a
+deployment sitting on an impassable cell (docs/07 section 3, docs/03 section
+17). An absent layer is legal and means empty terrain. Traversal links,
+static-object gameplay data, destruction state, and any consumer of these
+values (line of sight, pathfinding, movement) are later tasks (B-009 to
+B-011, B-019).
 
 - `FriendlySpawn`
 - `EnemySpawn`

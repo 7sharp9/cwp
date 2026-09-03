@@ -5,11 +5,11 @@ namespace CommandoWar.Sim
 /// docs/03_ARCHITECTURE.md sections 16-17; docs/06_CONTENT_AND_PRESENTATION.md
 /// sections 3, 7; docs/04_SIMULATION_SPEC.md section 21).
 ///
-/// This module carries authored *positions and references* only. Per-cell
-/// terrain, movement cost, opacity, and directional cover (backlog B-008),
-/// line of sight (B-009), and pathfinding (B-010) are deliberately absent: the
-/// scenario names map dimensions and deployment / objective / area / target
-/// positions, nothing more.
+/// This module carries authored *positions and references* plus an optional
+/// authored terrain layer (elevation, passability, movement cost, opacity,
+/// directional low cover; realised by TASK-010, backlog B-008). Line of
+/// sight (B-009) and pathfinding (B-010) are still absent, and no tick phase
+/// consumes the terrain grid the layer produces.
 ///
 /// Objective *evaluation* and mission success / failure are deferred (backlog
 /// B-032). The `Objective` algebra below is a data-only type: nothing in the
@@ -100,11 +100,15 @@ module TargetId =
 /// container, docs/04 section 16): it versions the authored input shape
 /// (`RawScenario`) and the validation contract, not the state encoding. Bump
 /// it when either the authored shape or a validation rule changes.
+///
+/// Version 2 (TASK-010) added the optional authored terrain layer and its
+/// validation. A version-1 scenario is rejected, not migrated (`docs/04`
+/// section 16: "does not guess migrations").
 [<RequireQualifiedAccess>]
 module ScenarioContent =
 
     [<Literal>]
-    let Version = 1
+    let Version = 2
 
 // --- validated model ---------------------------------------------------
 
@@ -161,8 +165,12 @@ type ScenarioRules = { FailOnFriendlyForceEliminated: bool }
 /// framework spikes' validated `Scenario` / `ScenarioDto` are.
 type Scenario =
     { Id: ScenarioId
-      /// Map dimensions only. Elevation is flat; per-cell terrain is B-008.
+      /// Map dimensions. Per-cell terrain data lives in `Terrain`.
       Map: GridBounds
+      /// The validated authoritative terrain grid. When the raw scenario
+      /// authored no terrain layer this is `Terrain.empty Map` (flat, fully
+      /// passable, transparent, uncovered).
+      Terrain: Terrain
       FriendlyDeployments: Deployment[]
       EnemyDeployments: Deployment[]
       ObjectiveAreas: Area[]
@@ -199,10 +207,42 @@ type RawObjective =
       ExtractAgentIds: int[]
       IsOptional: bool }
 
+/// One authored terrain-cell override. Cells a layer does not mention are
+/// open, flat (elevation 0), transparent, and cost `Terrain.BaseMoveCost`.
+/// `Class` is `"passable"` or `"impassable"`; any other value is
+/// `UnknownTerrainClass`. `Elevation` and `MoveCost` must be non-negative;
+/// `MoveCost` is ignored for an impassable cell. `Opaque` is the
+/// high-occlusion flag (docs/06 section 4).
+type RawTerrainCell =
+    { Cell: Cell
+      Class: string
+      Elevation: int
+      MoveCost: int
+      Opaque: bool }
+
+/// One authored low-cover value (docs/06 section 4 "Low cover"): `Cell`
+/// gains cover of `Level` against attacks arriving from `Direction`.
+/// `Direction` is `"north"`, `"east"`, `"south"`, or `"west"`; any other
+/// value is `UnknownCoverClass`. `Level` must be non-negative.
+type RawCoverFeature =
+    { Cell: Cell
+      Direction: string
+      Level: int }
+
+/// An authored terrain layer. `Width` and `Height` must equal the
+/// scenario's map dimensions. Cells and cover entries are sparse: only
+/// non-default cells need appear. An absent layer (`RawScenario.TerrainLayer
+/// = None`) is legal and means empty terrain.
+type RawTerrainLayer =
+    { Width: int
+      Height: int
+      Cells: RawTerrainCell[]
+      Cover: RawCoverFeature[] }
+
 /// The whole unvalidated authored scenario, as a content reader (a Godot
 /// `.tscn` reader, a Tiled importer, or a test) produces it. Every field is a
-/// primitive or an array of primitives so the reader depends on nothing in
-/// the validated model.
+/// primitive, an array of primitives, or the optional terrain layer, so the
+/// reader depends on nothing in the validated model.
 type RawScenario =
     { ContentVersion: int
       Id: string
@@ -214,6 +254,8 @@ type RawScenario =
       ExtractionAreas: RawArea[]
       StaticTargets: RawTarget[]
       Objectives: RawObjective[]
+      /// The authored terrain layer, or `None` for empty terrain.
+      TerrainLayer: RawTerrainLayer option
       FailOnFriendlyForceEliminated: bool }
 
 /// Why a raw scenario is invalid (docs/03 section 17, docs/06 section 7).
@@ -243,6 +285,17 @@ type ScenarioError =
     | ObjectiveReferencesMissingTarget of objective: int * target: string
     | ExtractionSelectsUnknownAgent of objective: int * agent: int
     | MissingRequiredMarker of marker: string
+    // --- terrain layer (ScenarioContent.Version 2, TASK-010) ---
+    | TerrainLayerDimensionsMismatch of layer: GridBounds * map: GridBounds
+    | TerrainFeatureOutOfMap of cell: Cell * bounds: GridBounds
+    | DuplicateTerrainCell of cell: Cell
+    | DuplicateCoverFeature of cell: Cell * direction: string
+    | UnknownTerrainClass of cell: Cell * className: string
+    | UnknownCoverClass of cell: Cell * className: string
+    | NegativeElevation of cell: Cell * level: int
+    | NegativeMoveCost of cell: Cell * cost: int
+    | NegativeCoverLevel of cell: Cell * level: int
+    | DeploymentOnImpassableCell of agent: int * cell: Cell
 
 [<RequireQualifiedAccess>]
 module Scenario =
@@ -265,6 +318,22 @@ module Scenario =
     let private presentTargetIds (targets: RawTarget[]) : string[] =
         targets
         |> Array.choose (fun t -> if System.String.IsNullOrWhiteSpace t.TargetId then None else Some t.TargetId)
+
+    /// The authored terrain-class token, or `None` for an unknown value.
+    let private parseMovementClass (s: string) : MovementClass option =
+        match s with
+        | "passable" -> Some Passable
+        | "impassable" -> Some Impassable
+        | _ -> None
+
+    /// The authored cover-direction token, or `None` for an unknown value.
+    let private parseDirection (s: string) : Direction option =
+        match s with
+        | "north" -> Some North
+        | "east" -> Some East
+        | "south" -> Some South
+        | "west" -> Some West
+        | _ -> None
 
     /// Validates a raw authored scenario, collecting every fault in one pass.
     /// On success every id, reference, and position in the returned `Scenario`
@@ -425,6 +494,82 @@ module Scenario =
         if Array.isEmpty raw.ExtractionAreas then
             report (MissingRequiredMarker "ExtractionArea")
 
+        // --- terrain layer (ScenarioContent.Version 2, TASK-010) -------
+        // An absent layer means empty terrain and is not a fault. A present
+        // layer is checked cell by cell and feature by feature; the parse
+        // here is reused to build the Terrain in the Ok branch below. In the
+        // fault-free case `Array.choose` drops nothing, so `authoredCells` /
+        // `authoredCover` are complete and every cell is in bounds.
+        let authoredCells, authoredCover =
+            match raw.TerrainLayer with
+            | None -> [||], [||]
+            | Some layer ->
+                if layer.Width <> raw.Width || layer.Height <> raw.Height then
+                    report (
+                        TerrainLayerDimensionsMismatch({ Width = layer.Width; Height = layer.Height }, bounds)
+                    )
+
+                for c in repeated (layer.Cells |> Array.map (fun tc -> tc.Cell)) do
+                    report (DuplicateTerrainCell c)
+
+                for c, d in repeated (layer.Cover |> Array.map (fun cf -> cf.Cell, cf.Direction)) do
+                    report (DuplicateCoverFeature(c, d))
+
+                for tc in layer.Cells do
+                    if mapOk && not (GridBounds.contains tc.Cell bounds) then
+                        report (TerrainFeatureOutOfMap(tc.Cell, bounds))
+
+                    if Option.isNone (parseMovementClass tc.Class) then
+                        report (UnknownTerrainClass(tc.Cell, tc.Class))
+
+                    if tc.Elevation < 0 then
+                        report (NegativeElevation(tc.Cell, tc.Elevation))
+
+                    if tc.MoveCost < 0 then
+                        report (NegativeMoveCost(tc.Cell, tc.MoveCost))
+
+                for cf in layer.Cover do
+                    if mapOk && not (GridBounds.contains cf.Cell bounds) then
+                        report (TerrainFeatureOutOfMap(cf.Cell, bounds))
+
+                    if Option.isNone (parseDirection cf.Direction) then
+                        report (UnknownCoverClass(cf.Cell, cf.Direction))
+
+                    if cf.Level < 0 then
+                        report (NegativeCoverLevel(cf.Cell, cf.Level))
+
+                let cells =
+                    layer.Cells
+                    |> Array.choose (fun tc ->
+                        parseMovementClass tc.Class
+                        |> Option.map (fun mc ->
+                            { Cell = tc.Cell
+                              Movement = mc
+                              Elevation = tc.Elevation
+                              MoveCost = tc.MoveCost
+                              Opaque = tc.Opaque }
+                            : AuthoredCell))
+
+                let cover =
+                    layer.Cover
+                    |> Array.choose (fun cf ->
+                        parseDirection cf.Direction
+                        |> Option.map (fun d ->
+                            { Cell = cf.Cell; Direction = d; Level = cf.Level }: AuthoredCover))
+
+                cells, cover
+
+        // A deployment on an authored impassable cell (docs/06 section 7).
+        let impassableCells =
+            authoredCells
+            |> Array.choose (fun ac -> if ac.Movement = Impassable then Some ac.Cell else None)
+            |> Set.ofArray
+
+        if not (Set.isEmpty impassableCells) then
+            for d, _ in deployments do
+                if impassableCells.Contains d.Cell then
+                    report (DeploymentOnImpassableCell(d.AgentId, d.Cell))
+
         // --- result -------------------------------------------------
         if errors.Count > 0 then
             Error(List.ofSeq errors)
@@ -439,6 +584,11 @@ module Scenario =
             Ok
                 { Id = ScenarioId.ofString raw.Id
                   Map = bounds
+                  // Both arrays empty when no layer was authored, so this is
+                  // `Terrain.empty bounds`. `Terrain.build` does no
+                  // validation: every cell reaching it is known in-bounds and
+                  // non-negative because any fault above blocks this branch.
+                  Terrain = Terrain.build bounds authoredCells authoredCover
                   FriendlyDeployments = toDeployments raw.FriendlyDeployments Friendly
                   EnemyDeployments = toDeployments raw.EnemyDeployments Hostile
                   ObjectiveAreas =

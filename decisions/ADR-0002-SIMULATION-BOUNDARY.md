@@ -2,7 +2,8 @@
 
 Status: accepted for project baseline  
 Date: 2026-09-02  
-Decision owner: Dave
+Decision owner: Dave  
+Amended: 2026-09-03 (TASK-010, "Static authoritative data and the canonical image")
 
 ## Context
 
@@ -153,3 +154,68 @@ A task touching architecture must fail review if:
 - tests require a window to execute core rules;
 - a host random source or physics query affects authoritative state;
 - content parser objects survive beyond the import boundary.
+
+## Amendment 2026-09-03 (TASK-010): static authoritative data and the canonical image
+
+### Context
+
+TASK-010 adds `WorldState.Terrain`: an authored, authoritative per-cell grid
+(elevation, passability, movement cost, opacity, directional cover). It is
+authoritative data the simulation owns, but at this stage it carries **no
+per-tick mutable state**: terrain is fixed for the life of a run (terrain
+destruction and damage state are deferred to backlog B-019, with combat).
+
+`Canonical.encode` (docs/04 section 17) is the hash input and the divergence
+oracle. The question is whether static authoritative data must be inside it.
+
+### Decision
+
+Static authoritative data is **excluded from `Canonical.encode` and the
+state hash while it carries no per-tick mutable state.** `WorldState.Terrain`
+is authoritative and owned by the simulation, but it does not enter the
+per-tick canonical image until it becomes mutable.
+
+`Canonical.FormatVersion` stays `1`. It bumps, and the canonical image gains a
+terrain section, when destructible terrain lands (B-019) or any other
+per-tick mutation of terrain is introduced.
+
+### Why
+
+- The canonical image exists to detect **divergence between two runs of the
+  same inputs**. Immutable data that is a pure function of the validated
+  scenario cannot diverge tick to tick: both runs load the identical grid at
+  tick 0 and never change it. Hashing it every tick adds cost and moves every
+  pinned fixture hash for zero determinism benefit.
+- Including it would re-pin every hash in `FixtureTests.fs`, `ScenarioTests.fs`,
+  `content/fixtures/SPIKE-FIXTURE.md`, and the two retained framework-spike
+  evidence sets, churning five files to encode a constant.
+- The determinism contract (docs/09 section 3) is unweakened: identical
+  validated scenario bytes are already a precondition of the contract, and the
+  terrain grid is derived from them by `Scenario.validate` with no random draw
+  and no wall-clock read.
+
+### Constraints this places on future work
+
+- The moment any phase **mutates** terrain (destruction, cratering, a dropped
+  obstacle), that task MUST bump `Canonical.FormatVersion`, add a terrain
+  section to `Canonical.encode` in canonical (row-major, fixed-width) order,
+  re-pin the five files above, and record the re-pin in the ledger.
+- The same rule applies to any other static authoritative store added later
+  (a fixed objective layout, immutable squad rosters): in the canonical image
+  when mutable, out of it while constant, format version bumps at the
+  transition.
+- A divergence in terrain-derived behaviour before B-019 is a **scenario
+  validation or `Terrain.build` bug**, not a hash mismatch; it surfaces as a
+  behavioural test failure, which is why `Terrain.build` is total and
+  `Scenario.validate` rejects every malformed layer in one pass.
+
+### ADR-0002 status
+
+Unchanged. Dependency direction, ownership split, and the allow/forbid lists
+are all satisfied: `Terrain` is `int`/`bool` arrays and DUs (allow-list
+"immutable or serializable records ... explicit enums or discriminated-union
+DTOs"), no framework type crosses any boundary, and the authored terrain
+layer follows the existing "Content DTOs -> validation -> Sim setup" path
+(`RawTerrainLayer` -> `Scenario.validate` -> `Terrain`). This amendment only
+records where the canonical-image boundary sits for static authoritative
+data.

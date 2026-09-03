@@ -97,7 +97,8 @@ debugger / glue-code observations are recorded, and ADR-0001 selects one route.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending (finalisation edits; the framework decision itself is
-  accepted)
+- Accepted: yes (2026-09-03)
 - Notes: Next session continues with the low-impedance C#/F# Godot boundary.
-  See the next-session prompt.
+  See the next-session prompt. Accepted 2026-09-03: the framework decision,
+  G1, ADR-0001, and every task since (TASK-007 through TASK-010) are built on
+  these finalisation edits, so they are accepted as a body.

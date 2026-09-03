@@ -54,7 +54,27 @@ let private goodRaw () : RawScenario =
              HoldTicks = 0
              ExtractAgentIds = [| 0; 1 |]
              IsOptional = false } |]
+      TerrainLayer = None
       FailOnFriendlyForceEliminated = true }
+
+/// A well-formed authored terrain layer for the 16x16 `goodRaw` map: one
+/// impassable cell, one elevated + opaque cell, and one directional cover
+/// feature. None of the cells collides with a `goodRaw` deployment.
+let private goodTerrainLayer () : RawTerrainLayer =
+    { Width = 16
+      Height = 16
+      Cells =
+        [| { Cell = { X = 5; Y = 5 }
+             Class = "impassable"
+             Elevation = 0
+             MoveCost = 0
+             Opaque = true }
+           { Cell = { X = 8; Y = 8 }
+             Class = "passable"
+             Elevation = 2
+             MoveCost = 3
+             Opaque = true } |]
+      Cover = [| { Cell = { X = 4; Y = 4 }; Direction = "north"; Level = 1 } |] }
 
 let private objective id kind : RawObjective =
     { Id = id
@@ -79,8 +99,10 @@ let private errorsOf (raw: RawScenario) : ScenarioError list =
 
 [<Fact>]
 let ``the content version is independent of the canonical and replay versions`` () =
-    Assert.Equal(1, ScenarioContent.Version)
-    // Independent constants: this test documents the intent, not an inequality.
+    // TASK-010 bumped the content version to 2 (authored terrain layer); the
+    // canonical and replay versions are unmoved. Independent constants: this
+    // test documents the intent, not an inequality.
+    Assert.Equal(2, ScenarioContent.Version)
     Assert.Equal(1, Canonical.FormatVersion)
     Assert.Equal(1, Replay.FormatVersion)
 
@@ -129,7 +151,13 @@ let ``an extraction with no listed agents validates to AllFriendlyAgents`` () =
 
 [<Fact>]
 let ``an unsupported content version is a typed error`` () =
-    Assert.Contains(UnsupportedContentVersion(2, 1), errorsOf { goodRaw () with ContentVersion = 2 })
+    Assert.Contains(UnsupportedContentVersion(99, 2), errorsOf { goodRaw () with ContentVersion = 99 })
+
+[<Fact>]
+let ``a version-1 scenario is rejected, not migrated`` () =
+    // ScenarioContent.Version 1 predates the authored terrain layer. The
+    // validator does not migrate it (docs/04 section 16).
+    Assert.Contains(UnsupportedContentVersion(1, 2), errorsOf { goodRaw () with ContentVersion = 1 })
 
 [<Fact>]
 let ``a blank scenario id is reported`` () =
@@ -268,14 +296,21 @@ let ``validation reports every fault in one pass`` () =
         { goodRaw () with
             ContentVersion = 3
             EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 } } |]
-            Objectives = [| objective 2 "orbit" |] }
+            Objectives = [| objective 2 "orbit" |]
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cover = [| { Cell = { X = 40; Y = 40 }; Direction = "up"; Level = -1 } |] } }
 
     let es = errorsOf raw
-    Assert.Contains(UnsupportedContentVersion(3, 1), es)
+    Assert.Contains(UnsupportedContentVersion(3, 2), es)
     Assert.Contains(DuplicateDeploymentId 1, es)
     Assert.Contains(DeploymentOutOfMap(1, { X = 99; Y = 99 }, { Width = 16; Height = 16 }), es)
     Assert.Contains(UnknownObjectiveKind(2, "orbit"), es)
-    Assert.True(es.Length >= 4, $"expected at least 4 errors, got {es}")
+    Assert.Contains(TerrainFeatureOutOfMap({ X = 40; Y = 40 }, { Width = 16; Height = 16 }), es)
+    Assert.Contains(UnknownCoverClass({ X = 40; Y = 40 }, "up"), es)
+    Assert.Contains(NegativeCoverLevel({ X = 40; Y = 40 }, -1), es)
+    Assert.True(es.Length >= 7, $"expected at least 7 errors, got {es}")
 
 // --- World.ofScenario --------------------------------------------
 
@@ -286,6 +321,181 @@ let ``World.ofScenario deploys friendly then enemy agents ordered ascending by i
     | Ok w ->
         Assert.Equal<int[]>([| 0; 1; 2; 10 |], w.Agents |> Array.map (fun a -> AgentId.value a.Id))
         Assert.Equal(Hostile, (w.Agents |> Array.find (fun a -> AgentId.value a.Id = 10)).Side)
+
+// --- authored terrain layer (ScenarioContent.Version 2) --------------
+
+[<Fact>]
+let ``an absent terrain layer validates to empty terrain`` () =
+    let s = validated (goodRaw ())
+    // Flat, fully passable, transparent, uncovered across the whole map.
+    Assert.True(Terrain.passable s.Terrain { X = 5; Y = 5 })
+    Assert.Equal(0, Terrain.elevation s.Terrain { X = 8; Y = 8 })
+    Assert.False(Terrain.opaque s.Terrain { X = 8; Y = 8 })
+    Assert.Equal(0, Terrain.cover s.Terrain { X = 4; Y = 4 } North)
+
+[<Fact>]
+let ``a well-formed terrain layer validates to a populated Terrain`` () =
+    let s =
+        validated { goodRaw () with TerrainLayer = Some(goodTerrainLayer ()) }
+
+    Assert.Equal<GridBounds>({ Width = 16; Height = 16 }, s.Terrain.Bounds)
+    Assert.False(Terrain.passable s.Terrain { X = 5; Y = 5 })
+    Assert.Equal(Terrain.BlockedCost, Terrain.moveCost s.Terrain { X = 5; Y = 5 })
+    Assert.Equal(2, Terrain.elevation s.Terrain { X = 8; Y = 8 })
+    Assert.Equal(3, Terrain.moveCost s.Terrain { X = 8; Y = 8 })
+    Assert.True(Terrain.opaque s.Terrain { X = 8; Y = 8 })
+    Assert.Equal(1, Terrain.cover s.Terrain { X = 4; Y = 4 } North)
+    Assert.Equal(0, Terrain.cover s.Terrain { X = 4; Y = 4 } East)
+
+[<Fact>]
+let ``World.ofScenario carries the authored terrain onto the world`` () =
+    let s =
+        validated { goodRaw () with TerrainLayer = Some(goodTerrainLayer ()) }
+
+    match World.ofScenario s Fixture.Seed with
+    | Error e -> Assert.Fail($"World.ofScenario failed: {e}")
+    | Ok w ->
+        Assert.False(Terrain.passable w.Terrain { X = 5; Y = 5 })
+        Assert.Equal(2, Terrain.elevation w.Terrain { X = 8; Y = 8 })
+
+[<Fact>]
+let ``a terrain layer whose dimensions disagree with the map is reported`` () =
+    let raw =
+        { goodRaw () with TerrainLayer = Some { goodTerrainLayer () with Width = 20 } }
+
+    Assert.Contains(
+        TerrainLayerDimensionsMismatch({ Width = 20; Height = 16 }, { Width = 16; Height = 16 }),
+        errorsOf raw
+    )
+
+[<Fact>]
+let ``a terrain cell outside the map is reported`` () =
+    let raw =
+        { goodRaw () with
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cells =
+                            [| { Cell = { X = 99; Y = 0 }
+                                 Class = "passable"
+                                 Elevation = 0
+                                 MoveCost = 1
+                                 Opaque = false } |] } }
+
+    Assert.Contains(TerrainFeatureOutOfMap({ X = 99; Y = 0 }, { Width = 16; Height = 16 }), errorsOf raw)
+
+[<Fact>]
+let ``a duplicate terrain cell is reported once`` () =
+    let cell: RawTerrainCell =
+        { Cell = { X = 3; Y = 3 }
+          Class = "passable"
+          Elevation = 0
+          MoveCost = 1
+          Opaque = false }
+
+    let raw =
+        { goodRaw () with TerrainLayer = Some { goodTerrainLayer () with Cells = [| cell; cell |] } }
+
+    let es = errorsOf raw
+    Assert.Contains(DuplicateTerrainCell { X = 3; Y = 3 }, es)
+    Assert.Equal(1, es |> List.filter ((=) (DuplicateTerrainCell { X = 3; Y = 3 })) |> List.length)
+
+[<Fact>]
+let ``a duplicate cover feature for the same cell and direction is reported`` () =
+    let feature: RawCoverFeature =
+        { Cell = { X = 3; Y = 3 }; Direction = "north"; Level = 1 }
+
+    let raw =
+        { goodRaw () with
+            TerrainLayer = Some { goodTerrainLayer () with Cover = [| feature; feature |] } }
+
+    Assert.Contains(DuplicateCoverFeature({ X = 3; Y = 3 }, "north"), errorsOf raw)
+
+[<Fact>]
+let ``an unknown terrain class is reported`` () =
+    let raw =
+        { goodRaw () with
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cells =
+                            [| { Cell = { X = 3; Y = 3 }
+                                 Class = "swamp"
+                                 Elevation = 0
+                                 MoveCost = 1
+                                 Opaque = false } |] } }
+
+    Assert.Contains(UnknownTerrainClass({ X = 3; Y = 3 }, "swamp"), errorsOf raw)
+
+[<Fact>]
+let ``an unknown cover class is reported`` () =
+    let raw =
+        { goodRaw () with
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cover = [| { Cell = { X = 3; Y = 3 }; Direction = "up"; Level = 1 } |] } }
+
+    Assert.Contains(UnknownCoverClass({ X = 3; Y = 3 }, "up"), errorsOf raw)
+
+[<Fact>]
+let ``a negative elevation is reported`` () =
+    let raw =
+        { goodRaw () with
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cells =
+                            [| { Cell = { X = 3; Y = 3 }
+                                 Class = "passable"
+                                 Elevation = -1
+                                 MoveCost = 1
+                                 Opaque = false } |] } }
+
+    Assert.Contains(NegativeElevation({ X = 3; Y = 3 }, -1), errorsOf raw)
+
+[<Fact>]
+let ``a negative move cost is reported`` () =
+    let raw =
+        { goodRaw () with
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cells =
+                            [| { Cell = { X = 3; Y = 3 }
+                                 Class = "passable"
+                                 Elevation = 0
+                                 MoveCost = -5
+                                 Opaque = false } |] } }
+
+    Assert.Contains(NegativeMoveCost({ X = 3; Y = 3 }, -5), errorsOf raw)
+
+[<Fact>]
+let ``a negative cover level is reported`` () =
+    let raw =
+        { goodRaw () with
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cover = [| { Cell = { X = 3; Y = 3 }; Direction = "south"; Level = -2 } |] } }
+
+    Assert.Contains(NegativeCoverLevel({ X = 3; Y = 3 }, -2), errorsOf raw)
+
+[<Fact>]
+let ``a deployment on an authored impassable cell is reported`` () =
+    let raw =
+        { goodRaw () with
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cells =
+                            [| { Cell = { X = 0; Y = 0 } // friendly agent 0 deploys here
+                                 Class = "impassable"
+                                 Elevation = 0
+                                 MoveCost = 0
+                                 Opaque = false } |] } }
+
+    Assert.Contains(DeploymentOnImpassableCell(0, { X = 0; Y = 0 }), errorsOf raw)
 
 // --- pinning: the six-agent fixture as a Scenario ---------------
 
@@ -304,6 +514,7 @@ let private fixtureScenario () : Scenario =
       ExtractionAreas = [| { AreaId = "exfil"; Cell = { X = 0; Y = 0 } } |]
       StaticTargets = [||]
       Objectives = [| { objective 1 "reach" with AreaRef = "observation" } |]
+      TerrainLayer = None
       FailOnFriendlyForceEliminated = true }
     |> validated
 

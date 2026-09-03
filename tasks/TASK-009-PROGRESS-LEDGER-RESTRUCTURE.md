@@ -1,6 +1,6 @@
 # TASK-009: Restructure the progress ledger into a summary index plus per-entry detail files
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); documentation refactor, moves no gate

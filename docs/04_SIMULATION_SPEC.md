@@ -100,6 +100,22 @@ A cell may include:
 
 The vertical slice needs only the data exercised by the bridge mission. Do not implement unused terrain categories.
 
+Realised by TASK-010: `src/CommandoWar.Sim/Terrain.fs`. `Terrain` is a dense
+row-major integer grid for one `GridBounds` carrying, per cell: elevation
+level (`Elevation`), a `MovementClass` (`Passable` / `Impassable`) plus an
+integer entry cost (`MoveCost`), an opacity flag (`Opaque`, the "high
+occlusion" layer), and a directional low-cover level per cardinal direction
+(`Cover`, indexed `cellIndex * 4 + Direction.index d`). Occupancy capacity,
+water/hazard classification, and destruction state are not implemented (no
+mission behaviour exercises them yet; destruction is B-019). Queries
+(`Terrain.passable` / `moveCost` / `elevation` / `opaque` / `cover`) are total
+and bounds-checked. `WorldState` gains `Terrain`; `World.create` builds an
+empty (flat, passable, transparent, uncovered) grid and `World.ofScenario`
+builds it from the validated authored layer. **No tick phase reads terrain
+yet** (backlog B-009 line of sight, B-010 pathfinding, B-011 movement are the
+first consumers), exactly as the TASK-008 `Objective` algebra is authored but
+not evaluated.
+
 ## 8. Position and movement
 
 An agent position consists of:
@@ -132,6 +148,14 @@ Complex formation maintenance is deferred.
 - Contacts are observations, not direct references to all enemy state.
 
 The initial implementation may use a supercover line algorithm or another deterministic grid method. The chosen corner and blocking semantics require tests before combat tuning.
+
+Realised by TASK-010 (cover data only): directional low cover is authored and
+stored per cell per cardinal direction as an integer level
+(`Terrain.cover : Terrain -> Cell -> Direction -> int`,
+`src/CommandoWar.Sim/Terrain.fs`), and the opacity flag that a sight
+algorithm will read is `Terrain.opaque`. The line-of-sight algorithm itself,
+its corner rules, and any consumer of these values are B-009; nothing
+evaluates cover or traces a ray yet.
 
 ## 10. World state
 
@@ -328,6 +352,16 @@ A divergence report should identify the first bad tick. Component-level subhashe
 
 Realised by TASK-003: `Canonical.encode` (`src/CommandoWar.Sim/Canonical.fs`, format version 1) produces a big-endian fixed-width byte image of `WorldState` only, agents sorted ascending by id, `Destination` carrying an explicit present/absent tag; events, snapshots, and phase traces are excluded. `Hashing.hash` (`Hashing.fs`) is FNV-1a-64 over that image, exposed through `IStateHasher`; it is not a cryptographic primitive. `Simulation.step` records `StepResult.StateHash` after the Output phase without any authoritative output depending on it. `Divergence.compare` reports the first tick whose hash differs, the expected and actual hash, the first differing canonical section, and the random draw count on each side.
 
+TASK-010 note: `WorldState.Terrain` is authoritative but is **excluded** from
+`Canonical.encode` while it carries no per-tick mutable state. Static
+authoritative data that is a pure function of the validated scenario cannot
+diverge tick to tick, so hashing it every tick would move every pinned
+fixture hash for no determinism benefit. `Canonical.FormatVersion` stays `1`;
+it bumps and the canonical image gains a terrain section when destructible
+terrain lands (backlog B-019) or any phase otherwise mutates terrain. This is
+recorded in the ADR-0002 amendment "Static authoritative data and the
+canonical image".
+
 ## 18. Save state
 
 Save-state support is not required for the first command-loop proof. Replay from the start is sufficient for short scenarios. If load times become material, add periodic snapshots through a versioned format and ADR.
@@ -364,11 +398,13 @@ At minimum:
 
 An authored scenario is framework-neutral typed data: a scenario id, map
 dimensions, friendly and enemy deployments (agent id, side, cell), an objective
-algebra, objective and extraction areas, static targets, and scenario-wide
-rules. It carries positions and references only. Per-cell terrain, line of
-sight, and pathfinding are not part of it (sections 7 to 9; backlog B-008 to
-B-010), and objective evaluation and mission success/failure are deferred
-(backlog B-032) so the objective algebra is a data-only type at this stage.
+algebra, objective and extraction areas, static targets, scenario-wide rules,
+and an optional authored terrain layer (TASK-010; elevation, passability and
+movement cost, opacity, directional low cover). Line of sight and pathfinding
+are still not part of it (sections 8 to 9; backlog B-009, B-010), and objective
+evaluation and mission success/failure are deferred (backlog B-032) so the
+objective algebra is a data-only type at this stage; the terrain grid the
+layer produces is likewise not consumed by any tick phase.
 
 The authored input is versioned by a content-format version that is independent
 of the canonical-state format version (section 17) and the replay container
@@ -384,24 +420,36 @@ non-positive map dimensions; a duplicate, negative, out-of-map, or
 cell-sharing deployment; a duplicate or blank area or target id; an area or
 target marker outside the map; a duplicate or negative objective id; an unknown
 objective class; an objective referencing a missing area or target; an
-extraction selecting an unknown agent; and a missing required marker (no
-friendly deployment, no objective, no extraction area).
+extraction selecting an unknown agent; a missing required marker (no
+friendly deployment, no objective, no extraction area); and, for the terrain
+layer, a layer whose dimensions disagree with the map, an out-of-map terrain
+cell or cover feature, a duplicate terrain cell or cover feature, an unknown
+terrain or cover class, a negative elevation, move cost, or cover level, and a
+deployment on an authored impassable cell.
+
+An absent terrain layer is legal and means empty terrain (flat, fully
+passable, transparent, uncovered).
 
 A validated scenario builds the authoritative world by deploying its agents
 (friendly then enemy, ordered ascending by id) through the same construction
 path as any other world.
 
-Realised by TASK-008: `src/CommandoWar.Sim/Scenario.fs`.
-`ScenarioContent.Version` = 1, independent of `Canonical.FormatVersion` and
-`Replay.FormatVersion`. `Scenario.validate : RawScenario -> Result<Scenario,
-ScenarioError list>` collects every fault in one pass (`ScenarioError`, 20
-explicit cases in the `ReplayError` style). The `Objective` algebra is
-`ReachArea` / `HoldArea` / `DestroyTarget` / `ExtractAgents` / `AllOf` /
-`Optional`, data only, with evaluation deferred. `World.ofScenario : Scenario
--> uint64 -> Result<WorldState, WorldError>` reuses `World.create`. A pinning
-test builds the six-agent shared fixture as a `Scenario`, runs it through
-`World.ofScenario` with seed 20260902 to the pinned initial hash
-`0xF2F3DF0D820AD9AC`, and steps 40 ticks with the fixture command to the pinned
-final hash `0x838D3AE7DBFB735D`, tying B-007 to the existing determinism
-evidence without changing the fixture, `Canonical.encode`, or
-`Setup.sixAgentWorld`.
+Realised by TASK-008 and extended by TASK-010: `src/CommandoWar.Sim/Scenario.fs`.
+`ScenarioContent.Version` = 2 (TASK-010 bumped it from 1 for the authored
+terrain layer; version 1 is rejected, not migrated), independent of
+`Canonical.FormatVersion` and `Replay.FormatVersion`. `Scenario.validate :
+RawScenario -> Result<Scenario, ScenarioError list>` collects every fault in
+one pass (`ScenarioError`, 30 explicit cases in the `ReplayError` style). The
+`Objective` algebra is `ReachArea` / `HoldArea` / `DestroyTarget` /
+`ExtractAgents` / `AllOf` / `Optional`, data only, with evaluation deferred.
+`RawScenario.TerrainLayer : RawTerrainLayer option` carries the optional
+authored terrain; `Scenario.Terrain : Terrain` is the validated grid
+(`Terrain.empty Map` when no layer was authored). `World.ofScenario : Scenario
+-> uint64 -> Result<WorldState, WorldError>` builds the world and carries
+`scenario.Terrain` onto it through the same construction core as
+`World.create`. A pinning test builds the six-agent shared fixture as a
+`Scenario` (no terrain layer), runs it through `World.ofScenario` with seed
+20260902 to the pinned initial hash `0xF2F3DF0D820AD9AC`, and steps 40 ticks
+with the fixture command to the pinned final hash `0x838D3AE7DBFB735D`, tying
+the model to the existing determinism evidence without changing the fixture,
+`Canonical.encode`, or `Setup.sixAgentWorld`.

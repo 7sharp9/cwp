@@ -18,12 +18,20 @@ type AgentState =
       Destination: Cell option }
 
 /// Minimal authoritative world state: an integer tick, the logical grid
-/// bounds, the agents ordered by ascending id, and the deterministic random
-/// stream. Fields are added only when an implemented behaviour requires them
-/// (docs/04_SIMULATION_SPEC.md section 10).
+/// bounds, the authoritative terrain grid, the agents ordered by ascending
+/// id, and the deterministic random stream. Fields are added only when an
+/// implemented behaviour requires them (docs/04_SIMULATION_SPEC.md section
+/// 10).
 type WorldState =
     { Tick: int64
       Bounds: GridBounds
+      /// The authoritative per-cell terrain grid (elevation, passability,
+      /// movement cost, opacity, directional cover). Authored and queryable
+      /// but not yet consumed: no tick phase reads it (backlog B-009 to
+      /// B-011). It is immutable within a run at this stage and is
+      /// deliberately excluded from `Canonical.encode` and the state hash
+      /// (docs/04_SIMULATION_SPEC.md section 17; ADR-0002 amendment).
+      Terrain: Terrain
       Agents: AgentState[]
       /// The authoritative deterministic random stream. It is threaded through
       /// every step and is part of the canonical state hash. No gameplay phase

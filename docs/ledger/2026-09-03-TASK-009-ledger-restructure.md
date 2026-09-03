@@ -126,7 +126,9 @@
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-03)
 - Notes: documentation-only restructure; no evidence, decision, date, hash, or
   acceptance of any past entry altered; 79 tests green and fixture hashes
-  unchanged as a sanity check.
+  unchanged as a sanity check. Accepted 2026-09-03 alongside the start of
+  TASK-010: index + detail-file split adopted, `docs/ledger/` is the
+  per-entry home, `docs/12_PROGRESS_LEDGER.md` is the index.

@@ -27,10 +27,10 @@ and detail are in the linked entries.
 | `Canonical.FormatVersion` | `1` | TASK-003 |
 | `Replay.FormatVersion` | `1` | TASK-003 |
 | `CommandLog.Version` | `1` | TASK-003 |
-| `ScenarioContent.Version` | `1` (independent of the three versions above) | TASK-008 |
+| `ScenarioContent.Version` | `2` (authored terrain layer added; independent of the three versions above; version 1 rejected, not migrated) | TASK-010 |
 | PRNG | SplitMix64 v1 (seed initialises the 64-bit counter directly) | TASK-003 |
 | State hash | FNV-1a-64 over `Canonical.encode` (not a cryptographic primitive) | TASK-003 |
-| Green tests | `79` — `dotnet test CommandoWar.slnx -c Release` (`Passed: 79`) | TASK-008 |
+| Green tests | `102` — `dotnet test CommandoWar.slnx -c Release` (`Passed: 102`) | TASK-010 |
 | Accepted ADRs | ADR-0001 (Godot, accepted 2026-09-03); ADR-0002 (framework-independent sim, project baseline); ADR-0003 (Mibo: spike complete, **not adopted**); ADR-0004 (low-impedance C#/F# boundary, accepted 2026-09-03) | TASK-007 acceptance |
 | Current gate | `G2_deterministic_core_proven` (pending) | TASK-006 finalisation |
 | Current phase | `P2_deterministic_core` | TASK-006 finalisation |
@@ -111,8 +111,9 @@ Chronological. One row per detail file.
 | 2026-09-02 | TASK-005 | Disposable Mibo + raylib framework spike (Mibo 4.1.0); shared fixture 41-hash sequence reproduced | `active -> review` | yes (2026-09-03) | [detail](ledger/2026-09-02-TASK-005-mibo-spike.md) |
 | 2026-09-03 | TASK-004 interactive addendum | Godot editor GUI still not drivable in-session; project imports into the 4.7.2 editor with no error | none (TASK-004 stays `done`) | n/a (addendum) | [detail](ledger/2026-09-03-TASK-004-interactive-addendum.md) |
 | 2026-09-03 | TASK-006 | Spikes evaluated; ADR-0001 scored table completed (Godot 4.13 / Mibo 3.62); Godot recommendation put to Dave | TASK-005 `review -> done`; TASK-006 `proposed -> active` | yes (2026-09-03) | [detail](ledger/2026-09-03-TASK-006-spikes-evaluated.md) |
-| 2026-09-03 | TASK-006 finalisation | ADR-0001 accepted (Godot); G1 passed; Mibo route retired | ADR-0001 `proposed -> accepted`; `G1 -> passed`; gate `G1 -> G2`; phase `P1 -> P2`; TASK-006 `active -> done` | pending (finalisation edits; framework decision itself accepted) | [detail](ledger/2026-09-03-TASK-006-finalisation.md) |
+| 2026-09-03 | TASK-006 finalisation | ADR-0001 accepted (Godot); G1 passed; Mibo route retired | ADR-0001 `proposed -> accepted`; `G1 -> passed`; gate `G1 -> G2`; phase `P1 -> P2`; TASK-006 `active -> done` | yes (2026-09-03) | [detail](ledger/2026-09-03-TASK-006-finalisation.md) |
 | 2026-09-03 | TASK-007 | Godot C#/F# client boundary designed; ADR-0004 proposed; disposable proof built (questions 1-5) | TASK-007 `-> active -> review`; ADR-0004 created (`proposed`) | yes (2026-09-03) | [detail](ledger/2026-09-03-TASK-007-godot-fsharp-boundary.md) |
 | 2026-09-03 | TASK-007 acceptance | ADR-0004 accepted; boundary design signed off | ADR-0004 `proposed -> accepted`; TASK-007 `review -> done` | yes (2026-09-03) | [detail](ledger/2026-09-03-TASK-007-acceptance.md) |
 | 2026-09-03 | TASK-008 | Authored `Scenario` model, `ScenarioContent.Version`, one-pass `Scenario.validate`, `World.ofScenario` | `active -> review` | yes (2026-09-03) | [detail](ledger/2026-09-03-TASK-008-scenario-dto.md) |
-| 2026-09-03 | TASK-009 | Progress ledger restructured into this index plus per-entry detail files under `docs/ledger/` | `active -> review` | pending | [detail](ledger/2026-09-03-TASK-009-ledger-restructure.md) |
+| 2026-09-03 | TASK-009 | Progress ledger restructured into this index plus per-entry detail files under `docs/ledger/` | `active -> review` | yes (2026-09-03) | [detail](ledger/2026-09-03-TASK-009-ledger-restructure.md) |
+| 2026-09-03 | TASK-010 | Authoritative terrain grid: `Terrain` module (elevation, passability, cost, opacity, directional cover), authored layer + validation, `ScenarioContent.Version` 2 | `active -> review` | pending | [detail](ledger/2026-09-03-TASK-010-terrain-grid.md) |
