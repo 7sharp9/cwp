@@ -1,0 +1,8 @@
+# Disposable TASK-007 proof. Editor + .NET build artifacts only.
+.godot/
+.mono/
+*.import
+/export/
+GodotFSharpBoundary.sln
+probe.log
+shot.log

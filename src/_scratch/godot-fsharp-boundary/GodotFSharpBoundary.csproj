@@ -1,0 +1,19 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+
+  <!-- TASK-007 disposable proof. NOT in any .slnx. Removable wholesale. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>disable</Nullable>
+    <RootNamespace>GodotFSharpBoundary</RootNamespace>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The F# client-core library. The Godot source generators run over the
+         C# in this project (src/MainShim.cs) but NOT over the F# assembly. -->
+    <ProjectReference Include="ClientCore\ClientCore.fsproj" />
+  </ItemGroup>
+
+</Project>

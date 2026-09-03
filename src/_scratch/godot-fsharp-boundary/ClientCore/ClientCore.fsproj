@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- TASK-007 disposable proof. NOT in any .slnx. Removable wholesale. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>CwClientCore</RootNamespace>
+    <Nullable>disable</Nullable>
+    <!-- Godot loads referenced assemblies through its own AssemblyLoadContext. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Boundary.fs" />
+    <Compile Include="Host.fs" />
+    <Compile Include="FSharpNode.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The proof consumes the real simulation and the shared fixture. -->
+    <ProjectReference Include="..\..\..\CommandoWar.Sim\CommandoWar.Sim.fsproj" />
+    <ProjectReference Include="..\..\..\CommandoWar.Headless\CommandoWar.Headless.fsproj" />
+    <!-- GodotSharp only (no Godot.NET.Sdk, no Godot.SourceGenerators): an F#
+         library cannot run the C#-only script source generators. Resolved from
+         the offline feed in ../nuget.config. -->
+    <PackageReference Include="GodotSharp" Version="4.7.2" />
+  </ItemGroup>
+
+</Project>

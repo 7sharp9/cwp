@@ -8,16 +8,11 @@ project:
   updated: 2026-09-03
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-007
+  task_file: tasks/TASK-007-GODOT-FSHARP-BOUNDARY.md
   owner: Dave
   blocked: false
   blockers: []
-  note: >
-    TASK-006 done; ADR-0001 accepted 2026-09-03 (Godot .NET + F# sim). Next task
-    not yet selected. See the 2026-09-03 ledger entry and the next-session prompt.
-    Leading candidate is a boundary-design task for the low-impedance C#/F# Godot
-    client (ADR-0001 named follow-up); then B-007 onward for G2.
 
 sources_of_truth:
   product: docs/00_PROJECT_CHARTER.md

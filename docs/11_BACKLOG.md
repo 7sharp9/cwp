@@ -26,6 +26,7 @@ A backlog row is not sufficient authority for an agent to implement work. A `rea
 | TASK-004 | P1 | Implement disposable Godot .NET framework spike | M | TASK-003 | done | `tasks/TASK-004-GODOT-SPIKE.md` |
 | TASK-005 | P1 | Implement disposable Mibo plus raylib framework spike (trimmed; pinned to Mibo 4.1.0 per ADR-0003 2026-09-02 amendment) | S | TASK-004, ADR-0003 amendment | done | `tasks/TASK-005-MIBO-SPIKE.md` |
 | TASK-006 | P1 | Evaluate spikes and accept framework ADR | S | TASK-004, TASK-005 | done | `tasks/TASK-006-FRAMEWORK-DECISION.md` |
+| TASK-007 | P2 | Design the low-impedance Godot C#/F# client boundary | S | TASK-006 | review | `tasks/TASK-007-GODOT-FSHARP-BOUNDARY.md` |
 
 ## 3. Planned simulation work
 

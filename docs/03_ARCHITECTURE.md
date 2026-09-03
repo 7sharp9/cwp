@@ -1,7 +1,7 @@
 # Architecture
 
 Status: baseline; framework-neutral core accepted by ADR-0002  
-Last revised: 2026-09-02
+Last revised: 2026-09-03 (section 14: Godot client boundary, ADR-0004)
 
 ## 1. Architectural objective
 
@@ -276,14 +276,30 @@ If Mibo wins, its classic HeadlessRunner may host this loop. `CommandoWar.Sim` s
 
 ## 14. Godot host
 
-If selected:
+Selected by ADR-0001 (accepted 2026-09-03). Client structure fixed by ADR-0004.
 
-- C# owns Godot node lifecycle and input mapping.
-- An F# facade owns the simulation session.
-- Godot TileMapLayer or imported map data provides authoring, but compiled gameplay cells are passed to the simulation.
-- Godot physics is not authoritative.
-- `_PhysicsProcess` or another fixed host callback schedules ticks; it does not supply authoritative floating-point time.
-- snapshots drive node creation and interpolation.
+- The client is a thin C# shim per scene entry point over an F# client-core
+  library. The shim (the scene root) holds `[Export]` refs and editor
+  integration and forwards lifecycle callbacks; it contains no client logic.
+  The F# client-core library owns the simulation facade, fixed-step scheduling,
+  input-to-command mapping, view-model and overlay preparation, and
+  replay-relevant messages. It may reference `GodotSharp`; it is a separate
+  project from `CommandoWar.Sim`, which never references a framework.
+- F# types are not scene entry points: Godot 4.7.2's script source generators
+  are C#-only, so Godot does not drive an F# node's lifecycle callbacks and
+  does not see its `[<Export>]` fields (ADR-0004 evidence).
+- The C# <-> F# boundary carries primitives, `System.Nullable<T>`, arrays of
+  `[<CLIMutable>]` records, and `Godot.InputEvent` into F# client methods.
+  F# `option` / `list` / `Result` / DU cases / module functions do not cross to
+  C#.
+- Content authoring: a C# reader at the Godot edge (TileMapLayer / imported map
+  data / typed marker nodes) emits framework-neutral DTOs; validation and
+  compiled gameplay cells are F# and are passed to the simulation. No Godot
+  type crosses past the DTO.
+- Godot physics, navigation, and random are not authoritative.
+- A host-owned fixed-step accumulator schedules ticks from the wall-clock
+  `_Process` delta; the simulation receives an integer tick, never a float.
+- Snapshots drive node creation and interpolation.
 
 ## 15. Mibo host
 
