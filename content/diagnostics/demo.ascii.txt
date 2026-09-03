@@ -1,0 +1,39 @@
+# CommandoWar diagnostic frame
+tick 0
+
+              11
+    012345678901
+  0 @...........
+  1 @.....o.....
+  2 ..1...o.##..
+  3 ...2..o.##..
+  4 ....3.......
+  5 .....2......
+  6 ......1.....
+  7 ...........X
+
+cover edges (N/E/S/W per cell, * for more than one):
+    012345678901
+  0 ............
+  1 ............
+  2 ............
+  3 ............
+  4 .N..........
+  5 ..........W.
+  6 .....S......
+  7 ............
+
+legend:
+  @ friendly agent   X hostile agent
+  # impassable        o opaque (passable)
+  1-9 elevation       . open flat ground
+movement-cost > base at: (2,5)=3 (3,5)=3 (4,5)=3
+
+agents:
+  agent 0  friendly  (0,0)  at rest
+  agent 1  friendly  (0,1)  at rest
+  agent 5  hostile   (11,7)  at rest
+
+events: none
+
+tick 0 | hash 0x8876CA7E24B60684 (format 1) | draws 0 | agents 3 | cover-edges 3 | events 0

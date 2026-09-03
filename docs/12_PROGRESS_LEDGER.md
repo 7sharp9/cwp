@@ -30,7 +30,7 @@ and detail are in the linked entries.
 | `ScenarioContent.Version` | `2` (authored terrain layer added; independent of the three versions above; version 1 rejected, not migrated) | TASK-010 |
 | PRNG | SplitMix64 v1 (seed initialises the 64-bit counter directly) | TASK-003 |
 | State hash | FNV-1a-64 over `Canonical.encode` (not a cryptographic primitive) | TASK-003 |
-| Green tests | `102` — `dotnet test CommandoWar.slnx -c Release` (`Passed: 102`) | TASK-010 |
+| Green tests | `115` — `dotnet test CommandoWar.slnx -c Release` (`Passed: 115`) | TASK-011 |
 | Accepted ADRs | ADR-0001 (Godot, accepted 2026-09-03); ADR-0002 (framework-independent sim, project baseline); ADR-0003 (Mibo: spike complete, **not adopted**); ADR-0004 (low-impedance C#/F# boundary, accepted 2026-09-03) | TASK-007 acceptance |
 | Current gate | `G2_deterministic_core_proven` (pending) | TASK-006 finalisation |
 | Current phase | `P2_deterministic_core` | TASK-006 finalisation |
@@ -117,3 +117,4 @@ Chronological. One row per detail file.
 | 2026-09-03 | TASK-008 | Authored `Scenario` model, `ScenarioContent.Version`, one-pass `Scenario.validate`, `World.ofScenario` | `active -> review` | yes (2026-09-03) | [detail](ledger/2026-09-03-TASK-008-scenario-dto.md) |
 | 2026-09-03 | TASK-009 | Progress ledger restructured into this index plus per-entry detail files under `docs/ledger/` | `active -> review` | yes (2026-09-03) | [detail](ledger/2026-09-03-TASK-009-ledger-restructure.md) |
 | 2026-09-03 | TASK-010 | Authoritative terrain grid: `Terrain` module (elevation, passability, cost, opacity, directional cover), authored layer + validation, `ScenarioContent.Version` 2 | `active -> review` | pending | [detail](ledger/2026-09-03-TASK-010-terrain-grid.md) |
+| 2026-09-03 | TASK-011 | Framework-neutral `DiagnosticFrame` observer in `CommandoWar.Sim` + deterministic ASCII/SVG/HTML renderers, `cwheadless render` verb, terrain-demo scenario, golden renders, and the "visually inspectable" standing rule | `proposed -> active -> review` | pending | [detail](ledger/2026-09-03-TASK-011-diagnostic-visualisation.md) |

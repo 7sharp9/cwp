@@ -50,6 +50,22 @@ Do not infer architecture from filenames alone. Inspect the implementation first
 - Keep system order visible and testable.
 - Add comments only for non-obvious constraints and reasons.
 
+## Diagnostics
+
+A task that adds or changes authoritative spatial or tactical state MUST extend
+the diagnostic frame (`src/CommandoWar.Sim/Diagnostics.fs`, `DiagnosticFrame`)
+with that state, as a `GridLayer`, an `EdgeMarker`, or a new `Overlay` case, and
+MUST add or update a golden visualiser output under `content/diagnostics/` that
+covers the new behaviour. "Visually inspectable" is a completion criterion
+alongside "has a focused test": if a reviewer cannot see the new state in an
+ASCII, SVG, or HTML render, the task is not done.
+
+The frame and its renderers are observers only (ADR-0002): nothing in
+`Simulation.step` or any phase constructs a frame, and no frame feeds back into
+the step. The model is framework-neutral (ints, bools, arrays, strings, DUs; no
+floating point); the renderers live in `CommandoWar.Headless`, never in the
+simulation.
+
 ## Verification
 
 Before reporting completion:

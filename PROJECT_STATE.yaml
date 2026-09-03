@@ -8,8 +8,8 @@ project:
   updated: 2026-09-03
 
 active_work:
-  selected_task: TASK-010
-  task_file: tasks/TASK-010-TERRAIN-GRID.md
+  selected_task: TASK-011
+  task_file: tasks/TASK-011-DIAGNOSTIC-VISUALISATION.md
   owner: Dave
   blocked: false
   blockers: []

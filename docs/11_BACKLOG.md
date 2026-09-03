@@ -29,7 +29,8 @@ A backlog row is not sufficient authority for an agent to implement work. A `rea
 | TASK-007 | P2 | Design the low-impedance Godot C#/F# client boundary | S | TASK-006 | done | `tasks/TASK-007-GODOT-FSHARP-BOUNDARY.md` |
 | TASK-008 | P2 | Define and validate the initial scenario DTO and content version | S | TASK-007 | done | `tasks/TASK-008-SCENARIO-DTO-AND-CONTENT-VERSION.md` |
 | TASK-009 | P2 | Restructure the progress ledger into a summary index plus per-entry detail files | S | TASK-008 | done | `tasks/TASK-009-PROGRESS-LEDGER-RESTRUCTURE.md` |
-| TASK-010 | P2 | Implement the authoritative terrain grid: elevation, passability, movement cost, directional cover | M | TASK-008 | active | `tasks/TASK-010-TERRAIN-GRID.md` |
+| TASK-010 | P2 | Implement the authoritative terrain grid: elevation, passability, movement cost, directional cover | M | TASK-008 | review | `tasks/TASK-010-TERRAIN-GRID.md` |
+| TASK-011 | P2 | Headless diagnostic visualisation and the framework-neutral diagnostic frame | M | TASK-010 | active | `tasks/TASK-011-DIAGNOSTIC-VISUALISATION.md` |
 
 ## 3. Planned simulation work
 
@@ -38,7 +39,8 @@ These items are not implementation-ready. Create and review a task file before s
 | ID | Phase | Work item | Size | Dependencies | Gate | Status |
 |---|---|---|---|---|---|---|
 | B-007 | P2 | Define and validate initial scenario DTO and content version | S | TASK-006 | G2 | done (`tasks/TASK-008-SCENARIO-DTO-AND-CONTENT-VERSION.md`) |
-| B-008 | P2 | Implement terrain grid, elevation, passability, and directional cover | M | B-007 | G2 | active (`tasks/TASK-010-TERRAIN-GRID.md`) |
+| B-008 | P2 | Implement terrain grid, elevation, passability, and directional cover | M | B-007 | G2 | review (`tasks/TASK-010-TERRAIN-GRID.md`) |
+| B-012a | P2 | Headless diagnostic visualisation and the framework-neutral diagnostic frame | M | B-008 | G2 | active (`tasks/TASK-011-DIAGNOSTIC-VISUALISATION.md`) |
 | B-009 | P2 | Implement deterministic line of sight and opacity | M | B-008 | G2 | proposed |
 | B-010 | P2 | Implement deterministic grid pathfinding with stable tie-breaking | M | B-008 | G2 | proposed |
 | B-011 | P2 | Implement movement, formation slots, and short-horizon cell reservation | L | B-010 | G2 | proposed |
@@ -64,7 +66,7 @@ These items are not implementation-ready. Create and review a task file before s
 | B-026 | P4 | Implement selection, input mapping, tactical pause, and command preview | M | B-014, TASK-006 | G4 | proposed |
 | B-027 | P4 | Implement snapshot rendering and isometric depth ordering | M | B-011, TASK-006 | G4 | proposed |
 | B-028 | P4 | Implement player-facing reason and disposition UI | M | B-017, B-026 | G4 | proposed |
-| B-029 | P4 | Implement developer perception, appraisal, reservation, and hash overlays | M | B-012, B-017, B-027 | G4 | proposed |
+| B-029 | P4 | Render the DiagnosticFrame in Godot (developer perception, appraisal, reservation, and hash overlays) | M | B-012a, B-012, B-017, B-027 | G4 | proposed |
 | B-030 | P4 | Implement suppress and assault command executors | L | B-018, B-020 | G4 | proposed |
 | B-031 | P4 | Implement casualties, leadership succession, and squad failure | M | B-019, B-021 | G4 | proposed |
 | B-032 | P4 | Implement demolition objective, extraction, success, and failure | M | B-025, B-030, B-031 | G4 | proposed |

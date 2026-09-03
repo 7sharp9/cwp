@@ -195,6 +195,117 @@ let private cmdFixture () : int =
         printOutcomeTail outcome
         Exit.ok
 
+let private cmdRender (args: string list) : int =
+    // render <fixture|demo|command-log> [--tick N] [--layer NAME] [--format ascii|svg|html] [--out PATH]
+    match args with
+    | [] ->
+        eprintfn
+            "usage: cwheadless render <fixture|demo|command-log> [--tick N] [--layer NAME] [--format ascii|svg|html] [--out PATH]"
+        Exit.usage
+    | target :: rest ->
+        let mutable tick: int64 option = None
+        let mutable layerName: string option = None
+        let mutable format = "ascii"
+        let mutable out: string option = None
+        let mutable optErr: string option = None
+
+        let rec parseOpts xs =
+            match xs with
+            | [] -> ()
+            | "--tick" :: v :: t ->
+                match Int64.TryParse v with
+                | true, n when n >= 0L ->
+                    tick <- Some n
+                    parseOpts t
+                | _ -> optErr <- Some $"invalid --tick value '{v}'"
+            | "--layer" :: v :: t ->
+                layerName <- Some v
+                parseOpts t
+            | "--format" :: v :: t ->
+                match v with
+                | "ascii"
+                | "svg"
+                | "html" ->
+                    format <- v
+                    parseOpts t
+                | _ -> optErr <- Some $"invalid --format '{v}', expected ascii|svg|html"
+            | "--out" :: v :: t ->
+                out <- Some v
+                parseOpts t
+            | other :: _ -> optErr <- Some $"unexpected argument '{other}'"
+
+        parseOpts rest
+
+        match optErr with
+        | Some m ->
+            eprintfn "error: %s" m
+            Exit.usage
+        | None ->
+            let frames: DiagnosticFrame[] option =
+                match target with
+                | "fixture" ->
+                    Some(DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount)
+                | "demo" ->
+                    Some(
+                        DiagnosticRender.runFrames
+                            (DemoScenario.initialState ())
+                            (DemoScenario.commandLog ())
+                            DemoScenario.TickCount
+                    )
+                | path ->
+                    match loadLog path with
+                    | None -> None
+                    | Some cmds ->
+                        Some(DiagnosticRender.runFrames (Fixture.initialState ()) cmds Fixture.TickCount)
+
+            match frames with
+            | None -> Exit.usage
+            | Some frames ->
+                let emit (text: string) =
+                    match out with
+                    | Some p ->
+                        File.WriteAllText(p, text)
+                        printfn "wrote %s (%d bytes)" p (Text.Encoding.UTF8.GetByteCount text)
+                    | None -> printf "%s" text
+
+                match format with
+                | "html" ->
+                    if tick.IsSome then
+                        eprintfn "note: --tick is ignored for --format html (all %d frames are embedded)" frames.Length
+
+                    emit (DiagnosticRender.Html frames)
+                    Exit.ok
+                | _ ->
+                    let idx = defaultArg (tick |> Option.map int) 0
+
+                    if idx < 0 || idx >= frames.Length then
+                        eprintfn "error: --tick %d is outside 0..%d" idx (frames.Length - 1)
+                        Exit.usage
+                    else
+                        let baseFrame = frames.[idx]
+
+                        match layerName with
+                        | Some name when not (baseFrame.Layers |> Array.exists (fun l -> l.Name = name)) ->
+                            let names = baseFrame.Layers |> Array.map (fun l -> l.Name) |> String.concat ", "
+                            eprintfn "error: unknown --layer '%s' (available: %s)" name names
+                            Exit.usage
+                        | _ ->
+                            let selected =
+                                match layerName with
+                                | None -> baseFrame
+                                | Some name ->
+                                    { baseFrame with
+                                        Layers = baseFrame.Layers |> Array.filter (fun l -> l.Name = name) }
+
+                            let text =
+                                if format = "svg" then
+                                    DiagnosticRender.Svg selected
+                                else
+                                    DiagnosticRender.Ascii selected
+
+                            emit text
+                            Exit.ok
+
 let private usage () =
     printfn "cwheadless - framework-neutral headless reference for CommandoWar.Sim"
     printfn ""
@@ -203,6 +314,8 @@ let private usage () =
     printfn "  cwheadless replay <command-log> [--ticks N]      replay a command log against the fixture"
     printfn "  cwheadless compare <log-a> <log-b> [--ticks N]   report the first authoritative divergence"
     printfn "  cwheadless fixture                               emit the pinned shared fixture + per-tick hashes"
+    printfn "  cwheadless render <target> [opts]                render diagnostic frames (target: fixture | demo | <command-log>)"
+    printfn "        [--tick N] [--layer NAME] [--format ascii|svg|html] [--out PATH]"
     printfn ""
     printfn "exit codes: %d ok, %d usage/IO, %d replay error, %d divergence detected"
         Exit.ok Exit.usage Exit.replayError Exit.diverged
@@ -222,6 +335,7 @@ let main argv =
     | "replay" :: rest -> cmdReplay rest
     | "compare" :: rest -> cmdCompare rest
     | [ "fixture" ] -> cmdFixture ()
+    | "render" :: rest -> cmdRender rest
     | other :: _ ->
         eprintfn "error: unknown subcommand '%s'" other
         usage ()

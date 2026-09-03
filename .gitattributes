@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Golden diagnostic renders are byte-compared against renderer output in tests
+# (tests/CommandoWar.Sim.Tests/DiagnosticsTests.fs); the renderers emit LF, so
+# these must stay LF in the working tree on every platform.
+content/diagnostics/** text eol=lf

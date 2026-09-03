@@ -26,6 +26,7 @@
     <Compile Include="Simulation.fs" />
     <Compile Include="Replay.fs" />
     <Compile Include="Divergence.fs" />
+    <Compile Include="Diagnostics.fs" />
   </ItemGroup>
 
 </Project>

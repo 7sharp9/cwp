@@ -15,6 +15,8 @@
   <ItemGroup>
     <Compile Include="CommandLogFile.fs" />
     <Compile Include="Fixture.fs" />
+    <Compile Include="DemoScenario.fs" />
+    <Compile Include="DiagnosticRender.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

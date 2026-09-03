@@ -255,6 +255,29 @@ Developer-facing:
 - last appraisal factors and selected reason;
 - simulation tick, state hash, and random draw counter.
 
+### Realised by TASK-011 (developer-facing foundation)
+
+The framework-neutral per-tick model behind the developer overlay is
+`src/CommandoWar.Sim/Diagnostics.fs`: `DiagnosticFrame` carries the terrain
+`GridLayer`s (elevation, passability, movement cost, opacity), directional
+cover `EdgeMarker`s, `AgentMarker`s (side, cell, destination), this-tick
+`EventMarker`s, an open `Overlay` DU for later systems (line of sight,
+pathfinding, reservation, fire line attach here), and the determinism trio
+(tick, state hash, random draw counter). `Diagnostics.frame` /
+`Diagnostics.frameOf` are pure observers: nothing in `Simulation.step` builds a
+frame and no frame feeds back (ADR-0002).
+
+Deterministic renderers of that frame are
+`src/CommandoWar.Headless/DiagnosticRender.fs`: `Ascii` (coordinate-ruled
+composite grid plus a cover grid, legend, agent roster, events line, footer),
+`Svg` (cells as rects with elevation shading, hatched impassable, dark-bordered
+opaque, cover triangles, agents with destination lines), and `Html` (one SVG
+per tick with a slider to scrub a run). The `cwheadless render` verb drives
+them; golden outputs and their regeneration command are in
+`content/diagnostics/`. The Godot developer overlay (backlog B-029) becomes a
+third renderer of the same frame. Player-facing overlays (threat markers,
+cover/exposure preview, reason panel) remain out of scope here.
+
 ## 12. Content iteration metric
 
 Each framework spike must measure a trivial map change:

@@ -242,3 +242,18 @@ A task that changes authoritative behaviour is complete only when:
 - deterministic replay remains valid or its intentional format change is documented;
 - test commands and outputs are recorded in the progress ledger;
 - no failing test is disabled or weakened without an explicit decision.
+
+### Diagnostic visualisation is a completion criterion
+
+A task that adds or changes authoritative spatial or tactical state MUST also
+extend the diagnostic frame (`src/CommandoWar.Sim/Diagnostics.fs`,
+`DiagnosticFrame`: a `GridLayer`, an `EdgeMarker`, or an `Overlay` case) with
+that state and add or update a golden visualiser output under
+`content/diagnostics/` that covers the new behaviour. "Visually inspectable"
+stands beside "has a focused test": a reviewer must be able to see the new
+state in an ASCII, SVG, or HTML render. The diagnostic frame and its renderers
+(`src/CommandoWar.Headless/DiagnosticRender.fs`) are observers only and never
+participate in `Simulation.step` (ADR-0002); the golden renders have an
+explicit regeneration command, recorded in `content/diagnostics/README.md`.
+
+Realised by TASK-011.

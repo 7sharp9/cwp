@@ -98,6 +98,21 @@ Direct leader movement may use a separate immediate input command, but it must p
 - mission completion and failure summary;
 - replay playback.
 
+### Realised by TASK-011 (developer overlay foundation, headless)
+
+The framework-neutral per-tick diagnostic model
+(`src/CommandoWar.Sim/Diagnostics.fs`, `DiagnosticFrame`) and its deterministic
+ASCII / SVG / HTML renderers (`src/CommandoWar.Headless/DiagnosticRender.fs`,
+driven by `cwheadless render`) give the developer overlay its data foundation
+before any client work. It covers the terrain grid, directional cover, agents
+and destinations, this-tick events, and the tick / state-hash / random-draw
+trio; perception, appraisal, commitment, and reservation state attach as
+`Overlay` cases when those systems land (B-009 to B-011, B-019). The HTML
+scrubber is the headless form of "the developer overlay can explain any
+appraisal and major state transition" (functional acceptance criterion 11) for
+the systems that currently exist. The Godot overlay (B-029) renders the same
+frame.
+
 ## 7. Deliberate exclusions
 
 The slice must not include:
