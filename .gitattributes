@@ -5,3 +5,7 @@
 # (tests/CommandoWar.Sim.Tests/DiagnosticsTests.fs); the renderers emit LF, so
 # these must stay LF in the working tree on every platform.
 content/diagnostics/** text eol=lf
+
+# Committed replay corpus (TASK-016): cwheadless corpus and CorpusTests.fs
+# byte-compare fresh output against these committed hash tables.
+content/replays/** text eol=lf

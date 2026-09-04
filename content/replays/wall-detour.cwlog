@@ -1,0 +1,7 @@
+# Replay corpus entry: wall-detour (command-log format v1).
+# Initial state: Corpus wall-detour scenario (12 x 9, seed 20260904), one
+# friendly agent at (1,3); an impassable wall runs along x=5, rows 0..6
+# (rows 7..8 open). Pathfinding routes the agent around the gap.
+version 1
+
+1 0 move 10 3

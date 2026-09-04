@@ -18,6 +18,7 @@
     <Compile Include="DemoScenario.fs" />
     <Compile Include="LosDemo.fs" />
     <Compile Include="PathDemo.fs" />
+    <Compile Include="Corpus.fs" />
     <Compile Include="DiagnosticRender.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

@@ -1,0 +1,9 @@
+# Replay corpus entry: converging-routes (command-log format v1).
+# Initial state: Corpus converging-routes scenario (8 x 8, seed 20260904),
+# open terrain. Agent 0 at (3,0) crosses agent 1 at (0,3); their routes meet
+# at (3,3) on the same tick with no cell reservation (B-011b re-pins this
+# entry's hashes).
+version 1
+
+1 0 move 3 7
+1 1 move 7 3

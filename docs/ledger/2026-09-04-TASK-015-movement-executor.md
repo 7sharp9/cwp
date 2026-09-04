@@ -240,7 +240,9 @@ observers: nothing in `Simulation.step` constructs a frame.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-04). Single-agent executor accepted as the realisation
+  of B-011; multi-agent reservation / formation slots / sub-cell progress carried
+  forward as B-011b. Finalised as the predecessor of TASK-016.
 - Notes: `Pathfinding`-driven single-agent Navigation and movement executor
   replacing `PlaceholderMovement` (`docs/04` section 8 steps 2/4/5/6);
   `AgentState.Route` a non-canonical derived cache, `Canonical.FormatVersion`

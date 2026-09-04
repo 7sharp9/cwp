@@ -90,6 +90,26 @@ Replay verification must identify:
 - random draw count;
 - simulation and content versions.
 
+Realised by TASK-016 (backlog B-012): `content/replays/` (index
+`CORPUS.md`), a committed, regenerable multi-entry replay corpus over the
+existing `.cwlog` v1 format (`src/CommandoWar.Headless/CommandLogFile.fs`) plus
+a per-tick authoritative-hash table per entry (mirroring
+`content/fixtures/SPIKE-FIXTURE.md`). Four entries: the shared spike fixture
+(cross-checked against `Fixture.run ()`, not an independent re-pin), a
+single-agent wall detour and a `MovementBlocked` no-path case (both exercising
+the TASK-015 executor), and a two-agent "converging routes" entry that pins
+today's no-reservation behaviour (B-011b re-pins it). `Corpus.fs`
+(`CommandoWar.Headless`) owns the name -> `WorldState` registry and the
+check/regenerate logic; `cwheadless corpus [--regenerate]` is the CLI form and
+`tests/CommandoWar.Sim.Tests/CorpusTests.fs` is an in-suite `[<Theory>]` over
+the same entries (the `BenchmarkTests` "cheap in-suite flag" precedent), so
+`dotnet test` catches a regression without an opt-in CLI run. A divergence
+report names the first bad tick and the expected/actual hash; genuine
+nondeterminism (two runs of the same entry disagreeing) additionally carries
+the first differing canonical section and both sides' random-draw counts via
+`Divergence.compare`. Generative property tests (needs a new dependency) and
+component-level subhashes in the report are deferred to **B-012b**.
+
 Do not promise replay compatibility across arbitrary future versions. Version the format and fail explicitly when migration is unavailable.
 
 ### 2.5 Content tests

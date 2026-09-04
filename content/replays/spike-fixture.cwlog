@@ -1,0 +1,7 @@
+# Replay corpus entry: spike-fixture (command-log format v1).
+# Mirrors content/fixtures/spike-fixture.cwlog. Initial state:
+# Fixture.initialState () (Setup.sixAgentWorld, 32 x 32, seed 20260902).
+version 1
+
+# tick 1: agent 3 (starts at column 0, row 3) is ordered to cell (20, 14).
+1 3 move 20 14

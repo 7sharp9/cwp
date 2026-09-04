@@ -15,6 +15,7 @@ module Exit =
     let diverged = 3
 
 let private hx (h: StateHash) = sprintf "0x%016X" h.Value
+let private hxv (v: uint64) = sprintf "0x%016X" v
 
 let private describeReplayError (e: ReplayError) : string =
     match e with
@@ -194,6 +195,97 @@ let private cmdFixture () : int =
         printfn ""
         printOutcomeTail outcome
         Exit.ok
+
+/// Runs, or regenerates, the committed replay corpus (`content/replays/`,
+/// TASK-016). `corpus` replays every entry, checks it reproduces its own
+/// hashes on a second independent run, then compares the per-tick hashes to
+/// the committed table, printing a divergence report and exiting non-zero on
+/// the first mismatch. `corpus --regenerate` rewrites every table instead.
+let private cmdCorpus (args: string list) : int =
+    let mutable dir = Corpus.DefaultDir
+    let mutable regenerate = false
+    let mutable optErr: string option = None
+
+    let rec parseOpts xs =
+        match xs with
+        | [] -> ()
+        | "--regenerate" :: t ->
+            regenerate <- true
+            parseOpts t
+        | "--dir" :: v :: t ->
+            dir <- v
+            parseOpts t
+        | other :: _ -> optErr <- Some $"unexpected argument '{other}'"
+
+    parseOpts args
+
+    match optErr with
+    | Some m ->
+        eprintfn "error: %s" m
+        eprintfn "usage: cwheadless corpus [--regenerate] [--dir PATH]"
+        Exit.usage
+    | None when regenerate ->
+        let mutable failed = false
+
+        for e in Corpus.all do
+            match Corpus.regenerateEntry dir e with
+            | Corpus.Wrote p -> printfn "wrote %s" p
+            | Corpus.RegenLogError m ->
+                eprintfn "error: %s: %s" e.Name m
+                failed <- true
+            | Corpus.RegenReplayError err ->
+                eprintfn "error: %s: replay error: %s" e.Name (describeReplayError err)
+                failed <- true
+
+        if failed then Exit.replayError else Exit.ok
+    | None ->
+        printfn "# cwheadless corpus - %d entries in %s" Corpus.all.Length dir
+        let mutable worst = Exit.ok
+
+        for e in Corpus.all do
+            match Corpus.checkEntry dir e with
+            | Corpus.Passed -> printfn "PASS  %-20s %d tick(s)" e.Name e.TickCount
+            | Corpus.LogError m ->
+                eprintfn "ERROR %-20s %s" e.Name m
+                worst <- max worst Exit.replayError
+            | Corpus.ReplayFailed err ->
+                eprintfn "ERROR %-20s replay error: %s" e.Name (describeReplayError err)
+                worst <- max worst Exit.replayError
+            | Corpus.TableError m ->
+                eprintfn "ERROR %-20s %s" e.Name m
+                worst <- max worst Exit.replayError
+            | Corpus.Nondeterministic report ->
+                eprintfn "DIVERGED %s: two independent replays of the same entry produced different hashes" e.Name
+
+                match report with
+                | Diverged(p, expTicks, actTicks) ->
+                    eprintfn "  first bad tick : %d" p.Tick
+                    eprintfn "  hash run A     : %s" (hx p.Expected)
+                    eprintfn "  hash run B     : %s" (hx p.Actual)
+                    eprintfn "  first section  : %s" (defaultArg p.Section "(unavailable)")
+                    eprintfn "  random draws   : run A %d, run B %d" p.ExpectedRandomDraws p.ActualRandomDraws
+                    eprintfn "  run lengths    : %d, %d" expTicks actTicks
+                | TruncatedRun(lastAgreed, expTicks, actTicks) ->
+                    eprintfn "  agreed through tick %d, then run lengths differ (%d, %d)" lastAgreed expTicks actTicks
+                | Match _ -> ()
+
+                worst <- max worst Exit.diverged
+            | Corpus.Mismatch d ->
+                eprintfn "DIVERGED %s: this build disagrees with the committed table" e.Name
+                eprintfn "  first bad tick : %d" d.FirstBadTick
+                eprintfn "  expected hash  : %s  (committed %s/%s.md)" (hxv d.Expected) dir e.Name
+                eprintfn "  actual hash    : %s  (this build)" (hxv d.Actual)
+                eprintfn "  random draws   : %d (this build; the committed table stores hashes only)" d.ActualDraws
+
+                if d.Note <> "" then
+                    eprintfn "  note           : %s" d.Note
+
+                worst <- max worst Exit.diverged
+
+        if worst = Exit.ok then
+            printfn "OK - all %d entries match their committed tables" Corpus.all.Length
+
+        worst
 
 let private parseCell (s: string) : Cell option =
     match s.Split(',') with
@@ -382,6 +474,7 @@ let private usage () =
     printfn "  cwheadless fixture                               emit the pinned shared fixture + per-tick hashes"
     printfn "  cwheadless render <target> [opts]                render diagnostic frames (target: fixture | demo | los | path | <command-log>)"
     printfn "        [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--path AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
+    printfn "  cwheadless corpus [--regenerate] [--dir PATH]    check (or regenerate) the committed replay corpus (content/replays/)"
     printfn ""
     printfn "exit codes: %d ok, %d usage/IO, %d replay error, %d divergence detected"
         Exit.ok Exit.usage Exit.replayError Exit.diverged
@@ -402,6 +495,7 @@ let main argv =
     | "compare" :: rest -> cmdCompare rest
     | [ "fixture" ] -> cmdFixture ()
     | "render" :: rest -> cmdRender rest
+    | "corpus" :: rest -> cmdCorpus rest
     | other :: _ ->
         eprintfn "error: unknown subcommand '%s'" other
         usage ()

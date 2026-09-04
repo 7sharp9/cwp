@@ -1,0 +1,8 @@
+# Replay corpus entry: blocked-goal (command-log format v1).
+# Initial state: Corpus blocked-goal scenario (8 x 8, seed 20260904), one
+# friendly agent at (1,4). Target (5,4) is passable but its four cardinal
+# neighbours are impassable, so Pathfinding.findWithin returns NoPath and the
+# executor emits MovementBlocked, clearing the destination.
+version 1
+
+1 0 move 5 4
