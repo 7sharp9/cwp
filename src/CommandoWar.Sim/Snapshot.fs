@@ -6,6 +6,11 @@ type AgentSnapshot =
     { Id: AgentId
       Side: Side
       Position: Cell
+      /// Integer progress toward entering the next cell along the agent's
+      /// route (TASK-018, `AgentState.Progress`). 0 at rest. A client
+      /// renderer interpolates between `Position` and its next cell using
+      /// this and the terrain movement-cost threshold (docs/04 section 8).
+      Progress: int
       Destination: Cell option }
 
 /// Framework-neutral render snapshot for one tick. Agents are ordered by

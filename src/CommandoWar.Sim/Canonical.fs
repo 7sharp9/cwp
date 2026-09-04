@@ -22,8 +22,15 @@ module Canonical =
 
     /// The canonical-format version. Bump whenever the byte layout below
     /// changes in any way. Hashes and replay records record this value.
+    ///
+    /// 2 (TASK-018): `writeAgent` gained `Progress` (docs/04 section 8
+    /// sub-cell movement progress) — genuine new per-tick agent state, not a
+    /// derived cache, so every pinned hash moves. On every scenario pinned
+    /// before this version every traversed cell costs `Terrain.BaseMoveCost`
+    /// (threshold = increment = 1), so `Progress` is 0 at every post-tick
+    /// checkpoint: the move is a byte-layout change, not a behaviour change.
     [<Literal>]
-    let FormatVersion = 1
+    let FormatVersion = 2
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -62,12 +69,16 @@ module Canonical =
     // `Destination`, and the immutable `Terrain`, so it cannot diverge tick to
     // tick and hashing it would only re-pin every fixture for a constant
     // (docs/04 section 17, "derived caches either excluded or normalised"; the
-    // ADR-0002 amendment made the same call for `Terrain`).
+    // ADR-0002 amendment made the same call for `Terrain`). `Progress`
+    // (TASK-018) IS written: unlike `Route`, it cannot be recomputed from
+    // `Position` alone (`Position` does not change while an edge is in
+    // progress), so it is genuine new state, not a derived cache.
     let private writeAgent (w: Writer) (a: AgentState) =
         w.I32(AgentId.value a.Id)
         w.I32(sideCode a.Side)
         w.I32 a.Position.X
         w.I32 a.Position.Y
+        w.I32 a.Progress
 
         match a.Destination with
         | None -> w.U8 0uy

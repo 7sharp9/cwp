@@ -72,12 +72,14 @@ type EdgeMarker =
       Direction: Direction
       Value: int }
 
-/// One agent as the frame sees it: identity, side, logical cell, and the
-/// movement destination if it has one.
+/// One agent as the frame sees it: identity, side, logical cell, integer
+/// progress toward entering its next cell (TASK-018, `AgentState.Progress`;
+/// 0 at rest), and the movement destination if it has one.
 type AgentMarker =
     { Id: AgentId
       Side: Side
       Cell: Cell
+      Progress: int
       Destination: Cell option }
 
 /// A small framework-neutral summary of one `DomainEvent` emitted this tick:
@@ -190,6 +192,7 @@ module Diagnostics =
             { Id = a.Id
               Side = a.Side
               Cell = a.Position
+              Progress = a.Progress
               Destination = a.Destination })
 
     let private eventMarker (e: DomainEvent) : EventMarker =

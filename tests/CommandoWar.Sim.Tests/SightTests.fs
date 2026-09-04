@@ -161,13 +161,13 @@ let ``producing LOS diagnostics for the shared fixture leaves its hashes and eve
     let w = Fixture.initialState ()
     // A pure query over the fixture's (empty) terrain: no mutation, no draw.
     let _ = Sight.trace w.Terrain { X = 0; Y = 0 } { X = 20; Y = 14 }
-    Assert.Equal(0xF2F3DF0D820AD9ACUL, (Hashing.hash w).Value)
-    Assert.Equal(1, Canonical.FormatVersion)
+    Assert.Equal(0xE13D7540912C7E25UL, (Hashing.hash w).Value)
+    Assert.Equal(2, Canonical.FormatVersion)
 
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x838D3AE7DBFB735DUL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0xAFA35198CC6BD8D4UL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(33, outcome.Events.Length)
 
 // --- the SightRay overlay renderer branch (golden-pinned) ----------

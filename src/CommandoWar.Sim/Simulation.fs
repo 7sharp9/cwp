@@ -168,33 +168,53 @@ module Simulation =
     // resolves same-tick contention over a shared next cell (step 3,
     // TASK-017) before applying the surviving moves, in ascending agent id
     // order:
-    //   * a mover with no rival for its next cell, or the winner of one,
-    //     advances exactly one cell and emits `MovementStepped`, then
-    //     `MovementCompleted` on the arrival tick, clearing the destination
-    //     and the route;
-    //   * a mover that loses a contested cell to another agent this tick
-    //     stays put and emits `MovementYielded`; its destination and route
-    //     are untouched, so it retries the same next cell next tick, once the
-    //     winner has vacated it;
-    //   * a destination with no path emits `MovementBlocked` and clears the
-    //     destination.
+    //   * an agent still mid-edge (its `Progress` plus this tick's increment
+    //     has not yet reached the next cell's threshold, TASK-018) simply
+    //     accumulates progress; it is not a claimant of anything this tick,
+    //     since it is not entering a cell;
+    //   * a mover that WOULD complete its edge this tick, with no rival for
+    //     its next cell or the winner of one, enters it and emits
+    //     `MovementStepped`, then `MovementCompleted` on the arrival tick,
+    //     resetting progress for the next edge and clearing the destination
+    //     and the route on arrival;
+    //   * a mover that would complete its edge but loses a contested cell to
+    //     another agent this tick stays put and emits `MovementYielded`; its
+    //     progress freezes (it does not advance, so it does not accumulate),
+    //     so it retries with the same progress next tick, once the winner has
+    //     vacated the cell;
+    //   * a destination with no path emits `MovementBlocked`, clears the
+    //     destination, and resets progress.
     //
     // Reservation is a same-tick derived resolution, not persisted state: the
     // winner of a contested cell is the mover with the fewest remaining route
     // steps (closest to its destination), ties broken by ascending agent id —
-    // computed fresh every tick from already-canonical/derived fields
-    // (`Position`, `Destination`, `Terrain` via `Route`), so nothing new
-    // enters `WorldState` and `Canonical.FormatVersion` stays 1 (TASK-017
-    // ledger note). It provably terminates for a shared-target-cell contest:
-    // the winner always advances, so the sum of every moving agent's
-    // remaining route length strictly decreases each tick a contest is
-    // resolved. It does not resolve an agent moving onto a cell held by a
-    // stationary agent (a distinct, chain-dependent problem — TASK-017
-    // ledger "Deviations").
+    // computed fresh every tick from already-canonical fields (`Position`,
+    // `Progress`, `Destination`, `Terrain` via `Route`), so nothing new is
+    // booked across ticks (TASK-017 ledger note; TASK-018 extends the
+    // contention *test* to "would complete this tick" without changing this
+    // argument — `Progress` is already canonical, not newly derived). It
+    // provably terminates for a shared-target-cell contest between two
+    // agents that both complete the same tick: the winner always advances, so
+    // the sum of every completing agent's remaining route length strictly
+    // decreases each tick a contest is resolved. It does not resolve an agent
+    // moving onto a cell held by a stationary agent (a distinct,
+    // chain-dependent problem — TASK-017 ledger "Deviations").
     //
-    // Formation slots and sub-cell movement progress within an edge are
-    // B-011c (split from B-011b by TASK-017, which lands reservation and
-    // deadlock avoidance only). `AgentState.Route` is still a non-canonical
+    // Sub-cell movement progress (TASK-018, step 3 "reserve only the
+    // immediate next destination", steps 4-5 "advance movement progress by an
+    // integer amount each tick... enter the next cell when progress reaches
+    // the threshold"): the threshold for entering a cell is
+    // `Terrain.moveCost` of that cell — the same value `Pathfinding` already
+    // uses as its A* edge weight, not a new concept — and the per-tick
+    // increment is `Terrain.BaseMoveCost`. Progress is scoped to the current
+    // edge only: it resets to 0 whenever that edge changes (a fresh route is
+    // computed, the agent enters a cell, arrives, or is blocked), and is
+    // genuinely new canonical state (`AgentState.Progress`,
+    // `Canonical.FormatVersion` 2) because — unlike `Route` — it cannot be
+    // recomputed from `Position` alone.
+    //
+    // Formation slots are B-011d (split from B-011c by TASK-018, which lands
+    // sub-cell progress only). `AgentState.Route` is still a non-canonical
     // derived cache (see `MovementPath`).
 
     /// One agent's movement outcome for this tick, computed in Pass 1 before
@@ -207,9 +227,15 @@ module Simulation =
         | Arrived of at: Cell
         /// No path to the destination.
         | Blocked of at: Cell * target: Cell
-        /// About to enter `next` along `route`, pending contention
-        /// resolution against every other agent's pending move this tick.
-        | Advancing of route: MovementPath * next: Cell * destination: Cell
+        /// Following `route` toward `next`, with `startProgress` toward it
+        /// already accumulated (0 when this tick started a fresh edge — a
+        /// new route, or a replan — regardless of the agent's prior
+        /// `Progress`, which belonged to a different edge). Pending
+        /// resolution: an agent whose `startProgress + Terrain.BaseMoveCost`
+        /// reaches the next cell's `Terrain.moveCost` threshold this tick is
+        /// a claimant in Pass 2; one that does not simply accumulates
+        /// progress in Pass 3 with no contention possible.
+        | Advancing of route: MovementPath * next: Cell * destination: Cell * startProgress: int
 
     let private navigationAndMovement (s: StepState) =
         let terrain = s.Terrain
@@ -223,6 +249,9 @@ module Simulation =
 
         // Pass 1: each agent's movement intent, computed independently (no
         // mutation, no event) from already-canonical/derived fields only.
+        // `startProgress` is 0 whenever this tick starts a fresh edge (a new
+        // route, or a replan): the agent's prior `Progress` belonged to a
+        // *different* edge and does not carry over.
         let intents =
             agents
             |> Array.map (fun a ->
@@ -256,9 +285,17 @@ module Simulation =
 
                     match route with
                     | None -> Blocked(a.Position, dest)
-                    | Some r -> Advancing(r, r.Cells.[r.Cursor + 1], dest))
+                    | Some r ->
+                        let startProgress = if cached.IsSome then a.Progress else 0
+                        Advancing(r, r.Cells.[r.Cursor + 1], dest, startProgress))
 
-        // Pass 2: reservation. Group every `Advancing` intent by its
+        // An `Advancing` agent whose progress reaches the next cell's
+        // threshold this tick — the only agents that can contend for a cell,
+        // since only they are actually entering one.
+        let wouldComplete (next: Cell) (startProgress: int) =
+            startProgress + Terrain.BaseMoveCost >= Terrain.moveCost terrain next
+
+        // Pass 2: reservation, over completing agents only. Group by
         // contested next cell; the mover with the fewest remaining route
         // steps wins, ties broken by ascending agent id; every other
         // claimant yields this tick (see the phase comment above for the
@@ -270,7 +307,9 @@ module Simulation =
             |> Array.indexed
             |> Array.choose (fun (idx, intent) ->
                 match intent with
-                | Advancing(r, next, _) -> Some(idx, agents.[idx].Id, r, next)
+                | Advancing(r, next, _, startProgress) when wouldComplete next startProgress ->
+                    Some(idx, agents.[idx].Id, r, next)
+                | Advancing _
                 | Idle
                 | Arrived _
                 | Blocked _ -> None)
@@ -291,20 +330,39 @@ module Simulation =
             match intents.[idx] with
             | Idle -> ()
             | Arrived at ->
-                agents.[idx] <- { a with Destination = None; Route = None }
+                agents.[idx] <- { a with Progress = 0; Destination = None; Route = None }
                 emit (MovementCompleted(a.Id, at)) s
             | Blocked(at, target) ->
-                agents.[idx] <- { a with Destination = None; Route = None }
+                agents.[idx] <- { a with Progress = 0; Destination = None; Route = None }
                 emit (MovementBlocked(a.Id, at, target)) s
-            | Advancing(r, next, dest) ->
+            | Advancing(r, next, _, startProgress) when not (wouldComplete next startProgress) ->
+                // Still mid-edge: accumulate progress, no cell change, no
+                // event (a continuous fact fully recoverable from the
+                // resulting `AgentState.Progress`, like an idle agent's tick).
+                // `Route = Some r` must still be written back — otherwise
+                // next tick's cache check finds no route, recomputes one,
+                // and `startProgress` resets to 0 every tick forever.
+                agents.[idx] <- { a with Progress = startProgress + Terrain.BaseMoveCost; Route = Some r }
+            | Advancing(r, next, dest, startProgress) ->
                 match yieldedTo.TryFind idx with
-                | Some winnerId -> emit (MovementYielded(a.Id, a.Position, next, winnerId)) s
+                | Some winnerId ->
+                    // Frozen at `startProgress`, not incremented — the agent
+                    // did not advance this tick. `startProgress` (not
+                    // `a.Progress`) so a replan that starts a fresh edge and
+                    // is contested in the same tick still freezes at 0, not a
+                    // stale value from the edge it just left. `Route = Some r`
+                    // is written back for the same reason as the mid-edge
+                    // branch above: otherwise next tick recomputes from
+                    // scratch and `startProgress` wrongly resets to 0.
+                    agents.[idx] <- { a with Progress = startProgress; Route = Some r }
+                    emit (MovementYielded(a.Id, a.Position, next, winnerId)) s
                 | None ->
                     let arrived = next = dest
 
                     agents.[idx] <-
                         { a with
                             Position = next
+                            Progress = 0
                             Destination = (if arrived then None else Some dest)
                             Route = (if arrived then None else Some { r with Cursor = r.Cursor + 1 }) }
 
@@ -328,6 +386,7 @@ module Simulation =
                     { Id = a.Id
                       Side = a.Side
                       Position = a.Position
+                      Progress = a.Progress
                       Destination = a.Destination })
                 |> Array.sortBy (fun a -> a.Id) }
 

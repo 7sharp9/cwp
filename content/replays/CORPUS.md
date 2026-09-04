@@ -28,6 +28,7 @@ content and none needs an on-disk format (backlog B-024).
 | `wall-detour` | A single agent detouring around an impassable wall (`Pathfinding.findWithin`, `docs/04` section 8 steps 2, 4, 5): TASK-015's replan branch structure without needing to mutate terrain mid-run. |
 | `blocked-goal` | A single agent whose target is unreachable: `Pathfinding` returns `NoPath`, the executor emits `MovementBlocked`, and the destination is cleared (no retry). |
 | `converging-routes` | Two agents whose routes cross the same cell on the same tick: `Simulation.navigationAndMovement`'s same-tick reservation resolves the contest (TASK-017), the lower-remaining-route agent enters the cell, and the other yields one tick before catching up. |
+| `slow-terrain` | A single agent crossing one cell whose `Terrain.moveCost` (3) exceeds `Terrain.BaseMoveCost` (1): `AgentState.Progress` accumulates over two ticks before the agent enters the cell on the third (TASK-018 sub-cell movement progress); every other cell is entered in the usual single tick. |
 
 ## Regeneration
 

@@ -180,6 +180,21 @@ let private impassable (cells: (int * int) list) : Terrain =
 
 let private worldWith (t: Terrain) : WorldState = { world () with Terrain = t }
 
+/// Terrain whose listed cells cost `moveCost` to enter (elsewhere
+/// `Terrain.BaseMoveCost` = 1). The `impassable` precedent.
+let private costly (moveCost: int) (cells: (int * int) list) : Terrain =
+    Terrain.build
+        bounds
+        (cells
+         |> List.map (fun (x, y) ->
+             { Cell = { X = x; Y = y }
+               Movement = Passable
+               Elevation = 0
+               MoveCost = moveCost
+               Opaque = false })
+         |> List.toArray)
+        [||]
+
 [<Fact>]
 let ``an agent routes around an impassable wall, one passable cell per tick`` () =
     // x = 1 rows 0..1 blocked; (1,2) is open, so agent 0 at (0,0) must detour.
@@ -310,6 +325,80 @@ let ``a tied contest (equal remaining route length) is won by the lower agent id
     Assert.Contains(MovementYielded(b, { X = 3; Y = 2 }, { X = 3; Y = 3 }, a), bodies r)
     Assert.Equal({ X = 3; Y = 3 }, (agentOf a r.State).Position)
     Assert.Equal({ X = 3; Y = 2 }, (agentOf b r.State).Position)
+
+// --- Sub-cell movement progress within an edge (TASK-018) ---------------
+
+[<Fact>]
+let ``an agent accumulates progress across ticks before entering a costly cell, then resets`` () =
+    // (1,0) costs 3 to enter; every other cell costs the BaseMoveCost of 1.
+    let t = costly 3 [ 1, 0 ]
+    let a = agent 0
+    let r1 = stepWith [| cmd 1 a { X = 4; Y = 0 } |] (worldWith t)
+    Assert.Equal({ X = 0; Y = 0 }, (agentOf a r1.State).Position)
+    Assert.Equal(1, (agentOf a r1.State).Progress)
+    Assert.DoesNotContain(bodies r1, (function MovementStepped _ -> true | _ -> false))
+
+    let r2 = stepIdle r1.State
+    Assert.Equal({ X = 0; Y = 0 }, (agentOf a r2.State).Position)
+    Assert.Equal(2, (agentOf a r2.State).Progress)
+
+    let r3 = stepIdle r2.State
+    Assert.Equal({ X = 1; Y = 0 }, (agentOf a r3.State).Position)
+    Assert.Equal(0, (agentOf a r3.State).Progress)
+    Assert.Contains(MovementStepped(a, { X = 0; Y = 0 }, { X = 1; Y = 0 }), bodies r3)
+
+    // The rest of the route is ordinary terrain: one cell per tick, no
+    // further accumulation.
+    let mutable st = r3.State
+    while (agentOf a st).Destination.IsSome do
+        Assert.Equal(0, (agentOf a st).Progress)
+        st <- (stepIdle st).State
+
+    Assert.Equal({ X = 4; Y = 0 }, (agentOf a st).Position)
+    Assert.Equal(0, (agentOf a st).Progress)
+
+[<Fact>]
+let ``a completing agent's frozen progress on a lost contest resumes correctly next tick`` () =
+    // (3,3) costs 3 to enter; both agents pass through it toward different
+    // onward destinations (so neither's final destination coincides with the
+    // contested cell — the known "walking onto a stationary agent's cell"
+    // gap, TASK-017, does not apply here). Symmetric remaining route length
+    // (3 cells each), so the tie is broken by agent id: agent 0 wins.
+    let t = costly 3 [ 3, 3 ]
+    let a = agent 0
+    let b = agent 1
+
+    let w =
+        match
+            World.create
+                bounds
+                1UL
+                [ Agent.create a Friendly { X = 2; Y = 3 }; Agent.create b Friendly { X = 3; Y = 2 } ]
+        with
+        | Ok w -> { w with Terrain = t }
+        | Error e -> failwith $"unexpected {e}"
+
+    let r1 = stepWith [| cmd 1 a { X = 5; Y = 3 }; cmd 2 b { X = 3; Y = 5 } |] w
+    let r2 = stepIdle r1.State
+    Assert.Equal(2, (agentOf a r2.State).Progress)
+    Assert.Equal(2, (agentOf b r2.State).Progress)
+
+    // Tick 3: both reach the threshold; agent 0 wins the tie, agent 1 yields
+    // and freezes at progress 2 (not reset to 0, not incremented to 3).
+    let r3 = stepIdle r2.State
+    Assert.Equal({ X = 3; Y = 3 }, (agentOf a r3.State).Position)
+    Assert.Equal(0, (agentOf a r3.State).Progress)
+    Assert.Equal({ X = 3; Y = 2 }, (agentOf b r3.State).Position)
+    Assert.Equal(2, (agentOf b r3.State).Progress)
+    Assert.Contains(MovementYielded(b, { X = 3; Y = 2 }, { X = 3; Y = 3 }, a), bodies r3)
+
+    // Tick 4: agent 0 has vacated (3,3) for (4,3); agent 1 is uncontested and
+    // enters (3,3) immediately — one tick behind, not re-accumulating from 0
+    // (which would delay it three more ticks instead of one).
+    let r4 = stepIdle r3.State
+    Assert.Equal({ X = 4; Y = 3 }, (agentOf a r4.State).Position)
+    Assert.Equal({ X = 3; Y = 3 }, (agentOf b r4.State).Position)
+    Assert.Equal(0, (agentOf b r4.State).Progress)
 
 [<Fact>]
 let ``World.create rejects duplicate agent ids`` () =

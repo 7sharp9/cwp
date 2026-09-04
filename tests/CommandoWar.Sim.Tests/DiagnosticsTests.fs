@@ -94,7 +94,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0xF2F3DF0D820AD9ACUL, f.Hash.Value)
+    Assert.Equal(0xE13D7540912C7E25UL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -284,6 +284,29 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
     Assert.Equal(golden "converging-routes-tick-003.ascii.txt", DiagnosticRender.Ascii tick3)
     Assert.Equal(golden "converging-routes-tick-003.svg", DiagnosticRender.Svg tick3)
 
+// --- sub-cell movement progress: the slow-terrain corpus entry (TASK-018) --
+
+let private slowTerrainFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "slow-terrain")
+
+    match Corpus.loadLog corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``the frame carries AgentMarker.Progress for the slow-terrain entry's accumulating tick (byte-equal to the goldens)`` () =
+    // Tick 2: agent 0 has accumulated 2 of the 3 progress needed to enter
+    // (1,0) and has not moved from (0,0) yet.
+    let frames = slowTerrainFrames ()
+    let tick2 = frames.[2]
+
+    Assert.Equal(1, tick2.Agents.Length)
+    Assert.Equal({ X = 0; Y = 0 }, tick2.Agents.[0].Cell)
+    Assert.Equal(2, tick2.Agents.[0].Progress)
+
+    Assert.Equal(golden "slow-terrain-tick-002.ascii.txt", DiagnosticRender.Ascii tick2)
+    Assert.Equal(golden "slow-terrain-tick-002.svg", DiagnosticRender.Svg tick2)
+
 [<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =
     let frames = demoFrames ()
@@ -320,12 +343,12 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0xF2F3DF0D820AD9ACUL, frames.[0].Hash.Value)
-    Assert.Equal(0x838D3AE7DBFB735DUL, frames.[40].Hash.Value)
+    Assert.Equal(0xE13D7540912C7E25UL, frames.[0].Hash.Value)
+    Assert.Equal(0xAFA35198CC6BD8D4UL, frames.[40].Hash.Value)
     Assert.Equal(33, frames |> Array.sumBy (fun f -> f.Events.Length))
 
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x838D3AE7DBFB735DUL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0xAFA35198CC6BD8D4UL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(33, outcome.Events.Length)

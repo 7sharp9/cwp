@@ -1,6 +1,6 @@
 # TASK-017: Same-tick cell reservation and deadlock avoidance
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); realises backlog B-011b (narrowed)

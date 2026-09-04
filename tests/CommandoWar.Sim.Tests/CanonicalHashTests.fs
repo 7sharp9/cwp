@@ -76,8 +76,10 @@ let ``the state hash is FNV-1a-64 over the canonical encoding`` () =
     Assert.Equal(expected, Hashing.digest (Canonical.encode w))
 
 [<Fact>]
-let ``the followed-path cache is outside the canonical image and the format version stays 1`` () =
+let ``the followed-path cache is outside the canonical image and the format version is unaffected by it`` () =
     // TASK-015: AgentState.Route is a derived cache, excluded from the hash.
+    // (Canonical.FormatVersion is 2 as of TASK-018 — AgentState.Progress, not
+    // Route — but nothing about that bump is exercised by this test.)
     let moved = (step [| move 1 0 { X = 5; Y = 0 } |] (world 1UL)).State
     let a0 = moved.Agents |> Array.find (fun a -> AgentId.value a.Id = 0)
     Assert.True(a0.Route.IsSome, "expected agent 0 to be following a route")
@@ -88,7 +90,7 @@ let ``the followed-path cache is outside the canonical image and the format vers
 
     Assert.Equal<byte[]>(Canonical.encode stripped, Canonical.encode moved)
     Assert.Equal(Hashing.hash stripped, Hashing.hash moved)
-    Assert.Equal(1, Canonical.FormatVersion)
+    Assert.Equal(2, Canonical.FormatVersion)
 
 // --- First-differing section -------------------------------------------
 

@@ -251,7 +251,11 @@ module DiagnosticRender =
                     match a.Destination with
                     | Some d -> sprintf "-> %s" (cellText d)
                     | None -> "at rest"
-                line (sprintf "  agent %d  %s  %s  %s" (AgentId.value a.Id) side (cellText a.Cell) dest)
+                // Sub-cell progress toward the next cell (TASK-018): omitted
+                // at 0 (at rest, or an edge just started) to keep the common
+                // case quiet.
+                let progress = if a.Progress > 0 then sprintf "  progress %d" a.Progress else ""
+                line (sprintf "  agent %d  %s  %s  %s%s" (AgentId.value a.Id) side (cellText a.Cell) dest progress)
 
         // Overlays (empty unless a caller supplies one: a test, or
         // `cwheadless render --los`). `Diagnostics.frame` never emits one.
@@ -422,6 +426,14 @@ module DiagnosticRender =
                     "  <circle cx=\"%d\" cy=\"%d\" r=\"5\" fill=\"%s\" stroke=\"#ffffff\" stroke-width=\"1\"/>"
                     cx cy colour
             )
+
+            // Sub-cell progress toward the next cell (TASK-018), omitted at 0.
+            if a.Progress > 0 then
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"8\" fill=\"%s\">%d</text>"
+                        (cx + 6) (cy - 6) colour a.Progress
+                )
 
         // Overlays: line-of-sight rays (dashed line, traced-cell dots, a red
         // cross on the blocker), planned paths (solid polyline, a green start

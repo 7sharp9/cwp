@@ -94,12 +94,16 @@ Realised by TASK-016 (backlog B-012): `content/replays/` (index
 `CORPUS.md`), a committed, regenerable multi-entry replay corpus over the
 existing `.cwlog` v1 format (`src/CommandoWar.Headless/CommandLogFile.fs`) plus
 a per-tick authoritative-hash table per entry (mirroring
-`content/fixtures/SPIKE-FIXTURE.md`). Four entries: the shared spike fixture
+`content/fixtures/SPIKE-FIXTURE.md`). Five entries: the shared spike fixture
 (cross-checked against `Fixture.run ()`, not an independent re-pin), a
 single-agent wall detour and a `MovementBlocked` no-path case (both exercising
-the TASK-015 executor), and a two-agent "converging routes" entry that pinned
-the then-current no-reservation behaviour (re-pinned by TASK-017 once
-short-horizon cell reservation landed). `Corpus.fs`
+the TASK-015 executor), a two-agent "converging routes" entry that pinned the
+then-current no-reservation behaviour (re-pinned by TASK-017 once
+short-horizon cell reservation landed), and a "slow-terrain" entry added by
+TASK-018 (one cell costing more than `Terrain.BaseMoveCost`) pinning genuine
+multi-tick `AgentState.Progress` accumulation — the other four entries all
+resolve every edge in a single tick, so none of them alone would catch a
+sub-cell-progress regression. `Corpus.fs`
 (`CommandoWar.Headless`) owns the name -> `WorldState` registry and the
 check/regenerate logic; `cwheadless corpus [--regenerate]` is the CLI form and
 `tests/CommandoWar.Sim.Tests/CorpusTests.fs` is an in-suite `[<Theory>]` over

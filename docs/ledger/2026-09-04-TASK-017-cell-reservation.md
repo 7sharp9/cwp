@@ -275,7 +275,7 @@ unit test — the `SightRay` / `PlannedPath` precedent from TASK-012 / TASK-013.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-04)
 - Notes: same-tick cell reservation and deadlock avoidance for
   `Simulation.navigationAndMovement` (priority by remaining route length,
   ties broken by agent id; provably terminating for a shared-target-cell

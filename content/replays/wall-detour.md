@@ -16,35 +16,35 @@ See `content/replays/CORPUS.md`.
 | Command log | `wall-detour.cwlog` |
 | Initial state | Corpus wall-detour scenario (12 x 9, seed 20260904) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0x730C715C6DE01E16` |
-| Final hash (tick 24) | `0x9B25511EA8D1AE8D` |
+| Initial hash (tick 0) | `0xF499BD05E1570D2D` |
+| Final hash (tick 24) | `0x23A672AC1206B006` |
 | Domain events | 19 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xCBB8C5B28AB3AC38` |
-|    2 | `0x59BD978759AB0212` |
-|    3 | `0xC8868DEB7AC12B18` |
-|    4 | `0x933AC56ACE87F6F8` |
-|    5 | `0x0D81DB3E9F082614` |
-|    6 | `0x57CA0EFEB792322C` |
-|    7 | `0xE8391CA38E3CC898` |
-|    8 | `0x774861FA80492A86` |
-|    9 | `0x6F802CCC4E22E770` |
-|   10 | `0xC39F872D91FCD81A` |
-|   11 | `0x26BA5C7E8BA2DAC4` |
-|   12 | `0xD3A0528DDFF97B62` |
-|   13 | `0x4C1E450E6F317178` |
-|   14 | `0x44703BC9253180F2` |
-|   15 | `0xDD01DA6A5B3200F8` |
-|   16 | `0x03E42829A1207A16` |
-|   17 | `0x25038A4E0AB35938` |
-|   18 | `0xD958CB95E6BFA44B` |
-|   19 | `0x22B1A0B3D48F15AE` |
-|   20 | `0xD84F66B28D4A8201` |
-|   21 | `0x785AEC5512B50524` |
-|   22 | `0x29A409C6DC05FDF7` |
-|   23 | `0x1600C102E3081CCA` |
-|   24 | `0x9B25511EA8D1AE8D` |
+|    1 | `0xA1C1B524A5B0E4CB` |
+|    2 | `0x51BD87987A4C3421` |
+|    3 | `0xFCEEA4466F97F2E3` |
+|    4 | `0x8BCEE125F1AE4953` |
+|    5 | `0x9FD78F96D3A53207` |
+|    6 | `0x0A7A62042CF0EB8F` |
+|    7 | `0xED36887755C97533` |
+|    8 | `0x898001D83861230D` |
+|    9 | `0x823455B4F0EDB083` |
+|   10 | `0x451E1792211178E9` |
+|   11 | `0xCBF3B5A3A6AE2A6F` |
+|   12 | `0x5D1D4A8540949229` |
+|   13 | `0xB1DCB011401075AB` |
+|   14 | `0xD916A7A4AF0C85E1` |
+|   15 | `0xD901F2997787ABD3` |
+|   16 | `0xCD92B39F7BFDD0FD` |
+|   17 | `0x94E181B43E62B69B` |
+|   18 | `0x59E3A48679B71158` |
+|   19 | `0x6F80EA16B4450045` |
+|   20 | `0xD4CF3927F8373A8A` |
+|   21 | `0x6830F7B4668F4887` |
+|   22 | `0x3D344E7783486504` |
+|   23 | `0xC1DFEDB7A3C33EB1` |
+|   24 | `0x23A672AC1206B006` |

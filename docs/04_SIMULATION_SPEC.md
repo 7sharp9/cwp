@@ -176,11 +176,12 @@ and movement phase (12.7, `src/CommandoWar.Sim/Simulation.fs`) consumes
   `Pathfinding.findWithin terrain agent.Position destination
   (Width * Height)` — the full-grid ceiling from
   `content/benchmarks/BASELINE.md`, passed explicitly so a tighter combined
-  per-tick multi-agent budget can be set by B-011b without touching
-  `Pathfinding.find`.
-- **Steps 4-5 (advance):** the agent advances exactly one cell along the path
-  per tick (movement progress within an edge is B-011c; this stays one cell
-  per tick). `MovementStepped` each tick, `MovementCompleted` on arrival.
+  per-tick multi-agent budget can be set later without touching
+  `Pathfinding.find` (an open performance question; not claimed by any task
+  yet).
+- **Steps 4-5 (advance):** the agent enters the next cell when its
+  accumulated progress reaches that cell's `Terrain.moveCost` (TASK-018,
+  below); `MovementStepped` on entry, `MovementCompleted` on arrival.
 - **Step 6 (replan):** the path (`AgentState.Route`) is recomputed from the
   current cell when the cached next cell is no longer `Terrain.passable` or the
   cache no longer matches `(Position, Destination)`. With static terrain this
@@ -221,11 +222,37 @@ applying the surviving moves in ascending agent id order (Pass 3):
   fresh every tick from already-canonical/derived fields only (`Position`,
   `Destination`, `Terrain` via `Route`). `Canonical.FormatVersion` stays 1.
 
-**Scope down (split to B-011c):** formation slots and sub-cell movement
-progress within an edge are new per-tick state with no derivation path from
-`Position` alone (unlike reservation), and were not realised by TASK-017 to
-keep it at size M. Both remain **B-011c**; landing either will need
-`Canonical.FormatVersion` to bump to 2 and every pinned hash to move.
+Realised by TASK-018 (backlog B-011c, narrowed to sub-cell movement progress —
+formation slots split to **B-011d**): **steps 4-5**. The threshold to enter a
+cell is `Terrain.moveCost` of that cell — the same value `Pathfinding` already
+uses as its A* edge weight, not a new concept — and the per-tick increment is
+`Terrain.BaseMoveCost`. `AgentState.Progress` accumulates toward the next
+cell; the agent enters it once progress reaches the threshold, and progress
+resets to 0 (a fresh edge starts, whether by entering a cell, arriving,
+blocking, or replanning). Reservation (step 3, TASK-017) generalises without
+new state: only an agent whose progress *would reach* the threshold this tick
+is a claimant of its next cell; one still mid-edge cannot contend, since it is
+not entering anything yet, and a claimant that loses a contest freezes its
+progress (does not accumulate) rather than resetting or advancing.
+
+`AgentState.Progress` is genuine new canonical state — unlike `Route`, it
+cannot be recomputed from `Position` alone, since `Position` does not change
+while an edge is in progress, so nothing else records how many ticks have
+been spent on it. `Canonical.FormatVersion` bumps to **2**
+(`Canonical.encode`, section 17) and every pinned hash moves: the fixture,
+every replay-corpus entry, and every `content/diagnostics/*` golden that
+embeds a hash/format footer. On every scenario pinned before this task, every
+traversed cell already costs exactly `Terrain.BaseMoveCost` (threshold =
+increment = 1), so `Progress` is 0 at every post-tick checkpoint: the moved
+hashes are a byte-layout artifact, not a behaviour change (content/replays'
+tick counts and event counts are unchanged; TASK-018 ledger). A fifth corpus
+entry, `slow-terrain`, pins genuine multi-tick accumulation (one cell costing
+3) as a determinism regression guard the first four entries cannot provide.
+
+Formation slots remain **B-011d** (new domain concept — a squad/formation
+grouping does not exist anywhere yet — closer to
+`docs/05_COMMAND_AND_AGENT_AI.md` than to movement mechanics; not attempted
+by TASK-018).
 
 ## 9. Line of sight and cover
 
@@ -354,13 +381,16 @@ Fatigue, persistent personality dimensions, interpersonal relations, inventory g
 - advance movement;
 - emit movement and blockage events where useful.
 
-Realised by TASK-015 (single-agent executor) and TASK-017 (reservation):
-`Simulation.navigationAndMovement` computes / repairs a `Pathfinding` path per
-agent with a destination, resolves same-tick contention over a shared next
-cell in stable order (fewest remaining route steps, ties broken by ascending
-agent id), advances the surviving moves one cell each, and emits
+Realised by TASK-015 (single-agent executor), TASK-017 (reservation), and
+TASK-018 (sub-cell progress): `Simulation.navigationAndMovement` computes /
+repairs a `Pathfinding` path per agent with a destination, resolves same-tick
+contention over a shared next cell in stable order (fewest remaining route
+steps among agents that would complete the edge this tick, ties broken by
+ascending agent id), advances `AgentState.Progress` toward the next cell's
+`Terrain.moveCost` threshold and enters it once reached, and emits
 `MovementStepped` / `MovementCompleted` / `MovementBlocked` / `MovementYielded`.
-Reservation is resolved fresh every tick, not stored. Full detail is in
+Reservation is resolved fresh every tick, not stored; `Progress` is genuine
+per-tick canonical state (`Canonical.FormatVersion` 2). Full detail is in
 section 8.
 
 ### 12.8 Combat

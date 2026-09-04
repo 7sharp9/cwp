@@ -24,14 +24,14 @@ and detail are in the linked entries.
 | .NET SDK | `10.0.303` (`global.json`, `rollForward: latestPatch`) | TASK-001 |
 | Target framework | `net10.0` (all projects) | TASK-001 |
 | FSharp.Core | `10.1.303` (implicit, SDK-pinned) | TASK-001 |
-| `Canonical.FormatVersion` | `1` | TASK-003 |
+| `Canonical.FormatVersion` | `2` (bumped from 1 by TASK-018: `AgentState.Progress` added) | TASK-003; bumped TASK-018 |
 | `Replay.FormatVersion` | `1` | TASK-003 |
 | `CommandLog.Version` | `1` | TASK-003 |
 | `ScenarioContent.Version` | `2` (authored terrain layer added; independent of the three versions above; version 1 rejected, not migrated) | TASK-010 |
 | PRNG | SplitMix64 v1 (seed initialises the 64-bit counter directly) | TASK-003 |
 | State hash | FNV-1a-64 over `Canonical.encode` (not a cryptographic primitive) | TASK-003 |
 | BenchmarkDotNet | `0.15.8` (pinned; `bench/CommandoWar.Benchmarks/` only, never in `CommandoWar.Sim` or the test project) | TASK-014 |
-| Green tests | `164` — `dotnet test CommandoWar.slnx -c Release` (`Passed: 164`; +5 over TASK-016's 159 for the reservation facts (`SimulationTests`) and the `Reserved`-overlay facts (`DiagnosticsTests`); the benchmark project contributes no tests) | TASK-017 |
+| Green tests | `168` — `dotnet test CommandoWar.slnx -c Release` (`Passed: 168`; +4 over TASK-017's 164: the fifth `slow-terrain` corpus entry's `[<Theory>]` row, two `SimulationTests` sub-cell-progress facts, one `DiagnosticsTests` `AgentMarker.Progress` golden fact; the benchmark project contributes no tests) | TASK-018 |
 | Accepted ADRs | ADR-0001 (Godot, accepted 2026-09-03); ADR-0002 (framework-independent sim, project baseline); ADR-0003 (Mibo: spike complete, **not adopted**); ADR-0004 (low-impedance C#/F# boundary, accepted 2026-09-03) | TASK-007 acceptance |
 | Current gate | `G2_deterministic_core_proven` (pending) | TASK-006 finalisation |
 | Current phase | `P2_deterministic_core` | TASK-006 finalisation |
@@ -51,9 +51,9 @@ Defined in `src/CommandoWar.Headless/Fixture.fs`; pinned by
 | Agents at tick 0 | 6 friendly, column `x = 0`, rows `y = 0..5` |
 | Command | tick 1: agent 3 `MoveTo (20, 14)`, `CommandId 1` |
 | Tick count | 40 (agent 3 reaches `(20, 14)` at tick 31; ticks 32..40 are rest) |
-| Initial hash (tick 0) | `0xF2F3DF0D820AD9AC` |
-| Final hash (tick 40) | `0x838D3AE7DBFB735D` (format 1) |
-| Domain events | 33 (1 `CommandAccepted` + 31 `MovementStepped` + 1 `MovementCompleted`); 0 random draws |
+| Initial hash (tick 0) | `0xE13D7540912C7E25` (format 2; TASK-018 re-pin, was `0xF2F3DF0D820AD9AC` at format 1) |
+| Final hash (tick 40) | `0xAFA35198CC6BD8D4` (format 2; TASK-018 re-pin, was `0x838D3AE7DBFB735D` at format 1) |
+| Domain events | 33 (1 `CommandAccepted` + 31 `MovementStepped` + 1 `MovementCompleted`); 0 random draws — unchanged by the TASK-018 re-pin (every traversed cell costs `Terrain.BaseMoveCost`, so the byte layout changed but not the tick-by-tick behaviour) |
 
 ## Detail entry template
 
@@ -124,4 +124,5 @@ Chronological. One row per detail file.
 | 2026-09-04 | TASK-014 | Headless performance and allocation benchmark harness (`bench/CommandoWar.Benchmarks/`: empty tick, six- and ~50-agent placeholder movement, line-of-sight batch, pathfinding open/blocked/choke, canonical encode + state hash, replay run) + committed `content/benchmarks/BASELINE.md` | `proposed -> active -> review -> done` | yes (2026-09-04) | [detail](ledger/2026-09-04-TASK-014-benchmark-harness.md) |
 | 2026-09-04 | TASK-015 | Navigation and movement phase: `Pathfinding`-driven single-agent executor replacing `PlaceholderMovement` (`docs/04` section 8 steps 2/4/5/6) + `AgentState.Route` non-canonical derived cache (`FormatVersion` stays 1, fixture hashes unmoved) + `MovementBlocked` event + `Diagnostics.frameOf` `PlannedPath` overlay with `fixture-mid-route.*` goldens; cell reservation / formation slots / sub-cell progress split to B-011b | `proposed -> active -> review -> done` | yes (2026-09-04) | [detail](ledger/2026-09-04-TASK-015-movement-executor.md) |
 | 2026-09-04 | TASK-016 | Divergence diagnostics and replay corpus infrastructure: committed multi-entry corpus `content/replays/` (spike fixture, wall detour, `MovementBlocked` no-path, two-agent converging routes) over the existing `.cwlog` v1 format, `Corpus.fs` name -> `WorldState` registry, `cwheadless corpus [--regenerate]` verb, in-suite `CorpusTests.fs` `[<Theory>]`; generative property tests and component subhashes split to B-012b | `proposed -> active -> review -> done` | yes (2026-09-04) | [detail](ledger/2026-09-04-TASK-016-replay-corpus.md) |
-| 2026-09-04 | TASK-017 | Same-tick cell reservation and deadlock avoidance (backlog B-011b, narrowed): `Simulation.navigationAndMovement` resolves contested-cell moves by fewest remaining route steps (ties broken by agent id), provably terminating for a shared-target-cell contest; new `MovementYielded` event and `Reserved` diagnostic overlay; `content/replays/converging-routes` re-pinned as TASK-016 anticipated; `Canonical.FormatVersion` stays 1; formation slots and sub-cell movement progress split to B-011c | `proposed -> active -> review` | pending | [detail](ledger/2026-09-04-TASK-017-cell-reservation.md) |
+| 2026-09-04 | TASK-017 | Same-tick cell reservation and deadlock avoidance (backlog B-011b, narrowed): `Simulation.navigationAndMovement` resolves contested-cell moves by fewest remaining route steps (ties broken by agent id), provably terminating for a shared-target-cell contest; new `MovementYielded` event and `Reserved` diagnostic overlay; `content/replays/converging-routes` re-pinned as TASK-016 anticipated; `Canonical.FormatVersion` stays 1; formation slots and sub-cell movement progress split to B-011c | `proposed -> active -> review -> done` | yes (2026-09-04) | [detail](ledger/2026-09-04-TASK-017-cell-reservation.md) |
+| 2026-09-04 | TASK-018 | Sub-cell movement progress within an edge (backlog B-011c, narrowed): `AgentState.Progress` (threshold `Terrain.moveCost`, increment `Terrain.BaseMoveCost`), `Canonical.FormatVersion` bumped 1 -> 2 (every pinned hash re-pinned, confirmed behaviour-neutral for every pre-existing scenario); reservation generalised to "would complete this tick" claimants with no new state; new `slow-terrain` corpus entry and diagnostics golden; a route-persistence bug found and fixed during implementation; formation slots split to B-011d | `proposed -> active -> review` | pending | [detail](ledger/2026-09-04-TASK-018-subcell-movement-progress.md) |

@@ -59,6 +59,16 @@ module Corpus =
           MoveCost = 0
           Opaque = false }
 
+    /// A passable cell whose entry cost is above `Terrain.BaseMoveCost` (the
+    /// `PathDemo` "costly" precedent) — for `slow-terrain`, the one cell
+    /// whose crossing takes more than one tick (TASK-018 sub-cell progress).
+    let private costly (x: int) (y: int) (moveCost: int) : RawTerrainCell =
+        { Cell = { X = x; Y = y }
+          Class = "passable"
+          Elevation = 0
+          MoveCost = moveCost
+          Opaque = false }
+
     /// Fills the common `RawScenario` fields: one "reach" objective on an
     /// objective area, one extraction area, no enemies, no targets.
     let private rawScenario
@@ -144,6 +154,14 @@ module Corpus =
             rawScenario "corpus-converging-routes" 8 8 [ 0, { X = 3; Y = 0 }; 1, { X = 0; Y = 3 } ] [] { X = 7; Y = 7 } { X = 0; Y = 0 }
         )
 
+    /// One friendly agent at (0,0) ordered to (4,0), open terrain except
+    /// (1,0), which costs 3 to enter (`Terrain.BaseMoveCost` elsewhere is 1).
+    /// Crossing that one cell takes 3 ticks of accumulated `AgentState.Progress`
+    /// (TASK-018 sub-cell movement progress) before the agent enters it; every
+    /// other cell is entered in the usual single tick.
+    let private slowTerrainWorld () : WorldState =
+        worldOf (rawScenario "corpus-slow-terrain" 8 8 [ 0, { X = 0; Y = 0 } ] [ costly 1 0 3 ] { X = 7; Y = 7 } { X = 0; Y = 7 })
+
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
         [| { Name = "spike-fixture"
@@ -177,7 +195,16 @@ module Corpus =
                + "agent id wins): agent 0 enters (3,3), agent 1 yields one tick and catches up."
              InitialStateNote = "Corpus converging-routes scenario (8 x 8, seed 20260904)"
              InitialState = convergingRoutesWorld
-             TickCount = 12L } |]
+             TickCount = 12L }
+           { Name = "slow-terrain"
+             Description =
+               "One friendly agent at (0,0) ordered to (4,0); cell (1,0) costs 3 to enter (elsewhere "
+               + "Terrain.BaseMoveCost = 1). AgentState.Progress accumulates 1, 2, then reaches the threshold "
+               + "and the agent enters the cell on the third tick (TASK-018); every other cell is entered in "
+               + "the usual single tick."
+             InitialStateNote = "Corpus slow-terrain scenario (8 x 8, seed 20260904)"
+             InitialState = slowTerrainWorld
+             TickCount = 8L } |]
 
     // --- entry paths and loading ----------------------------------------
 

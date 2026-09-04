@@ -30,14 +30,28 @@ type MovementPath =
       Cost: int }
 
 /// Minimal authoritative agent state for the simulation skeleton: identity,
-/// side, logical position, an optional movement destination, and the
-/// (non-canonical, derived) path the agent is following toward it. Movement
-/// progress within an edge, facing and stance are deferred until a real
+/// side, logical position, movement progress within the current edge, an
+/// optional movement destination, and the (non-canonical, derived) path the
+/// agent is following toward it. Facing and stance are deferred until a real
 /// movement model exists.
 type AgentState =
     { Id: AgentId
       Side: Side
       Position: Cell
+      /// Integer progress toward entering the next cell along `Route`
+      /// (TASK-018, docs/04 section 8: "advance movement progress by an
+      /// integer amount each tick; enter the next cell when progress reaches
+      /// the threshold"). The threshold is `Terrain.moveCost` of the next
+      /// cell (the same value `Pathfinding` already uses as its edge weight);
+      /// the per-tick increment is `Terrain.BaseMoveCost`. Always 0 at rest,
+      /// on arrival, when blocked, and immediately after entering a cell —
+      /// it measures progress along the *current* edge only, never carried
+      /// past it. Unlike `Route`, this cannot be recomputed from `Position`
+      /// alone (`Position` does not change while an edge is in progress, so
+      /// nothing else records how many ticks have been spent on it): it is
+      /// genuine new per-tick canonical state, part of `Canonical.encode`
+      /// (`Canonical.FormatVersion` 2).
+      Progress: int
       Destination: Cell option
       /// The path the agent is currently following (TASK-015). A derived
       /// cache: recomputed deterministically from `(Position, Destination,
@@ -70,11 +84,12 @@ type WorldState =
 [<RequireQualifiedAccess>]
 module Agent =
 
-    /// Creates an agent at rest (no destination, no route) at the given
-    /// position.
+    /// Creates an agent at rest (no destination, no route, no progress) at
+    /// the given position.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
           Position = position
+          Progress = 0
           Destination = None
           Route = None }
