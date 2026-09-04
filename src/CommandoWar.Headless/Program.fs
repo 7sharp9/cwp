@@ -203,8 +203,8 @@ let private parseCell (s: string) : Cell option =
         | _ -> None
     | _ -> None
 
-/// Parses an `AX,AY:BX,BY` line-of-sight spec for `--los`.
-let private parseLos (s: string) : (Cell * Cell) option =
+/// Parses an `AX,AY:BX,BY` cell-pair spec, used by `--los` and `--path`.
+let private parseCellPair (s: string) : (Cell * Cell) option =
     match s.Split(':') with
     | [| l; r |] ->
         match parseCell l, parseCell r with
@@ -213,12 +213,13 @@ let private parseLos (s: string) : (Cell * Cell) option =
     | _ -> None
 
 let private cmdRender (args: string list) : int =
-    // render <fixture|demo|los|command-log> [--tick N] [--layer NAME]
-    //        [--los AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]
+    // render <fixture|demo|los|path|command-log> [--tick N] [--layer NAME]
+    //        [--los AX,AY:BX,BY]... [--path AX,AY:BX,BY]...
+    //        [--format ascii|svg|html] [--out PATH]
     match args with
     | [] ->
         eprintfn
-            "usage: cwheadless render <fixture|demo|los|command-log> [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
+            "usage: cwheadless render <fixture|demo|los|path|command-log> [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--path AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
         Exit.usage
     | target :: rest ->
         let mutable tick: int64 option = None
@@ -226,6 +227,7 @@ let private cmdRender (args: string list) : int =
         let mutable format = "ascii"
         let mutable out: string option = None
         let mutable losSpecs: (Cell * Cell) list = []
+        let mutable pathSpecs: (Cell * Cell) list = []
         let mutable optErr: string option = None
 
         let rec parseOpts xs =
@@ -241,11 +243,17 @@ let private cmdRender (args: string list) : int =
                 layerName <- Some v
                 parseOpts t
             | "--los" :: v :: t ->
-                match parseLos v with
+                match parseCellPair v with
                 | Some pair ->
                     losSpecs <- losSpecs @ [ pair ]
                     parseOpts t
                 | None -> optErr <- Some $"invalid --los value '{v}', expected AX,AY:BX,BY"
+            | "--path" :: v :: t ->
+                match parseCellPair v with
+                | Some pair ->
+                    pathSpecs <- pathSpecs @ [ pair ]
+                    parseOpts t
+                | None -> optErr <- Some $"invalid --path value '{v}', expected AX,AY:BX,BY"
             | "--format" :: v :: t ->
                 match v with
                 | "ascii"
@@ -279,6 +287,9 @@ let private cmdRender (args: string list) : int =
                 | "los" ->
                     let w = LosDemo.initialState ()
                     Some(DiagnosticRender.runFrames w [||] LosDemo.TickCount, w.Terrain)
+                | "path" ->
+                    let w = PathDemo.initialState ()
+                    Some(DiagnosticRender.runFrames w [||] PathDemo.TickCount, w.Terrain)
                 | path ->
                     match loadLog path with
                     | None -> None
@@ -296,11 +307,23 @@ let private cmdRender (args: string list) : int =
                         SightRay(a, b, r.Path, r.Blocker))
                     |> List.toArray
 
+                let pathOverlays: Overlay[] =
+                    pathSpecs
+                    |> List.map (fun (a, b) ->
+                        match Pathfinding.find terrain a b with
+                        | Found(cells, cost) -> PlannedPath(a, b, cells, cost, true)
+                        | NoPath
+                        | BudgetExhausted _
+                        | InvalidEndpoint _ -> PlannedPath(a, b, [||], 0, false))
+                    |> List.toArray
+
+                let extraOverlays = Array.append losOverlays pathOverlays
+
                 let attach (f: DiagnosticFrame) =
-                    if Array.isEmpty losOverlays then
+                    if Array.isEmpty extraOverlays then
                         f
                     else
-                        { f with Overlays = Array.append f.Overlays losOverlays }
+                        { f with Overlays = Array.append f.Overlays extraOverlays }
 
                 let emit (text: string) =
                     match out with
@@ -357,8 +380,8 @@ let private usage () =
     printfn "  cwheadless replay <command-log> [--ticks N]      replay a command log against the fixture"
     printfn "  cwheadless compare <log-a> <log-b> [--ticks N]   report the first authoritative divergence"
     printfn "  cwheadless fixture                               emit the pinned shared fixture + per-tick hashes"
-    printfn "  cwheadless render <target> [opts]                render diagnostic frames (target: fixture | demo | los | <command-log>)"
-    printfn "        [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
+    printfn "  cwheadless render <target> [opts]                render diagnostic frames (target: fixture | demo | los | path | <command-log>)"
+    printfn "        [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--path AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
     printfn ""
     printfn "exit codes: %d ok, %d usage/IO, %d replay error, %d divergence detected"
         Exit.ok Exit.usage Exit.replayError Exit.diverged

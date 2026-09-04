@@ -86,15 +86,16 @@ type EventMarker =
 /// system adds a case here and a branch in each renderer:
 ///
 ///   * B-009 line of sight  -> `SightRay` (realised by TASK-012);
-///   * B-010 pathfinding     -> a planned-path case (agent, ordered cells);
+///   * B-010 pathfinding     -> `PlannedPath` (realised by TASK-013);
 ///   * B-011 reservation     -> a reserved-cell case (cell, agent, until tick);
 ///   * B-019 combat          -> a fire-line case (shooter, target).
 ///
-/// B-010 / B-011 / B-019 do not exist yet: no such case is defined.
+/// B-011 / B-019 do not exist yet: no such case is defined.
 /// `Diagnostics.frame` and `Diagnostics.frameOf` never produce an overlay of
 /// any kind; `DiagnosticFrame.Overlays` is populated only by a caller (a test,
-/// or `cwheadless render --los`). `Cells` is the generic non-speculative
-/// shape: a labelled set of cells a renderer can always fall back to.
+/// or `cwheadless render --los` / `--path`). `Cells` is the generic
+/// non-speculative shape: a labelled set of cells a renderer can always fall
+/// back to.
 type Overlay =
     /// A labelled set of cells.
     | Cells of label: string * cells: Cell[]
@@ -102,6 +103,11 @@ type Overlay =
     /// (`Sight.trace`'s `Path`), and the first blocking cell when the target
     /// is not visible. Supplied by a caller; `Diagnostics` never emits one.
     | SightRay of from: Cell * target: Cell * cells: Cell[] * blocked: Cell option
+    /// A planned grid path: start, goal, the ordered cell path
+    /// (`Pathfinding.find`'s `Found` cells, empty when no path was found or
+    /// the budget was exhausted), its integer cost, and whether the goal was
+    /// reached. Supplied by a caller; `Diagnostics` never emits one.
+    | PlannedPath of from: Cell * target: Cell * cells: Cell[] * cost: int * reached: bool
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw

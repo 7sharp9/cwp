@@ -15,6 +15,7 @@
     <Compile Include="FixtureTests.fs" />
     <Compile Include="TerrainTests.fs" />
     <Compile Include="SightTests.fs" />
+    <Compile Include="PathfindingTests.fs" />
     <Compile Include="ScenarioTests.fs" />
     <Compile Include="DiagnosticsTests.fs" />
   </ItemGroup>

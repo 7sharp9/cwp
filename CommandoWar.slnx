@@ -6,4 +6,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/CommandoWar.Sim.Tests/CommandoWar.Sim.Tests.fsproj" />
   </Folder>
+  <Folder Name="/bench/">
+    <Project Path="bench/CommandoWar.Benchmarks/CommandoWar.Benchmarks.fsproj" />
+  </Folder>
 </Solution>

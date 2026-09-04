@@ -144,6 +144,34 @@ Benchmark at least:
 
 Record median, tail latency, allocation, runtime, build configuration, machine, and commit. Reject benchmarks that mix debug overlays or editor overhead with the core result unless that is the explicit subject.
 
+Realised by TASK-014 (backlog B-013): `bench/CommandoWar.Benchmarks/`, a
+dev-only `net10.0` console project referencing `CommandoWar.Sim`,
+`CommandoWar.Headless`, and BenchmarkDotNet (pinned) only. It is in
+`CommandoWar.slnx` under `/bench/` and builds in Release with the solution, but
+has no test SDK and no `[<Fact>]`, so `dotnet test` never collects it. Every
+benchmark is `[<MemoryDiagnoser>]` and steps the real deterministic simulation
+over a fixed `SyntheticWorlds` vector with no renderer or diagnostic-frame
+work. The committed baseline is `content/benchmarks/BASELINE.md` (median, P95,
+allocation per operation, run environment, commit) with a documented
+regeneration command; it is a recorded baseline read for order-of-magnitude
+sanity against the section 19 budget, not a test oracle, and no test asserts on
+its numbers.
+
+- **Covered now** (systems that exist): empty fixed tick; agent movement under
+  the placeholder rule (six-agent and a synthetic ~50-agent world; real
+  movement phase is B-011); line-of-sight batch (`Sight.trace`); pathfinding
+  through open / blocked / choke-point maps (`Pathfinding.find`, plus
+  `findWithin` closed-set-size evidence for the B-011 expansion budget);
+  canonical encode; state hash; replay run.
+- **Deferred**: 50-agent perception (backlog B-015), appraisal batch (B-017),
+  combat, and a full synthetic 50-agent tick (B-019) attach to a commented
+  slot in `bench/CommandoWar.Benchmarks/Benchmarks.fs` when those systems land.
+
+The cheap in-suite regression flag remains
+`tests/CommandoWar.Sim.Tests/BenchmarkTests.fs` (asserts only on tick
+progression; rough timing to test output). It is kept, not folded into the
+harness, so the green count stays 145.
+
 ## 3. Determinism verification
 
 ### Required controls

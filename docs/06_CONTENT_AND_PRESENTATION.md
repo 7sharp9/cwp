@@ -122,10 +122,16 @@ B-019).
 
 TASK-012 gave the High occlusion row its first consumer: `Sight`
 (`src/CommandoWar.Sim/Sight.fs`) reads `Terrain.opaque` and `Terrain.elevation`
-for deterministic point-to-point line of sight (`docs/04` section 9). It is
-still authored-and-queried only, with no tick phase calling it (Perception,
-backlog B-015, is the first). Pathfinding and movement over the Terrain and
-Elevation rows (B-010, B-011) remain later tasks.
+for deterministic point-to-point line of sight (`docs/04` section 9).
+
+TASK-013 gave the Terrain row's movement-class and movement-cost data their
+first consumer: `Pathfinding` (`src/CommandoWar.Sim/Pathfinding.fs`) reads
+`Terrain.passable` and `Terrain.moveCost` for a deterministic A* path query
+(`docs/04` section 8). Both modules are still authored-and-queried only, with
+no tick phase calling them (Perception, backlog B-015, is `Sight`'s first
+consumer; the Navigation and movement phase, backlog B-011, is `Pathfinding`'s).
+Movement execution, cell reservation, and dynamic replanning over the Terrain
+and Elevation rows (B-011) remain a later task.
 
 - `FriendlySpawn`
 - `EnemySpawn`

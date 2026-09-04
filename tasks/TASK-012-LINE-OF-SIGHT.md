@@ -1,6 +1,6 @@
 # TASK-012: Deterministic line of sight and opacity
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); realises backlog B-009

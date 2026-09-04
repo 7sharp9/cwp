@@ -240,7 +240,12 @@ nothing in `Simulation.step` calls `Sight`.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-04)
+- Acceptance note: line-of-sight module, `SightRay` overlay, `--los` render
+  option, and LOS demo goldens accepted; `Canonical.encode` and every pinned
+  fixture value unmoved; 128 tests green. Finalised as the precondition of
+  TASK-013 with a `git status` scope check plus one `dotnet test` (`Passed:
+  128`).
 - Notes: integer supercover LOS with a symmetric corner rule and a minimal
   ridge-occlusion elevation rule; symmetry pinned by a property test and
   golden examples; `SightRay` overlay + `--los` render option + LOS demo

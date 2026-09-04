@@ -175,6 +175,30 @@ let ``a hand-built SightRay overlay renders through the ASCII and SVG renderers`
     Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
 
 [<Fact>]
+let ``a hand-built PlannedPath overlay renders through the ASCII and SVG renderers`` () =
+    let f = Diagnostics.frame (DemoScenario.initialState ())
+
+    let withPath =
+        { f with
+            Overlays =
+                [| PlannedPath(
+                       { X = 0; Y = 0 },
+                       { X = 3; Y = 0 },
+                       [| { X = 0; Y = 0 }; { X = 1; Y = 0 }; { X = 2; Y = 0 }; { X = 3; Y = 0 } |],
+                       3,
+                       true
+                   ) |] }
+
+    let ascii = DiagnosticRender.Ascii withPath
+    Assert.Contains("overlays:", ascii)
+    Assert.Contains("path (0,0) -> (3,0): reached, cost 3", ascii)
+
+    let svg = DiagnosticRender.Svg withPath
+    Assert.Contains("<polyline points=", svg)
+    // Byte-identical without the overlay (regression guard for the goldens).
+    Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
+
+[<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =
     let frames = demoFrames ()
     let mid = frames.[8]

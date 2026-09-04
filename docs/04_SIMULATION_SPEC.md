@@ -139,6 +139,43 @@ Movement resolution is discrete and deterministic. The renderer interpolates bet
 
 Complex formation maintenance is deferred.
 
+Realised by TASK-013 (step 2 only, the path query): `src/CommandoWar.Sim/Pathfinding.fs`.
+`Pathfinding.find : Terrain -> Cell -> Cell -> PathResult` (and
+`Pathfinding.findWithin` with an explicit expansion budget) is a pure, total,
+integer-only A* query over `Terrain` passability and entry cost.
+
+- **Algorithm:** A*, 4-connected (cardinal moves only, matching `Direction`,
+  `PlaceholderMovement`, and the cardinal cover model). Diagonal / 8-connected
+  movement is a documented deferral (a scaled integer cost plus the `Sight`
+  corner rule); no slice map needs it.
+- **Cost model:** entering a cell costs `Terrain.moveCost` for that cell; the
+  start cell's own cost is never counted. An `Impassable` cell is never
+  expanded and never appears in a path. Path cost is the exact sum of the
+  entered cells' costs.
+- **Heuristic:** Manhattan distance times `Terrain.BaseMoveCost`. Integer,
+  admissible for cardinal moves whose minimum step cost is `BaseMoveCost`.
+- **Tie-break (stable):** the frontier is ordered by the total key
+  `(g + h, then h, then row-major cell index)`; neighbours are generated in
+  `Direction.all` order (North, East, South, West). The expansion order and
+  the returned path are fully determined regardless of any heap's behaviour
+  for equal priorities. Pinned by a golden two-equal-cost-paths example
+  (`PathfindingTests.fs`) and a demo golden (`content/diagnostics/path.*`).
+- **Bounded work (section 19):** `findWithin` takes an explicit
+  `maxExpansions` and returns `BudgetExhausted` when the closed set would
+  exceed it; `find` uses a default cap `Width * Height` derived from
+  `Terrain.Bounds`. No wall-clock timing.
+- **Totality:** an out-of-bounds or impassable start or goal yields
+  `InvalidEndpoint`; `start = goal` yields `Found([| start |], 0)`; an
+  unreachable goal yields `NoPath`.
+
+No tick phase consumes it: like `Terrain`, `Sight`, and the `Objective`
+algebra it is authored and queryable but not evaluated. The Navigation and
+movement phase (12.7, backlog B-011) is the first consumer, replacing
+`PlaceholderMovement` with a `Pathfinding`-driven executor. `Canonical.encode`
+and `Canonical.FormatVersion` are unchanged; `Pathfinding.fs` is a leaf
+nothing authoritative references. Steps 3-6 (cell reservation, movement
+progress within an edge, dynamic replanning) are B-011.
+
 ## 9. Line of sight and cover
 
 - Line of sight operates on logical cells and elevation.
@@ -403,6 +440,22 @@ The initial target is intentionally conservative:
 - pathfinding work must have a per-tick cap or predictable upper bound once dynamic replanning exists.
 
 Do not optimise immutable F# structures pre-emptively. Profile first, then move measured hot paths to arrays, structs, spans, or controlled mutation.
+
+Realised by TASK-014 (backlog B-013): the benchmark harness
+`bench/CommandoWar.Benchmarks/` exists, and `content/benchmarks/BASELINE.md` is
+the recorded baseline (median, P95, allocation per operation, run environment,
+commit) with a documented regeneration command. On the reference machine every
+per-tick measurement is at least ~36x inside the 5 ms budget, including a
+full-grid A* query run once per tick, and the empty and movement ticks show no
+allocation proportional to map size. The **5 ms per-tick** and **no unbounded
+per-tick allocation** budgets therefore stand as written; a tighter
+per-subsystem number is a follow-up once the real Perception / Appraisal /
+Combat phases exist (B-015 / B-017 / B-019) and the greybox map is built
+(B-025), re-running the harness against them. The `Pathfinding.find` default
+expansion cap (`Width * Height`) is left unchanged: `BASELINE.md` records that a
+single legitimate query on an adversarial 40x40 map already closes ~73% of the
+grid, so the cap is a correctly-sized safety ceiling and B-011 owns any
+per-tick pathfinding budget.
 
 ## 20. Invariants
 

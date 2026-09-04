@@ -31,7 +31,9 @@ A backlog row is not sufficient authority for an agent to implement work. A `rea
 | TASK-009 | P2 | Restructure the progress ledger into a summary index plus per-entry detail files | S | TASK-008 | done | `tasks/TASK-009-PROGRESS-LEDGER-RESTRUCTURE.md` |
 | TASK-010 | P2 | Implement the authoritative terrain grid: elevation, passability, movement cost, directional cover | M | TASK-008 | done | `tasks/TASK-010-TERRAIN-GRID.md` |
 | TASK-011 | P2 | Headless diagnostic visualisation and the framework-neutral diagnostic frame | M | TASK-010 | done | `tasks/TASK-011-DIAGNOSTIC-VISUALISATION.md` |
-| TASK-012 | P2 | Deterministic line of sight and opacity | M | TASK-010 | active | `tasks/TASK-012-LINE-OF-SIGHT.md` |
+| TASK-012 | P2 | Deterministic line of sight and opacity | M | TASK-010 | done | `tasks/TASK-012-LINE-OF-SIGHT.md` |
+| TASK-013 | P2 | Deterministic grid pathfinding with stable tie-breaking | M | TASK-010 | done | `tasks/TASK-013-PATHFINDING.md` |
+| TASK-014 | P2 | Headless performance and allocation benchmark harness | S | TASK-010 | active | `tasks/TASK-014-BENCHMARK-HARNESS.md` |
 
 ## 3. Planned simulation work
 
@@ -42,11 +44,11 @@ These items are not implementation-ready. Create and review a task file before s
 | B-007 | P2 | Define and validate initial scenario DTO and content version | S | TASK-006 | G2 | done (`tasks/TASK-008-SCENARIO-DTO-AND-CONTENT-VERSION.md`) |
 | B-008 | P2 | Implement terrain grid, elevation, passability, and directional cover | M | B-007 | G2 | done (`tasks/TASK-010-TERRAIN-GRID.md`) |
 | B-012a | P2 | Headless diagnostic visualisation and the framework-neutral diagnostic frame | M | B-008 | G2 | done (`tasks/TASK-011-DIAGNOSTIC-VISUALISATION.md`) |
-| B-009 | P2 | Implement deterministic line of sight and opacity | M | B-008 | G2 | active (`tasks/TASK-012-LINE-OF-SIGHT.md`) |
-| B-010 | P2 | Implement deterministic grid pathfinding with stable tie-breaking | M | B-008 | G2 | proposed |
-| B-011 | P2 | Implement movement, formation slots, and short-horizon cell reservation | L | B-010 | G2 | proposed |
+| B-009 | P2 | Implement deterministic line of sight and opacity | M | B-008 | G2 | done (`tasks/TASK-012-LINE-OF-SIGHT.md`) |
+| B-010 | P2 | Implement deterministic grid pathfinding with stable tie-breaking | M | B-008 | G2 | done (`tasks/TASK-013-PATHFINDING.md`) |
+| B-011 | P2 | Implement movement, formation slots, and short-horizon cell reservation. First phase consumer of the TASK-013 `Pathfinding` module: the Navigation and movement phase (12.7) replaces `PlaceholderMovement` with a `Pathfinding`-driven executor. | L | B-010 | G2 | proposed |
 | B-012 | P2 | Add divergence diagnostics and replay corpus infrastructure | M | B-008 | G2 | proposed |
-| B-013 | P2 | Add headless performance and allocation benchmark harness | S | B-008 | G2 | proposed |
+| B-013 | P2 | Add headless performance and allocation benchmark harness | S | B-008 | G2 | active (`tasks/TASK-014-BENCHMARK-HARNESS.md`) |
 | B-014 | P3 | Define command validation and recipient selection | S | B-011 | G3 | proposed |
 | B-015 | P3 | Implement observations and shared squad tactical knowledge (first phase consumer of the TASK-012 `Sight` module: Perception, phase 12.3, reads `Sight.trace` / `Sight.visible`) | M | B-009 | G3 | proposed |
 | B-016 | P3 | Implement communication constraints and report aging | M | B-015 | G3 | proposed |

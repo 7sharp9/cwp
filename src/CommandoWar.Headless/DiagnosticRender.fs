@@ -91,7 +91,8 @@ module DiagnosticRender =
             frame.Overlays
             |> Array.choose (function
                 | SightRay(_, _, cells, blk) -> Some(cells, blk)
-                | Cells _ -> None)
+                | Cells _
+                | PlannedPath _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -103,6 +104,26 @@ module DiagnosticRender =
                 match blk with
                 | Some c -> c.X = x && c.Y = y
                 | None -> false)
+
+        // Planned-path overlays drawn onto the composite grid: `+` on a path
+        // cell, `S` at the start, `G` at the goal. Empty unless a caller
+        // supplied a `PlannedPath` overlay (e.g. `cwheadless render --path`).
+        let plannedPaths =
+            frame.Overlays
+            |> Array.choose (function
+                | PlannedPath(a, b, cells, _, _) -> Some(a, b, cells)
+                | Cells _
+                | SightRay _ -> None)
+
+        let onPath (x: int) (y: int) =
+            plannedPaths
+            |> Array.exists (fun (_, _, cells) -> cells |> Array.exists (fun c -> c.X = x && c.Y = y))
+
+        let pathStart (x: int) (y: int) =
+            plannedPaths |> Array.exists (fun (a, _, _) -> a.X = x && a.Y = y)
+
+        let pathGoal (x: int) (y: int) =
+            plannedPaths |> Array.exists (fun (_, b, _) -> b.X = x && b.Y = y)
 
         let elevation = layer LayerName.Elevation frame
         let passable = layer LayerName.Passability frame
@@ -118,7 +139,10 @@ module DiagnosticRender =
             match agentAt frame x y with
             | Some a -> sideGlyph a.Side
             | None when blockerAt x y -> 'x'
+            | None when pathStart x y -> 'S'
+            | None when pathGoal x y -> 'G'
             | None when onRay x y -> '*'
+            | None when onPath x y -> '+'
             | None ->
                 match single with
                 | Some l ->
@@ -243,6 +267,13 @@ module DiagnosticRender =
                         | Some c -> sprintf "blocked at %s" (cellText c)
                         | None -> "clear"
                     line (sprintf "  sight %s -> %s: %s" (cellText a) (cellText b) status)
+                | PlannedPath(a, b, _, cost, reached) ->
+                    let status =
+                        if reached then
+                            sprintf "reached, cost %d" cost
+                        else
+                            "no path"
+                    line (sprintf "  path %s -> %s: %s" (cellText a) (cellText b) status)
 
         line ""
 
@@ -383,8 +414,10 @@ module DiagnosticRender =
             )
 
         // Overlays: line-of-sight rays (dashed line, traced-cell dots, a red
-        // cross on the blocker) and generic labelled cell sets. Empty unless a
-        // caller supplied one; existing renders are byte-identical without it.
+        // cross on the blocker), planned paths (solid polyline, a green start
+        // disc, an orange goal box), and generic labelled cell sets. Empty
+        // unless a caller supplied one; existing renders are byte-identical
+        // without it.
         for o in frame.Overlays do
             match o with
             | Cells(_, cells) ->
@@ -426,6 +459,30 @@ module DiagnosticRender =
                             (c.X * s + s) (c.Y * s) (c.X * s) (c.Y * s + s)
                     )
                 | None -> ()
+            | PlannedPath(a, target, cells, _, _) ->
+                if cells.Length >= 2 then
+                    let pts =
+                        cells
+                        |> Array.map (fun c -> sprintf "%d,%d" (c.X * s + mid) (c.Y * s + mid))
+                        |> String.concat " "
+
+                    line (
+                        sprintf
+                            "  <polyline points=\"%s\" fill=\"none\" stroke=\"#dd6b20\" stroke-width=\"2\"/>"
+                            pts
+                    )
+
+                line (
+                    sprintf
+                        "  <circle cx=\"%d\" cy=\"%d\" r=\"4\" fill=\"#2f855a\" stroke=\"#ffffff\" stroke-width=\"1\"/>"
+                        (a.X * s + mid) (a.Y * s + mid)
+                )
+
+                line (
+                    sprintf
+                        "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#dd6b20\" stroke-width=\"3\"/>"
+                        (target.X * s) (target.Y * s) s s
+                )
 
         // Footer.
         let footerText (dy: int) (str: string) =

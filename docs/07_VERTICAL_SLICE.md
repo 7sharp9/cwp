@@ -180,6 +180,23 @@ These are initial budgets and may be revised only with measured evidence.
 
 Exact millisecond and allocation budgets should be set after TASK-003 establishes a benchmark harness.
 
+### Realised by TASK-014 (headless benchmark harness)
+
+`bench/CommandoWar.Benchmarks/` is the headless performance and allocation
+harness (`docs/09` section 2.8; backlog B-013), and
+`content/benchmarks/BASELINE.md` is the committed baseline with a documented
+regeneration command. It covers the authoritative systems that exist today
+(empty tick, placeholder movement at 6 and ~50 agents, line-of-sight batch,
+pathfinding open/blocked/choke, canonical encode, state hash, replay run);
+50-agent perception, appraisal, and the full synthetic tick attach when
+B-015 / B-017 / B-019 land. The reference-machine baseline keeps every per-tick
+measurement at least ~36x inside the 5 ms budget with no map-size-proportional
+per-tick allocation, so the budgets in this section stand as written. Exact
+per-subsystem millisecond and allocation numbers are still a follow-up: set
+them once the real phases and the greybox map (B-025) exist and the harness is
+re-run against them. The 60 fps graphical budget and frame-pacing items remain
+untested (no client yet).
+
 ## 11. External playtest gate
 
 Use at least five participants who did not implement the game. This is not a formal research study and must not be represented as one.

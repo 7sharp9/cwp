@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>CommandoWar.Benchmarks</RootNamespace>
+    <!-- Leave AssemblyName as the project name: BenchmarkDotNet's CsProj
+         toolchain locates the .fsproj by matching it to the output assembly
+         name when it generates the per-benchmark runner project. -->
+
+    <!-- Same baseline discipline as the simulation library and the headless
+         reference. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors />
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Dev-only benchmark harness (TASK-014, backlog B-013). It is built in
+         Release with the solution but has NO test SDK and NO [<Fact>], so
+         `dotnet test` never collects it: the determinism suite stays at 145.
+         BenchmarkDotNet requires an optimised build to measure. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="SyntheticWorlds.fs" />
+    <Compile Include="Benchmarks.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Pinned explicitly; recorded in the ledger "Pinned facts". The only
+         package dependency of this project. -->
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ADR-0002: the arrow is Benchmarks -> Headless -> Sim and
+         Benchmarks -> Sim, never the reverse. `CommandoWar.Sim` gains no
+         reference to this project or to BenchmarkDotNet. -->
+    <ProjectReference Include="..\..\src\CommandoWar.Sim\CommandoWar.Sim.fsproj" />
+    <ProjectReference Include="..\..\src\CommandoWar.Headless\CommandoWar.Headless.fsproj" />
+  </ItemGroup>
+
+</Project>
