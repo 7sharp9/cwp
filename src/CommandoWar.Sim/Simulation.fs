@@ -158,71 +158,148 @@ module Simulation =
 
     // --- Phase: navigation and movement -------------------------------------
     // Consumes the TASK-013 `Pathfinding` module (docs/04 section 8 "Initial
-    // movement progression", steps 2, 4, 5, 6). For every agent with a
-    // destination, in ascending agent id order:
-    //   * reuse the cached `Route` when its cursor still tracks the agent, it
-    //     still targets the current destination, and its next cell is still
-    //     passable; otherwise recompute a path with `Pathfinding.findWithin`
-    //     over the authoritative terrain (a new destination, or step 6, replan
-    //     on an invalidated next cell);
-    //   * advance the agent exactly one cell along it and emit
-    //     `MovementStepped`, then `MovementCompleted` on the arrival tick,
-    //     clearing the destination and the route;
-    //   * emit `MovementBlocked` and clear the destination when no path exists.
+    // movement progression", steps 2, 3, 4, 5, 6). For every agent with a
+    // destination, in ascending agent id order, first computes a movement
+    // intent (`MoveOutcome`) — reusing the cached `Route` when its cursor
+    // still tracks the agent, it still targets the current destination, and
+    // its next cell is still passable; otherwise recomputing a path with
+    // `Pathfinding.findWithin` over the authoritative terrain (a new
+    // destination, or step 6, replan on an invalidated next cell) — then
+    // resolves same-tick contention over a shared next cell (step 3,
+    // TASK-017) before applying the surviving moves, in ascending agent id
+    // order:
+    //   * a mover with no rival for its next cell, or the winner of one,
+    //     advances exactly one cell and emits `MovementStepped`, then
+    //     `MovementCompleted` on the arrival tick, clearing the destination
+    //     and the route;
+    //   * a mover that loses a contested cell to another agent this tick
+    //     stays put and emits `MovementYielded`; its destination and route
+    //     are untouched, so it retries the same next cell next tick, once the
+    //     winner has vacated it;
+    //   * a destination with no path emits `MovementBlocked` and clears the
+    //     destination.
     //
-    // Single-agent executor only: cell reservation, formation slots, and
-    // sub-cell movement progress are B-011b. `AgentState.Route` is a
-    // non-canonical derived cache (see `MovementPath`).
+    // Reservation is a same-tick derived resolution, not persisted state: the
+    // winner of a contested cell is the mover with the fewest remaining route
+    // steps (closest to its destination), ties broken by ascending agent id —
+    // computed fresh every tick from already-canonical/derived fields
+    // (`Position`, `Destination`, `Terrain` via `Route`), so nothing new
+    // enters `WorldState` and `Canonical.FormatVersion` stays 1 (TASK-017
+    // ledger note). It provably terminates for a shared-target-cell contest:
+    // the winner always advances, so the sum of every moving agent's
+    // remaining route length strictly decreases each tick a contest is
+    // resolved. It does not resolve an agent moving onto a cell held by a
+    // stationary agent (a distinct, chain-dependent problem — TASK-017
+    // ledger "Deviations").
+    //
+    // Formation slots and sub-cell movement progress within an edge are
+    // B-011c (split from B-011b by TASK-017, which lands reservation and
+    // deadlock avoidance only). `AgentState.Route` is still a non-canonical
+    // derived cache (see `MovementPath`).
+
+    /// One agent's movement outcome for this tick, computed in Pass 1 before
+    /// same-tick contention resolution (Pass 2). Not persisted: recomputed
+    /// fresh every tick from already-canonical/derived fields only.
+    type private MoveOutcome =
+        /// No destination.
+        | Idle
+        /// Already at the destination.
+        | Arrived of at: Cell
+        /// No path to the destination.
+        | Blocked of at: Cell * target: Cell
+        /// About to enter `next` along `route`, pending contention
+        /// resolution against every other agent's pending move this tick.
+        | Advancing of route: MovementPath * next: Cell * destination: Cell
+
     let private navigationAndMovement (s: StepState) =
         let terrain = s.Terrain
 
         // The full-grid ceiling from content/benchmarks/BASELINE.md: a single
         // legitimate query on an adversarial map can close most of the grid, so
-        // a per-agent budget must not be cut below it. A tighter combined
-        // per-tick multi-agent budget is B-011b.
+        // a per-agent budget must not be cut below it.
         let budget = terrain.Bounds.Width * terrain.Bounds.Height
 
         let agents = Array.copy s.Agents
 
+        // Pass 1: each agent's movement intent, computed independently (no
+        // mutation, no event) from already-canonical/derived fields only.
+        let intents =
+            agents
+            |> Array.map (fun a ->
+                match a.Destination with
+                | None -> Idle
+                | Some dest when a.Position = dest -> Arrived a.Position
+                | Some dest ->
+                    let cached =
+                        match a.Route with
+                        | Some r when
+                            r.Cursor >= 0
+                            && r.Cursor + 1 < r.Cells.Length
+                            && r.Cells.[r.Cursor] = a.Position
+                            && r.Cells.[r.Cells.Length - 1] = dest
+                            && Terrain.passable terrain r.Cells.[r.Cursor + 1]
+                            ->
+                            Some r
+                        | _ -> None
+
+                    let route =
+                        match cached with
+                        | Some r -> Some r
+                        | None ->
+                            match Pathfinding.findWithin terrain a.Position dest budget with
+                            | Found(cells, cost) when cells.Length >= 2 ->
+                                Some { Cells = cells; Cursor = 0; Cost = cost }
+                            | Found _
+                            | NoPath
+                            | BudgetExhausted _
+                            | InvalidEndpoint _ -> None
+
+                    match route with
+                    | None -> Blocked(a.Position, dest)
+                    | Some r -> Advancing(r, r.Cells.[r.Cursor + 1], dest))
+
+        // Pass 2: reservation. Group every `Advancing` intent by its
+        // contested next cell; the mover with the fewest remaining route
+        // steps wins, ties broken by ascending agent id; every other
+        // claimant yields this tick (see the phase comment above for the
+        // termination argument).
+        let remaining (r: MovementPath) = r.Cells.Length - 1 - r.Cursor
+
+        let yieldedTo: Map<int, AgentId> =
+            intents
+            |> Array.indexed
+            |> Array.choose (fun (idx, intent) ->
+                match intent with
+                | Advancing(r, next, _) -> Some(idx, agents.[idx].Id, r, next)
+                | Idle
+                | Arrived _
+                | Blocked _ -> None)
+            |> Array.groupBy (fun (_, _, _, next) -> next)
+            |> Array.collect (fun (_, claims) ->
+                let winnerIdx, winnerId, _, _ = claims |> Array.minBy (fun (_, id, r, _) -> (remaining r, id))
+
+                claims
+                |> Array.filter (fun (idx, _, _, _) -> idx <> winnerIdx)
+                |> Array.map (fun (idx, _, _, _) -> idx, winnerId))
+            |> Map.ofArray
+
+        // Pass 3: apply, in ascending agent id order — the standing
+        // movement-event ordering guarantee (Events.fs).
         for idx in 0 .. agents.Length - 1 do
             let a = agents.[idx]
 
-            match a.Destination with
-            | None -> ()
-            | Some dest when a.Position = dest ->
+            match intents.[idx] with
+            | Idle -> ()
+            | Arrived at ->
                 agents.[idx] <- { a with Destination = None; Route = None }
-                emit (MovementCompleted(a.Id, a.Position)) s
-            | Some dest ->
-                let cached =
-                    match a.Route with
-                    | Some r when
-                        r.Cursor >= 0
-                        && r.Cursor + 1 < r.Cells.Length
-                        && r.Cells.[r.Cursor] = a.Position
-                        && r.Cells.[r.Cells.Length - 1] = dest
-                        && Terrain.passable terrain r.Cells.[r.Cursor + 1]
-                        ->
-                        Some r
-                    | _ -> None
-
-                let route =
-                    match cached with
-                    | Some r -> Some r
-                    | None ->
-                        match Pathfinding.findWithin terrain a.Position dest budget with
-                        | Found(cells, cost) when cells.Length >= 2 ->
-                            Some { Cells = cells; Cursor = 0; Cost = cost }
-                        | Found _
-                        | NoPath
-                        | BudgetExhausted _
-                        | InvalidEndpoint _ -> None
-
-                match route with
+                emit (MovementCompleted(a.Id, at)) s
+            | Blocked(at, target) ->
+                agents.[idx] <- { a with Destination = None; Route = None }
+                emit (MovementBlocked(a.Id, at, target)) s
+            | Advancing(r, next, dest) ->
+                match yieldedTo.TryFind idx with
+                | Some winnerId -> emit (MovementYielded(a.Id, a.Position, next, winnerId)) s
                 | None ->
-                    agents.[idx] <- { a with Destination = None; Route = None }
-                    emit (MovementBlocked(a.Id, a.Position, dest)) s
-                | Some r ->
-                    let next = r.Cells.[r.Cursor + 1]
                     let arrived = next = dest
 
                     agents.[idx] <-

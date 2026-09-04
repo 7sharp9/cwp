@@ -179,13 +179,14 @@ and movement phase (12.7, `src/CommandoWar.Sim/Simulation.fs`) consumes
   per-tick multi-agent budget can be set by B-011b without touching
   `Pathfinding.find`.
 - **Steps 4-5 (advance):** the agent advances exactly one cell along the path
-  per tick (movement progress within an edge is B-011b; this stays one cell
+  per tick (movement progress within an edge is B-011c; this stays one cell
   per tick). `MovementStepped` each tick, `MovementCompleted` on arrival.
 - **Step 6 (replan):** the path (`AgentState.Route`) is recomputed from the
   current cell when the cached next cell is no longer `Terrain.passable` or the
-  cache no longer matches `(Position, Destination)`. With static terrain and no
-  agent-agent collision this branch is currently unreachable in practice; it is
-  written and tested so the structure B-011b hooks into exists.
+  cache no longer matches `(Position, Destination)`. With static terrain this
+  branch stays rare in practice; TASK-017's reservation does not force a
+  replan on a yield (the route and cursor are left untouched, not
+  invalidated), so multi-agent contention does not exercise it either.
 - **No path:** `MovementBlocked (agent, at, target)` is emitted and the
   destination cleared when `Pathfinding` returns `NoPath`, `BudgetExhausted`,
   or `InvalidEndpoint`.
@@ -198,8 +199,33 @@ reproduces the exact cell sequence the retired `PlaceholderMovement` rule
 produced (X axis before Y), so the shared fixture's pinned hashes and 33-event
 count are unmoved.
 
-Step 3 (cell reservation), short-horizon deadlock avoidance, formation slots,
-and sub-cell movement progress are **B-011b**.
+Realised by TASK-017 (backlog B-011b, narrowed to reservation and deadlock
+avoidance — see "Scope down" below): **step 3**. The phase computes every
+agent's movement intent for the tick first (no mutation, no event — Pass 1),
+then resolves same-tick contention over a shared next cell (Pass 2) before
+applying the surviving moves in ascending agent id order (Pass 3):
+
+- **Step 3 (reserve only the immediate next destination):** when two or more
+  agents compute the same next cell for the tick, the agent with the fewest
+  remaining route steps wins (ties broken by ascending agent id); every other
+  claimant emits `MovementYielded` and does not advance, retrying the same
+  next cell next tick once the winner has vacated it.
+- **Deadlock avoidance:** provable, not merely tested, for a shared-target-cell
+  contest — the winner always advances, so the sum of every moving agent's
+  remaining route length strictly decreases each tick a contest is resolved,
+  which bounds the wait. This does **not** cover an agent moving onto a cell
+  currently held by a stationary agent (a distinct, chain-dependent problem);
+  no corpus entry exercises that case, and solving it in general is the
+  "negotiation protocol" this task was scoped away from (TASK-017 ledger).
+- Reservation is a same-tick derived resolution, not persisted state: computed
+  fresh every tick from already-canonical/derived fields only (`Position`,
+  `Destination`, `Terrain` via `Route`). `Canonical.FormatVersion` stays 1.
+
+**Scope down (split to B-011c):** formation slots and sub-cell movement
+progress within an edge are new per-tick state with no derivation path from
+`Position` alone (unlike reservation), and were not realised by TASK-017 to
+keep it at size M. Both remain **B-011c**; landing either will need
+`Canonical.FormatVersion` to bump to 2 and every pinned hash to move.
 
 ## 9. Line of sight and cover
 
@@ -328,11 +354,14 @@ Fatigue, persistent personality dimensions, interpersonal relations, inventory g
 - advance movement;
 - emit movement and blockage events where useful.
 
-Realised by TASK-015 (single-agent executor): `Simulation.navigationAndMovement`
-computes / repairs a `Pathfinding` path per agent with a destination (in
-ascending agent id order), advances it one cell, and emits `MovementStepped` /
-`MovementCompleted` / `MovementBlocked`. Reservation resolution is B-011b; there
-is no reservation store yet. Full detail is in section 8.
+Realised by TASK-015 (single-agent executor) and TASK-017 (reservation):
+`Simulation.navigationAndMovement` computes / repairs a `Pathfinding` path per
+agent with a destination, resolves same-tick contention over a shared next
+cell in stable order (fewest remaining route steps, ties broken by ascending
+agent id), advances the surviving moves one cell each, and emits
+`MovementStepped` / `MovementCompleted` / `MovementBlocked` / `MovementYielded`.
+Reservation is resolved fresh every tick, not stored. Full detail is in
+section 8.
 
 ### 12.8 Combat
 

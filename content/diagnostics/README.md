@@ -30,6 +30,8 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `los.svg` | SVG of the same LOS demo frame: each ray a dashed line with traced-cell dots and a red cross on its blocker. |
 | `path.ascii.txt` | The pathfinding demo (`src/CommandoWar.Headless/PathDemo.fs`, 16 x 12) at tick 0 with four `--path` routes: a straight clear route, a route detouring around the impassable `x = 5` wall, a route preferring a cheap detour over the `x = 10..11` movement-cost patch, and a no-path route to the walled-off pocket `(14,9)`. `+` = path cell, `S` = start, `G` = goal. |
 | `path.svg` | SVG of the same pathfinding demo frame: each route a solid polyline with a green start disc and an orange goal box; the no-path route shows only its markers. |
+| `converging-routes-tick-003.ascii.txt` | The `content/replays/converging-routes` corpus entry (TASK-017) at tick 3: agent 0 and agent 1 both compute `(3,3)` as their next cell; `Simulation.navigationAndMovement`'s same-tick reservation picks agent 0 (tied remaining route length, lower agent id) and agent 1 yields. `Diagnostics.frameOf` derives a `Reserved` overlay from the tick's `MovementYielded` event, shown alongside each agent's `PlannedPath`. |
+| `converging-routes-tick-003.svg` | SVG of the same frame: the reserved cell as a pink dashed box labelled `R0` (the winning agent id), alongside each agent's route polyline. |
 
 ## Regeneration
 
@@ -56,6 +58,15 @@ PATHS="--path 1,1:4,1 --path 2,6:9,6 --path 9,3:13,3 --path 1,10:14,9"
 $R render path $PATHS --format ascii --out content/diagnostics/path.ascii.txt
 $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 ```
+
+`converging-routes-tick-003.*` is not produced by the `render` verb: its
+initial state is the corpus entry's own two-agent world (`Corpus.all`), not
+the shared fixture or demo scenario `render` knows about. It is regenerated
+from `tests/CommandoWar.Sim.Tests/DiagnosticsTests.fs`'s
+`convergingRoutesFrames ()` helper (`DiagnosticRender.runFrames` over
+`Corpus.all`'s `"converging-routes"` entry and its committed `.cwlog`), tick
+index 3 — the same construction the golden-comparison test itself uses, so a
+regeneration and its test cannot silently disagree.
 
 `render` also accepts a command-log path in place of `fixture` / `demo` / `los` /
 `path` (replayed against the shared fixture initial state), an optional

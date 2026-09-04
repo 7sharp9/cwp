@@ -27,7 +27,7 @@ content and none needs an on-disk format (backlog B-024).
 | `spike-fixture` | The framework-spike shared fixture (`Fixture.initialState ()`, 32 x 32, seed 20260902): agent 3 ordered to (20,14). The same 40-value sequence as `content/fixtures/SPIKE-FIXTURE.md`; `CorpusTests.fs` cross-checks it against `Fixture.run ()` so it is not an independent re-pin. |
 | `wall-detour` | A single agent detouring around an impassable wall (`Pathfinding.findWithin`, `docs/04` section 8 steps 2, 4, 5): TASK-015's replan branch structure without needing to mutate terrain mid-run. |
 | `blocked-goal` | A single agent whose target is unreachable: `Pathfinding` returns `NoPath`, the executor emits `MovementBlocked`, and the destination is cleared (no retry). |
-| `converging-routes` | Two agents whose routes cross the same cell on the same tick, with no cell reservation. Pins today's no-reservation behaviour; **B-011b will re-pin this entry's hashes** when short-horizon reservation lands. |
+| `converging-routes` | Two agents whose routes cross the same cell on the same tick: `Simulation.navigationAndMovement`'s same-tick reservation resolves the contest (TASK-017), the lower-remaining-route agent enters the cell, and the other yields one tick before catching up. |
 
 ## Regeneration
 

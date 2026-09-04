@@ -135,8 +135,10 @@ module Corpus =
         )
 
     /// Two friendly agents on open terrain: agent 0 at (3,0) -> (3,7) crosses
-    /// agent 1 at (0,3) -> (7,3), meeting at (3,3) on the same tick with no
-    /// cell reservation (B-011b re-pins this entry).
+    /// agent 1 at (0,3) -> (7,3), both computing (3,3) as their next cell at
+    /// tick 3. TASK-017 (B-011b) reservation resolves the contest: agent 0
+    /// wins (tied remaining route length, lower agent id) and agent 1 yields
+    /// one tick, then both reach their destinations by tick 12.
     let private convergingRoutesWorld () : WorldState =
         worldOf (
             rawScenario "corpus-converging-routes" 8 8 [ 0, { X = 3; Y = 0 }; 1, { X = 0; Y = 3 } ] [] { X = 7; Y = 7 } { X = 0; Y = 0 }
@@ -170,9 +172,9 @@ module Corpus =
              TickCount = 5L }
            { Name = "converging-routes"
              Description =
-               "Agent 0 at (3,0) -> (3,7) crosses agent 1 at (0,3) -> (7,3); their routes meet at (3,3) on the "
-               + "same tick with no cell reservation. Pins today's no-reservation behaviour: B-011b re-pins this "
-               + "entry's hashes."
+               "Agent 0 at (3,0) -> (3,7) crosses agent 1 at (0,3) -> (7,3); both compute (3,3) as their next "
+               + "cell at tick 3. TASK-017 reservation resolves the contest (tied remaining route length, lower "
+               + "agent id wins): agent 0 enters (3,3), agent 1 yields one tick and catches up."
              InitialStateNote = "Corpus converging-routes scenario (8 x 8, seed 20260904)"
              InitialState = convergingRoutesWorld
              TickCount = 12L } |]

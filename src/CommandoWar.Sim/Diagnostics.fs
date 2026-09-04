@@ -94,15 +94,16 @@ type EventMarker =
 ///
 ///   * B-009 line of sight  -> `SightRay` (realised by TASK-012);
 ///   * B-010 pathfinding     -> `PlannedPath` (realised by TASK-013);
-///   * B-011b reservation    -> a reserved-cell case (cell, agent, until tick);
+///   * B-011b reservation    -> `Reserved` (realised by TASK-017);
 ///   * B-019 combat          -> a fire-line case (shooter, target).
 ///
-/// B-011b / B-019 do not exist yet: no such case is defined.
+/// B-019 does not exist yet: no such case is defined.
 /// `Diagnostics.frame` produces no overlay. `Diagnostics.frameOf` produces one
-/// `PlannedPath` per agent following a route (TASK-015) and nothing else; every
-/// other overlay is populated by a caller (a test, or `cwheadless render --los`
-/// / `--path`). `Cells` is the generic non-speculative shape: a labelled set of
-/// cells a renderer can always fall back to.
+/// `PlannedPath` per agent following a route (TASK-015) and one `Reserved` per
+/// cell contested this tick (TASK-017); every other overlay is populated by a
+/// caller (a test, or `cwheadless render --los` / `--path`). `Cells` is the
+/// generic non-speculative shape: a labelled set of cells a renderer can
+/// always fall back to.
 type Overlay =
     /// A labelled set of cells.
     | Cells of label: string * cells: Cell[]
@@ -115,6 +116,16 @@ type Overlay =
     /// the budget was exhausted), its integer cost, and whether the goal was
     /// reached. Supplied by a caller; `Diagnostics` never emits one.
     | PlannedPath of from: Cell * target: Cell * cells: Cell[] * cost: int * reached: bool
+    /// A same-tick cell-reservation outcome (TASK-017, docs/04 section 8 step
+    /// 3): `cell` was contested by two or more agents this tick, `winner` is
+    /// the agent that entered it (fewest remaining route steps, ties broken
+    /// by ascending agent id), and `untilTick` is the tick the reservation
+    /// covers — always the tick it was resolved on, since resolution is a
+    /// same-tick derived fact, never a persisted multi-tick booking.
+    /// `Diagnostics.frameOf` derives one per `MovementYielded` event this
+    /// tick; `Diagnostics` never emits one from a bare `WorldState`
+    /// (`Diagnostics.frame`), which carries no per-tick movement history.
+    | Reserved of cell: Cell * winner: AgentId * untilTick: int64
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -189,6 +200,7 @@ module Diagnostics =
         | MovementStepped(_, from, into) -> { Kind = "movement-stepped"; Cells = [| from; into |] }
         | MovementCompleted(_, at) -> { Kind = "movement-completed"; Cells = [| at |] }
         | MovementBlocked(_, at, target) -> { Kind = "movement-blocked"; Cells = [| at; target |] }
+        | MovementYielded(_, at, contested, _) -> { Kind = "movement-yielded"; Cells = [| at; contested |] }
 
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
@@ -220,12 +232,30 @@ module Diagnostics =
                 Some(PlannedPath(r.Cells.[0], r.Cells.[r.Cells.Length - 1], r.Cells, r.Cost, true))
             | _ -> None)
 
+    /// A `Reserved` overlay per cell contested this tick (TASK-017), derived
+    /// from this tick's `MovementYielded` events — one entry per distinct
+    /// contested cell, in the order its first `MovementYielded` event
+    /// appears (ascending agent id, the standing movement-event order).
+    let private reservationOverlays (result: StepResult) : Overlay[] =
+        result.Events
+        |> Array.choose (fun e ->
+            match e.Body with
+            | MovementYielded(_, _, contested, winner) -> Some(contested, winner)
+            | CommandAccepted _
+            | CommandRejected _
+            | MovementStepped _
+            | MovementCompleted _
+            | MovementBlocked _ -> None)
+        |> Array.distinctBy fst
+        |> Array.map (fun (cell, winner) -> Reserved(cell, winner, result.State.Tick))
+
     /// The diagnostic frame for a completed step: the frame of the resulting
     /// world, plus this tick's event markers, a `PlannedPath` overlay for every
-    /// agent still following a route, and the post-step canonical hash recorded
-    /// on the `StepResult`. Total, pure, deterministic.
+    /// agent still following a route, a `Reserved` overlay for every cell
+    /// contested this tick, and the post-step canonical hash recorded on the
+    /// `StepResult`. Total, pure, deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
         { frame result.State with
             Events = result.Events |> Array.map eventMarker
-            Overlays = routeOverlays result.State
+            Overlays = Array.append (routeOverlays result.State) (reservationOverlays result)
             Hash = result.StateHash }

@@ -97,8 +97,9 @@ a per-tick authoritative-hash table per entry (mirroring
 `content/fixtures/SPIKE-FIXTURE.md`). Four entries: the shared spike fixture
 (cross-checked against `Fixture.run ()`, not an independent re-pin), a
 single-agent wall detour and a `MovementBlocked` no-path case (both exercising
-the TASK-015 executor), and a two-agent "converging routes" entry that pins
-today's no-reservation behaviour (B-011b re-pins it). `Corpus.fs`
+the TASK-015 executor), and a two-agent "converging routes" entry that pinned
+the then-current no-reservation behaviour (re-pinned by TASK-017 once
+short-horizon cell reservation landed). `Corpus.fs`
 (`CommandoWar.Headless`) owns the name -> `WorldState` registry and the
 check/regenerate logic; `cwheadless corpus [--regenerate]` is the CLI form and
 `tests/CommandoWar.Sim.Tests/CorpusTests.fs` is an in-suite `[<Theory>]` over

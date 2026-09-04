@@ -255,6 +255,62 @@ let ``an agent mid-route carries a Route cache that clears on arrival`` () =
     Assert.Equal(None, (agentOf a st).Route)
     Assert.Equal({ X = 4; Y = 0 }, (agentOf a st).Position)
 
+// --- Multi-agent movement: same-tick cell reservation (TASK-017) -------
+
+let private twoAgentWorld (aStart: Cell) (bStart: Cell) : WorldState =
+    match World.create bounds 1UL [ Agent.create (agent 0) Friendly aStart; Agent.create (agent 1) Friendly bStart ] with
+    | Ok w -> w
+    | Error e -> failwith $"unexpected {e}"
+
+[<Fact>]
+let ``two agents converging on the same cell never occupy it simultaneously, and the loser catches up`` () =
+    let a = agent 0
+    let b = agent 1
+    let w = twoAgentWorld { X = 3; Y = 0 } { X = 0; Y = 3 }
+    let r0 = stepWith [| cmd 1 a { X = 3; Y = 7 }; cmd 2 b { X = 7; Y = 3 } |] w
+    let mutable st = r0.State
+    let mutable events = bodies r0
+    let mutable ticks = 1
+
+    while ((agentOf a st).Destination.IsSome || (agentOf b st).Destination.IsSome) && ticks < 30 do
+        Assert.NotEqual((agentOf a st).Position, (agentOf b st).Position)
+        let r = stepIdle st
+        events <- Array.append events (bodies r)
+        st <- r.State
+        ticks <- ticks + 1
+
+    Assert.NotEqual((agentOf a st).Position, (agentOf b st).Position)
+    Assert.Contains(events, (function MovementYielded _ -> true | _ -> false))
+    Assert.Equal(None, (agentOf a st).Destination)
+    Assert.Equal(None, (agentOf b st).Destination)
+    Assert.Equal({ X = 3; Y = 7 }, (agentOf a st).Position)
+    Assert.Equal({ X = 7; Y = 3 }, (agentOf b st).Position)
+
+[<Fact>]
+let ``the agent closer to its destination wins a contested cell even with a higher agent id`` () =
+    let a = agent 0 // (2,3) -> (5,3): 3 remaining route steps at the contest
+    let b = agent 1 // (3,4) -> (3,3): 1 remaining route step (the contested cell is its destination)
+    let w = twoAgentWorld { X = 2; Y = 3 } { X = 3; Y = 4 }
+    let r = stepWith [| cmd 1 a { X = 5; Y = 3 }; cmd 2 b { X = 3; Y = 3 } |] w
+
+    Assert.Contains(MovementYielded(a, { X = 2; Y = 3 }, { X = 3; Y = 3 }, b), bodies r)
+    Assert.Contains(MovementCompleted(b, { X = 3; Y = 3 }), bodies r)
+    Assert.Equal({ X = 2; Y = 3 }, (agentOf a r.State).Position)
+    Assert.Equal({ X = 3; Y = 3 }, (agentOf b r.State).Position)
+    Assert.Equal(Some { X = 5; Y = 3 }, (agentOf a r.State).Destination) // untouched by yielding
+
+[<Fact>]
+let ``a tied contest (equal remaining route length) is won by the lower agent id`` () =
+    let a = agent 0
+    let b = agent 1
+    let w = twoAgentWorld { X = 2; Y = 3 } { X = 3; Y = 2 }
+    let r = stepWith [| cmd 1 a { X = 4; Y = 3 }; cmd 2 b { X = 3; Y = 4 } |] w
+
+    Assert.Contains(MovementStepped(a, { X = 2; Y = 3 }, { X = 3; Y = 3 }), bodies r)
+    Assert.Contains(MovementYielded(b, { X = 3; Y = 2 }, { X = 3; Y = 3 }, a), bodies r)
+    Assert.Equal({ X = 3; Y = 3 }, (agentOf a r.State).Position)
+    Assert.Equal({ X = 3; Y = 2 }, (agentOf b r.State).Position)
+
 [<Fact>]
 let ``World.create rejects duplicate agent ids`` () =
     let result =

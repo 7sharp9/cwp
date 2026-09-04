@@ -232,6 +232,59 @@ let ``a hand-built PlannedPath overlay renders through the ASCII and SVG rendere
     Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
 
 [<Fact>]
+let ``a hand-built Reserved overlay renders through the ASCII and SVG renderers`` () =
+    let f = Diagnostics.frame (DemoScenario.initialState ())
+
+    let withReserved =
+        { f with
+            Overlays = [| Reserved({ X = 3; Y = 3 }, AgentId.ofInt 0, 3L) |] }
+
+    let ascii = DiagnosticRender.Ascii withReserved
+    Assert.Contains("overlays:", ascii)
+    Assert.Contains("reserved (3,3): agent 0 (until tick 3)", ascii)
+
+    let svg = DiagnosticRender.Svg withReserved
+    Assert.Contains("stroke=\"#d53f8c\"", svg)
+    // Byte-identical without the overlay (regression guard for the goldens).
+    Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
+
+// --- reservation: the converging-routes corpus entry (TASK-017) --------
+
+let private corpusDir = Path.Combine(AppContext.BaseDirectory, "replays")
+
+let private convergingRoutesFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "converging-routes")
+
+    match Corpus.loadLog corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives a Reserved overlay for the converging-routes entry's contested tick (byte-equal to the goldens)`` () =
+    // Tick 3: agent 0 and agent 1 both compute (3,3) as their next cell;
+    // reservation picks agent 0 (tied remaining route length, lower agent id).
+    let frames = convergingRoutesFrames ()
+    let tick3 = frames.[3]
+
+    // Both agents are still mid-route at tick 3, so `routeOverlays` also
+    // contributes a `PlannedPath` per agent; pick out the `Reserved` one.
+    match tick3.Overlays |> Array.tryPick (function
+        | Reserved(cell, winner, untilTick) -> Some(cell, winner, untilTick)
+        | Cells _
+        | SightRay _
+        | PlannedPath _ -> None) with
+    | Some(cell, winner, untilTick) ->
+        Assert.Equal({ X = 3; Y = 3 }, cell)
+        Assert.Equal(AgentId.ofInt 0, winner)
+        Assert.Equal(3L, untilTick)
+    | None -> Assert.Fail($"expected one Reserved overlay, got {tick3.Overlays}")
+
+    Assert.Contains(tick3.Events, fun (e: EventMarker) -> e.Kind = "movement-yielded")
+
+    Assert.Equal(golden "converging-routes-tick-003.ascii.txt", DiagnosticRender.Ascii tick3)
+    Assert.Equal(golden "converging-routes-tick-003.svg", DiagnosticRender.Svg tick3)
+
+[<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =
     let frames = demoFrames ()
     let mid = frames.[8]

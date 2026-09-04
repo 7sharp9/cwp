@@ -92,7 +92,8 @@ module DiagnosticRender =
             |> Array.choose (function
                 | SightRay(_, _, cells, blk) -> Some(cells, blk)
                 | Cells _
-                | PlannedPath _ -> None)
+                | PlannedPath _
+                | Reserved _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -113,7 +114,8 @@ module DiagnosticRender =
             |> Array.choose (function
                 | PlannedPath(a, b, cells, _, _) -> Some(a, b, cells)
                 | Cells _
-                | SightRay _ -> None)
+                | SightRay _
+                | Reserved _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -274,6 +276,14 @@ module DiagnosticRender =
                         else
                             "no path"
                     line (sprintf "  path %s -> %s: %s" (cellText a) (cellText b) status)
+                | Reserved(cell, winner, untilTick) ->
+                    line (
+                        sprintf
+                            "  reserved %s: agent %d (until tick %d)"
+                            (cellText cell)
+                            (AgentId.value winner)
+                            untilTick
+                    )
 
         line ""
 
@@ -415,9 +425,11 @@ module DiagnosticRender =
 
         // Overlays: line-of-sight rays (dashed line, traced-cell dots, a red
         // cross on the blocker), planned paths (solid polyline, a green start
-        // disc, an orange goal box), and generic labelled cell sets. Empty
-        // unless a caller supplied one; existing renders are byte-identical
-        // without it.
+        // disc, an orange goal box), same-tick cell reservations (a pink
+        // dashed box labelled with the winning agent id), and generic
+        // labelled cell sets. Empty unless a caller supplied one, or
+        // `Diagnostics.frameOf` derived one; existing renders are
+        // byte-identical without it.
         for o in frame.Overlays do
             match o with
             | Cells(_, cells) ->
@@ -482,6 +494,20 @@ module DiagnosticRender =
                     sprintf
                         "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#dd6b20\" stroke-width=\"3\"/>"
                         (target.X * s) (target.Y * s) s s
+                )
+            | Reserved(cell, winner, _) ->
+                line (
+                    sprintf
+                        "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#d53f8c\" stroke-width=\"2\" stroke-dasharray=\"2,2\"/>"
+                        (cell.X * s) (cell.Y * s) s s
+                )
+
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"9\" fill=\"#d53f8c\">R%d</text>"
+                        (cell.X * s + 1)
+                        (cell.Y * s + s - 2)
+                        (AgentId.value winner)
                 )
 
         // Footer.

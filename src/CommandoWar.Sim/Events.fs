@@ -15,6 +15,14 @@ type EventBody =
     /// target). The Navigation and movement phase clears the destination when
     /// it emits this, so the agent does not retry every tick.
     | MovementBlocked of agent: AgentId * at: Cell * target: Cell
+    /// `agent`, at `at`, held a destination and computed a path whose next
+    /// cell (`contested`) another agent also computed as its own next cell
+    /// this tick; `winner` — chosen by fewer remaining route steps, ties
+    /// broken by ascending agent id (docs/04 section 8 step 3) — took it
+    /// instead. `agent`'s destination and route are unchanged, so it retries
+    /// the same next cell next tick, once `winner` has vacated it. A
+    /// same-tick reservation only: nothing is booked across ticks (TASK-017).
+    | MovementYielded of agent: AgentId * at: Cell * contested: Cell * winner: AgentId
 
 /// An immutable domain event tagged with the tick it occurred on. Within a
 /// single step, events are emitted in a stable order: command outcomes
