@@ -22,6 +22,13 @@ namespace CommandoWar.Sim
 /// part of the phase pipeline. Building a frame must not move any pinned
 /// fixture hash and must not change `Canonical.encode`; this module is a leaf
 /// that nothing authoritative references.
+///
+/// `Diagnostics.frameOf` emits one `PlannedPath` overlay per agent that is
+/// following a route (TASK-015): the followed path is authoritative-derived
+/// spatial state, so the `docs/09` section 8 rule wants it visible in a render.
+/// `Diagnostics.frame` still emits no overlay (a bare `WorldState` carries no
+/// per-tick movement history to draw from). Every other overlay is still
+/// supplied by a caller.
 
 /// The canonical layer names carried by `Diagnostics.frame`. Renderers key on
 /// these strings; `--layer` on the `cwheadless render` verb filters
@@ -87,15 +94,15 @@ type EventMarker =
 ///
 ///   * B-009 line of sight  -> `SightRay` (realised by TASK-012);
 ///   * B-010 pathfinding     -> `PlannedPath` (realised by TASK-013);
-///   * B-011 reservation     -> a reserved-cell case (cell, agent, until tick);
+///   * B-011b reservation    -> a reserved-cell case (cell, agent, until tick);
 ///   * B-019 combat          -> a fire-line case (shooter, target).
 ///
-/// B-011 / B-019 do not exist yet: no such case is defined.
-/// `Diagnostics.frame` and `Diagnostics.frameOf` never produce an overlay of
-/// any kind; `DiagnosticFrame.Overlays` is populated only by a caller (a test,
-/// or `cwheadless render --los` / `--path`). `Cells` is the generic
-/// non-speculative shape: a labelled set of cells a renderer can always fall
-/// back to.
+/// B-011b / B-019 do not exist yet: no such case is defined.
+/// `Diagnostics.frame` produces no overlay. `Diagnostics.frameOf` produces one
+/// `PlannedPath` per agent following a route (TASK-015) and nothing else; every
+/// other overlay is populated by a caller (a test, or `cwheadless render --los`
+/// / `--path`). `Cells` is the generic non-speculative shape: a labelled set of
+/// cells a renderer can always fall back to.
 type Overlay =
     /// A labelled set of cells.
     | Cells of label: string * cells: Cell[]
@@ -181,6 +188,7 @@ module Diagnostics =
         | CommandRejected(_, TargetOutOfBounds target) -> { Kind = "command-rejected"; Cells = [| target |] }
         | MovementStepped(_, from, into) -> { Kind = "movement-stepped"; Cells = [| from; into |] }
         | MovementCompleted(_, at) -> { Kind = "movement-completed"; Cells = [| at |] }
+        | MovementBlocked(_, at, target) -> { Kind = "movement-blocked"; Cells = [| at; target |] }
 
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
@@ -197,10 +205,27 @@ module Diagnostics =
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
 
+    /// A `PlannedPath` overlay per agent following a route, in ascending agent
+    /// id order. `from` is the cell the path was planned from, `target` the
+    /// destination, `cells` the whole 4-connected path, `cost` its
+    /// `Pathfinding` integer cost, `reached` always true (a stored route always
+    /// has a path). Reads the non-canonical `AgentState.Route` cache; emits
+    /// nothing for agents at rest.
+    let private routeOverlays (world: WorldState) : Overlay[] =
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.choose (fun a ->
+            match a.Route with
+            | Some r when r.Cells.Length >= 2 ->
+                Some(PlannedPath(r.Cells.[0], r.Cells.[r.Cells.Length - 1], r.Cells, r.Cost, true))
+            | _ -> None)
+
     /// The diagnostic frame for a completed step: the frame of the resulting
-    /// world, plus this tick's event markers and the post-step canonical
-    /// hash recorded on the `StepResult`. Total, pure, deterministic.
+    /// world, plus this tick's event markers, a `PlannedPath` overlay for every
+    /// agent still following a route, and the post-step canonical hash recorded
+    /// on the `StepResult`. Total, pure, deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
         { frame result.State with
             Events = result.Events |> Array.map eventMarker
+            Overlays = routeOverlays result.State
             Hash = result.StateHash }

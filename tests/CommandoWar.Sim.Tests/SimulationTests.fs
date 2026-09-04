@@ -163,6 +163,98 @@ let ``World.create rejects an agent placed outside the grid`` () =
         Assert.Equal({ X = 10; Y = 0 }, pos)
     | other -> Assert.Fail($"expected AgentOutOfBounds, got {other}")
 
+// --- Pathfinding-driven movement executor (TASK-015) -------------------
+
+let private impassable (cells: (int * int) list) : Terrain =
+    Terrain.build
+        bounds
+        (cells
+         |> List.map (fun (x, y) ->
+             { Cell = { X = x; Y = y }
+               Movement = Impassable
+               Elevation = 0
+               MoveCost = 0
+               Opaque = false })
+         |> List.toArray)
+        [||]
+
+let private worldWith (t: Terrain) : WorldState = { world () with Terrain = t }
+
+[<Fact>]
+let ``an agent routes around an impassable wall, one passable cell per tick`` () =
+    // x = 1 rows 0..1 blocked; (1,2) is open, so agent 0 at (0,0) must detour.
+    let t = impassable [ 1, 0; 1, 1 ]
+    let a = agent 0
+    let mutable st = (stepWith [| cmd 1 a { X = 3; Y = 0 } |] (worldWith t)).State
+    let mutable prev = (agentOf a st).Position
+    let mutable ticks = 1
+
+    while (agentOf a st).Destination.IsSome && ticks < 50 do
+        st <- (stepIdle st).State
+        let p = (agentOf a st).Position
+        Assert.True(Terrain.passable t p, $"agent entered impassable {p}")
+        Assert.Equal(1, abs (p.X - prev.X) + abs (p.Y - prev.Y))
+        prev <- p
+        ticks <- ticks + 1
+
+    Assert.Equal({ X = 3; Y = 0 }, (agentOf a st).Position)
+    Assert.Equal(None, (agentOf a st).Destination)
+    Assert.True(ticks > 3, "the agent took a straight line through the wall")
+
+[<Fact>]
+let ``the agent follows exactly the Pathfinding path for its destination`` () =
+    let t = impassable [ 3, 0; 3, 1; 3, 2 ]
+    let a = agent 0
+    let dest = { X = 6; Y = 0 }
+
+    let expected =
+        match Pathfinding.find t { X = 0; Y = 0 } dest with
+        | Found(cells, _) -> cells
+        | other -> failwith $"unexpected {other}"
+
+    let visited = ResizeArray<Cell>()
+    visited.Add { X = 0; Y = 0 }
+    let mutable st = (stepWith [| cmd 1 a dest |] (worldWith t)).State
+    visited.Add (agentOf a st).Position
+
+    while (agentOf a st).Destination.IsSome do
+        st <- (stepIdle st).State
+        visited.Add (agentOf a st).Position
+
+    Assert.Equal<Cell[]>(expected, visited.ToArray())
+
+[<Fact>]
+let ``a move to a fully walled-off cell emits MovementBlocked and clears the destination`` () =
+    // (5,5) is passable but its four cardinal neighbours are impassable.
+    let t = impassable [ 5, 4; 5, 6; 4, 5; 6, 5 ]
+    let a = agent 0
+    let r = stepWith [| cmd 1 a { X = 5; Y = 5 } |] (worldWith t)
+    Assert.Contains(MovementBlocked(a, { X = 0; Y = 0 }, { X = 5; Y = 5 }), bodies r)
+    Assert.Equal(None, (agentOf a r.State).Destination)
+    Assert.Equal({ X = 0; Y = 0 }, (agentOf a r.State).Position)
+
+[<Fact>]
+let ``a move onto an impassable cell is accepted at intake then blocked by the executor`` () =
+    let t = impassable [ 4, 4 ]
+    let a = agent 0
+    let r = stepWith [| cmd 1 a { X = 4; Y = 4 } |] (worldWith t)
+    Assert.Contains(CommandAccepted(CommandId.ofInt 1, a, { X = 4; Y = 4 }), bodies r)
+    Assert.Contains(MovementBlocked(a, { X = 0; Y = 0 }, { X = 4; Y = 4 }), bodies r)
+    Assert.Equal(None, (agentOf a r.State).Destination)
+
+[<Fact>]
+let ``an agent mid-route carries a Route cache that clears on arrival`` () =
+    let a = agent 0
+    let r1 = stepWith [| cmd 1 a { X = 4; Y = 0 } |] (world ())
+    Assert.True((agentOf a r1.State).Route.IsSome)
+
+    let mutable st = r1.State
+    while (agentOf a st).Destination.IsSome do
+        st <- (stepIdle st).State
+
+    Assert.Equal(None, (agentOf a st).Route)
+    Assert.Equal({ X = 4; Y = 0 }, (agentOf a st).Position)
+
 [<Fact>]
 let ``World.create rejects duplicate agent ids`` () =
     let result =

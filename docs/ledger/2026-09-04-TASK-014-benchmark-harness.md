@@ -261,7 +261,11 @@ golden are untouched.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-04)
+- Acceptance note: baseline harness accepted as the B-011 sizing evidence;
+  finalised as the precondition of TASK-015 (`git status` scope check plus one
+  `dotnet test CommandoWar.slnx -c Release` = `Passed: 145`, unchanged; no
+  re-run of the full TASK-014 verification).
 - Notes: dev-only BenchmarkDotNet 0.15.8 harness in `bench/CommandoWar.Benchmarks/`
   covering the `docs/09` s2.8 list for the systems that exist (empty tick,
   6-/50-agent placeholder movement, line-of-sight batch, pathfinding

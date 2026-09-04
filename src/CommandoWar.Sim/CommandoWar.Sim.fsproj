@@ -24,7 +24,6 @@
     <Compile Include="Canonical.fs" />
     <Compile Include="Hashing.fs" />
     <Compile Include="Phases.fs" />
-    <Compile Include="Movement.fs" />
     <Compile Include="Simulation.fs" />
     <Compile Include="Replay.fs" />
     <Compile Include="Divergence.fs" />

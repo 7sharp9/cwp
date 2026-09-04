@@ -10,11 +10,10 @@ namespace CommandoWar.Sim
 /// run at this stage: destruction and damage state are deferred to combat
 /// (backlog B-019).
 ///
-/// NOTHING in `Simulation.step` or any tick phase reads this module yet.
-/// It is authored, stored, and queryable, but not consumed, exactly as the
-/// TASK-008 `Objective` algebra is authored but not evaluated. The first
-/// consumers are line of sight (B-009), pathfinding (B-010), and movement
-/// (B-011).
+/// The Navigation and movement phase reads this module (via `Pathfinding`,
+/// TASK-015) for passability and entry cost; line of sight (`Sight`,
+/// TASK-012) and pathfinding (`Pathfinding`, TASK-013) query it directly.
+/// Perception, appraisal, and combat do not consume it yet.
 ///
 /// Because terrain carries no per-tick mutable state, it is deliberately
 /// excluded from `Canonical.encode` and the state hash (see
@@ -23,9 +22,10 @@ namespace CommandoWar.Sim
 /// format version bumps when destructible terrain lands.
 
 /// A cardinal direction. Movement and the cover model are cardinal-only at
-/// this stage: the placeholder movement rule steps one axis at a time
-/// (`Movement.fs`), and line of sight, which would want eight directions, is
-/// B-009. Extend to eight only when a consumer needs diagonals.
+/// this stage: the Navigation and movement phase advances one cell per tick
+/// along a 4-connected `Pathfinding` path (`Simulation.fs`, TASK-015), and
+/// line of sight is a cardinal-plus-diagonal supercover walk (`Sight.fs`).
+/// Extend this DU to eight only when a consumer needs diagonal movement.
 type Direction =
     | North
     | East

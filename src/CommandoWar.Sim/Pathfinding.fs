@@ -13,19 +13,16 @@ namespace CommandoWar.Sim
 /// costs and an integer heuristic, no floating point, no `System.Math` on
 /// doubles.
 ///
-/// NOTHING in `Simulation.step` or any tick phase calls this module yet. It is
-/// authored and queryable but not consumed, exactly as `Terrain` (TASK-010),
-/// `Sight` (TASK-012), and the `Objective` algebra (TASK-008) are. The first
-/// consumer is the Navigation and movement phase (12.7, backlog B-011), which
-/// replaces `PlaceholderMovement` with a `Pathfinding`-driven executor.
-///
-/// Because it is a leaf that nothing authoritative references, it moves no
-/// pinned fixture hash and does not touch `Canonical.encode`.
+/// The Navigation and movement phase (12.7, `Simulation.fs`, TASK-015) is the
+/// consumer: on a new destination it calls `findWithin` over `WorldState.Terrain`
+/// and the agent follows the returned path one cell per tick. The path is held
+/// on `AgentState.Route` as a non-canonical derived cache, so this module still
+/// moves no pinned fixture hash and does not touch `Canonical.encode`.
 ///
 /// ## Algorithm
 ///
-/// A* over the grid, 4-connected (cardinal moves only), matching `Direction`,
-/// `PlaceholderMovement`, and the cardinal cover model. Diagonal / 8-connected
+/// A* over the grid, 4-connected (cardinal moves only), matching `Direction`
+/// and the cardinal cover model. Diagonal / 8-connected
 /// movement is a documented deferral: it would need a scaled integer cost
 /// (cardinal vs diagonal) and the same "no cut through an impassable corner"
 /// rule `Sight` uses, and no slice map needs it yet. If the greybox map

@@ -285,3 +285,13 @@ participate in `Simulation.step` (ADR-0002); the golden renders have an
 explicit regeneration command, recorded in `content/diagnostics/README.md`.
 
 Realised by TASK-011.
+
+TASK-015 applied this rule: the Navigation and movement phase adds the path an
+agent is following as authoritative-derived spatial state, so
+`Diagnostics.frameOf` now emits a `PlannedPath` overlay per following agent
+(the `PlannedPath` case itself is from TASK-013). Goldens
+`content/diagnostics/fixture-mid-route.ascii.txt` / `.svg` (fixture agent 3 at
+tick 25, mid-route) are committed and `demo.html` is regenerated;
+`content/diagnostics/README.md` carries the regeneration commands.
+`Diagnostics.frame` still emits no overlay and nothing in a phase constructs a
+frame.

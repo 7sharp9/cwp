@@ -122,6 +122,9 @@ module Simulation =
     type private StepState =
         { Tick: int64
           Bounds: GridBounds
+          /// The authoritative terrain for this run. Immutable within a run;
+          /// the Navigation and movement phase reads it for pathfinding.
+          Terrain: Terrain
           mutable Agents: AgentState[]
           /// The deterministic stream for this tick. No phase draws from it
           /// yet; a future gameplay phase reassigns it after each draw so the
@@ -154,10 +157,31 @@ module Simulation =
                     emit (CommandAccepted(cmd.Id, cmd.Agent, target)) s
 
     // --- Phase: navigation and movement -------------------------------------
-    // Advance every agent with a destination by one placeholder step, in
-    // ascending agent id order. Emits a step event, then a completion event
-    // on the tick the destination is reached, and clears the destination.
+    // Consumes the TASK-013 `Pathfinding` module (docs/04 section 8 "Initial
+    // movement progression", steps 2, 4, 5, 6). For every agent with a
+    // destination, in ascending agent id order:
+    //   * reuse the cached `Route` when its cursor still tracks the agent, it
+    //     still targets the current destination, and its next cell is still
+    //     passable; otherwise recompute a path with `Pathfinding.findWithin`
+    //     over the authoritative terrain (a new destination, or step 6, replan
+    //     on an invalidated next cell);
+    //   * advance the agent exactly one cell along it and emit
+    //     `MovementStepped`, then `MovementCompleted` on the arrival tick,
+    //     clearing the destination and the route;
+    //   * emit `MovementBlocked` and clear the destination when no path exists.
+    //
+    // Single-agent executor only: cell reservation, formation slots, and
+    // sub-cell movement progress are B-011b. `AgentState.Route` is a
+    // non-canonical derived cache (see `MovementPath`).
     let private navigationAndMovement (s: StepState) =
+        let terrain = s.Terrain
+
+        // The full-grid ceiling from content/benchmarks/BASELINE.md: a single
+        // legitimate query on an adversarial map can close most of the grid, so
+        // a per-agent budget must not be cut below it. A tighter combined
+        // per-tick multi-agent budget is B-011b.
+        let budget = terrain.Bounds.Width * terrain.Bounds.Height
+
         let agents = Array.copy s.Agents
 
         for idx in 0 .. agents.Length - 1 do
@@ -166,16 +190,51 @@ module Simulation =
             match a.Destination with
             | None -> ()
             | Some dest when a.Position = dest ->
-                agents.[idx] <- { a with Destination = None }
+                agents.[idx] <- { a with Destination = None; Route = None }
                 emit (MovementCompleted(a.Id, a.Position)) s
             | Some dest ->
-                let next = PlaceholderMovement.nextCell a.Position dest
-                let arrived = next = dest
-                agents.[idx] <- { a with Position = next; Destination = (if arrived then None else Some dest) }
-                emit (MovementStepped(a.Id, a.Position, next)) s
+                let cached =
+                    match a.Route with
+                    | Some r when
+                        r.Cursor >= 0
+                        && r.Cursor + 1 < r.Cells.Length
+                        && r.Cells.[r.Cursor] = a.Position
+                        && r.Cells.[r.Cells.Length - 1] = dest
+                        && Terrain.passable terrain r.Cells.[r.Cursor + 1]
+                        ->
+                        Some r
+                    | _ -> None
 
-                if arrived then
-                    emit (MovementCompleted(a.Id, next)) s
+                let route =
+                    match cached with
+                    | Some r -> Some r
+                    | None ->
+                        match Pathfinding.findWithin terrain a.Position dest budget with
+                        | Found(cells, cost) when cells.Length >= 2 ->
+                            Some { Cells = cells; Cursor = 0; Cost = cost }
+                        | Found _
+                        | NoPath
+                        | BudgetExhausted _
+                        | InvalidEndpoint _ -> None
+
+                match route with
+                | None ->
+                    agents.[idx] <- { a with Destination = None; Route = None }
+                    emit (MovementBlocked(a.Id, a.Position, dest)) s
+                | Some r ->
+                    let next = r.Cells.[r.Cursor + 1]
+                    let arrived = next = dest
+
+                    agents.[idx] <-
+                        { a with
+                            Position = next
+                            Destination = (if arrived then None else Some dest)
+                            Route = (if arrived then None else Some { r with Cursor = r.Cursor + 1 }) }
+
+                    emit (MovementStepped(a.Id, a.Position, next)) s
+
+                    if arrived then
+                        emit (MovementCompleted(a.Id, next)) s
 
         s.Agents <- agents
 
@@ -234,6 +293,7 @@ module Simulation =
         let acc =
             { Tick = nextTick
               Bounds = state.Bounds
+              Terrain = state.Terrain
               Agents = state.Agents
               Random = state.Random
               EventsRev = []

@@ -144,10 +144,10 @@ Realised by TASK-013 (step 2 only, the path query): `src/CommandoWar.Sim/Pathfin
 `Pathfinding.findWithin` with an explicit expansion budget) is a pure, total,
 integer-only A* query over `Terrain` passability and entry cost.
 
-- **Algorithm:** A*, 4-connected (cardinal moves only, matching `Direction`,
-  `PlaceholderMovement`, and the cardinal cover model). Diagonal / 8-connected
-  movement is a documented deferral (a scaled integer cost plus the `Sight`
-  corner rule); no slice map needs it.
+- **Algorithm:** A*, 4-connected (cardinal moves only, matching `Direction`
+  and the cardinal cover model). Diagonal / 8-connected movement is a
+  documented deferral (a scaled integer cost plus the `Sight` corner rule); no
+  slice map needs it.
 - **Cost model:** entering a cell costs `Terrain.moveCost` for that cell; the
   start cell's own cost is never counted. An `Impassable` cell is never
   expanded and never appears in a path. Path cost is the exact sum of the
@@ -168,13 +168,38 @@ integer-only A* query over `Terrain` passability and entry cost.
   `InvalidEndpoint`; `start = goal` yields `Found([| start |], 0)`; an
   unreachable goal yields `NoPath`.
 
-No tick phase consumes it: like `Terrain`, `Sight`, and the `Objective`
-algebra it is authored and queryable but not evaluated. The Navigation and
-movement phase (12.7, backlog B-011) is the first consumer, replacing
-`PlaceholderMovement` with a `Pathfinding`-driven executor. `Canonical.encode`
-and `Canonical.FormatVersion` are unchanged; `Pathfinding.fs` is a leaf
-nothing authoritative references. Steps 3-6 (cell reservation, movement
-progress within an edge, dynamic replanning) are B-011.
+Realised by TASK-015 (backlog B-011, single-agent executor): the Navigation
+and movement phase (12.7, `src/CommandoWar.Sim/Simulation.fs`) consumes
+`Pathfinding`. Steps **2, 4, 5, 6**:
+
+- **Step 2 (compute path):** on a new destination the phase calls
+  `Pathfinding.findWithin terrain agent.Position destination
+  (Width * Height)` — the full-grid ceiling from
+  `content/benchmarks/BASELINE.md`, passed explicitly so a tighter combined
+  per-tick multi-agent budget can be set by B-011b without touching
+  `Pathfinding.find`.
+- **Steps 4-5 (advance):** the agent advances exactly one cell along the path
+  per tick (movement progress within an edge is B-011b; this stays one cell
+  per tick). `MovementStepped` each tick, `MovementCompleted` on arrival.
+- **Step 6 (replan):** the path (`AgentState.Route`) is recomputed from the
+  current cell when the cached next cell is no longer `Terrain.passable` or the
+  cache no longer matches `(Position, Destination)`. With static terrain and no
+  agent-agent collision this branch is currently unreachable in practice; it is
+  written and tested so the structure B-011b hooks into exists.
+- **No path:** `MovementBlocked (agent, at, target)` is emitted and the
+  destination cleared when `Pathfinding` returns `NoPath`, `BudgetExhausted`,
+  or `InvalidEndpoint`.
+
+`AgentState.Route` (the followed path + cursor + cost) is a **non-canonical
+derived cache**: a pure deterministic function of `(Position, Destination,
+Terrain)` at every tick, so it is excluded from `Canonical.encode` (section 17)
+and `Canonical.FormatVersion` stays 1. On empty terrain A*'s N/E/S/W tie-break
+reproduces the exact cell sequence the retired `PlaceholderMovement` rule
+produced (X axis before Y), so the shared fixture's pinned hashes and 33-event
+count are unmoved.
+
+Step 3 (cell reservation), short-horizon deadlock avoidance, formation slots,
+and sub-cell movement progress are **B-011b**.
 
 ## 9. Line of sight and cover
 
@@ -303,6 +328,12 @@ Fatigue, persistent personality dimensions, interpersonal relations, inventory g
 - advance movement;
 - emit movement and blockage events where useful.
 
+Realised by TASK-015 (single-agent executor): `Simulation.navigationAndMovement`
+computes / repairs a `Pathfinding` path per agent with a destination (in
+ascending agent id order), advances it one cell, and emits `MovementStepped` /
+`MovementCompleted` / `MovementBlocked`. Reservation resolution is B-011b; there
+is no reservation store yet. Full detail is in section 8.
+
 ### 12.8 Combat
 
 - validate line of fire and ammunition;
@@ -413,6 +444,16 @@ The hash input must be canonical:
 A divergence report should identify the first bad tick. Component-level subhashes are desirable once the world grows.
 
 Realised by TASK-003: `Canonical.encode` (`src/CommandoWar.Sim/Canonical.fs`, format version 1) produces a big-endian fixed-width byte image of `WorldState` only, agents sorted ascending by id, `Destination` carrying an explicit present/absent tag; events, snapshots, and phase traces are excluded. `Hashing.hash` (`Hashing.fs`) is FNV-1a-64 over that image, exposed through `IStateHasher`; it is not a cryptographic primitive. `Simulation.step` records `StepResult.StateHash` after the Output phase without any authoritative output depending on it. `Divergence.compare` reports the first tick whose hash differs, the expected and actual hash, the first differing canonical section, and the random draw count on each side.
+
+TASK-015 note: `AgentState.Route` (the path an agent is following, its cursor,
+and its cost) is per-tick mutable but is a **derived cache** — a pure
+deterministic function of `(Position, Destination, Terrain)` recomputable at
+any tick — so it is **excluded** from `Canonical.encode` under the "derived
+caches either excluded or normalised" rule above. Two runs of the same inputs
+produce identical caches (`Pathfinding.findWithin` is total, pure, integer-only,
+deterministic), so it cannot diverge. `Canonical.FormatVersion` stays `1`. A
+route-following bug still surfaces in the hash within one tick because the
+agent's `Position` is canonical.
 
 TASK-010 note: `WorldState.Terrain` is authoritative but is **excluded** from
 `Canonical.encode` while it carries no per-tick mutable state. Static

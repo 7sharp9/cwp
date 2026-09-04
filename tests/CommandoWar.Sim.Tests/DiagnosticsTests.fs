@@ -121,6 +121,39 @@ let ``ASCII and SVG renders of the shared fixture at tick 0 and the final tick m
     Assert.Equal(golden "fixture-tick-000.svg", DiagnosticRender.Svg frames.[0])
     Assert.Equal(golden "fixture-tick-040.svg", DiagnosticRender.Svg frames.[40])
 
+[<Fact>]
+let ``the mid-route fixture frame renders agent 3's followed path (byte-equal to the goldens)`` () =
+    // Tick 25: fixture agent 3 is at (20,8), still en route to (20,14).
+    // `frameOf` emits a PlannedPath overlay from the stored `AgentState.Route`;
+    // the goldens show the L-shaped route between S (0,3) and G (20,14).
+    let frames =
+        DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
+
+    let mid = frames.[25]
+
+    match mid.Overlays with
+    | [| PlannedPath(from, target, cells, cost, reached) |] ->
+        Assert.Equal({ X = 0; Y = 3 }, from)
+        Assert.Equal({ X = 20; Y = 14 }, target)
+        Assert.Equal(31, cost)
+        Assert.True(reached)
+        Assert.Equal({ X = 0; Y = 3 }, cells.[0])
+        Assert.Equal({ X = 20; Y = 14 }, cells.[cells.Length - 1])
+    | other -> Assert.Fail($"expected one PlannedPath overlay, got {other}")
+
+    Assert.Equal(golden "fixture-mid-route.ascii.txt", DiagnosticRender.Ascii mid)
+    Assert.Equal(golden "fixture-mid-route.svg", DiagnosticRender.Svg mid)
+
+[<Fact>]
+let ``frameOf emits no overlay once every agent is at rest`` () =
+    let frames =
+        DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
+
+    // Agent 3 arrives at tick 31; tick 32 onward carries no route.
+    Assert.NotEmpty(frames.[30].Overlays)
+    Assert.Empty(frames.[31].Overlays)
+    Assert.Empty(frames.[40].Overlays)
+
 // --- renderers: distinct features and determinism ----------------------
 
 [<Fact>]

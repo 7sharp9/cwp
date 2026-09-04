@@ -57,6 +57,12 @@ module Canonical =
         w.U64 r.Word
         w.U64 r.Draws
 
+    // `AgentState.Route` (TASK-015) is deliberately NOT written: it is a
+    // derived cache, a pure deterministic function of `Position`,
+    // `Destination`, and the immutable `Terrain`, so it cannot diverge tick to
+    // tick and hashing it would only re-pin every fixture for a constant
+    // (docs/04 section 17, "derived caches either excluded or normalised"; the
+    // ADR-0002 amendment made the same call for `Terrain`).
     let private writeAgent (w: Writer) (a: AgentState) =
         w.I32(AgentId.value a.Id)
         w.I32(sideCode a.Side)

@@ -1,6 +1,6 @@
 # TASK-014: Headless performance and allocation benchmark harness
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); realises backlog B-013
