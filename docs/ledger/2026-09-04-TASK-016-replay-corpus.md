@@ -246,7 +246,7 @@ an overlay (the TASK-014 precedent).
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-04)
 - Notes: committed, regenerable four-entry replay corpus
   (`content/replays/`: spike fixture, wall detour, `MovementBlocked` no-path,
   two-agent converging routes) over the existing `.cwlog` v1 format;

@@ -1,6 +1,6 @@
 # TASK-016: Divergence diagnostics and replay corpus infrastructure
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); realises backlog B-012

@@ -35,7 +35,7 @@ A backlog row is not sufficient authority for an agent to implement work. A `rea
 | TASK-013 | P2 | Deterministic grid pathfinding with stable tie-breaking | M | TASK-010 | done | `tasks/TASK-013-PATHFINDING.md` |
 | TASK-014 | P2 | Headless performance and allocation benchmark harness | S | TASK-010 | done | `tasks/TASK-014-BENCHMARK-HARNESS.md` |
 | TASK-015 | P2 | Navigation and movement phase: `Pathfinding`-driven single-agent executor (scoped; formation slots and multi-agent reservation deferred to B-011b) | M | TASK-013 | done | `tasks/TASK-015-MOVEMENT-EXECUTOR.md` |
-| TASK-016 | P2 | Divergence diagnostics and replay corpus infrastructure (committed multi-entry corpus, in-suite determinism check, `cwheadless corpus` verb; generative property tests and component subhashes deferred to B-012b) | M | TASK-015 | active | `tasks/TASK-016-REPLAY-CORPUS.md` |
+| TASK-016 | P2 | Divergence diagnostics and replay corpus infrastructure (committed multi-entry corpus, in-suite determinism check, `cwheadless corpus` verb; generative property tests and component subhashes deferred to B-012b) | M | TASK-015 | done | `tasks/TASK-016-REPLAY-CORPUS.md` |
 
 ## 3. Planned simulation work
 
@@ -50,7 +50,7 @@ These items are not implementation-ready. Create and review a task file before s
 | B-010 | P2 | Implement deterministic grid pathfinding with stable tie-breaking | M | B-008 | G2 | done (`tasks/TASK-013-PATHFINDING.md`) |
 | B-011 | P2 | Implement movement, formation slots, and short-horizon cell reservation. First phase consumer of the TASK-013 `Pathfinding` module: the Navigation and movement phase (12.7) replaces `PlaceholderMovement` with a `Pathfinding`-driven executor. | L | B-010 | G2 | done (`tasks/TASK-015-MOVEMENT-EXECUTOR.md`; single-agent executor only) |
 | B-011b | P2 | Multi-agent movement: short-horizon cell reservation and deadlock avoidance, formation slots, sub-cell movement progress within an edge. Split from B-011 by TASK-015, which landed the single-agent executor only. | M | B-011 | G2 | proposed |
-| B-012 | P2 | Add divergence diagnostics and replay corpus infrastructure: a committed multi-entry replay corpus, an in-suite determinism check, and a `cwheadless corpus` localisation verb. | M | B-008 | G2 | active (`tasks/TASK-016-REPLAY-CORPUS.md`) |
+| B-012 | P2 | Add divergence diagnostics and replay corpus infrastructure: a committed multi-entry replay corpus, an in-suite determinism check, and a `cwheadless corpus` localisation verb. | M | B-008 | G2 | done (`tasks/TASK-016-REPLAY-CORPUS.md`) |
 | B-012b | P2 | Generative / FsCheck-style determinism property tests (new dependency) and component-level per-agent subhashes in the divergence report. Split from B-012 by TASK-016. | M | B-012 | G2 | proposed |
 | B-013 | P2 | Add headless performance and allocation benchmark harness | S | B-008 | G2 | done (`tasks/TASK-014-BENCHMARK-HARNESS.md`) |
 | B-014 | P3 | Define command validation and recipient selection | S | B-011 | G3 | proposed |
