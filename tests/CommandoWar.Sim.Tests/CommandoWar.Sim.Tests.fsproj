@@ -19,6 +19,7 @@
     <Compile Include="ScenarioTests.fs" />
     <Compile Include="DiagnosticsTests.fs" />
     <Compile Include="CorpusTests.fs" />
+    <Compile Include="DeterminismPropertyTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,6 +40,14 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!-- Generative determinism property tests (TASK-019, backlog B-012b
+         narrowed). FsCheck.Xunit (not FsCheck.Xunit.v3) targets
+         xunit.extensibility.execution [2.4.1, 3.0.0), matching the xunit 2.9.3
+         v2 test project above. Test-only, same discipline as
+         BenchmarkDotNet in bench/CommandoWar.Benchmarks: never referenced by
+         CommandoWar.Sim or CommandoWar.Headless. -->
+    <PackageReference Include="FsCheck" Version="3.3.4" />
+    <PackageReference Include="FsCheck.Xunit" Version="3.3.4" />
   </ItemGroup>
 
   <ItemGroup>

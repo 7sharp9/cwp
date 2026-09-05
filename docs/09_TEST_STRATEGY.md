@@ -43,6 +43,17 @@ Use FsCheck or an equivalent F# property-testing library for invariants such as:
 - appraisal never returns `Accepted` after a hard feasibility failure;
 - objective completion is monotonic where the objective definition requires it.
 
+**Realised (TASK-019, backlog B-012b narrowed):** the invalid-cell, pathfinding
+endpoint, and determinism-under-commands properties above are landed as
+FsCheck properties in
+`tests/CommandoWar.Sim.Tests/DeterminismPropertyTests.fs`, over generated
+small worlds (random terrain, agents placed only on passable cells) and
+random `MoveTo` command sequences. `FsCheck` and `FsCheck.Xunit` 3.3.4 are
+referenced only by the test project, mirroring the BenchmarkDotNet
+precedent. The remaining items name systems not yet implemented (vehicles,
+commitments, death, canonical serialization round-trip, appraisal,
+objectives) and stay proposed.
+
 Randomly generated cases must print the reduced counterexample and seed.
 
 ### 2.3 Deterministic scenario tests
