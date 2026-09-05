@@ -273,7 +273,7 @@ repository that can show a nonzero value.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-05)
 - Notes: sub-cell movement progress for `Simulation.navigationAndMovement`
   (`AgentState.Progress`, threshold `Terrain.moveCost`, increment
   `Terrain.BaseMoveCost`); reservation generalised to "would complete this
@@ -281,4 +281,7 @@ repository that can show a nonzero value.
   (every pinned hash re-pinned, confirmed behaviour-neutral for every
   pre-existing scenario); new `slow-terrain` corpus entry and diagnostics
   golden; a route-persistence bug found and fixed during implementation
-  (see Deviations); formation slots split to B-011d, unscoped.
+  (see Deviations); formation slots split to B-011d, unscoped. Finalised
+  2026-09-05 (was left `review` at the end of the TASK-018 session, formally
+  closed out at the start of this session): TASK-018 `review -> done`,
+  `docs/11_BACKLOG.md` TASK-018 row and B-011c row `active -> done`.

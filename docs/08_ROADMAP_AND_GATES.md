@@ -85,8 +85,15 @@ A gate passes only when:
 - implement project-owned random generator and golden vectors;
 - implement canonical state hashing;
 - implement command recording and replay;
-- build grid, terrain, movement, reservations, line of sight, and tactical knowledge;
+- build grid, terrain, movement, reservations, and line of sight;
 - establish headless benchmark and allocation measurements.
+
+**Resolved 2026-09-05:** this list previously also named "tactical knowledge."
+No G2 evidence bullet below exercises it, and Perception (B-015, the first
+consumer of `Sight.trace` / `Sight.visible`) is a P3 item, not P2 — section 6's
+P3 Required work already names "shared squad tactical knowledge" under
+B-015/B-016. Removed here as a forward-reference that belonged to P3, not a
+G2 blocker; G2 was declared passed on the evidence bullets alone.
 
 ### G2 evidence
 

@@ -1,6 +1,6 @@
 # TASK-019: Generative determinism property tests
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); realises backlog B-012b (narrowed)

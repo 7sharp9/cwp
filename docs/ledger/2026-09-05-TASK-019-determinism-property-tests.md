@@ -181,9 +181,11 @@ TASK-016 precedent for the same rule).
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-05)
 - Notes: three FsCheck property tests landed (determinism under generated
   commands, no agent on an invalid cell post-movement, pathfinding
   endpoints/cost on random terrain); `FsCheck`/`FsCheck.Xunit` 3.3.4 in the
   test project only; component subhashes stay proposed under B-012b with a
-  narrowed justification; no production-code change.
+  narrowed justification; no production-code change. Accepted explicitly
+  ("look good") at the start of the following session; TASK-019
+  `review -> done`.

@@ -1,6 +1,6 @@
 # TASK-018: Sub-cell movement progress within an edge
 
-Status: review
+Status: done
 Owner: Dave
 Phase: P2
 Gate: G2 (deterministic core); realises backlog B-011c (narrowed)

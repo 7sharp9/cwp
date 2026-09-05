@@ -2,17 +2,21 @@ project:
   working_name: Commando War spiritual successor
   public_title: null
   status: discovery
-  current_phase: P2_deterministic_core
-  current_gate: G2_deterministic_core_proven
+  current_phase: P3_command_loop_headless
+  current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-03
+  updated: 2026-09-05
 
 active_work:
-  selected_task: TASK-019
-  task_file: tasks/TASK-019-DETERMINISM-PROPERTY-TESTS.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
+  note: TASK-018 and TASK-019 finalised 2026-09-05 (both done). Next task
+    selection is pending Dave's answer on whether G2 is proven on the
+    docs/08 section 5 evidence bullets alone, or "tactical knowledge" in
+    that section's Required work list is a hard G2 blocker.
 
 sources_of_truth:
   product: docs/00_PROJECT_CHARTER.md
@@ -26,7 +30,7 @@ sources_of_truth:
 gates:
   G0_project_control_ready: passed
   G1_framework_selected: passed
-  G2_deterministic_core_proven: pending
+  G2_deterministic_core_proven: passed
   G3_command_loop_proven_headless: pending
   G4_vertical_slice_feature_complete: pending
   G5_external_playtest_passed: pending
