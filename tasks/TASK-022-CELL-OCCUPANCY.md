@@ -1,6 +1,6 @@
 # TASK-022: Runtime cell-occupancy correctness in the Navigation and movement phase
 
-Status: review (implemented 2026-09-06, pending Dave's acceptance)
+Status: done (2026-09-06, accepted by Dave)
 Owner: Dave
 Phase: P3
 Gate: G3 (corrects a G2 deliverable: navigation and movement, TASK-015 / TASK-017)

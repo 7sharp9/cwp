@@ -199,5 +199,10 @@ All from the repository root.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: single headless session; no GitHub round-trip. Ready for review.
+- Accepted: yes (2026-09-06)
+- Notes: single headless session; no GitHub round-trip. Acceptance recorded
+  2026-09-06 alongside TASK-022 and TASK-023
+  (`docs/ledger/2026-09-06-reconcile-021-022-023-acceptances.md`).
+  `NegativeMoveCost` kept alongside `MoveCostOutOfRange` as the implementer
+  chose; the map-area upper-bound and `int64` path-cost questions from the
+  standing review of `07af43a` remain untriaged backlog candidates.

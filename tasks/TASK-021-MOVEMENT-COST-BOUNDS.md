@@ -1,6 +1,6 @@
 # TASK-021: Minimum passable movement cost and overflow-safe pathfinding cost
 
-Status: done (2026-09-06, pending Dave's acceptance)
+Status: done (2026-09-06, accepted by Dave)
 Owner: Dave
 Phase: P3
 Gate: G3 (corrects a G2 deliverable: terrain grid + pathfinding, TASK-010 / TASK-013)

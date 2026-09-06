@@ -365,5 +365,11 @@ plus a hand-built-overlay unit test — the `Reserved` precedent from TASK-017.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes:
+- Accepted: yes (2026-09-06)
+- Notes: acceptance recorded 2026-09-06 alongside TASK-021 and TASK-023
+  (`docs/ledger/2026-09-06-reconcile-021-022-023-acceptances.md`). The
+  modified `an agent routes around an impassable wall` fact and the
+  `WorldError.AgentsShareCell` construction guard are accepted as described.
+  The `07af43a` mid-implementation commit is left in history (squash optional).
+  The out-of-scope `07af43a`-review findings against TASK-020 / TASK-021 remain
+  for Dave to triage as new backlog rows.

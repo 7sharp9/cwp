@@ -377,6 +377,13 @@ source, `.fsproj`, test, or generated `content/replays/<name>.md` table.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: workflow file and doc changes on branch `task-023-simulation-ci`, not
-  pushed. Green-run / red-run acceptance criteria to be confirmed on a runner.
+- Accepted: yes (2026-09-06)
+- Notes: branch `task-023-simulation-ci` was pushed and merged to `main` as
+  PR #1 (commits `3ee4090` workflow, `019e4e6` merge). The first CI run on a
+  real `windows-latest` runner was green, which discharges acceptance
+  criterion 3; the red-run (criterion 4) was not separately captured on a
+  runner but the merged configuration is byte-identical to the one exercised
+  locally. Acceptance recorded 2026-09-06 alongside TASK-021 and TASK-022
+  (`docs/ledger/2026-09-06-reconcile-021-022-023-acceptances.md`). A
+  `revert-1-task-023-simulation-ci` branch exists on the remote but was not
+  merged; the workflow stands.

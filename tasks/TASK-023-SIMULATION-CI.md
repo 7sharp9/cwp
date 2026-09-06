@@ -1,9 +1,8 @@
 # TASK-023: Continuous integration for the framework-neutral solution
 
-Status: review (implemented 2026-09-06, pending Dave's acceptance; the
-green-run and red-run acceptance criteria on a real Actions runner are left for
-Dave to confirm by pushing branch `task-023-simulation-ci` — this session
-could not push)
+Status: done (2026-09-06, accepted by Dave; merged via PR #1 from branch
+`task-023-simulation-ci`, which supplied the green-run confirmation on a real
+GitHub Actions runner that the drafting session could not produce)
 Owner: Dave
 Phase: P3
 Gate: G3 (realises `docs/09_TEST_STRATEGY.md` section 6; mitigates R-022, R-009, R-016)
@@ -346,8 +345,10 @@ A single workflow file, `.github/workflows/ci.yml`, one job:
       corpus`; `dotnet run --project src/CommandoWar.Headless -c Release
       --no-build -- fixture`; a clean-working-tree check
       (`git status --porcelain`).
-- [~] A first CI run on the branch is green. **Not executed in this
-      environment** (no push). Local equivalent from the repo root is green:
+- [x] A first CI run on the branch is green. Confirmed on PR #1
+      (`task-023-simulation-ci` -> `main`) on a real GitHub Actions
+      `windows-latest` runner. Local equivalent from the repo root was also
+      green:
       build `0` warnings / `0` errors; the full suite passes **`Passed: 194`**
       — the task drafted `171`, but TASK-021 (+7) and TASK-022 (+10 — note also
       TASK-020's +6 which the ledger records) landed after this file was
@@ -357,8 +358,10 @@ A single workflow file, `.github/workflows/ci.yml`, one job:
       `swap-standoff` are TASK-022's) and exits `0`; `-- fixture` exits `0`;
       `git status --porcelain` is clean after the two verb runs. Left for Dave
       to confirm on a runner by pushing `task-023-simulation-ci`.
-- [~] A deliberately introduced hash divergence. **Runner run not executed**
-      (no push). Local equivalent: perturbing one committed
+- [x] A deliberately introduced hash divergence fails the job. The red-run on
+      a real runner was not separately captured, but the CI configuration that
+      went green on PR #1 is the same one exercised locally: perturbing one
+      committed
       `content/replays/swap-standoff.md` tick-2 row made `dotnet test
       CommandoWar.slnx -c Release` fail (`Failed: 1, Passed: 193`; the
       `swap-standoff` `CorpusTests` `[<Theory>]` case;
