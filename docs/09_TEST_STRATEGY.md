@@ -66,12 +66,9 @@ precedent. TASK-021 added a fourth property: `Pathfinding.find`'s returned
 cost equals an independent relaxation-based shortest-path search over terrain
 whose passable costs span the full valid `[BaseMoveCost, MaxMoveCost]` range
 (the endpoint property only recomputes the returned path's own cost, so it
-cannot catch a suboptimal path). TASK-022 added a fifth: after every tick of
-every generated case, distinct live agents hold distinct cells — the "an
-entity cannot occupy two cells at once" invariant in its pairwise form, which
-property 2 (passable cells only) does not check. The remaining items name
-systems not yet implemented (vehicles, commitments, death, canonical
-serialization round-trip, appraisal, objectives) and stay proposed.
+cannot catch a suboptimal path). The remaining items name systems not yet
+implemented (vehicles, commitments, death, canonical serialization
+round-trip, appraisal, objectives) and stay proposed.
 
 Randomly generated cases must print the reduced counterexample and seed.
 
@@ -89,13 +86,6 @@ Create named, compact maps for behaviours that cross modules:
 - two agents reserve a choke point without permanent deadlock;
 - enemy does not target an unobserved player position;
 - extraction completes only for the required agents.
-
-Partially realised for the choke-point item by the replay corpus
-(`content/replays/`, section 2.4): `converging-routes` (TASK-017, two agents
-contend for one cell and one yields) and `follow-chain` / `swap-standoff`
-(TASK-022, a vacation chain that resolves each tick and a two-agent swap that
-deadlocks with both agents emitting `MovementObstructed`). The rest name
-systems not yet implemented.
 
 Each scenario should specify:
 
@@ -131,19 +121,16 @@ Realised by TASK-016 (backlog B-012): `content/replays/` (index
 `CORPUS.md`), a committed, regenerable multi-entry replay corpus over the
 existing `.cwlog` v1 format (`src/CommandoWar.Headless/CommandLogFile.fs`) plus
 a per-tick authoritative-hash table per entry (mirroring
-`content/fixtures/SPIKE-FIXTURE.md`). Seven entries: the shared spike fixture
+`content/fixtures/SPIKE-FIXTURE.md`). Five entries: the shared spike fixture
 (cross-checked against `Fixture.run ()`, not an independent re-pin), a
 single-agent wall detour and a `MovementBlocked` no-path case (both exercising
 the TASK-015 executor), a two-agent "converging routes" entry that pinned the
 then-current no-reservation behaviour (re-pinned by TASK-017 once
-short-horizon cell reservation landed), a "slow-terrain" entry added by
+short-horizon cell reservation landed), and a "slow-terrain" entry added by
 TASK-018 (one cell costing more than `Terrain.BaseMoveCost`) pinning genuine
-multi-tick `AgentState.Progress` accumulation — the other entries all
+multi-tick `AgentState.Progress` accumulation — the other four entries all
 resolve every edge in a single tick, so none of them alone would catch a
-sub-cell-progress regression — and, from TASK-022, a "follow-chain" entry (a
-three-agent vacation chain that resolves every tick) and a "swap-standoff"
-entry (a two-agent position swap that deadlocks, both agents emitting
-`MovementObstructed` every tick). `Corpus.fs`
+sub-cell-progress regression. `Corpus.fs`
 (`CommandoWar.Headless`) owns the name -> `WorldState` registry and the
 check/regenerate logic; `cwheadless corpus [--regenerate]` is the CLI form and
 `tests/CommandoWar.Sim.Tests/CorpusTests.fs` is an in-suite `[<Theory>]` over
@@ -306,25 +293,6 @@ After selection, the minimum matrix should include:
 - selected client compile;
 - content validation;
 - package smoke test where the environment supports it.
-
-**Framework-neutral items realised by TASK-023 (backlog B-048):**
-`.github/workflows/ci.yml` runs on `windows-latest` on every push and pull
-request and covers the first four rows — pinned-dependency restore (a
-cold-cache `dotnet restore CommandoWar.slnx`; the exact `PackageReference`
-pins plus the `global.json` SDK pin are the "pinned" half of row 1, so no
-lockfile is added), Release build of `CommandoWar.slnx` (`bench/` builds with
-it, benchmarks are not run), the full `dotnet test` suite (headless unit +
-FsCheck properties), and the deterministic scenario / replay tests
-(`FixtureTests`, the `CorpusTests` theory, and an explicit `cwheadless corpus`
-CLI run that fails the job on any divergence from the committed
-`content/replays/*.md` tables). `windows-latest` because the determinism
-contract is per-environment (section 3) and every committed hash was pinned on
-Windows x64 / .NET `10.0.303`.
-
-**Still pending P4:** selected client compile, content validation, and package
-smoke test. Client integration is P4, gated on G3 (`docs/08` section 7); these
-rows have nothing to guard until a P4 client task adds client code, and that
-task owns adding them to the same workflow.
 
 Do not expand the matrix to unsupported platforms without a delivery requirement.
 

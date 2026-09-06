@@ -33,15 +33,6 @@ type WorldError =
     | EmptyGrid of bounds: GridBounds
     | DuplicateAgentId of agent: AgentId
     | AgentOutOfBounds of agent: AgentId * position: Cell
-    /// Two or more agents were placed on the same cell at construction
-    /// (TASK-022). `cell` is the shared cell and `agents` its occupants in
-    /// ascending id order. `Scenario.validate` already rejects a cell-sharing
-    /// deployment (docs/04 section 21); this closes the same gap on the direct
-    /// `World.create` / `World.ofScenario` path, so the one-live-agent-per-cell
-    /// invariant the Navigation and movement phase relies on (docs/04 section
-    /// 20) holds from tick 0 by construction, not only by convention. When two
-    /// cells are shared the lowest row-major cell is reported.
-    | AgentsShareCell of cell: Cell * agents: AgentId[]
 
 [<RequireQualifiedAccess>]
 module World =
@@ -72,23 +63,12 @@ module World =
                 match sorted |> List.tryFind (fun a -> not (GridBounds.contains a.Position bounds)) with
                 | Some a -> Error(AgentOutOfBounds(a.Id, a.Position))
                 | None ->
-                    let shared =
-                        sorted
-                        |> List.groupBy (fun a -> a.Position)
-                        |> List.filter (fun (_, occ) -> List.length occ > 1)
-                        |> List.sortBy (fun (c, _) -> c.Y, c.X)
-                        |> List.tryHead
-
-                    match shared with
-                    | Some(cell, occ) ->
-                        Error(AgentsShareCell(cell, occ |> List.map (fun a -> a.Id) |> List.sort |> List.toArray))
-                    | None ->
-                        Ok
-                            { Tick = 0L
-                              Bounds = bounds
-                              Terrain = terrain
-                              Agents = List.toArray sorted
-                              Random = SplitMix64.create seed }
+                    Ok
+                        { Tick = 0L
+                          Bounds = bounds
+                          Terrain = terrain
+                          Agents = List.toArray sorted
+                          Random = SplitMix64.create seed }
 
     /// Builds a validated world at tick 0 with a SplitMix64 random stream
     /// seeded by `seed` and empty (flat, fully passable, transparent,
@@ -533,31 +513,19 @@ module Simulation =
                     agents.[idx] <- { a with Progress = startProgress; Route = Some r }
                     emit (MovementYielded(a.Id, a.Position, next, winnerId)) s
                 | None ->
-                    match Map.tryFind idx obstructedBy with
-                    | Some occupantId ->
-                        // The next route cell is held by an agent that did not
-                        // vacate it this tick (stage 2b). Freeze exactly like a
-                        // rival-contest loser above — `Progress = startProgress`
-                        // (not incremented, not reset), `Route = Some r` written
-                        // back, `Position` / `Destination` untouched — and retry
-                        // the same next cell next tick. Persistent obstruction
-                        // is B-015 / B-017 scope, not resolved here.
-                        agents.[idx] <- { a with Progress = startProgress; Route = Some r }
-                        emit (MovementObstructed(a.Id, a.Position, next, occupantId)) s
-                    | None ->
-                        let arrived = next = dest
+                    let arrived = next = dest
 
-                        agents.[idx] <-
-                            { a with
-                                Position = next
-                                Progress = 0
-                                Destination = (if arrived then None else Some dest)
-                                Route = (if arrived then None else Some { r with Cursor = r.Cursor + 1 }) }
+                    agents.[idx] <-
+                        { a with
+                            Position = next
+                            Progress = 0
+                            Destination = (if arrived then None else Some dest)
+                            Route = (if arrived then None else Some { r with Cursor = r.Cursor + 1 }) }
 
-                        emit (MovementStepped(a.Id, a.Position, next)) s
+                    emit (MovementStepped(a.Id, a.Position, next)) s
 
-                        if arrived then
-                            emit (MovementCompleted(a.Id, next)) s
+                    if arrived then
+                        emit (MovementCompleted(a.Id, next)) s
 
         s.Agents <- agents
 

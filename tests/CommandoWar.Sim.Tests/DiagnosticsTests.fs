@@ -248,23 +248,6 @@ let ``a hand-built Reserved overlay renders through the ASCII and SVG renderers`
     // Byte-identical without the overlay (regression guard for the goldens).
     Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
 
-[<Fact>]
-let ``a hand-built Obstructed overlay renders through the ASCII and SVG renderers`` () =
-    let f = Diagnostics.frame (DemoScenario.initialState ())
-
-    let withObstructed =
-        { f with
-            Overlays = [| Obstructed({ X = 3; Y = 3 }, AgentId.ofInt 2) |] }
-
-    let ascii = DiagnosticRender.Ascii withObstructed
-    Assert.Contains("overlays:", ascii)
-    Assert.Contains("obstructed (3,3): held by agent 2", ascii)
-
-    let svg = DiagnosticRender.Svg withObstructed
-    Assert.Contains("fill=\"#c53030\">B2</text>", svg)
-    // Byte-identical without the overlay (regression guard for the goldens).
-    Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
-
 // --- reservation: the converging-routes corpus entry (TASK-017) --------
 
 let private corpusDir = Path.Combine(AppContext.BaseDirectory, "replays")
@@ -289,8 +272,7 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | Reserved(cell, winner, untilTick) -> Some(cell, winner, untilTick)
         | Cells _
         | SightRay _
-        | PlannedPath _
-        | Obstructed _ -> None) with
+        | PlannedPath _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -324,40 +306,6 @@ let ``the frame carries AgentMarker.Progress for the slow-terrain entry's accumu
 
     Assert.Equal(golden "slow-terrain-tick-002.ascii.txt", DiagnosticRender.Ascii tick2)
     Assert.Equal(golden "slow-terrain-tick-002.svg", DiagnosticRender.Svg tick2)
-
-// --- cell occupancy: the swap-standoff corpus entry (TASK-022) ---------
-
-let private swapStandoffFrames () =
-    let entry = Corpus.all |> Array.find (fun e -> e.Name = "swap-standoff")
-
-    match Corpus.loadLog corpusDir entry with
-    | Error m -> failwith m
-    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
-
-[<Fact>]
-let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocked tick (byte-equal to the goldens)`` () =
-    // Tick 1: agent 0 (3,3) and agent 1 (4,3) are each ordered onto the
-    // other's cell; the two-agent swap is blocked, so both freeze and emit
-    // MovementObstructed. `frameOf` derives one Obstructed overlay per blocked
-    // cell alongside each agent's PlannedPath.
-    let frames = swapStandoffFrames ()
-    let tick1 = frames.[1]
-
-    let obstructed =
-        tick1.Overlays
-        |> Array.choose (function
-            | Obstructed(cell, occupant) -> Some(cell, AgentId.value occupant)
-            | Cells _
-            | SightRay _
-            | PlannedPath _
-            | Reserved _ -> None)
-        |> Array.sortBy (fun (c, _) -> c.X, c.Y)
-
-    Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
-    Assert.Contains(tick1.Events, fun (e: EventMarker) -> e.Kind = "movement-obstructed")
-
-    Assert.Equal(golden "swap-standoff-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
-    Assert.Equal(golden "swap-standoff-tick-001.svg", DiagnosticRender.Svg tick1)
 
 [<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =

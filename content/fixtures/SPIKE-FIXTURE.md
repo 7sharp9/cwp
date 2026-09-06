@@ -15,12 +15,6 @@ The fixture itself is defined once in `src/CommandoWar.Headless/Fixture.fs`
 (a framework-neutral project that references only `CommandoWar.Sim`). The
 canonical command log is `content/fixtures/spike-fixture.cwlog`.
 
-**Environment (TASK-023):** the per-tick hashes here are pinned on Windows
-x64 / .NET SDK `10.0.303`, and `.github/workflows/ci.yml` re-verifies them
-there on every push and pull request (via `FixtureTests.fs` and the
-`spike-fixture` corpus entry). Other environments are outside the current
-per-environment determinism contract (`docs/09_TEST_STRATEGY.md` section 3).
-
 ## Parameters
 
 | Parameter | Value |

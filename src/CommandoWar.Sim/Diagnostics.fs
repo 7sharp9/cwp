@@ -97,14 +97,12 @@ type EventMarker =
 ///   * B-009 line of sight  -> `SightRay` (realised by TASK-012);
 ///   * B-010 pathfinding     -> `PlannedPath` (realised by TASK-013);
 ///   * B-011b reservation    -> `Reserved` (realised by TASK-017);
-///   * B-047 cell occupancy  -> `Obstructed` (realised by TASK-022);
 ///   * B-019 combat          -> a fire-line case (shooter, target).
 ///
 /// B-019 does not exist yet: no such case is defined.
 /// `Diagnostics.frame` produces no overlay. `Diagnostics.frameOf` produces one
-/// `PlannedPath` per agent following a route (TASK-015), one `Reserved` per
-/// cell contested this tick (TASK-017), and one `Obstructed` per cell an agent
-/// was held out of this tick (TASK-022); every other overlay is populated by a
+/// `PlannedPath` per agent following a route (TASK-015) and one `Reserved` per
+/// cell contested this tick (TASK-017); every other overlay is populated by a
 /// caller (a test, or `cwheadless render --los` / `--path`). `Cells` is the
 /// generic non-speculative shape: a labelled set of cells a renderer can
 /// always fall back to.
@@ -130,16 +128,6 @@ type Overlay =
     /// tick; `Diagnostics` never emits one from a bare `WorldState`
     /// (`Diagnostics.frame`), which carries no per-tick movement history.
     | Reserved of cell: Cell * winner: AgentId * untilTick: int64
-    /// A same-tick cell-occupancy outcome (TASK-022, docs/04 section 20 "one
-    /// live agent has one authoritative position"): an agent would have
-    /// completed its edge into `cell` this tick but `cell` is held by
-    /// `occupant`, an agent that did not vacate it, so the mover was frozen
-    /// and emitted `MovementObstructed`. Unlike `Reserved`, the blocker is a
-    /// stationary occupant, not the winner of a contest, and there is no
-    /// forward booking window. `Diagnostics.frameOf` derives one per distinct
-    /// obstructed cell from this tick's `MovementObstructed` events;
-    /// `Diagnostics.frame` never emits one.
-    | Obstructed of cell: Cell * occupant: AgentId
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -220,7 +208,6 @@ module Diagnostics =
         | MovementCompleted(_, at) -> { Kind = "movement-completed"; Cells = [| at |] }
         | MovementBlocked(_, at, target) -> { Kind = "movement-blocked"; Cells = [| at; target |] }
         | MovementYielded(_, at, contested, _) -> { Kind = "movement-yielded"; Cells = [| at; contested |] }
-        | MovementObstructed(_, at, blocked, _) -> { Kind = "movement-obstructed"; Cells = [| at; blocked |] }
 
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
@@ -265,42 +252,17 @@ module Diagnostics =
             | CommandRejected _
             | MovementStepped _
             | MovementCompleted _
-            | MovementBlocked _
-            | MovementObstructed _ -> None)
+            | MovementBlocked _ -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, winner) -> Reserved(cell, winner, result.State.Tick))
-
-    /// An `Obstructed` overlay per cell an agent was held out of this tick
-    /// (TASK-022), derived from this tick's `MovementObstructed` events — one
-    /// entry per distinct blocked cell, in the order its first
-    /// `MovementObstructed` event appears (ascending agent id). The
-    /// `reservationOverlays` precedent.
-    let private obstructionOverlays (result: StepResult) : Overlay[] =
-        result.Events
-        |> Array.choose (fun e ->
-            match e.Body with
-            | MovementObstructed(_, _, blocked, occupant) -> Some(blocked, occupant)
-            | CommandAccepted _
-            | CommandRejected _
-            | MovementStepped _
-            | MovementCompleted _
-            | MovementBlocked _
-            | MovementYielded _ -> None)
-        |> Array.distinctBy fst
-        |> Array.map (fun (cell, occupant) -> Obstructed(cell, occupant))
 
     /// The diagnostic frame for a completed step: the frame of the resulting
     /// world, plus this tick's event markers, a `PlannedPath` overlay for every
     /// agent still following a route, a `Reserved` overlay for every cell
-    /// contested this tick, an `Obstructed` overlay for every cell an agent was
-    /// held out of this tick, and the post-step canonical hash recorded on the
+    /// contested this tick, and the post-step canonical hash recorded on the
     /// `StepResult`. Total, pure, deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
         { frame result.State with
             Events = result.Events |> Array.map eventMarker
-            Overlays =
-                Array.concat
-                    [ routeOverlays result.State
-                      reservationOverlays result
-                      obstructionOverlays result ]
+            Overlays = Array.append (routeOverlays result.State) (reservationOverlays result)
             Hash = result.StateHash }

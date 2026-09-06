@@ -93,8 +93,7 @@ module DiagnosticRender =
                 | SightRay(_, _, cells, blk) -> Some(cells, blk)
                 | Cells _
                 | PlannedPath _
-                | Reserved _
-                | Obstructed _ -> None)
+                | Reserved _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -116,8 +115,7 @@ module DiagnosticRender =
                 | PlannedPath(a, b, cells, _, _) -> Some(a, b, cells)
                 | Cells _
                 | SightRay _
-                | Reserved _
-                | Obstructed _ -> None)
+                | Reserved _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -290,8 +288,6 @@ module DiagnosticRender =
                             (AgentId.value winner)
                             untilTick
                     )
-                | Obstructed(cell, occupant) ->
-                    line (sprintf "  obstructed %s: held by agent %d" (cellText cell) (AgentId.value occupant))
 
         line ""
 
@@ -524,20 +520,6 @@ module DiagnosticRender =
                         (cell.X * s + 1)
                         (cell.Y * s + s - 2)
                         (AgentId.value winner)
-                )
-            | Obstructed(cell, occupant) ->
-                line (
-                    sprintf
-                        "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#c53030\" stroke-width=\"2\" stroke-dasharray=\"3,2\"/>"
-                        (cell.X * s) (cell.Y * s) s s
-                )
-
-                line (
-                    sprintf
-                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"9\" fill=\"#c53030\">B%d</text>"
-                        (cell.X * s + 1)
-                        (cell.Y * s + s - 2)
-                        (AgentId.value occupant)
                 )
 
         // Footer.
