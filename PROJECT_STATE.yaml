@@ -5,15 +5,38 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-06 (TASK-022 implemented, pending acceptance)
+  updated: 2026-09-06 (TASK-023 implemented, pending acceptance)
 
 active_work:
-  selected_task: TASK-022
-  task_file: tasks/TASK-022-CELL-OCCUPANCY.md
+  selected_task: TASK-023
+  task_file: tasks/TASK-023-SIMULATION-CI.md
   owner: Dave
   blocked: false
   blockers: []
-  note: G2 passed 2026-09-05 (docs/ledger/2026-09-05-G2-gate-decision.md);
+  note: >-
+    2026-09-06: TASK-023 (backlog B-048) selected — continuous integration for
+    the framework-neutral solution. Adds .github/workflows/ci.yml (one job,
+    windows-latest, on push and pull_request -> main) that restores, Release-
+    builds, and tests CommandoWar.slnx under the global.json SDK pin, then runs
+    cwheadless corpus (fails the job on any divergence from the committed
+    content/replays/*.md tables) and cwheadless fixture (CLI smoke), and checks
+    the working tree is unchanged by the verbs. One-line Windows-x64 / .NET
+    10.0.303 environment annotation added to content/replays/CORPUS.md,
+    content/fixtures/SPIKE-FIXTURE.md, and the docs/12 "Shared fixture" block;
+    docs/09 section 6 marks its framework-neutral matrix items realised, with
+    client-compile / content-validation / package-smoke still P4. No source /
+    .fsproj / test / hash / Canonical.FormatVersion change; no ADR. Verified
+    locally from the repo root: restore / build (0/0) / test (Passed: 194) /
+    -- corpus (7x PASS, exit 0) / -- fixture (exit 0) all green; the working
+    tree stays clean after the verbs; the negative test (perturb one committed
+    content/replays row) fails both dotnet test and -- corpus with the first
+    bad tick and expected/actual hash, then reverts clean. This session cannot
+    push, so the green-run and red-run acceptance criteria on a real Actions
+    runner are left for Dave to confirm by pushing branch
+    task-023-simulation-ci. Pending Dave's acceptance.
+    (docs/ledger/2026-09-06-TASK-023-simulation-ci.md)
+
+    G2 passed 2026-09-05 (docs/ledger/2026-09-05-G2-gate-decision.md);
     phase and gate advanced to P3/G3. TASK-021 (backlog B-046, minimum
     passable movement cost + overflow-safe pathfinding cost) implemented
     2026-09-06 and marked done in tasks/ and docs/11_BACKLOG.md, still
@@ -32,7 +55,7 @@ active_work:
     B-044 and B-045 before G3). No Canonical.FormatVersion or
     CommandLogFile.Version change, no hash re-pin; 178 -> 184 green
     (docs/ledger/2026-09-06-TASK-020-command-validation-and-recipients.md).
-    TASK-022 / TASK-023 remain drafted and unselected under tasks/. Mibo
+    Mibo
     5.0.0 recorded as a framework reconsideration option (ADR-0003 amendment,
     backlog B-043); framework decision unchanged. 2026-09-06: TASK-022 (backlog
     B-047) selected — runtime cell-occupancy correctness in the Navigation and

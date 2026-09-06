@@ -13,6 +13,12 @@ evidence infrastructure over the existing `Simulation` / `Replay` / `Divergence`
 modules — so it does not extend the diagnostic frame
 (`docs/09_TEST_STRATEGY.md` section 8).
 
+**Environment (TASK-023):** the hashes below are pinned on Windows x64 / .NET
+SDK `10.0.303`, and `.github/workflows/ci.yml` re-verifies them there on every
+push and pull request. Other environments are outside the current
+per-environment determinism contract (`docs/09_TEST_STRATEGY.md` section 3);
+strengthening that is an ADR-gated decision.
+
 ## Entries
 
 Each entry is `<name>.cwlog` (existing command-log format v1,

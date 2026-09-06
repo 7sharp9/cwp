@@ -307,6 +307,25 @@ After selection, the minimum matrix should include:
 - content validation;
 - package smoke test where the environment supports it.
 
+**Framework-neutral items realised by TASK-023 (backlog B-048):**
+`.github/workflows/ci.yml` runs on `windows-latest` on every push and pull
+request and covers the first four rows — pinned-dependency restore (a
+cold-cache `dotnet restore CommandoWar.slnx`; the exact `PackageReference`
+pins plus the `global.json` SDK pin are the "pinned" half of row 1, so no
+lockfile is added), Release build of `CommandoWar.slnx` (`bench/` builds with
+it, benchmarks are not run), the full `dotnet test` suite (headless unit +
+FsCheck properties), and the deterministic scenario / replay tests
+(`FixtureTests`, the `CorpusTests` theory, and an explicit `cwheadless corpus`
+CLI run that fails the job on any divergence from the committed
+`content/replays/*.md` tables). `windows-latest` because the determinism
+contract is per-environment (section 3) and every committed hash was pinned on
+Windows x64 / .NET `10.0.303`.
+
+**Still pending P4:** selected client compile, content validation, and package
+smoke test. Client integration is P4, gated on G3 (`docs/08` section 7); these
+rows have nothing to guard until a P4 client task adds client code, and that
+task owns adding them to the same workflow.
+
 Do not expand the matrix to unsupported platforms without a delivery requirement.
 
 ## 7. Defect evidence
