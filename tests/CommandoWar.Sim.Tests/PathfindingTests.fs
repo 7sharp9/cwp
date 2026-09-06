@@ -136,6 +136,31 @@ let ``a cheap detour beats a straight line through a movement-cost patch`` () =
         Assert.DoesNotContain({ X = 4; Y = 3 }, cells)
     | other -> Assert.Fail($"expected Found, got {other}")
 
+[<Fact>]
+let ``a long path over near-ceiling authored costs sums to the exact total without overflow`` () =
+    // A one-cell-wide corridor on row 3 (rows 2 and 4 impassable), every
+    // corridor cell costing Terrain.MaxMoveCost. The only route
+    // (0,3)->(7,3) enters seven cells at the ceiling: 7 * MaxMoveCost, exact
+    // and far inside int32. Exercises the Pathfinding "## Bounded work"
+    // non-overflow bound (Width * Height * MaxMoveCost < Int32.MaxValue).
+    let t =
+        Terrain.build
+            bounds
+            [| for x in 0..7 do
+                   baseCell x 2 Impassable 0
+                   baseCell x 4 Impassable 0
+                   baseCell x 3 Passable Terrain.MaxMoveCost |]
+            [||]
+
+    match Pathfinding.find t { X = 0; Y = 3 } { X = 7; Y = 3 } with
+    | Found(cells, cost) ->
+        Assert.Equal({ X = 0; Y = 3 }, cells.[0])
+        Assert.Equal({ X = 7; Y = 3 }, cells.[cells.Length - 1])
+        Assert.Equal(7 * Terrain.MaxMoveCost, cost)
+        Assert.Equal(cost, recomputedCost t cells)
+        Assert.True(cost > 0 && cost < System.Int32.MaxValue)
+    | other -> Assert.Fail($"expected Found, got {other}")
+
 // --- no path -----------------------------------------------------
 
 [<Fact>]

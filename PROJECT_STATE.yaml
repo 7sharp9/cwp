@@ -5,19 +5,34 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-06
+  updated: 2026-09-06 (TASK-020 selected and implemented)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-020
+  task_file: tasks/TASK-020-COMMAND-VALIDATION-AND-RECIPIENTS.md
   owner: Dave
   blocked: false
   blockers: []
   note: G2 passed 2026-09-05 (docs/ledger/2026-09-05-G2-gate-decision.md);
-    phase and gate advanced to P3/G3. No task is selected. TASK-020
-    (backlog B-014, command validation and recipients) is drafted and
-    ready under tasks/, pending Dave selecting it. 2026-09-06: Mibo 5.0.0
-    recorded as a framework reconsideration option (ADR-0003 amendment,
+    phase and gate advanced to P3/G3. TASK-021 (backlog B-046, minimum
+    passable movement cost + overflow-safe pathfinding cost) implemented
+    2026-09-06 and marked done in tasks/ and docs/11_BACKLOG.md, still
+    pending Dave's formal acceptance
+    (docs/ledger/2026-09-06-TASK-021-movement-cost-bounds.md) — that
+    acceptance state is Dave's to set and is untouched here. 2026-09-06:
+    TASK-020 (backlog B-014) selected and implemented in a single headless
+    session — PlayerCommand.Recipients: AgentId list generalised from the
+    single Agent field (back-compatible Command.moveTo, new Command.moveToMany),
+    inert Urgency/RiskTolerance envelope fields, four new CommandRejection
+    cases (EmptyRecipients, DuplicateRecipient, UnauthorisedRecipient,
+    batch-order-independent DuplicateCommandId), commandIntake copies the
+    agent array once per phase invocation, emit-before-apply; a partial
+    section 13 envelope only (issuer identity and issue-tick eligibility stay
+    out, with mandatory follow-ups B-044 and B-045 before G3). No
+    Canonical.FormatVersion or CommandLogFile.Version change, no hash re-pin
+    (docs/ledger/2026-09-06-TASK-020-command-validation-and-recipients.md).
+    TASK-022 / TASK-023 remain drafted and unselected under tasks/. Mibo
+    5.0.0 recorded as a framework reconsideration option (ADR-0003 amendment,
     backlog B-043); framework decision unchanged.
 
 sources_of_truth:

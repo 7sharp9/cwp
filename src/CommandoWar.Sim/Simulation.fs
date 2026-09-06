@@ -137,24 +137,81 @@ module Simulation =
     let private emit (body: EventBody) (s: StepState) =
         s.EventsRev <- { Tick = s.Tick; Body = body } :: s.EventsRev
 
+    /// The first `AgentId` that appears more than once in `ids`, in list
+    /// order, or `None` if every id is distinct.
+    let private firstDuplicate (ids: AgentId list) : AgentId option =
+        let rec go seen =
+            function
+            | [] -> None
+            | a :: rest -> if Set.contains a seen then Some a else go (Set.add a seen) rest
+
+        go Set.empty ids
+
     // --- Phase: command intake ------------------------------------------------
-    // Validate and apply move commands, processed in ascending command id.
-    // Accepted commands set the target agent's destination; invalid agent or
-    // out-of-bounds target commands are rejected explicitly. This is the
-    // documented phase at which commands are processed.
+    // Validate and apply move commands (docs/04 section 12.1: "reject
+    // malformed, unauthorised, impossible-to-address, or duplicate commands;
+    // record accepted commands before effects are applied"). Commands arrive
+    // already sorted by command id (Simulation.step). Validation order:
+    //
+    //   1. batch-level: a CommandId that appears more than once in this tick's
+    //      batch rejects EVERY command in that group (DuplicateCommandId), none
+    //      processed — order-independent, since the batch sort is stable and a
+    //      "first wins" rule would let a caller change the result by reordering
+    //      an invalid batch. Cross-tick duplicate-id tracking is out (B-044).
+    //   2. per surviving command, whole-command checks that short-circuit with
+    //      one CommandRejected and no per-recipient events: empty recipients
+    //      (EmptyRecipients) -> repeated recipient (DuplicateRecipient) ->
+    //      target in bounds (TargetOutOfBounds, checked once — a MoveTo target
+    //      is equally out of bounds for every recipient).
+    //   3. per-recipient checks in ascending AgentId order regardless of
+    //      authoring order (stable entity ordering): unknown agent
+    //      (UnknownAgent) -> hostile-side agent (UnauthorisedRecipient) ->
+    //      accept. CommandAccepted is emitted BEFORE the destination is
+    //      written, per 12.1.
+    //
+    // The agent array is copied once per phase invocation, not once per
+    // accepted command (content/benchmarks/BASELINE.md recorded the old
+    // per-command Array.copy as an O(n^2) allocation hot spot). Agent identity
+    // and array order are stable within command intake — only Destination is
+    // written, no agent is added or removed — so one AgentId -> index map
+    // stays valid for the whole batch, and a later command still sees an
+    // earlier command's applied destination.
     let private commandIntake (commands: PlayerCommand list) (s: StepState) =
+        let agents = Array.copy s.Agents
+
+        let indexOf: Map<AgentId, int> =
+            agents |> Array.mapi (fun i a -> a.Id, i) |> Map.ofArray
+
+        let duplicatedIds: Set<CommandId> =
+            commands
+            |> List.countBy (fun c -> c.Id)
+            |> List.choose (fun (id, n) -> if n > 1 then Some id else None)
+            |> Set.ofList
+
         for cmd in commands do
-            match cmd.Intent with
-            | MoveTo target ->
-                match s.Agents |> Array.tryFindIndex (fun a -> a.Id = cmd.Agent) with
-                | None -> emit (CommandRejected(cmd.Id, UnknownAgent cmd.Agent)) s
-                | Some _ when not (GridBounds.contains target s.Bounds) ->
-                    emit (CommandRejected(cmd.Id, TargetOutOfBounds target)) s
-                | Some idx ->
-                    let agents = Array.copy s.Agents
-                    agents.[idx] <- { agents.[idx] with Destination = Some target }
-                    s.Agents <- agents
-                    emit (CommandAccepted(cmd.Id, cmd.Agent, target)) s
+            if Set.contains cmd.Id duplicatedIds then
+                emit (CommandRejected(cmd.Id, DuplicateCommandId cmd.Id)) s
+            else
+                match cmd.Intent with
+                | MoveTo target ->
+                    match cmd.Recipients with
+                    | [] -> emit (CommandRejected(cmd.Id, EmptyRecipients)) s
+                    | recipients ->
+                        match firstDuplicate recipients with
+                        | Some repeated -> emit (CommandRejected(cmd.Id, DuplicateRecipient repeated)) s
+                        | None when not (GridBounds.contains target s.Bounds) ->
+                            emit (CommandRejected(cmd.Id, TargetOutOfBounds target)) s
+                        | None ->
+                            for recipient in recipients |> List.sortBy AgentId.value do
+                                match Map.tryFind recipient indexOf with
+                                | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
+                                | Some idx when agents.[idx].Side = Hostile ->
+                                    emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
+                                | Some idx ->
+                                    emit (CommandAccepted(cmd.Id, recipient, target)) s
+                                    agents.[idx] <- { agents.[idx] with Destination = Some target }
+
+        s.Agents <- agents
 
     // --- Phase: navigation and movement -------------------------------------
     // Consumes the TASK-013 `Pathfinding` module (docs/04 section 8 "Initial

@@ -86,8 +86,9 @@ type Terrain =
       /// Traversability class per cell.
       Movement: MovementClass[]
       /// Integer cost to enter each cell. Meaningful only where `Movement`
-      /// is `Passable`; `moveCost` reports `BlockedCost` for an `Impassable`
-      /// cell regardless of this value.
+      /// is `Passable`, where `Scenario.validate` has confined it to
+      /// `[BaseMoveCost, MaxMoveCost]`; `moveCost` reports `BlockedCost` for
+      /// an `Impassable` cell regardless of this value.
       MoveCost: int[]
       /// High-occlusion flag per cell: blocks line of sight when set.
       Opaque: bool[]
@@ -98,14 +99,32 @@ type Terrain =
 [<RequireQualifiedAccess>]
 module Terrain =
 
-    /// The movement cost of an ordinary passable cell. Empty terrain uses
-    /// this everywhere.
+    /// The movement cost of an ordinary passable cell, and the least an
+    /// authored passable cell may cost. Empty terrain uses this everywhere.
     [<Literal>]
     let BaseMoveCost = 1
 
+    /// The greatest entry cost an authored passable cell may carry.
+    /// `Scenario.validate` rejects a passable cell outside
+    /// `[BaseMoveCost, MaxMoveCost]` (TASK-021). The ceiling exists for two
+    /// independent reasons, not just to pair with the floor:
+    ///
+    ///   * it keeps a passable cell's `moveCost` strictly below the
+    ///     `BlockedCost` sentinel, so "cannot enter" and "expensive to enter"
+    ///     can never collide;
+    ///   * it bounds `Pathfinding` cost accumulation. Every `g` there is at
+    ///     most `Width * Height * MaxMoveCost` (the closed set holds each cell
+    ///     once), and `1000 * Width * Height` stays inside
+    ///     `System.Int32.MaxValue` for any grid up to ~1460 cells on a side,
+    ///     far beyond a desktop tactical map. A single cell costing 1000x the
+    ///     base step is already an extreme "deep obstacle" value.
+    [<Literal>]
+    let MaxMoveCost = 1000
+
     /// The cost `moveCost` reports for a cell that cannot be entered: out of
     /// bounds, or `Impassable`. A large sentinel, not an arithmetic
-    /// infinity; a future pathfinder treats it as "no edge".
+    /// infinity; a future pathfinder treats it as "no edge". Strictly above
+    /// `MaxMoveCost`, so it is never a valid passable-cell cost.
     let BlockedCost = System.Int32.MaxValue
 
     let private area (b: GridBounds) : int = b.Width * b.Height
@@ -173,7 +192,10 @@ module Terrain =
             | Impassable -> false)
 
     /// Integer cost to enter a cell. `BlockedCost` for an out-of-bounds or
-    /// `Impassable` cell; the authored cost otherwise.
+    /// `Impassable` cell; the authored cost otherwise, which
+    /// `Scenario.validate` has kept within `[BaseMoveCost, MaxMoveCost]` for
+    /// a passable cell, so this never returns `BlockedCost` for a passable
+    /// one.
     let moveCost (t: Terrain) (c: Cell) : int =
         if passable t c then t.MoveCost.[indexOf t c] else BlockedCost
 

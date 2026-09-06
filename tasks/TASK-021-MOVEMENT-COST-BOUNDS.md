@@ -1,10 +1,26 @@
 # TASK-021: Minimum passable movement cost and overflow-safe pathfinding cost
 
-Status: ready
+Status: done (2026-09-06, pending Dave's acceptance)
 Owner: Dave
 Phase: P3
 Gate: G3 (corrects a G2 deliverable: terrain grid + pathfinding, TASK-010 / TASK-013)
 Size: S
+
+## Outcome
+
+`Terrain.MaxMoveCost = 1000` literal added; `ScenarioError.MoveCostOutOfRange`
+added and reported by `Scenario.validate` for a passable authored cell outside
+`[Terrain.BaseMoveCost, Terrain.MaxMoveCost]` (`NegativeMoveCost` kept for
+`< 0`; impassable cells still ignored). `Pathfinding` comment records the
+consistency precondition and the `Width * Height * MaxMoveCost < Int32.MaxValue`
+non-overflow bound; no algorithm change. Tests `171 -> 178` (five
+`ScenarioTests`, one `PathfindingTests`, one `DeterminismPropertyTests`
+optimality property vs an independent shortest-path search). `dotnet build`
+`0/0`; `-- corpus` / `-- fixture` reproduce every committed hash with no
+`--regenerate`; `Canonical.FormatVersion` stays `2`. No committed scenario
+authors an out-of-range passable cost (grep-verified: authored passable costs
+are 1, 3, 5). Detail:
+`docs/ledger/2026-09-06-TASK-021-movement-cost-bounds.md`.
 
 ## Objective
 

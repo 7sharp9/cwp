@@ -29,6 +29,18 @@ Use for pure or tightly bounded rules:
 - leadership succession;
 - canonical ordering and serialization.
 
+**Command validation — partially realised (TASK-020, backlog B-014):**
+`tests/CommandoWar.Sim.Tests/SimulationTests.fs` covers the current-scope
+`docs/04` section 12.1 rules as focused facts over `Simulation.step` — a
+multi-recipient accept emitting one `CommandAccepted` per recipient in
+ascending `AgentId` order; a `Hostile`-side recipient rejected
+`UnauthorisedRecipient` while a `Friendly` co-recipient still accepts; an
+empty `Recipients` list rejected `EmptyRecipients`; a repeated recipient
+rejected `DuplicateRecipient` as a whole command; two same-tick commands
+sharing a `CommandId` both rejected `DuplicateCommandId` with a byte-identical
+result whichever order the batch arrives in. Issue-tick eligibility is not
+covered because it is not implemented (backlog B-044).
+
 ### 2.2 Property tests
 
 Use FsCheck or an equivalent F# property-testing library for invariants such as:
@@ -50,9 +62,13 @@ FsCheck properties in
 small worlds (random terrain, agents placed only on passable cells) and
 random `MoveTo` command sequences. `FsCheck` and `FsCheck.Xunit` 3.3.4 are
 referenced only by the test project, mirroring the BenchmarkDotNet
-precedent. The remaining items name systems not yet implemented (vehicles,
-commitments, death, canonical serialization round-trip, appraisal,
-objectives) and stay proposed.
+precedent. TASK-021 added a fourth property: `Pathfinding.find`'s returned
+cost equals an independent relaxation-based shortest-path search over terrain
+whose passable costs span the full valid `[BaseMoveCost, MaxMoveCost]` range
+(the endpoint property only recomputes the returned path's own cost, so it
+cannot catch a suboptimal path). The remaining items name systems not yet
+implemented (vehicles, commitments, death, canonical serialization
+round-trip, appraisal, objectives) and stay proposed.
 
 Randomly generated cases must print the reduced counterexample and seed.
 

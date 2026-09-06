@@ -151,9 +151,15 @@ integer-only A* query over `Terrain` passability and entry cost.
 - **Cost model:** entering a cell costs `Terrain.moveCost` for that cell; the
   start cell's own cost is never counted. An `Impassable` cell is never
   expanded and never appears in a path. Path cost is the exact sum of the
-  entered cells' costs.
+  entered cells' costs. `Scenario.validate` confines a passable cell's
+  authored `MoveCost` to `[Terrain.BaseMoveCost, Terrain.MaxMoveCost]`
+  (TASK-021, `MaxMoveCost` = 1000): below the `Terrain.BlockedCost` sentinel,
+  and small enough that accumulation stays a bounded `int`
+  (`Width * Height * MaxMoveCost < Int32.MaxValue`).
 - **Heuristic:** Manhattan distance times `Terrain.BaseMoveCost`. Integer,
-  admissible for cardinal moves whose minimum step cost is `BaseMoveCost`.
+  admissible and consistent for cardinal moves: every passable step now costs
+  at least `BaseMoveCost` (the range check above), which is the precondition
+  this no-reopening A* needs for an optimal path.
 - **Tie-break (stable):** the frontier is ordered by the total key
   `(g + h, then h, then row-major cell index)`; neighbours are generated in
   `Direction.all` order (North, East, South, West). The expansion order and
@@ -343,6 +349,21 @@ Fatigue, persistent personality dimensions, interpersonal relations, inventory g
 - reject malformed, unauthorised, impossible-to-address, or duplicate commands;
 - record accepted commands before effects are applied.
 
+Partially realised by TASK-020 (`Simulation.commandIntake`): the batch is
+stably sorted by command id in `Simulation.step`, then, in order — every
+command in a group that shares a `CommandId` within this tick's batch is
+rejected (`DuplicateCommandId`, order-independent, none processed); each
+surviving command is checked whole (`EmptyRecipients` -> `DuplicateRecipient`
+-> `TargetOutOfBounds`, first failure short-circuits with one
+`CommandRejected` and no per-recipient events); then each recipient is checked
+in ascending `AgentId` order (`UnknownAgent` -> `UnauthorisedRecipient` for a
+`Hostile`-side agent -> accept), emitting `CommandAccepted` **before** the
+destination is written. One accept/reject event per (command, recipient) pair.
+The agent array is copied once per phase invocation. **Issue-tick validation
+is not implemented**: `IssueTick` is carried but unenforced and its semantics
+are unresolved (backlog B-044, mandatory before G3). "Unauthorised" here is
+only the friendly/hostile-side check — no issuer identity or commander model.
+
 ### 12.2 Communication
 
 - determine which recipients receive an order this tick;
@@ -437,6 +458,20 @@ type PlayerIntent =
 An envelope supplies command ID, issuer, recipients, issue tick, urgency, and risk tolerance.
 
 A command can be syntactically valid but tactically refused by an agent. Command validation and agent appraisal are separate concepts.
+
+**Partially realised by TASK-020.** `PlayerCommand` carries `Id`, `Recipients:
+AgentId list` (generalised from a single agent; `Command.moveTo` builds a
+one-element list, `Command.moveToMany` a multi-recipient one), `IssueTick`,
+`Urgency` (`Routine | Immediate`) and `RiskTolerance` (`Cautious | Standard |
+Aggressive`). `Urgency` and `RiskTolerance` are **inert envelope data** —
+`docs/05` section 5 stage 4 names them as appraisal-resolve inputs, but
+appraisal (B-017) does not exist and nothing reads them yet. Still **out of
+this partial envelope**: issuer identity (not modelled — one player) and
+issue-tick eligibility/scheduling (`IssueTick` carried but unenforced,
+semantics unresolved). Each has a mandatory-before-G3 follow-up: **B-044**
+(issue-tick / submission-tick semantics) and **B-045** (the production
+replay-command serialisation — after TASK-020 the legacy `.cwlog` fixture
+grammar can no longer express a full accepted command).
 
 ## 14. Events
 

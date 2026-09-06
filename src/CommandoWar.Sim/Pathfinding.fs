@@ -37,9 +37,12 @@ namespace CommandoWar.Sim
 ///     returns an authored value here. Path cost is the exact sum of the
 ///     entered cells' costs.
 ///   * **Heuristic.** Manhattan distance times `Terrain.BaseMoveCost`.
-///     Admissible for cardinal moves whose minimum step cost is
-///     `Terrain.BaseMoveCost` (authored passable cells respect this).
-///     Integer.
+///     Admissible *and consistent*: `Scenario.validate` rejects a passable
+///     cell costing less than `Terrain.BaseMoveCost` (TASK-021), so every
+///     cardinal step costs at least `BaseMoveCost` while Manhattan distance
+///     changes by exactly 1 per step, giving `h(n) - h(n') <= BaseMoveCost <=
+///     cost(n, n')`. Consistency is what this no-reopening A* (`if not
+///     closed.[ni]`) needs for an optimal path. Integer.
 ///
 /// ## Determinism (a required property, docs/09 section 3)
 ///
@@ -71,6 +74,16 @@ namespace CommandoWar.Sim
 /// (`Width * Height`, enough to close every cell once, so `find` returns
 /// `BudgetExhausted` only for a genuinely pathological call). No wall-clock
 /// timing, no `Stopwatch`.
+///
+/// **No cost overflow.** `g` and every `tentative = g + Terrain.moveCost` are
+/// unchecked `int`. They stay inside `System.Int32.MaxValue` because the
+/// closed set holds each of `Width * Height` cells at most once and each
+/// passable step costs at most `Terrain.MaxMoveCost` (`Scenario.validate`,
+/// TASK-021), so every value is bounded by
+/// `Width * Height * Terrain.MaxMoveCost`. With `MaxMoveCost = 1000` that
+/// holds for any grid up to ~1460 cells on a side, well beyond a desktop
+/// tactical map; no `int64` widening and no per-step guard are needed for
+/// terrain that passes validation.
 ///
 /// ## Totality
 ///

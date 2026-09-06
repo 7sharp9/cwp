@@ -400,6 +400,97 @@ let ``a completing agent's frozen progress on a lost contest resumes correctly n
     Assert.Equal({ X = 3; Y = 3 }, (agentOf b r4.State).Position)
     Assert.Equal(0, (agentOf b r4.State).Progress)
 
+// --- Command validation and multi-recipient addressing (TASK-020) --------
+
+/// A world with agents 0 and 1 Friendly and agent 2 Hostile, for the
+/// authorisation check (`Setup.sixAgentWorld` is all-Friendly).
+let private mixedWorld () : WorldState =
+    match
+        World.create
+            bounds
+            1UL
+            [ Agent.create (agent 0) Friendly { X = 0; Y = 0 }
+              Agent.create (agent 1) Friendly { X = 0; Y = 1 }
+              Agent.create (agent 2) Hostile { X = 0; Y = 2 } ]
+    with
+    | Ok w -> w
+    | Error e -> failwith $"unexpected {e}"
+
+let private moveMany (id: int) (ids: int list) (dest: Cell) =
+    Command.moveToMany (CommandId.ofInt id) 0L (ids |> List.map agent) dest Routine Standard
+
+let private acceptedAgents (r: StepResult) =
+    bodies r
+    |> Array.choose (function
+        | CommandAccepted(_, a, _) -> Some(AgentId.value a)
+        | _ -> None)
+
+[<Fact>]
+let ``a command naming several friendly recipients emits one CommandAccepted per recipient and sets every destination`` () =
+    let dest = { X = 4; Y = 4 }
+    let r = stepWith [| moveMany 1 [ 1; 3; 5 ] dest |] (world ())
+
+    Assert.Equal<int[]>([| 1; 3; 5 |], acceptedAgents r)
+
+    for i in [ 1; 3; 5 ] do
+        Assert.Equal(Some dest, (agentOf (agent i) r.State).Destination)
+
+[<Fact>]
+let ``multi-recipient acceptance is ordered by ascending agent id regardless of authoring order`` () =
+    let r = stepWith [| moveMany 1 [ 5; 1; 3 ] { X = 4; Y = 4 } |] (world ())
+    Assert.Equal<int[]>([| 1; 3; 5 |], acceptedAgents r)
+
+[<Fact>]
+let ``a hostile recipient is rejected UnauthorisedRecipient while a friendly co-recipient still accepts`` () =
+    let dest = { X = 3; Y = 3 }
+    let r = stepWith [| moveMany 1 [ 1; 2 ] dest |] (mixedWorld ()) // agent 2 is Hostile
+
+    Assert.Contains(CommandRejected(CommandId.ofInt 1, UnauthorisedRecipient(agent 2)), bodies r)
+    Assert.Contains(CommandAccepted(CommandId.ofInt 1, agent 1, dest), bodies r)
+    Assert.Equal(Some dest, (agentOf (agent 1) r.State).Destination)
+    Assert.Equal(None, (agentOf (agent 2) r.State).Destination)
+
+[<Fact>]
+let ``a command with an empty recipients list is rejected EmptyRecipients with no per-recipient events`` () =
+    let c = Command.moveToMany (CommandId.ofInt 1) 0L [] { X = 2; Y = 2 } Routine Standard
+    let r = stepWith [| c |] (world ())
+
+    Assert.Contains(CommandRejected(CommandId.ofInt 1, EmptyRecipients), bodies r)
+    Assert.DoesNotContain(bodies r, (function CommandAccepted _ -> true | _ -> false))
+
+[<Fact>]
+let ``a command listing the same agent twice in Recipients is rejected DuplicateRecipient as a whole command`` () =
+    let r = stepWith [| moveMany 1 [ 2; 4; 2 ] { X = 5; Y = 5 } |] (world ())
+
+    Assert.Contains(CommandRejected(CommandId.ofInt 1, DuplicateRecipient(agent 2)), bodies r)
+    Assert.DoesNotContain(bodies r, (function CommandAccepted _ -> true | _ -> false))
+    Assert.Equal(None, (agentOf (agent 2) r.State).Destination)
+    Assert.Equal(None, (agentOf (agent 4) r.State).Destination)
+
+[<Fact>]
+let ``two commands in one tick sharing a command id are both rejected and neither destination is applied, independent of batch order`` () =
+    let mk (target: Cell) = Command.moveTo (CommandId.ofInt 7) 0L (agent 0) target
+    let forwardOrder = [| mk { X = 3; Y = 0 }; mk { X = 0; Y = 3 } |]
+    let reverseOrder = [| mk { X = 0; Y = 3 }; mk { X = 3; Y = 0 } |]
+
+    let forward = stepWith forwardOrder (world ())
+    let reverse = stepWith reverseOrder (world ())
+
+    let dupRejections r =
+        bodies r
+        |> Array.filter (function
+            | CommandRejected(_, DuplicateCommandId cid) -> cid = CommandId.ofInt 7
+            | _ -> false)
+
+    Assert.Equal(2, (dupRejections forward).Length)
+    Assert.DoesNotContain(bodies forward, (function CommandAccepted _ -> true | _ -> false))
+    Assert.Equal(None, (agentOf (agent 0) forward.State).Destination)
+
+    // Reject-all (not "first wins") makes the emitted events and the
+    // end-of-tick state identical whichever order the invalid batch arrives.
+    Assert.True(bodies forward = bodies reverse)
+    Assert.Equal(Hashing.hash forward.State, Hashing.hash reverse.State)
+
 [<Fact>]
 let ``World.create rejects duplicate agent ids`` () =
     let result =

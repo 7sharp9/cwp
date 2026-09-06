@@ -203,3 +203,112 @@ let ``whenever Pathfinding.find returns Found on random terrain the cells form a
         | NoPath
         | BudgetExhausted _
         | InvalidEndpoint _ -> true)
+
+// --- property 4: pathfinding optimality vs an independent shortest path --
+// Property 3 recomputes the *returned* path's own cost, so it cannot catch a
+// path that is suboptimal but summed correctly (the TASK-021 defect). This
+// compares Pathfinding.find's cost to a plain relaxation-to-fixed-point
+// shortest-path search that shares no code or ordering with A*, over terrain
+// whose passable costs span the whole valid [BaseMoveCost, MaxMoveCost]
+// range, including values near the ceiling.
+
+/// One cell for the optimality property: passable costs cover the low range,
+/// exactly `BaseMoveCost`, and a band near `MaxMoveCost`; a minority impassable.
+let private validCellGen: Gen<MovementClass * int> =
+    Gen.frequency
+        [ 1, Gen.constant (Impassable, 0)
+          4, Gen.constant (Passable, Terrain.BaseMoveCost)
+          3, Gen.choose (Terrain.BaseMoveCost, 15) |> Gen.map (fun c -> Passable, c)
+          1, Gen.choose (Terrain.MaxMoveCost - 25, Terrain.MaxMoveCost) |> Gen.map (fun c -> Passable, c) ]
+
+let private validTerrainAndEndpointsGen: Gen<Terrain * Cell * Cell> =
+    gen {
+        let! bounds = boundsGen
+        let n = bounds.Width * bounds.Height
+        let! cells = Gen.arrayOfLength n validCellGen
+
+        let terrain =
+            { Bounds = bounds
+              Elevation = Array.zeroCreate n
+              Movement = cells |> Array.map fst
+              MoveCost = cells |> Array.map snd
+              Opaque = Array.zeroCreate n
+              Cover = Array.zeroCreate (n * 4) }
+
+        let cellGen =
+            gen {
+                let! x = Gen.choose (0, bounds.Width - 1)
+                let! y = Gen.choose (0, bounds.Height - 1)
+                return ({ X = x; Y = y }: Cell)
+            }
+
+        let! start = cellGen
+        let! goal = cellGen
+        return terrain, start, goal
+    }
+
+/// Independent shortest path: least cost to enter `goal` from `start`, or
+/// `None` when no traversable path exists or an endpoint is invalid. A dense
+/// distance array relaxed until it stops changing (Bellman-Ford style) — no
+/// heuristic, no frontier, no dependence on expansion order, so agreement
+/// with A* is real evidence rather than a restatement.
+let private referenceShortestPath (terrain: Terrain) (start: Cell) (goal: Cell) : int option =
+    let b = terrain.Bounds
+    let idx (c: Cell) = c.Y * b.Width + c.X
+
+    if
+        not (GridBounds.contains start b)
+        || not (GridBounds.contains goal b)
+        || not (Terrain.passable terrain start)
+        || not (Terrain.passable terrain goal)
+    then
+        None
+    elif start = goal then
+        Some 0
+    else
+        let dist = Array.create (b.Width * b.Height) System.Int32.MaxValue
+        dist.[idx start] <- 0
+        let mutable changed = true
+
+        while changed do
+            changed <- false
+
+            for y in 0 .. b.Height - 1 do
+                for x in 0 .. b.Width - 1 do
+                    let here = dist.[y * b.Width + x]
+
+                    if here < System.Int32.MaxValue then
+                        for nb in
+                            [ { X = x; Y = y - 1 }
+                              { X = x + 1; Y = y }
+                              { X = x; Y = y + 1 }
+                              { X = x - 1; Y = y } ] do
+                            if GridBounds.contains nb b && Terrain.passable terrain nb then
+                                let cand = here + Terrain.moveCost terrain nb
+
+                                if cand < dist.[idx nb] then
+                                    dist.[idx nb] <- cand
+                                    changed <- true
+
+        if dist.[idx goal] = System.Int32.MaxValue then
+            None
+        else
+            Some dist.[idx goal]
+
+[<Property(MaxTest = 200)>]
+let ``Pathfinding.find on valid random terrain returns the true minimum cost and finds a path exactly when one exists`` () =
+    Prop.forAll (Arb.fromGen validTerrainAndEndpointsGen) (fun (terrain, start, goal) ->
+        let reference = referenceShortestPath terrain start goal
+
+        match Pathfinding.find terrain start goal with
+        // Default cap Width * Height closes every cell once, so on these
+        // (<= 7x7) grids the budget is never the limiting factor: Found iff a
+        // path exists, and the cost is exactly the reference minimum.
+        | Found(_, cost) -> reference = Some cost
+        | NoPath -> reference = None
+        | InvalidEndpoint _ ->
+            not (GridBounds.contains start terrain.Bounds)
+            || not (GridBounds.contains goal terrain.Bounds)
+            || not (Terrain.passable terrain start)
+            || not (Terrain.passable terrain goal)
+        | BudgetExhausted _ -> true)

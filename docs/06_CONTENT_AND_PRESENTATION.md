@@ -114,7 +114,11 @@ row-major integer grid) plus the authored input path
 (`Opaque`) flag; a `RawCoverFeature` carries a cardinal direction and an
 integer low-cover level. Validation rejects a layer whose dimensions disagree
 with the map, an out-of-map or duplicated cell or cover feature, an unknown
-terrain or cover class, a negative elevation / cost / cover level, and a
+terrain or cover class, a negative elevation / cost / cover level, a passable
+cell whose entry cost falls outside
+`[Terrain.BaseMoveCost, Terrain.MaxMoveCost]` (TASK-021 — a cheaper step
+would break the pathfinding heuristic, a dearer one risks the blocked-cost
+sentinel and cost overflow; an impassable cell's cost stays ignored), and a
 deployment sitting on an impassable cell (docs/07 section 3, docs/03 section
 17). An absent layer is legal and means empty terrain. Traversal links,
 static-object gameplay data, and destruction state are later tasks (B-011,

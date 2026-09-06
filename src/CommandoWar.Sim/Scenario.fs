@@ -210,9 +210,12 @@ type RawObjective =
 /// One authored terrain-cell override. Cells a layer does not mention are
 /// open, flat (elevation 0), transparent, and cost `Terrain.BaseMoveCost`.
 /// `Class` is `"passable"` or `"impassable"`; any other value is
-/// `UnknownTerrainClass`. `Elevation` and `MoveCost` must be non-negative;
-/// `MoveCost` is ignored for an impassable cell. `Opaque` is the
-/// high-occlusion flag (docs/06 section 4).
+/// `UnknownTerrainClass`. `Elevation` must be non-negative. `MoveCost` is
+/// ignored for an impassable cell; for a passable cell it must lie within
+/// `[Terrain.BaseMoveCost, Terrain.MaxMoveCost]` (a cheaper step would break
+/// the pathfinding heuristic's admissibility; a dearer one risks the
+/// `Terrain.BlockedCost` sentinel and cost overflow — TASK-021). `Opaque` is
+/// the high-occlusion flag (docs/06 section 4).
 type RawTerrainCell =
     { Cell: Cell
       Class: string
@@ -294,6 +297,11 @@ type ScenarioError =
     | UnknownCoverClass of cell: Cell * className: string
     | NegativeElevation of cell: Cell * level: int
     | NegativeMoveCost of cell: Cell * cost: int
+    /// A passable cell whose authored `MoveCost` is `>= 0` but outside
+    /// `[min, max]` = `[Terrain.BaseMoveCost, Terrain.MaxMoveCost]`. A
+    /// negative cost is the more specific `NegativeMoveCost`; an impassable
+    /// cell's cost is ignored and never reported here (TASK-021).
+    | MoveCostOutOfRange of cell: Cell * cost: int * min: int * max: int
     | NegativeCoverLevel of cell: Cell * level: int
     | DeploymentOnImpassableCell of agent: int * cell: Cell
 
@@ -525,8 +533,21 @@ module Scenario =
                     if tc.Elevation < 0 then
                         report (NegativeElevation(tc.Cell, tc.Elevation))
 
+                    // A negative cost is always a fault; a passable cell must
+                    // also stay within [BaseMoveCost, MaxMoveCost] so the A*
+                    // heuristic stays admissible and cost accumulation stays
+                    // inside int32 (TASK-021). An impassable cell's cost is
+                    // ignored (`Terrain.moveCost` reports `BlockedCost`), so
+                    // it is not range-checked.
                     if tc.MoveCost < 0 then
                         report (NegativeMoveCost(tc.Cell, tc.MoveCost))
+                    elif
+                        parseMovementClass tc.Class = Some Passable
+                        && (tc.MoveCost < Terrain.BaseMoveCost || tc.MoveCost > Terrain.MaxMoveCost)
+                    then
+                        report (
+                            MoveCostOutOfRange(tc.Cell, tc.MoveCost, Terrain.BaseMoveCost, Terrain.MaxMoveCost)
+                        )
 
                 for cf in layer.Cover do
                     if mapOk && not (GridBounds.contains cf.Cell bounds) then

@@ -199,6 +199,10 @@ module Diagnostics =
         match e.Body with
         | CommandAccepted(_, _, dest) -> { Kind = "command-accepted"; Cells = [| dest |] }
         | CommandRejected(_, UnknownAgent _) -> { Kind = "command-rejected"; Cells = [||] }
+        | CommandRejected(_, EmptyRecipients) -> { Kind = "command-rejected"; Cells = [||] }
+        | CommandRejected(_, DuplicateRecipient _) -> { Kind = "command-rejected"; Cells = [||] }
+        | CommandRejected(_, UnauthorisedRecipient _) -> { Kind = "command-rejected"; Cells = [||] }
+        | CommandRejected(_, DuplicateCommandId _) -> { Kind = "command-rejected"; Cells = [||] }
         | CommandRejected(_, TargetOutOfBounds target) -> { Kind = "command-rejected"; Cells = [| target |] }
         | MovementStepped(_, from, into) -> { Kind = "movement-stepped"; Cells = [| from; into |] }
         | MovementCompleted(_, at) -> { Kind = "movement-completed"; Cells = [| at |] }

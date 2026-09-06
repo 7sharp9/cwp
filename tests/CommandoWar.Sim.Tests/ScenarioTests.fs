@@ -470,6 +470,115 @@ let ``a negative move cost is reported`` () =
 
     Assert.Contains(NegativeMoveCost({ X = 3; Y = 3 }, -5), errorsOf raw)
 
+// --- passable move-cost range (TASK-021) --------------------------------
+// A passable cell must cost within [Terrain.BaseMoveCost, Terrain.MaxMoveCost]:
+// a cheaper step breaks the A* heuristic's admissibility, a dearer one risks
+// the Terrain.BlockedCost sentinel and Pathfinding cost overflow.
+
+[<Fact>]
+let ``a passable cell costing below BaseMoveCost is rejected naming the cell`` () =
+    let raw =
+        { goodRaw () with
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cells =
+                            [| { Cell = { X = 3; Y = 3 }
+                                 Class = "passable"
+                                 Elevation = 0
+                                 MoveCost = 0
+                                 Opaque = false } |] } }
+
+    Assert.Contains(
+        MoveCostOutOfRange({ X = 3; Y = 3 }, 0, Terrain.BaseMoveCost, Terrain.MaxMoveCost),
+        errorsOf raw
+    )
+
+[<Fact>]
+let ``a passable cell costing above MaxMoveCost is rejected naming the cell`` () =
+    let raw =
+        { goodRaw () with
+            TerrainLayer =
+                Some
+                    { goodTerrainLayer () with
+                        Cells =
+                            [| { Cell = { X = 3; Y = 3 }
+                                 Class = "passable"
+                                 Elevation = 0
+                                 MoveCost = Terrain.MaxMoveCost + 1
+                                 Opaque = false } |] } }
+
+    Assert.Contains(
+        MoveCostOutOfRange({ X = 3; Y = 3 }, Terrain.MaxMoveCost + 1, Terrain.BaseMoveCost, Terrain.MaxMoveCost),
+        errorsOf raw
+    )
+
+[<Fact>]
+let ``a passable cell costing exactly BaseMoveCost and one costing exactly MaxMoveCost both validate`` () =
+    let s =
+        validated
+            { goodRaw () with
+                TerrainLayer =
+                    Some
+                        { goodTerrainLayer () with
+                            Cells =
+                                [| { Cell = { X = 3; Y = 3 }
+                                     Class = "passable"
+                                     Elevation = 0
+                                     MoveCost = Terrain.BaseMoveCost
+                                     Opaque = false }
+                                   { Cell = { X = 4; Y = 3 }
+                                     Class = "passable"
+                                     Elevation = 0
+                                     MoveCost = Terrain.MaxMoveCost
+                                     Opaque = false } |] } }
+
+    Assert.Equal(Terrain.BaseMoveCost, Terrain.moveCost s.Terrain { X = 3; Y = 3 })
+    Assert.Equal(Terrain.MaxMoveCost, Terrain.moveCost s.Terrain { X = 4; Y = 3 })
+
+[<Fact>]
+let ``an impassable cell with an out-of-range move cost is still accepted`` () =
+    // MoveCost is ignored for an impassable cell (Terrain.moveCost reports
+    // BlockedCost), so a wild value there is not a fault.
+    let s =
+        validated
+            { goodRaw () with
+                TerrainLayer =
+                    Some
+                        { goodTerrainLayer () with
+                            Cells =
+                                [| { Cell = { X = 3; Y = 3 }
+                                     Class = "impassable"
+                                     Elevation = 0
+                                     MoveCost = 999_999
+                                     Opaque = false } |] } }
+
+    Assert.False(Terrain.passable s.Terrain { X = 3; Y = 3 })
+    Assert.Equal(Terrain.BlockedCost, Terrain.moveCost s.Terrain { X = 3; Y = 3 })
+
+[<Fact>]
+let ``the zero-cost corridor grid the standing review found is rejected`` () =
+    // A passable MoveCost = 0 shortcut down column x = 4: the exact shape the
+    // review flagged as able to make Pathfinding.find return a non-minimal
+    // path. Scenario.validate must reject the content before it reaches
+    // Terrain.build.
+    let corridor =
+        [| for y in 3..5 ->
+               { Cell = { X = 4; Y = y }
+                 Class = "passable"
+                 Elevation = 0
+                 MoveCost = 0
+                 Opaque = false } |]
+
+    let es =
+        errorsOf { goodRaw () with TerrainLayer = Some { goodTerrainLayer () with Cells = corridor } }
+
+    for y in 3..5 do
+        Assert.Contains(
+            MoveCostOutOfRange({ X = 4; Y = y }, 0, Terrain.BaseMoveCost, Terrain.MaxMoveCost),
+            es
+        )
+
 [<Fact>]
 let ``a negative cover level is reported`` () =
     let raw =
