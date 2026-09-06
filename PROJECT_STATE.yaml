@@ -5,7 +5,7 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-06 (TASK-022 selected)
+  updated: 2026-09-06 (TASK-022 implemented, pending acceptance)
 
 active_work:
   selected_task: TASK-022
@@ -40,7 +40,13 @@ active_work:
     (TASK-015 / TASK-017). Adds a deterministic vacation-chain resolution stage
     to Pass 2 (after rival arbitration, before apply), a new MovementObstructed
     event and Obstructed diagnostic overlay, and a unique-live-agent-cell
-    occupancy property. TASK-021 acceptance state untouched (Dave's to set).
+    occupancy property. Implemented the same day: stage-2b additive fixpoint,
+    MovementObstructed, Overlay.Obstructed, WorldError.AgentsShareCell
+    base-case guard, follow-chain + swap-standoff corpus entries, one golden
+    pair; 184 -> 194 green; -- corpus / -- fixture byte-identical;
+    Canonical.FormatVersion stays 2, no hash re-pin
+    (docs/ledger/2026-09-06-TASK-022-cell-occupancy.md). Pending Dave's
+    acceptance. TASK-021 acceptance state untouched (Dave's to set).
 
 sources_of_truth:
   product: docs/00_PROJECT_CHARTER.md

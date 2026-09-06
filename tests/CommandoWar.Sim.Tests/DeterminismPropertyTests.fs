@@ -163,6 +163,24 @@ let ``no agent occupies an impassable cell after any tick of the movement phase`
             outcome.TickStates
             |> Array.forall (fun state -> state.Agents |> Array.forall (fun a -> Terrain.passable state.Terrain a.Position)))
 
+// --- property 2b: distinct live agents hold distinct cells ---------------
+// TASK-022: the movement phase must never place two live agents on the same
+// cell. `randomCaseGen` seeds every agent on a distinct passable cell, so a
+// duplicate at any post-tick checkpoint is a movement-phase defect (a mover
+// entering an occupied cell, a swap, or a collapsed follow chain), not a
+// generator artefact. Property 2 above only checks cells are *passable*.
+
+[<Property(MaxTest = 200)>]
+let ``after every tick of every generated case, distinct live agents hold distinct cells`` () =
+    Prop.forAll (Arb.fromGen randomCaseGen) (fun case ->
+        match replayOf case with
+        | Error e -> failwith $"replay of a generated case failed: {e}"
+        | Ok outcome ->
+            outcome.TickStates
+            |> Array.forall (fun state ->
+                let cells = state.Agents |> Array.map (fun a -> a.Position)
+                Array.length (Array.distinct cells) = Array.length cells))
+
 // --- property 3: pathfinding correctness on random terrain ---------------
 // Extends PathfindingTests.fs's hand-built `propertyTerrain` check (a fixed
 // terrain proves the invariant for one map, not the general case) to
