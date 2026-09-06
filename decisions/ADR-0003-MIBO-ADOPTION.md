@@ -1,6 +1,6 @@
 # ADR-0003: Conditional and Limited Use of Mibo
 
-Status: spike complete; Mibo not adopted (ADR-0001 chose Godot, 2026-09-03). Amended 2026-09-02, 2026-09-03  
+Status: spike complete; Mibo not adopted (ADR-0001 chose Godot, 2026-09-03); Mibo 5.x recorded as a live reconsideration option (2026-09-06 amendment). Amended 2026-09-02, 2026-09-03, 2026-09-06  
 Date: 2026-09-02  
 Decision owner: Dave
 
@@ -192,3 +192,79 @@ Consequences:
 Reopening Mibo as a production option would require a new ADR with measured
 failure evidence against the Godot route, per this ADR's rollback rule and
 ADR-0001.
+
+## 2026-09-06 amendment: Mibo 5.0.0 re-separates the MVU and adaptive packages
+
+### Trigger
+
+Dave flagged the Mibo 5.0.0 release (2026-09-04) and asked that it be recorded as
+a live option now, noting that the Godot client work has not materially
+progressed since ADR-0001: the editor edit-to-visible-result measurement
+(ADR-0001 review trigger 1) and the blocked self-contained export (review
+trigger 2) are both still open.
+
+This is the condition the 2026-09-02 amendment and ADR-0001 both named: "an
+upstream change that re-separates the packages".
+
+### Finding
+
+From the Mibo changelog (`https://github.com/AngelMunoz/Mibo/blob/main/CHANGELOG.md`,
+entry `[5.0.0] - 2026-09-04`):
+
+- The framework is split into two independent runtime lanes over a shared
+  kernel. Classic Elmish/MVU (`Cmd`, `Sub`, `Program`, loops, headless support)
+  moves to a new `Mibo.Mvu` package; the adaptive runtime moves to
+  `Mibo.Adaptive.Mibo`.
+- `Mibo.Core` no longer depends on `Mibo.Adaptive`.
+- MVU host packages are `Mibo.Raylib.Mvu` and `Mibo.MonoGame.Mvu`; adaptive host
+  packages are `Mibo.Raylib.Adaptive` and `Mibo.MonoGame.Adaptive`. An MVU
+  install pulls no adaptive code.
+- Every namespace, type, and member keeps its name and home; the migration is a
+  recompile against the correct lane's packages, not a source edit.
+- Templates now pin `5.*`.
+
+Not verified (no spike has been run against 5.x, and outbound package restore is
+unavailable in the review environment): the 5.x packages' target frameworks (the
+4.x line published `net8.0` and `net10.0` dependency groups; this project is
+`net10.0`), the actual restore graph and `deps.json` contents, and
+headless-runner parity with the 4.1.0 surface exercised in TASK-005.
+
+### What this changes
+
+The 2026-09-02 amendment's blocker is lifted on the 5.x line. "Current Mibo
+cannot be adopted without the prohibited `Mibo.Adaptive` package" was true for
+4.2.0 through 4.5.3; it is not true for 5.0.0, where classic MVU is the
+standalone `Mibo.Mvu` package. The `Mibo.Adaptive` production prohibition
+(`PROJECT_STATE.yaml` `prohibited_before_G5`, unchanged) is now satisfied simply
+by not referencing `Mibo.Adaptive.Mibo` or the `*.Adaptive` host packages,
+rather than by a version pin to a stale release.
+
+On packaging grounds, Mibo classic MVU (5.x) is production-eligible again
+before G5.
+
+### What this does not change
+
+- **Mibo is still not adopted.** ADR-0001 selected Godot on a weighted score of
+  4.13 vs 3.62. The dependency-and-maintenance-risk driver (weight 5; Godot 4.5,
+  Mibo 1.5) accounted for 0.15 of the 0.51 weighted gap (Godot 0.225, Mibo 0.075
+  on that driver). Re-scoring Mibo's dependency risk from 1.5 toward ~3.0 adds
+  about 0.075 to its total (~3.70) and does not close the gap; the decision was
+  carried by the higher-weighted content-authoring, UI/presentation, and
+  glue-code drivers, which this release does not touch.
+- ADR-0001's rollback rule still governs: reopening Mibo as a production option
+  requires a new ADR with measured failure evidence against the Godot route.
+- The `Mibo.Adaptive` prohibition before G5 is unchanged.
+- Mibo's release cadence remains a live concern (1.0 to 5.0 in about four
+  months, a major restructure days before this amendment); the churn
+  sub-argument in the ADR-0001 Mibo column stands.
+
+### Recorded status
+
+Mibo 5.x classic MVU is a **live reconsideration option** for the production
+client, no longer blocked on packaging. Acting on it is an ADR-0001
+review-trigger decision for Dave, coupled to ADR-0001 review trigger 1: the
+Godot editor edit-to-visible-result loop is still unmeasured on this project,
+which is the other half of the "honest case for Mibo" condition in ADR-0001. If
+that measurement lands and shows no material Godot authoring advantage, the Mibo
+route becomes defensible and the reconsideration spike (backlog B-043) should
+run before framework-specific client work (B-024 onward) begins.

@@ -74,7 +74,8 @@ These items are not implementation-ready. Create and review a task file before s
 
 | ID | Phase | Work item | Size | Dependencies | Gate | Status |
 |---|---|---|---|---|---|---|
-| B-024 | P4 | Implement selected-framework content importer and validation command | M | B-007, TASK-006 | G4 | proposed |
+| B-043 | P4 | Mibo 5.x production reconsideration spike (ADR-0001 decision review). Re-score the framework comparison for the Mibo classic-MVU route now that Mibo 5.0.0 re-separates `Mibo.Mvu` from `Mibo.Adaptive.Mibo` (ADR-0003 2026-09-06 amendment) and the packaging blocker is gone. Gated on the ADR-0001 review-trigger-1 editor edit-to-visible-result measurement. Outcome: an ADR-0001 amendment keeping Godot, or a new ADR selecting Mibo. Resolve before B-024 commits framework-specific client work. | S | ADR-0003 2026-09-06 amendment; ADR-0001 review trigger 1 | G4 | proposed |
+| B-024 | P4 | Implement selected-framework content importer and validation command | M | B-007, TASK-006, B-043 | G4 | proposed |
 | B-025 | P4 | Build Bridgehead greybox map | M | B-024 | G4 | proposed |
 | B-026 | P4 | Implement selection, input mapping, tactical pause, and command preview | M | B-014, TASK-006 | G4 | proposed |
 | B-027 | P4 | Implement snapshot rendering and isometric depth ordering | M | B-011, TASK-006 | G4 | proposed |

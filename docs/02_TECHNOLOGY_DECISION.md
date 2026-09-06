@@ -16,9 +16,11 @@ because the project is content- and UX-iteration-bound before it is
 rendering-bound, and Godot ships the scene / tilemap / inspector / animation /
 debugger tooling that the code-first route would have to build. Mibo's real
 advantages (no C#/F# interop tax, native headless stepping, out-of-the-box
-`dotnet publish`) were genuine but lower-leverage, and current Mibo cannot be
+`dotnet publish`) were genuine but lower-leverage, and Mibo 4.2.0-4.5.3 could not be
 adopted without the prohibited `Mibo.Adaptive` package (ADR-0003 2026-09-02
-amendment).
+amendment). That coupling was re-separated upstream in Mibo 5.0.0 (ADR-0003
+2026-09-06 amendment), which records Mibo 5.x classic MVU as a live
+reconsideration option; the Godot decision itself is unchanged.
 
 The analysis below is the pre-spike research snapshot, kept for context. Where
 it is provisional or hedged, ADR-0001 and the 2026-09-03 progress-ledger entry
@@ -62,6 +64,7 @@ raylib in one production path, and do not build an abstraction over them.
 - Its headless runner can Step, StepN, StepUntil, Run, and RunAsync without a graphics backend.
 - Mibo.Adaptive is explicitly marked experimental.
 - Mibo intentionally provides no integrated editor or wizard-driven content workflow.
+- Mibo 5.0.0 (2026-09-04) split the framework into independent MVU (`Mibo.Mvu`) and adaptive (`Mibo.Adaptive.Mibo`) packages over a shared kernel; `Mibo.Core` no longer depends on `Mibo.Adaptive`. This removes the packaging blocker recorded on 2026-09-02. See ADR-0003 2026-09-06 amendment.
 
 ### Tiled
 

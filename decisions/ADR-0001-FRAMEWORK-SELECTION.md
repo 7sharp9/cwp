@@ -453,3 +453,28 @@ Open, tracked as review triggers / follow-up above:
   directory; the app runs outside the editor via `--path`.
 - The editor-iteration measurement (review trigger 1).
 - The low-impedance C#/F# boundary design task (named follow-up above).
+
+## 2026-09-06 note: Mibo packaging blocker may be resolved upstream
+
+Mibo 5.0.0 (2026-09-04) re-separates classic MVU (`Mibo.Mvu`) from the adaptive
+runtime (`Mibo.Adaptive.Mibo`); `Mibo.Core` no longer depends on `Mibo.Adaptive`.
+See `decisions/ADR-0003-MIBO-ADOPTION.md` 2026-09-06 amendment.
+
+Effect on this decision:
+
+- Decisive-evidence point 2 ("Mibo carries a confirmed production-eligibility
+  problem") no longer holds on the Mibo 5.x line, on packaging grounds. The
+  "dependency and maintenance risk" driver would re-score from 1.5 toward ~3.0,
+  worth about +0.075 of weighted total to Mibo (new total ~3.70 vs Godot 4.13);
+  the release-cadence sub-argument survives. This does not overturn the decision;
+  the gap is carried by the authoring and presentation drivers.
+- The "honest case for Mibo" block above states Mibo would be defensible if the
+  `Mibo.Adaptive` coupling were resolved upstream **and** the first real Godot
+  editor-authoring task showed the editor loop is not materially faster than a
+  code relaunch. The first condition may now be met. The second is still
+  unmeasured (review trigger 1); no Godot client work has progressed since
+  acceptance.
+- **The decision stands.** Reconsideration is tracked as backlog B-043, gated on
+  the review-trigger-1 measurement and to be resolved before B-024 commits
+  framework-specific client work. No source change and no `PROJECT_STATE.yaml`
+  `framework_decision` change.
