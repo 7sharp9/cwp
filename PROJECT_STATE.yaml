@@ -5,11 +5,11 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-06 (TASK-020 selected and implemented)
+  updated: 2026-09-06 (TASK-022 selected)
 
 active_work:
-  selected_task: TASK-020
-  task_file: tasks/TASK-020-COMMAND-VALIDATION-AND-RECIPIENTS.md
+  selected_task: TASK-022
+  task_file: tasks/TASK-022-CELL-OCCUPANCY.md
   owner: Dave
   blocked: false
   blockers: []
@@ -34,7 +34,13 @@ active_work:
     (docs/ledger/2026-09-06-TASK-020-command-validation-and-recipients.md).
     TASK-022 / TASK-023 remain drafted and unselected under tasks/. Mibo
     5.0.0 recorded as a framework reconsideration option (ADR-0003 amendment,
-    backlog B-043); framework decision unchanged.
+    backlog B-043); framework decision unchanged. 2026-09-06: TASK-022 (backlog
+    B-047) selected — runtime cell-occupancy correctness in the Navigation and
+    movement phase, a post-gate correctness fix to the G2 movement deliverables
+    (TASK-015 / TASK-017). Adds a deterministic vacation-chain resolution stage
+    to Pass 2 (after rival arbitration, before apply), a new MovementObstructed
+    event and Obstructed diagnostic overlay, and a unique-live-agent-cell
+    occupancy property. TASK-021 acceptance state untouched (Dave's to set).
 
 sources_of_truth:
   product: docs/00_PROJECT_CHARTER.md

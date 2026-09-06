@@ -23,6 +23,19 @@ type EventBody =
     /// the same next cell next tick, once `winner` has vacated it. A
     /// same-tick reservation only: nothing is booked across ticks (TASK-017).
     | MovementYielded of agent: AgentId * at: Cell * contested: Cell * winner: AgentId
+    /// `agent`, at `at`, would have completed its edge into `blocked` this
+    /// tick, but `blocked` is currently held by `occupant` — an agent that did
+    /// not vacate it this tick (idle, arrived, blocked, still mid-edge, a rival
+    /// contest loser, or itself obstructed further down the chain). `agent`'s
+    /// destination and route are unchanged, so it retries the same next cell
+    /// next tick. Distinct from `MovementBlocked` (no traversable path exists;
+    /// the destination is cleared) and `MovementYielded` (lost a same-tick
+    /// rival contest for the cell to another *mover*). The vacation-chain
+    /// resolution (TASK-022) is a same-tick pure function of pre-tick positions
+    /// and this tick's intents; nothing is booked across ticks. Persistent
+    /// obstruction (a blocker that never moves) is a perception / appraisal
+    /// concern (B-015 / B-017), not resolved here.
+    | MovementObstructed of agent: AgentId * at: Cell * blocked: Cell * occupant: AgentId
 
 /// An immutable domain event tagged with the tick it occurred on. Within a
 /// single step, events are emitted in a stable order: command outcomes

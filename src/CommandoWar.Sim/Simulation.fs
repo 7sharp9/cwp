@@ -253,9 +253,47 @@ module Simulation =
     // provably terminates for a shared-target-cell contest between two
     // agents that both complete the same tick: the winner always advances, so
     // the sum of every completing agent's remaining route length strictly
-    // decreases each tick a contest is resolved. It does not resolve an agent
-    // moving onto a cell held by a stationary agent (a distinct,
-    // chain-dependent problem — TASK-017 ledger "Deviations").
+    // decreases each tick a contest is resolved.
+    //
+    // Realised by TASK-022 (backlog B-047): runtime cell-occupancy correctness.
+    // Rival arbitration (above) only decides *which* completing agent may claim
+    // a contested cell; it never checks whether that cell is already held by a
+    // stationary agent. A second stage 2b resolution — the "vacation chain" —
+    // runs after rival arbitration and before Pass 3:
+    //   * `M0` = the completing agents that did not lose a rival contest (at
+    //     most one per target cell). `occupant(c)` = the unique agent whose
+    //     pre-tick `Position` is `c` (pre-tick uniqueness is the invariant this
+    //     stage preserves: true by construction for every world builder and
+    //     `Scenario.validate`, and preserved tick to tick by this rule).
+    //   * an agent `a` in `M0` may move iff the chain
+    //         a -> occupant(next a) -> occupant(next (occupant (next a))) -> ...
+    //     terminates at an agent whose next cell has no occupant — i.e. it
+    //     neither hits a cycle nor an agent that is not itself a moving
+    //     candidate. Computed as an additive fixpoint (monotone,
+    //     order-independent, <= n rounds): seed `S` with every `a in M0` whose
+    //     `next a` is unoccupied, then repeatedly add every `a in M0` whose
+    //     `next a` is held by an agent already in `S`. Movers = `S`;
+    //     `obstructedBy` maps every `a in M0 \ S` to `occupant(next a).Id`.
+    //   * two-agent swaps and n-agent rotation cycles fall out with no special
+    //     case: no member of a pure cycle is ever seeded or added, so all
+    //     freeze. TASK-022 deliberately does NOT add simultaneous rotation /
+    //     atomic multi-agent swap — that needs an atomic-swap primitive and a
+    //     tactical justification, neither of which exists.
+    //   * a follow chain (each agent's next cell is the one ahead, the lead
+    //     cell free) resolves the whole chain in a single tick: the lead is
+    //     seeded, then each follower in turn, and Pass 3 applies the moves from
+    //     precomputed decisions so its ascending-id application order cannot
+    //     create a transient collision.
+    // An `Advancing` agent found in `obstructedBy` freezes exactly like a
+    // `yieldedTo` loser (`Progress = startProgress`, `Route = Some r` written
+    // back, `Position` / `Destination` unchanged) and emits `MovementObstructed`.
+    // Termination of the fixpoint is trivial (finite monotone). It does NOT
+    // guarantee an obstructed agent ever completes: an agent permanently
+    // blocked by one that never moves retries — and emits `MovementObstructed`
+    // — every tick, forever. Routing *around* a live agent is the cooperative
+    // pathfinder TASK-022 forbids; noticing a persistent stall and
+    // re-appraising the order is a perception / appraisal concern (B-015 /
+    // B-017), named here, not built here.
     //
     // Sub-cell movement progress (TASK-018, step 3 "reserve only the
     // immediate next destination", steps 4-5 "advance movement progress by an
@@ -377,6 +415,67 @@ module Simulation =
                 claims
                 |> Array.filter (fun (idx, _, _, _) -> idx <> winnerIdx)
                 |> Array.map (fun (idx, _, _, _) -> idx, winnerId))
+            |> Map.ofArray
+
+        // Stage 2b: vacation-chain resolution (TASK-022). Rival arbitration
+        // above yields at most one candidate mover per target cell; this stage
+        // decides which of those may actually enter, given what the cell's
+        // current occupant does. `obstructedBy` maps an agent array index to
+        // the id of the stationary agent blocking it, consumed by a new Pass 3
+        // arm. The fixpoint specification is in the phase comment above.
+        let occupantOf: Map<Cell, int> =
+            agents |> Array.mapi (fun i a -> a.Position, i) |> Map.ofArray
+
+        // Candidate movers: completing `Advancing` agents that did not lose a
+        // rival contest (at most one per target cell), as `(idx, next cell)`.
+        let candidateMovers: (int * Cell)[] =
+            intents
+            |> Array.indexed
+            |> Array.choose (fun (idx, intent) ->
+                match intent with
+                | Advancing(_, next, _, startProgress) when
+                    wouldComplete next startProgress && not (Map.containsKey idx yieldedTo)
+                    ->
+                    Some(idx, next)
+                | Advancing _
+                | Idle
+                | Arrived _
+                | Blocked _ -> None)
+
+        // Additive fixpoint: an index joins `movers` once its next cell is free
+        // of every agent, or is held by an agent already known to move. Each
+        // round consults only the previous round's set and pre-tick positions,
+        // never the iteration order within a round.
+        let movers: Set<int> =
+            let mutable acc = Set.empty
+            let mutable changed = true
+
+            while changed do
+                changed <- false
+
+                for idx, next in candidateMovers do
+                    if not (Set.contains idx acc) then
+                        let free =
+                            match Map.tryFind next occupantOf with
+                            | None -> true
+                            | Some occ -> Set.contains occ acc
+
+                        if free then
+                            acc <- Set.add idx acc
+                            changed <- true
+
+            acc
+
+        let obstructedBy: Map<int, AgentId> =
+            candidateMovers
+            |> Array.choose (fun (idx, next) ->
+                if Set.contains idx movers then
+                    None
+                else
+                    // Not a mover: `next` therefore has an occupant that does
+                    // not vacate this tick (an unoccupied `next` would have
+                    // seeded `idx` in round 0).
+                    Map.tryFind next occupantOf |> Option.map (fun occ -> idx, agents.[occ].Id))
             |> Map.ofArray
 
         // Pass 3: apply, in ascending agent id order — the standing
