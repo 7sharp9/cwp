@@ -5,7 +5,7 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-05
+  updated: 2026-09-06
 
 active_work:
   selected_task: none
@@ -13,10 +13,12 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  note: TASK-018 and TASK-019 finalised 2026-09-05 (both done). Next task
-    selection is pending Dave's answer on whether G2 is proven on the
-    docs/08 section 5 evidence bullets alone, or "tactical knowledge" in
-    that section's Required work list is a hard G2 blocker.
+  note: G2 passed 2026-09-05 (docs/ledger/2026-09-05-G2-gate-decision.md);
+    phase and gate advanced to P3/G3. No task is selected. TASK-020
+    (backlog B-014, command validation and recipients) is drafted and
+    ready under tasks/, pending Dave selecting it. 2026-09-06: Mibo 5.0.0
+    recorded as a framework reconsideration option (ADR-0003 amendment,
+    backlog B-043); framework decision unchanged.
 
 sources_of_truth:
   product: docs/00_PROJECT_CHARTER.md

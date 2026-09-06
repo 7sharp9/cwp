@@ -109,6 +109,9 @@ G2 blocker; G2 was declared passed on the evidence bullets alone.
 ### Required work
 
 - implement the five vertical-slice intents;
+- resolve issue-tick / submission-tick semantics (B-044) and the production
+  replay-command serialisation (B-045) — both are foundations of the command
+  loop deferred by TASK-020 and must be settled before this gate;
 - implement communication and shared tactical knowledge;
 - implement explicit order appraisal and typed reasons;
 - implement commitment and finite execution states;

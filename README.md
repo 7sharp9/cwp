@@ -1,9 +1,9 @@
 # Commando War Spiritual Successor - Project Control Pack
 
-Status: discovery and architecture validation  
+Status: discovery / architecture validation (current phase and gate: `PROJECT_STATE.yaml`)  
 Public title: not selected  
-Current framework decision: pending ADR-0001  
-Next controlled task: `tasks/TASK-001-REPOSITORY-BASELINE.md`
+Framework: Godot .NET client over a framework-independent F# simulation (ADR-0001, accepted 2026-09-03)  
+Current phase, gate, and selected task: see `PROJECT_STATE.yaml`
 
 ## Purpose
 
@@ -61,40 +61,30 @@ Use `tasks/CODING_AGENT_PROMPT.md` to start an implementation session.
 
 ## Immediate sequence
 
-The initial dependency chain is:
+P0 through P2 are complete and gates G0, G1, and G2 have passed: the repository
+baseline, the framework-neutral simulation skeleton, the determinism harness,
+both framework spikes, ADR-0001 (Godot selected), and the deterministic core
+(terrain, line of sight, pathfinding, movement, same-tick reservation, sub-cell
+progress, replay corpus, benchmarks, determinism property tests) are all done.
+See `docs/12_PROGRESS_LEDGER.md` for the task-by-task record.
 
-```text
-TASK-001 repository baseline
-    |
-    v
-TASK-002 simulation skeleton
-    |
-    v
-TASK-003 determinism harness
-    |
-    +-------------------+
-    |                   |
-    v                   v
-TASK-004 Godot spike    TASK-005 Mibo spike
-    |                   |
-    +---------+---------+
-              |
-              v
-TASK-006 framework decision
-```
-
-No production client work should proceed until TASK-006 records the framework decision.
+Current position, the active gate (G3), and the next task are in
+`PROJECT_STATE.yaml` and `docs/11_BACKLOG.md`. Client and presentation work
+belongs to P4 and must not begin before G3 passes.
 
 ## Architectural position
 
 The simulation is an ordinary F# library with no dependency on Godot, MonoGame, raylib, Mibo, rendering, audio, or an editor. A client submits typed commands and receives domain events plus a render snapshot.
 
-During the framework spike, two disposable presentation hosts exercise the same simulation:
+The framework spike (TASK-004 Godot, TASK-005 Mibo) built two disposable
+presentation hosts over the same simulation. ADR-0001 selected Godot .NET through
+a thin C# adapter; the Mibo host is retained as spike evidence only. Mibo 5.x is
+recorded as a reconsideration option (ADR-0003 2026-09-06 amendment), not an
+active route.
 
-- Godot .NET through a thin C# adapter.
-- Mibo classic MVU, initially using its raylib backend and Tiled for map authoring.
-
-Mibo.Adaptive is excluded until after the vertical-slice gate. It is currently experimental and adds invalidation and threading behaviour that the small initial simulation does not need.
+Mibo.Adaptive is excluded until after the vertical-slice gate (G5). It is
+experimental and adds invalidation and threading behaviour that the initial
+simulation does not need.
 
 ## Intellectual property boundary
 
@@ -125,7 +115,8 @@ Established by TASK-001. The repository is a standard .NET solution.
 | Simulation library | `src/CommandoWar.Sim/` (F#, no host or framework dependency) |
 | Tests | `tests/CommandoWar.Sim.Tests/` (F#, xUnit) |
 
-A graphical framework is deliberately not selected yet; see ADR-0001.
+The graphical framework is Godot .NET (ADR-0001, accepted 2026-09-03). The
+simulation library itself has no framework dependency.
 
 ### Restore, build, and test
 
