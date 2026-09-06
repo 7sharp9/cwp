@@ -162,6 +162,39 @@ module Corpus =
     let private slowTerrainWorld () : WorldState =
         worldOf (rawScenario "corpus-slow-terrain" 8 8 [ 0, { X = 0; Y = 0 } ] [ costly 1 0 3 ] { X = 7; Y = 7 } { X = 0; Y = 7 })
 
+    /// Three friendly agents in a line at (1,3), (2,3), (3,3), all ordered east
+    /// to (11,3). Each tick the lead agent has a free cell ahead, so the
+    /// TASK-022 vacation chain resolves and all three step together; no agent
+    /// reaches (11,3) within the run, so the chain flows every tick with no
+    /// obstruction.
+    let private followChainWorld () : WorldState =
+        worldOf (
+            rawScenario
+                "corpus-follow-chain"
+                12
+                9
+                [ 0, { X = 1; Y = 3 }; 1, { X = 2; Y = 3 }; 2, { X = 3; Y = 3 } ]
+                []
+                { X = 11; Y = 3 }
+                { X = 0; Y = 8 }
+        )
+
+    /// Two friendly agents at (3,3) and (4,3), each ordered onto the other's
+    /// cell. A two-agent position swap is blocked (TASK-022): neither is ever a
+    /// first mover, so both emit `MovementObstructed` every tick and neither
+    /// agent ever leaves its start cell.
+    let private swapStandoffWorld () : WorldState =
+        worldOf (
+            rawScenario
+                "corpus-swap-standoff"
+                8
+                8
+                [ 0, { X = 3; Y = 3 }; 1, { X = 4; Y = 3 } ]
+                []
+                { X = 7; Y = 7 }
+                { X = 0; Y = 0 }
+        )
+
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
         [| { Name = "spike-fixture"
@@ -204,7 +237,24 @@ module Corpus =
                + "the usual single tick."
              InitialStateNote = "Corpus slow-terrain scenario (8 x 8, seed 20260904)"
              InitialState = slowTerrainWorld
-             TickCount = 8L } |]
+             TickCount = 8L }
+           { Name = "follow-chain"
+             Description =
+               "Three friendly agents in a line at (1,3), (2,3), (3,3), all ordered east to (11,3). Each tick the "
+               + "lead agent has a free cell ahead, so TASK-022's vacation-chain resolution lets the whole chain "
+               + "advance on the same tick; no agent reaches (11,3) within the run, so the chain flows every tick "
+               + "with no MovementObstructed."
+             InitialStateNote = "Corpus follow-chain scenario (12 x 9, seed 20260904)"
+             InitialState = followChainWorld
+             TickCount = 6L }
+           { Name = "swap-standoff"
+             Description =
+               "Two friendly agents at (3,3) and (4,3), each ordered onto the other's cell. A two-agent position "
+               + "swap is blocked (TASK-022): neither agent is ever a first mover, so both emit MovementObstructed "
+               + "every tick and neither agent ever leaves its start cell (only the tick counter advances)."
+             InitialStateNote = "Corpus swap-standoff scenario (8 x 8, seed 20260904)"
+             InitialState = swapStandoffWorld
+             TickCount = 4L } |]
 
     // --- entry paths and loading ----------------------------------------
 

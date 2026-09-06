@@ -34,6 +34,8 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `converging-routes-tick-003.svg` | SVG of the same frame: the reserved cell as a pink dashed box labelled `R0` (the winning agent id), alongside each agent's route polyline. |
 | `slow-terrain-tick-002.ascii.txt` | The `content/replays/slow-terrain` corpus entry (TASK-018) at tick 2: agent 0 has accumulated 2 of the 3 `Terrain.moveCost` needed to enter `(1,0)` and has not moved from `(0,0)` yet — the roster line shows `progress 2`, and the movement-cost note shows `(1,0)=3`. |
 | `slow-terrain-tick-002.svg` | SVG of the same frame: a small progress number next to the agent's circle. |
+| `swap-standoff-tick-001.ascii.txt` | The `content/replays/swap-standoff` corpus entry (TASK-022) at tick 1: agent 0 `(3,3)` and agent 1 `(4,3)` are each ordered onto the other's cell, so the two-agent swap is blocked and both freeze. `Diagnostics.frameOf` derives one `Obstructed` overlay per blocked cell (`obstructed (x,y): held by agent N`) alongside each agent's `PlannedPath`, and the events line carries two `movement-obstructed` markers. |
+| `swap-standoff-tick-001.svg` | SVG of the same frame: each blocked cell as a red dashed box labelled `B<occupant id>`, alongside each agent's route polyline. |
 
 ## Regeneration
 
@@ -61,13 +63,14 @@ $R render path $PATHS --format ascii --out content/diagnostics/path.ascii.txt
 $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 ```
 
-`converging-routes-tick-003.*` and `slow-terrain-tick-002.*` are not produced
-by the `render` verb: each entry's initial state is corpus-owned
-(`Corpus.all`), not the shared fixture or demo scenario `render` knows about.
-Both are regenerated the same way — `DiagnosticRender.runFrames` over the
-named `Corpus.all` entry and its committed `.cwlog`, at the tick named in the
-file — using the exact helper (`convergingRoutesFrames ()` /
-`slowTerrainFrames ()`) the corresponding `DiagnosticsTests.fs` fact uses to
+`converging-routes-tick-003.*`, `slow-terrain-tick-002.*`, and
+`swap-standoff-tick-001.*` are not produced by the `render` verb: each entry's
+initial state is corpus-owned (`Corpus.all`), not the shared fixture or demo
+scenario `render` knows about. All are regenerated the same way —
+`DiagnosticRender.runFrames` over the named `Corpus.all` entry and its
+committed `.cwlog`, at the tick named in the file — using the exact helper
+(`convergingRoutesFrames ()` / `slowTerrainFrames ()` /
+`swapStandoffFrames ()`) the corresponding `DiagnosticsTests.fs` fact uses to
 compare against these files, so a regeneration and its test cannot silently
 disagree.
 

@@ -1,10 +1,45 @@
 # TASK-022: Runtime cell-occupancy correctness in the Navigation and movement phase
 
-Status: ready
+Status: review (implemented 2026-09-06, pending Dave's acceptance)
 Owner: Dave
 Phase: P3
 Gate: G3 (corrects a G2 deliverable: navigation and movement, TASK-015 / TASK-017)
 Size: M
+
+## Outcome
+
+Implemented 2026-09-06 in a single headless session.
+`Simulation.navigationAndMovement` gains a stage-2b vacation-chain resolution
+between rival arbitration (2a, TASK-017, unchanged) and Pass 3: an additive
+fixpoint over the completing non-yielded movers (`M0`) computes `movers` (may
+enter this tick) and `obstructedBy: Map<int, AgentId>` (blocked by a
+non-vacating occupant). One new Pass 3 arm freezes an obstructed `Advancing`
+agent exactly like a rival-contest loser (`Progress = startProgress`,
+`Route` written back, `Position` / `Destination` untouched) and emits the new
+`MovementObstructed of agent * at * blocked * occupant` event. Swaps and
+n-agent rotation cycles fall out as all-obstructed with no special case; a
+3-agent pure cycle is geometrically impossible on the bipartite 4-connected
+grid, so the rotation-deadlock test uses four agents around a 2x2 block.
+Persistent obstruction is named for B-015 / B-017, not solved.
+
+`World.create` / `World.ofScenario` gained `WorldError.AgentsShareCell`
+(the optional base-case guard, taken: the vacation-chain algorithm relies on
+pre-tick one-agent-per-cell uniqueness). `Diagnostics` gained
+`Overlay.Obstructed of cell * occupant`, an `eventMarker` arm, and a `frameOf`
+derivation; `DiagnosticRender` renders it in ASCII (`obstructed (x,y): held by
+agent N`) and SVG (red dashed box `B<id>`). Two new corpus entries
+(`follow-chain`, `swap-standoff`) and one golden pair
+(`content/diagnostics/swap-standoff-tick-001.*`).
+
+`Canonical.FormatVersion` stays 2; no `AgentState` / `WorldState` field added;
+no existing fixture / corpus / golden hash moved (`-- corpus` and `-- fixture`
+byte-identical before and after, with and without `--regenerate`). Tests
+`184 -> 194`. One pre-existing `SimulationTests` fact
+(`an agent routes around an impassable wall`) had its wall repositioned: it
+used the six-agent world and its detour ran the moving agent straight through
+two parked friendly agents — exactly the defect this task fixes — so it could
+not pass unmodified. Full evidence in
+`docs/ledger/2026-09-06-TASK-022-cell-occupancy.md`.
 
 ## Objective
 
@@ -306,44 +341,44 @@ shape and matches the `Overlay` doc comment's "a new system adds a case here".
 
 ## Acceptance criteria
 
-- [ ] A `SimulationTests.fs` fact builds a world where agent A's only route
+- [x] A `SimulationTests.fs` fact builds a world where agent A's only route
       runs through a cell held by a permanently idle agent B, and asserts: A
       never enters B's cell, A emits `MovementObstructed` (occupant = B), the
       two agents never share a cell on any tick.
-- [ ] A fact where two adjacent agents are each ordered onto the other's cell
+- [x] A fact where two adjacent agents are each ordered onto the other's cell
       asserts both are obstructed indefinitely (a bounded loop: neither moves,
       neither shares a cell, both emit `MovementObstructed`).
-- [ ] A fact with three agents in a rotation cycle asserts all three are
+- [x] A fact with three agents in a rotation cycle asserts all three are
       obstructed (no first mover) and no two share a cell.
-- [ ] A fact with three agents in a line — the lead ordered into a free cell,
+- [x] A fact with three agents in a line — the lead ordered into a free cell,
       the two behind ordered into the cell ahead — asserts all three advance on
       the same tick (the follow chain resolves same-tick) and the invariant
       holds every tick.
-- [ ] A fact with two agents converging on a cell held by a stationary third
+- [x] A fact with two agents converging on a cell held by a stationary third
       asserts neither converging agent enters it and the invariant holds.
-- [ ] A new property (≥ 200 generated cases, over `randomCaseGen`): for every
+- [x] A new property (≥ 200 generated cases, over `randomCaseGen`): for every
       tick state of every case, `state.Agents` mapped to `Position` has no
       duplicate among live agents (`DeterminismPropertyTests.fs`). Print the
       reduced counterexample and seed on failure.
-- [ ] Property 1 (determinism under random commands) and property 2 (passable
+- [x] Property 1 (determinism under random commands) and property 2 (passable
       cells only) still pass unmodified at 200 cases each.
-- [ ] At least two new corpus entries: one follow / vacation chain that
+- [x] At least two new corpus entries: one follow / vacation chain that
       resolves each tick, and one swap or converging-on-occupied standoff that
       does not. Each has a `CORPUS.md` row, a committed hash table, and passes
       `CorpusTests.fs` and `cwheadless corpus`.
-- [ ] `Obstructed` overlay: derived in `frameOf`, rendered in `Ascii` and
+- [x] `Obstructed` overlay: derived in `frameOf`, rendered in `Ascii` and
       `Svg`, covered by a hand-built unit test and a committed
       `content/diagnostics/` golden byte-compared by `DiagnosticsTests.fs`.
-- [ ] `-- corpus` and `-- fixture` reproduce every **pre-existing** committed
+- [x] `-- corpus` and `-- fixture` reproduce every **pre-existing** committed
       hash with no `--regenerate` (evidence: the before/after hash lines).
-- [ ] Every pre-existing `SimulationTests.fs`, `CorpusTests.fs`,
+- [x] Every pre-existing `SimulationTests.fs`, `CorpusTests.fs`,
       `DiagnosticsTests.fs`, `ReplayTests.fs`, `FixtureTests.fs`,
       `PathfindingTests.fs` fact passes unmodified.
-- [ ] `dotnet build CommandoWar.slnx -c Release` = 0 warnings, 0 errors;
+- [x] `dotnet build CommandoWar.slnx -c Release` = 0 warnings, 0 errors;
       `dotnet list src/CommandoWar.Sim package --include-transitive` =
       `FSharp.Core` only; source scan of `src/CommandoWar.Sim` clean
       (no `float` / `Stopwatch` / `DateTime` / `System.Random` / `godot`).
-- [ ] `docs/04` sections 8 / 12.7 / 20, `docs/09` section 2.2, backlog row,
+- [x] `docs/04` sections 8 / 12.7 / 20, `docs/09` section 2.2, backlog row,
       ledger index row + detail file, `PROJECT_STATE.yaml` (if active), task
       status updated. "Green tests" pinned fact refreshed with the new count.
 

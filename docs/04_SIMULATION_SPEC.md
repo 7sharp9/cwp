@@ -260,6 +260,57 @@ grouping does not exist anywhere yet — closer to
 `docs/05_COMMAND_AND_AGENT_AI.md` than to movement mechanics; not attempted
 by TASK-018).
 
+Realised by TASK-022 (backlog B-047, a post-gate correctness fix to
+TASK-015 / TASK-017): **runtime cell-occupancy correctness**. Rival
+arbitration (step 3, TASK-017) only decides which completing agent may claim a
+*contested* cell; it never checks whether that cell is already held by a
+stationary agent, so a mover with no rival for its next cell used to enter it
+unconditionally — over an idle, arrived, blocked, or still-mid-edge occupant.
+TASK-022 adds a second resolution stage to Pass 2, after rival arbitration and
+before apply:
+
+- **The occupancy policy.** A stationary-occupied cell blocks entry; a
+  two-agent position swap is blocked (no agent may pass through another); an
+  n-agent rotation cycle is blocked (no first mover — and on a 4-connected
+  grid, which is bipartite, the smallest pure cycle has four agents); a follow
+  chain advances **this tick** only when the whole chain resolves to a free
+  cell.
+- **The vacation chain.** Let `M0` be the completing agents that did not lose a
+  rival contest (at most one per target cell) and `occupant(c)` the unique
+  agent whose pre-tick `Position` is `c`. An agent `a in M0` may move iff the
+  chain `a -> occupant(next a) -> occupant(next (occupant (next a))) -> ...`
+  terminates at an agent whose next cell has no occupant — it neither reaches a
+  cycle nor an agent that is not itself a moving candidate. Computed as an
+  additive fixpoint (monotone, order-independent, at most n rounds): seed with
+  every `a` whose `next a` is unoccupied, then repeatedly add every `a` whose
+  `next a` is held by an agent already known to move. `obstructedBy` maps every
+  remaining `a` to `occupant(next a).Id`.
+- **No simultaneous rotation.** Swaps and pure cycles fall out of the fixpoint
+  as all-obstructed with no special case. TASK-022 deliberately does not add an
+  atomic multi-agent swap / rotate-in-place primitive: it needs a tactical
+  justification that does not exist yet.
+- **New event: `MovementObstructed of agent * at * blocked * occupant`.** A
+  movement outcome, emitted in Pass 3 in ascending agent id order. Distinct
+  from `MovementBlocked` (no traversable path; destination cleared) and
+  `MovementYielded` (lost a same-tick rival contest to another *mover*): the
+  obstructed agent's destination and route are unchanged and it retries next
+  tick. The obstructed agent freezes exactly like a rival-contest loser
+  (`Progress = startProgress`, `Route` written back, `Position` /
+  `Destination` untouched).
+- **Persistent obstruction is not resolved here.** An agent permanently blocked
+  by one that never moves retries — and re-emits `MovementObstructed` — every
+  tick, forever. Routing around a live agent is the cooperative pathfinder
+  TASK-022 forbids; noticing a persistent stall and re-appraising the order is
+  a perception / appraisal concern (**B-015 / B-017**).
+- The resolution is a same-tick pure function of already-canonical pre-tick
+  positions plus this tick's intents — the identical argument that kept
+  reservation out of the canonical image in TASK-017. `Canonical.FormatVersion`
+  stays **2**; no `AgentState` / `WorldState` field is added; no pinned hash
+  moves (every scenario pinned before this task already keeps one agent per
+  cell). `World.create` / `World.ofScenario` gain a `WorldError.AgentsShareCell`
+  guard so the one-agent-per-cell base case (section 20) holds from tick 0 by
+  construction on the direct path too, not only through `Scenario.validate`.
+
 ## 9. Line of sight and cover
 
 - Line of sight operates on logical cells and elevation.
@@ -402,17 +453,20 @@ only the friendly/hostile-side check — no issuer identity or commander model.
 - advance movement;
 - emit movement and blockage events where useful.
 
-Realised by TASK-015 (single-agent executor), TASK-017 (reservation), and
-TASK-018 (sub-cell progress): `Simulation.navigationAndMovement` computes /
-repairs a `Pathfinding` path per agent with a destination, resolves same-tick
-contention over a shared next cell in stable order (fewest remaining route
-steps among agents that would complete the edge this tick, ties broken by
-ascending agent id), advances `AgentState.Progress` toward the next cell's
-`Terrain.moveCost` threshold and enters it once reached, and emits
-`MovementStepped` / `MovementCompleted` / `MovementBlocked` / `MovementYielded`.
-Reservation is resolved fresh every tick, not stored; `Progress` is genuine
-per-tick canonical state (`Canonical.FormatVersion` 2). Full detail is in
-section 8.
+Realised by TASK-015 (single-agent executor), TASK-017 (reservation),
+TASK-018 (sub-cell progress), and TASK-022 (cell-occupancy correctness):
+`Simulation.navigationAndMovement` computes / repairs a `Pathfinding` path per
+agent with a destination, resolves same-tick contention over a shared next
+cell in stable order (fewest remaining route steps among agents that would
+complete the edge this tick, ties broken by ascending agent id), then resolves
+the vacation chain so no mover enters a cell a stationary agent still holds
+(swaps and rotation cycles blocked, follow chains advanced only when they
+clear), advances `AgentState.Progress` toward the next cell's `Terrain.moveCost`
+threshold and enters it once reached, and emits `MovementStepped` /
+`MovementCompleted` / `MovementBlocked` / `MovementYielded` / `MovementObstructed`.
+Reservation and vacation-chain resolution are both resolved fresh every tick,
+not stored; `Progress` is genuine per-tick canonical state
+(`Canonical.FormatVersion` 2). Full detail is in section 8.
 
 ### 12.8 Combat
 
@@ -596,7 +650,10 @@ per-tick pathfinding budget.
 
 At minimum:
 
-- one live agent has one authoritative position;
+- one live agent has one authoritative position — enforced pairwise: the
+  Navigation and movement phase never places two live agents on the same cell
+  (TASK-022 vacation-chain resolution), and `World.create` / `World.ofScenario`
+  reject a cell-sharing construction (`WorldError.AgentsShareCell`);
 - dead or incapacitated agents do not start new actions;
 - an order references existing recipients at acceptance time;
 - a path contains traversable adjacent cells;

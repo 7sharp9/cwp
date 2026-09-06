@@ -1,0 +1,121 @@
+# Continuous integration for the framework-neutral solution (TASK-023, backlog B-048).
+#
+# Scope: this workflow builds and tests `CommandoWar.slnx` only. That solution
+# *is* the framework-neutral boundary — it contains exactly the four
+# framework-neutral projects (CommandoWar.Sim, CommandoWar.Headless,
+# CommandoWar.Sim.Tests, CommandoWar.Benchmarks). The Godot and Mibo client
+# projects and src/_scratch/ are in the repository but not in the solution, so
+# they are never restored, built, or tested here.
+#
+# Deliberately NOT in this workflow, deferred to P4 and the first client task
+# (docs/09 section 6 post-selection matrix; docs/08 section 7):
+#   - selected-client (Godot) compile — needs the Godot .NET SDK and a pinned
+#     Godot version, a CI toolchain of its own; the Godot project does not
+#     change during P3.
+#   - content validation and package smoke — nothing to guard until client
+#     code exists.
+# The first P4 client task (B-024 / B-025) adds those jobs to this file when
+# there is client code for them to protect.
+#
+# Runner: windows-latest only. The determinism contract is per-environment
+# (docs/09 section 3): every committed hash (content/fixtures/SPIKE-FIXTURE.md,
+# content/replays/*.md, the docs/12 "Shared fixture" block) was pinned on
+# Windows x64 with .NET SDK 10.0.303. A ubuntu-latest job would be testing a
+# cross-platform claim the project explicitly disclaims. Strengthening that
+# contract is an ADR-gated decision with its own cross-target evidence
+# requirement, not a side effect of adding a CI file.
+#
+# Dependency pinning: restore relies on the existing exact-version
+# PackageReference pins in every .fsproj plus the global.json SDK pin
+# (docs/09 section 6 accepts "locked OR pinned"). A cold-cache restore on the
+# runner is itself the check that those pins resolve — so this workflow adds no
+# NuGet cache: a warm cache would weaken that signal, and there is no lockfile
+# to key one on. packages.lock.json / --locked-mode is a source change and a
+# separate task if R-016 ever justifies transitive locking.
+#
+# bench/CommandoWar.Benchmarks is built by the Release solution build (it
+# carries TreatWarningsAsErrors, so an API break in Benchmarks.fs fails CI at
+# zero extra cost) but the benchmarks are never executed — they are timing
+# measurements, not a test oracle (docs/09 sections 2.8, 5.6).
+#
+# CommandoWar.Sim, CommandoWar.Headless and CommandoWar.Benchmarks set
+# <TreatWarningsAsErrors>true</TreatWarningsAsErrors> per project; the test
+# project deliberately does not (xUnit / FsCheck analyzer noise). This workflow
+# does not override that with a global -warnaserror. Widening the test
+# project's warning discipline is a one-line .fsproj change and out of scope
+# here.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  framework-neutral:
+    name: Restore, build, test, verify determinism
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up the pinned .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          # Honour the same pin a local build honours: global.json is
+          # 10.0.303 under rollForward: latestPatch.
+          global-json-file: global.json
+
+      - name: Restore (cold cache — the pinned-restore check)
+        run: dotnet restore CommandoWar.slnx
+
+      - name: Build (Release, 0 warnings / 0 errors)
+        run: dotnet build CommandoWar.slnx -c Release --no-restore
+
+      - name: Test (full headless suite)
+        # FixtureTests (shared-fixture per-tick hashes), the CorpusTests
+        # [<Theory>] (every content/replays/ entry vs its committed table),
+        # DeterminismPropertyTests (the FsCheck properties at 200 cases each),
+        # and the rest.
+        run: dotnet test CommandoWar.slnx -c Release --no-build
+
+      - name: Verify the replay corpus (CLI form)
+        # No --regenerate: Corpus.checkEntry replays every entry, verifies it
+        # reproduces its own hashes on a second run, then compares per-tick
+        # hashes, tick count, and event count to the committed
+        # content/replays/<name>.md. Exit 3 (Exit.diverged) on the first
+        # mismatch. Belt-and-braces over the in-suite theory; this is the check
+        # that makes the determinism claim independently reproducible on a
+        # clean runner. The verb resolves content/replays relative to the
+        # working directory, so it runs from the repository root.
+        run: dotnet run --project src/CommandoWar.Headless -c Release --no-build -- corpus
+
+      - name: Smoke-check the fixture verb
+        # cmdFixture prints the fixture and its per-tick hash table and returns
+        # Exit.ok unless Fixture.run () itself errors — it does NOT compare
+        # against content/fixtures/SPIKE-FIXTURE.md. Those hashes are pinned by
+        # FixtureTests.fs (test step) and the spike-fixture corpus entry
+        # (corpus step). This step only proves the verb runs.
+        run: dotnet run --project src/CommandoWar.Headless -c Release --no-build -- fixture
+
+      - name: Working tree unchanged by the verbs
+        # Proves no committed file was rewritten (no stray --regenerate, no
+        # working-tree drift from the two verb runs).
+        shell: pwsh
+        run: |
+          $dirty = git status --porcelain
+          if ($dirty) {
+            Write-Host "working tree is dirty after the verb runs:"
+            Write-Host $dirty
+            exit 1
+          }
+          Write-Host "working tree clean"

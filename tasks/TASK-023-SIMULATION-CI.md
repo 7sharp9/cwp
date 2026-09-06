@@ -1,6 +1,9 @@
 # TASK-023: Continuous integration for the framework-neutral solution
 
-Status: ready
+Status: review (implemented 2026-09-06, pending Dave's acceptance; the
+green-run and red-run acceptance criteria on a real Actions runner are left for
+Dave to confirm by pushing branch `task-023-simulation-ci` — this session
+could not push)
 Owner: Dave
 Phase: P3
 Gate: G3 (realises `docs/09_TEST_STRATEGY.md` section 6; mitigates R-022, R-009, R-016)
@@ -328,39 +331,87 @@ A single workflow file, `.github/workflows/ci.yml`, one job:
 
 ## Acceptance criteria
 
-- [ ] `.github/workflows/ci.yml` exists, triggers on `push` and
+- [x] `.github/workflows/ci.yml` exists, triggers on `push` and
       `pull_request`, runs on `windows-latest`, and pins `actions/checkout` and
       `actions/setup-dotnet` (SHA or released major tag) with
-      `global-json-file: global.json`.
-- [ ] The job runs, in order: `dotnet restore CommandoWar.slnx`;
+      `global-json-file: global.json`. — `checkout` pinned to
+      `3d3c42e5aac5ba805825da76410c181273ba90b1` (v7.0.1), `setup-dotnet` to
+      `a98b56852c35b8e3190ac28c8c2271da59106c68` (v6.0.0); `push` any branch,
+      `pull_request` -> `main`; `concurrency` per ref with `cancel-in-progress`;
+      `permissions: contents: read`.
+- [x] The job runs, in order: `dotnet restore CommandoWar.slnx`;
       `dotnet build CommandoWar.slnx -c Release --no-restore`;
       `dotnet test CommandoWar.slnx -c Release --no-build`;
       `dotnet run --project src/CommandoWar.Headless -c Release --no-build --
       corpus`; `dotnet run --project src/CommandoWar.Headless -c Release
-      --no-build -- fixture`; a clean-working-tree check.
-- [ ] A first CI run on the branch is green: build `0` warnings / `0` errors,
-      the full suite passes (state the count observed on the runner and whether
-      it matches the local `171`), `-- corpus` prints `PASS` for all five
-      entries and exits `0`, `-- fixture` exits `0`, the working-tree check
-      passes.
-- [ ] A deliberately introduced hash divergence (e.g. a throwaway commit that
-      perturbs one committed `content/replays/*.md` row) makes the job fail at
-      step 5 **and** step 6, with `-- corpus` naming the first bad tick and the
-      expected/actual hash. Revert the throwaway commit; capture the failed-run
-      log as evidence.
-- [ ] `content/replays/CORPUS.md`, `content/fixtures/SPIKE-FIXTURE.md`, and the
+      --no-build -- fixture`; a clean-working-tree check
+      (`git status --porcelain`).
+- [~] A first CI run on the branch is green. **Not executed in this
+      environment** (no push). Local equivalent from the repo root is green:
+      build `0` warnings / `0` errors; the full suite passes **`Passed: 194`**
+      — the task drafted `171`, but TASK-021 (+7) and TASK-022 (+10 — note also
+      TASK-020's +6 which the ledger records) landed after this file was
+      written, so the current figure is `194`, and the `docs/12` "Pinned
+      facts" note is reconciled to `194`; `-- corpus` prints `PASS` for all
+      **seven** entries (the task drafted five; `follow-chain` and
+      `swap-standoff` are TASK-022's) and exits `0`; `-- fixture` exits `0`;
+      `git status --porcelain` is clean after the two verb runs. Left for Dave
+      to confirm on a runner by pushing `task-023-simulation-ci`.
+- [~] A deliberately introduced hash divergence. **Runner run not executed**
+      (no push). Local equivalent: perturbing one committed
+      `content/replays/swap-standoff.md` tick-2 row made `dotnet test
+      CommandoWar.slnx -c Release` fail (`Failed: 1, Passed: 193`; the
+      `swap-standoff` `CorpusTests` `[<Theory>]` case;
+      `Mismatch { FirstBadTick = 2L }`) — CI step 5 — **and** `cwheadless
+      -- corpus` exit `3` with `first bad tick : 2`, `expected hash
+      0x515092D658B2791F  (committed …/swap-standoff.md)`, `actual hash
+      0x515092D658B2791E  (this build)` — CI step 6. Perturbation reverted;
+      corpus back to 7× PASS. Left for Dave to capture the red-run log on a
+      runner.
+- [x] `content/replays/CORPUS.md`, `content/fixtures/SPIKE-FIXTURE.md`, and the
       `docs/12` "Shared fixture" block each carry the one-line
       Windows-x64 / .NET `10.0.303` environment annotation. No generated
-      `<name>.md` table is hand-edited.
-- [ ] `docs/09_TEST_STRATEGY.md` section 6 marks the framework-neutral matrix
+      `<name>.md` table is hand-edited (the annotation lives only in the
+      hand-authored `CORPUS.md`, `SPIKE-FIXTURE.md`, and `docs/12`).
+- [x] `docs/09_TEST_STRATEGY.md` section 6 marks the framework-neutral matrix
       items realised by TASK-023, with client-compile / content-validation /
       package-smoke explicitly still P4.
-- [ ] No source, `.fsproj`, or test file changed (`git status --porcelain`
+- [x] No source, `.fsproj`, or test file changed (`git status --porcelain`
       shows only `.github/`, `content/replays/CORPUS.md`,
       `content/fixtures/SPIKE-FIXTURE.md`, and control docs).
-- [ ] `Canonical.FormatVersion` unchanged (`2`); no committed hash moved;
-      `PROJECT_STATE.yaml` updated only if this became the active task; backlog
+- [x] `Canonical.FormatVersion` unchanged (`2`); no committed hash moved;
+      `PROJECT_STATE.yaml` updated (this became the active task); backlog
       row, ledger index row + detail file, task status updated.
+
+## Outcome (2026-09-06)
+
+Implemented as drafted. One workflow file, three one-line environment
+annotations, the `docs/09` section 6 realised-note, and the control-document
+updates. No source, `.fsproj`, test, hash, or `Canonical.FormatVersion` change;
+no ADR; no `docs/08` gate change.
+
+**Deviations from the draft, all downstream of TASK-021/022 landing after this
+file was written:**
+
+- Green-test count is **`194`**, not `171`. The `docs/12` "Pinned facts" note
+  is reconciled to `194`; CI does not pin the count.
+- The corpus has **seven** entries, not five. `-- corpus` must print `PASS` for
+  all seven; the negative test perturbs one of the seven `content/replays/*.md`
+  rows (`swap-standoff`).
+- `actions/checkout` is pinned to **v7.0.1** and `actions/setup-dotnet` to
+  **v6.0.0** (both current latest, SHA-pinned with a version comment), not the
+  older majors the draft's examples implied.
+
+**Implementer's calls on the "Optional hardening":** no NuGet `actions/cache`
+(a warm cache would weaken Decision 2's cold-restore signal, and there is no
+lockfile to key on); no `-- corpus --regenerate` + `git diff` step (step 6's
+check plus the clean-tree check already cover a stray regenerate; `renderTable`
+prose drift is caught by `CorpusTests` on the committed tables). Both noted in
+the ledger.
+
+**Not executed here:** the green-run and red-run on a GitHub Actions runner —
+this session cannot push. Branch `task-023-simulation-ci` holds the workflow
+and doc changes for Dave to push and confirm. `Canonical.FormatVersion` `2`.
 
 ## Required verification
 

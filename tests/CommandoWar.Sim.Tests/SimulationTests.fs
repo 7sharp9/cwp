@@ -197,8 +197,12 @@ let private costly (moveCost: int) (cells: (int * int) list) : Terrain =
 
 [<Fact>]
 let ``an agent routes around an impassable wall, one passable cell per tick`` () =
-    // x = 1 rows 0..1 blocked; (1,2) is open, so agent 0 at (0,0) must detour.
-    let t = impassable [ 1, 0; 1, 1 ]
+    // x = 2 rows 0..2 blocked, so agent 0 at (0,0) must detour south through
+    // the open x = 1 column and cross at row 3. The six-agent world parks
+    // agents 1..5 down column x = 0, so the wall is placed clear of them: the
+    // detour never re-enters x = 0 and the one-agent-per-cell invariant
+    // (TASK-022) is not what this fact exercises.
+    let t = impassable [ 2, 0; 2, 1; 2, 2 ]
     let a = agent 0
     let mutable st = (stepWith [| cmd 1 a { X = 3; Y = 0 } |] (worldWith t)).State
     let mutable prev = (agentOf a st).Position
@@ -503,3 +507,172 @@ let ``World.create rejects duplicate agent ids`` () =
     match result with
     | Error(DuplicateAgentId id) -> Assert.Equal(AgentId.ofInt 1, id)
     | other -> Assert.Fail($"expected DuplicateAgentId, got {other}")
+
+// --- Runtime cell-occupancy correctness (TASK-022) ---------------------
+
+/// A world with one friendly agent per listed cell, ids ascending from 0.
+let private occWorld (cells: Cell list) : WorldState =
+    match
+        World.create bounds 1UL (cells |> List.mapi (fun i c -> Agent.create (agent i) Friendly c))
+    with
+    | Ok w -> w
+    | Error e -> failwith $"unexpected {e}"
+
+/// Every live agent holds a distinct cell.
+let private distinctCells (s: WorldState) =
+    let ps = s.Agents |> Array.map (fun a -> a.Position)
+    Assert.Equal(ps.Length, (Array.distinct ps).Length)
+
+let private obstructedBodies (r: StepResult) =
+    bodies r
+    |> Array.choose (function
+        | MovementObstructed(a, at, blocked, occ) -> Some(AgentId.value a, at, blocked, AgentId.value occ)
+        | _ -> None)
+
+[<Fact>]
+let ``a mover whose only route runs through a permanently idle agent never enters that cell and emits MovementObstructed`` () =
+    // Agent 0 at (0,0) -> (4,0); agent 1 idle on the route at (2,0).
+    let a = agent 0
+    let b = agent 1
+    let w = occWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 } ]
+    let r0 = stepWith [| cmd 1 a { X = 4; Y = 0 } |] w
+    let mutable st = r0.State
+    let mutable sawObstructed = obstructedBodies r0 |> Array.isEmpty |> not
+
+    for _ in 1..8 do
+        distinctCells st
+        Assert.NotEqual({ X = 2; Y = 0 }, (agentOf a st).Position)
+        let r = stepIdle st
+        sawObstructed <- sawObstructed || (obstructedBodies r |> Array.isEmpty |> not)
+        st <- r.State
+
+    distinctCells st
+    Assert.Equal({ X = 1; Y = 0 }, (agentOf a st).Position) // parked one cell short, retrying
+    Assert.Equal({ X = 2; Y = 0 }, (agentOf b st).Position) // B never moved
+    Assert.Equal(Some { X = 4; Y = 0 }, (agentOf a st).Destination) // destination untouched
+    Assert.True(sawObstructed, "agent 0 never emitted MovementObstructed")
+
+    let r = stepIdle st
+    Assert.Contains((0, { X = 1; Y = 0 }, { X = 2; Y = 0 }, 1), obstructedBodies r)
+
+[<Fact>]
+let ``two adjacent agents each ordered onto the other's cell are both obstructed indefinitely and never swap`` () =
+    let a = agent 0
+    let b = agent 1
+    let w = occWorld [ { X = 2; Y = 2 }; { X = 3; Y = 2 } ]
+    let r0 = stepWith [| cmd 1 a { X = 3; Y = 2 }; cmd 2 b { X = 2; Y = 2 } |] w
+    let mutable st = r0.State
+
+    for _ in 0..5 do
+        distinctCells st
+        Assert.Equal({ X = 2; Y = 2 }, (agentOf a st).Position)
+        Assert.Equal({ X = 3; Y = 2 }, (agentOf b st).Position)
+        let ob = obstructedBodies (stepIdle st)
+        Assert.Contains((0, { X = 2; Y = 2 }, { X = 3; Y = 2 }, 1), ob)
+        Assert.Contains((1, { X = 3; Y = 2 }, { X = 2; Y = 2 }, 0), ob)
+        st <- (stepIdle st).State
+
+[<Fact>]
+let ``four agents rotating around a 2x2 block are all obstructed, with no first mover, deterministically`` () =
+    // The minimal pure rotation deadlock on a 4-connected grid: cardinal
+    // adjacency is bipartite, so every cycle has even length and a 3-agent
+    // pure cycle is geometrically impossible. Four agents fill the 2x2 block
+    // (2,2)-(3,3); each is ordered clockwise onto the next agent's cell, so no
+    // agent's next cell is ever free.
+    let cells = [ { X = 2; Y = 2 }; { X = 3; Y = 2 }; { X = 3; Y = 3 }; { X = 2; Y = 3 } ]
+    let dests = [ { X = 3; Y = 2 }; { X = 3; Y = 3 }; { X = 2; Y = 3 }; { X = 2; Y = 2 } ]
+
+    let cmds =
+        List.mapi (fun i d -> cmd (i + 1) (agent i) d) dests |> List.toArray
+
+    let run () =
+        let r0 = stepWith cmds (occWorld cells)
+        let mutable st = r0.State
+        let mutable evs = bodies r0
+
+        for _ in 1..4 do
+            let r = stepIdle st
+            evs <- Array.append evs (bodies r)
+            st <- r.State
+
+        evs, st
+
+    let evs1, st1 = run ()
+    let evs2, st2 = run ()
+
+    distinctCells st1
+    // No agent ever left its start cell.
+    List.iteri (fun i c -> Assert.Equal(c, (agentOf (agent i) st1).Position)) cells
+    // Every agent is obstructed by the agent holding its target cell.
+    let obstructedIds =
+        evs1
+        |> Array.choose (function
+            | MovementObstructed(a, _, _, _) -> Some(AgentId.value a)
+            | _ -> None)
+        |> Array.distinct
+        |> Array.sort
+
+    Assert.Equal<int[]>([| 0; 1; 2; 3 |], obstructedIds)
+    Assert.DoesNotContain(evs1, (function MovementStepped _ -> true | _ -> false))
+    // Deterministic: identical events and identical end-of-run hash.
+    Assert.Equal<EventBody[]>(evs1, evs2)
+    Assert.Equal(Hashing.hash st1, Hashing.hash st2)
+
+[<Fact>]
+let ``a three-agent follow chain into a free cell advances the whole chain on the same tick`` () =
+    // Agents 0,1,2 in a line at x = 1,2,3 (row 1); all ordered east. The lead
+    // (agent 2) has a free cell ahead, so the vacation chain resolves and all
+    // three step on the same tick, every tick.
+    let w = occWorld [ { X = 1; Y = 1 }; { X = 2; Y = 1 }; { X = 3; Y = 1 } ]
+
+    let cmds =
+        [| cmd 1 (agent 0) { X = 6; Y = 1 }
+           cmd 2 (agent 1) { X = 6; Y = 1 }
+           cmd 3 (agent 2) { X = 6; Y = 1 } |]
+
+    let r0 = stepWith cmds w
+    distinctCells r0.State
+    Assert.Equal({ X = 2; Y = 1 }, (agentOf (agent 0) r0.State).Position)
+    Assert.Equal({ X = 3; Y = 1 }, (agentOf (agent 1) r0.State).Position)
+    Assert.Equal({ X = 4; Y = 1 }, (agentOf (agent 2) r0.State).Position)
+
+    let stepped (r: StepResult) =
+        bodies r |> Array.filter (function MovementStepped _ -> true | _ -> false) |> Array.length
+
+    Assert.Equal(3, stepped r0)
+
+    let mutable st = r0.State
+    for _ in 1..2 do
+        let r = stepIdle st
+        Assert.Equal(3, stepped r)
+        distinctCells r.State
+        st <- r.State
+
+    // After 3 ticks the train has advanced 3 cells intact.
+    Assert.Equal({ X = 4; Y = 1 }, (agentOf (agent 0) st).Position)
+    Assert.Equal({ X = 5; Y = 1 }, (agentOf (agent 1) st).Position)
+    Assert.Equal({ X = 6; Y = 1 }, (agentOf (agent 2) st).Position)
+
+[<Fact>]
+let ``two agents converging on a cell held by a stationary third never enter it and never collide`` () =
+    // Agent 2 idle at (3,3). Agent 0 at (1,3) -> (5,3) and agent 1 at (3,1) ->
+    // (3,5) both route through (3,3): stage 2a picks one candidate (rival),
+    // stage 2b obstructs it on the stationary occupant. Neither enters (3,3).
+    let w = occWorld [ { X = 1; Y = 3 }; { X = 3; Y = 1 }; { X = 3; Y = 3 } ]
+    let r0 = stepWith [| cmd 1 (agent 0) { X = 5; Y = 3 }; cmd 2 (agent 1) { X = 3; Y = 5 } |] w
+    let mutable st = r0.State
+    let mutable sawYield = false
+    let mutable sawObstruct = false
+
+    for _ in 0..9 do
+        distinctCells st
+        Assert.NotEqual({ X = 3; Y = 3 }, (agentOf (agent 0) st).Position)
+        Assert.NotEqual({ X = 3; Y = 3 }, (agentOf (agent 1) st).Position)
+        Assert.Equal({ X = 3; Y = 3 }, (agentOf (agent 2) st).Position)
+        let r = stepIdle st
+        sawYield <- sawYield || (bodies r |> Array.exists (function MovementYielded _ -> true | _ -> false))
+        sawObstruct <- sawObstruct || (bodies r |> Array.exists (function MovementObstructed _ -> true | _ -> false))
+        st <- r.State
+
+    Assert.True(sawYield, "expected a MovementYielded from the rival contest")
+    Assert.True(sawObstruct, "expected a MovementObstructed on the stationary occupant")
