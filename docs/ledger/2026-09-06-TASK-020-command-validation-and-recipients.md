@@ -5,7 +5,8 @@
 session's uncommitted control-plane state
 **Environment:** Windows 11 Pro 26200 (25H2); .NET SDK 10.0.303; .NET 10.0.11 X64
 **Status change:** `tasks/TASK-020-COMMAND-VALIDATION-AND-RECIPIENTS.md`
-`ready -> review`; `docs/11_BACKLOG.md` TASK-020 row and B-014 `ready -> review`;
+`ready -> review -> done` (accepted by Dave 2026-09-06 in the implementation
+session); `docs/11_BACKLOG.md` TASK-020 row and B-014 `ready -> done`;
 `PROJECT_STATE.yaml active_work.selected_task` `TASK-021 -> TASK-020`. TASK-021's
 own `done`/acceptance state is untouched (Dave's to set).
 
@@ -155,7 +156,9 @@ No "Pinned facts" value changed except the green-test count, refreshed to
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-06)
 - Notes: partial section 13 envelope. Do not describe this as "section 13
   landed in full". Issue-tick semantics (B-044) and the replay-command
-  serialisation (B-045) remain mandatory before G3.
+  serialisation (B-045) remain mandatory before G3. Accepted with the
+  `PlayerCommand.Agent` accessor as a known wart — a later task should migrate
+  `CorpusTests` to `Recipients` and delete it.

@@ -1,6 +1,6 @@
 # TASK-020: Command validation and recipient selection
 
-Status: review (implemented 2026-09-06, pending Dave's acceptance)
+Status: done (2026-09-06, accepted by Dave)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-014

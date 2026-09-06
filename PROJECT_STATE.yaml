@@ -21,15 +21,16 @@ active_work:
     (docs/ledger/2026-09-06-TASK-021-movement-cost-bounds.md) — that
     acceptance state is Dave's to set and is untouched here. 2026-09-06:
     TASK-020 (backlog B-014) selected and implemented in a single headless
-    session — PlayerCommand.Recipients: AgentId list generalised from the
-    single Agent field (back-compatible Command.moveTo, new Command.moveToMany),
-    inert Urgency/RiskTolerance envelope fields, four new CommandRejection
-    cases (EmptyRecipients, DuplicateRecipient, UnauthorisedRecipient,
-    batch-order-independent DuplicateCommandId), commandIntake copies the
-    agent array once per phase invocation, emit-before-apply; a partial
-    section 13 envelope only (issuer identity and issue-tick eligibility stay
-    out, with mandatory follow-ups B-044 and B-045 before G3). No
-    Canonical.FormatVersion or CommandLogFile.Version change, no hash re-pin
+    session and accepted by Dave the same day — PlayerCommand.Recipients:
+    AgentId list generalised from the single Agent field (back-compatible
+    Command.moveTo, new Command.moveToMany), inert Urgency/RiskTolerance
+    envelope fields, four new CommandRejection cases (EmptyRecipients,
+    DuplicateRecipient, UnauthorisedRecipient, batch-order-independent
+    DuplicateCommandId), commandIntake copies the agent array once per phase
+    invocation, emit-before-apply; a partial section 13 envelope only (issuer
+    identity and issue-tick eligibility stay out, with mandatory follow-ups
+    B-044 and B-045 before G3). No Canonical.FormatVersion or
+    CommandLogFile.Version change, no hash re-pin; 178 -> 184 green
     (docs/ledger/2026-09-06-TASK-020-command-validation-and-recipients.md).
     TASK-022 / TASK-023 remain drafted and unselected under tasks/. Mibo
     5.0.0 recorded as a framework reconsideration option (ADR-0003 amendment,
