@@ -69,8 +69,8 @@ module LosDemo =
           Width = bounds.Width
           Height = bounds.Height
           FriendlyDeployments =
-            [| { AgentId = 0; Cell = { X = 0; Y = 0 } }
-               { AgentId = 1; Cell = { X = 0; Y = 11 } } |]
+            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true }
+               { AgentId = 1; Cell = { X = 0; Y = 11 }; CommunicationAvailable = true } |]
           EnemyDeployments = [||]
           ObjectiveAreas = [| { AreaId = "observation-point"; Cell = { X = 11; Y = 0 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 11; Y = 11 } } |]

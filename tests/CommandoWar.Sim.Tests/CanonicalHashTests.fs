@@ -93,6 +93,29 @@ let ``the followed-path cache is outside the canonical image and the format vers
     Assert.Equal(Hashing.hash stripped, Hashing.hash moved)
     Assert.Equal(3, Canonical.FormatVersion)
 
+[<Fact>]
+let ``communication availability is static authored data outside the canonical image`` () =
+    // TASK-027: AgentState.CommunicationAvailable is static scenario data,
+    // excluded from Canonical.encode like Terrain (ADR-0002 amendment), so
+    // flipping it alone changes neither the encoding nor the hash and does not
+    // bump the format version.
+    let w = world 1UL
+
+    let blackedOut =
+        { w with
+            Agents = w.Agents |> Array.map (fun a -> { a with CommunicationAvailable = false }) }
+
+    Assert.Equal<byte[]>(Canonical.encode w, Canonical.encode blackedOut)
+    Assert.Equal(Hashing.hash w, Hashing.hash blackedOut)
+    Assert.Equal(3, Canonical.FormatVersion)
+
+    // But the order the blackout suppresses changes the hash within one tick,
+    // via the recipient's Position: the delivered order moves agent 0, the
+    // undelivered one does not.
+    let delivered = (step [| move 1 0 { X = 5; Y = 0 } |] w).State
+    let notDelivered = (step [| move 1 0 { X = 5; Y = 0 } |] blackedOut).State
+    Assert.NotEqual(Hashing.hash delivered, Hashing.hash notDelivered)
+
 // --- First-differing section -------------------------------------------
 
 [<Fact>]

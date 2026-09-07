@@ -456,3 +456,74 @@ let ``every squad contact was seen by a friendly within ExpireAfter, with a non-
                     | None -> true
 
                 withinExpiry && seenNotFuture && validBand && grounded && nonDecreasing)))
+
+// --- property 7: communication constraints gate order delivery -------------
+// TASK-027. `commsCaseGen` is `randomCaseGen` with a random subset of the
+// agents comms-blacked-out (`CommunicationAvailable = false`). For every
+// post-tick state: (a) a blacked-out agent never holds a `Destination` and
+// never leaves its start cell (Command intake accepts its orders, but the
+// Communication phase drops them); (b) every `OrderUndelivered` event names a
+// blacked-out recipient and follows a `CommandAccepted` for the same
+// (command, recipient) on the same tick; (c) no `OrderUndelivered` is ever
+// emitted for a comms-available agent.
+
+let private commsCaseGen: Gen<RandomCase> =
+    gen {
+        let! case = randomCaseGen
+        let n = case.World.Agents.Length
+
+        let! flags =
+            Gen.arrayOfLength n (Gen.frequency [ 3, Gen.constant true; 1, Gen.constant false ])
+
+        let agents =
+            case.World.Agents
+            |> Array.mapi (fun i a -> { a with CommunicationAvailable = flags.[i] })
+
+        return { case with World = { case.World with Agents = agents } }
+    }
+
+[<Property(MaxTest = 200)>]
+let ``a comms-blacked-out agent never receives a command destination and never moves`` () =
+    Prop.forAll (Arb.fromGen commsCaseGen) (fun case ->
+        match replayOf case with
+        | Error e -> failwith $"replay of a generated case failed: {e}"
+        | Ok outcome ->
+            let startOf =
+                case.World.Agents
+                |> Array.filter (fun a -> not a.CommunicationAvailable)
+                |> Array.map (fun a -> a.Id, a.Position)
+                |> Map.ofArray
+
+            // (a) blacked-out agents are inert.
+            let inert =
+                outcome.TickStates
+                |> Array.forall (fun st ->
+                    st.Agents
+                    |> Array.forall (fun a ->
+                        match Map.tryFind a.Id startOf with
+                        | Some start -> a.Destination = None && a.Position = start
+                        | None -> true))
+
+            let blackedOut = startOf |> Map.toSeq |> Seq.map fst |> Set.ofSeq
+
+            // (b) + (c): every OrderUndelivered names a blacked-out recipient
+            // and pairs with a same-tick CommandAccepted; no comms-available
+            // agent is ever reported undelivered.
+            let byTick =
+                outcome.Events |> Array.groupBy (fun e -> e.Tick) |> Map.ofArray
+
+            let deliveryEventsOk =
+                outcome.Events
+                |> Array.forall (fun e ->
+                    match e.Body with
+                    | OrderUndelivered(cmd, recipient, UnableToCommunicate) ->
+                        Set.contains recipient blackedOut
+                        && (Map.tryFind e.Tick byTick
+                            |> Option.defaultValue [||]
+                            |> Array.exists (fun a ->
+                                match a.Body with
+                                | CommandAccepted(c, r, _) -> c = cmd && r = recipient
+                                | _ -> false))
+                    | _ -> true)
+
+            inert && deliveryEventsOk)

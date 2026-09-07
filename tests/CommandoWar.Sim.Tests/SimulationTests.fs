@@ -873,3 +873,95 @@ let ``a contact seen then lost drops a confidence band after StaleAfter and expi
 
     Assert.Equal(Some(lastSeen + int64 PerceptionConfig.ExpireAfter, { X = 6; Y = 3 }), expired)
     Assert.Equal(None, contactOf (agent 1) st)
+
+// --- Communication constraints and order delivery (TASK-027) ----------
+
+/// The six-agent friendly world with the listed agent ids' communication
+/// blacked out (`CommunicationAvailable = false`).
+let private commsBlackoutWorld (blackedOut: int list) : WorldState =
+    let w = world ()
+
+    { w with
+        Agents =
+            w.Agents
+            |> Array.map (fun a ->
+                if List.contains (AgentId.value a.Id) blackedOut then
+                    { a with CommunicationAvailable = false }
+                else
+                    a) }
+
+let private undeliveredIn (r: StepResult) =
+    bodies r
+    |> Array.choose (function
+        | OrderUndelivered(c, recipient, reason) -> Some(c, recipient, reason)
+        | _ -> None)
+
+[<Fact>]
+let ``an order to a reachable recipient is delivered the same tick it is accepted`` () =
+    // Agent 2 starts at (0,2). Command intake accepts, the Communication phase
+    // delivers (writes Destination), and Navigation and movement (phase 7,
+    // same tick) steps the agent one cell — exactly the pre-TASK-027
+    // behaviour, since nothing runs between Command intake and Communication.
+    let r = stepWith [| cmd 1 (agent 2) { X = 4; Y = 2 } |] (world ())
+
+    Assert.Contains(CommandAccepted(CommandId.ofInt 1, agent 2, { X = 4; Y = 2 }), bodies r)
+    Assert.Empty(undeliveredIn r)
+    Assert.Equal(Some { X = 4; Y = 2 }, (agentOf (agent 2) r.State).Destination)
+    Assert.Equal({ X = 1; Y = 2 }, (agentOf (agent 2) r.State).Position)
+
+[<Fact>]
+let ``an order to an unreachable recipient emits OrderUndelivered and sets no destination`` () =
+    let r = stepWith [| cmd 1 (agent 2) { X = 4; Y = 2 } |] (commsBlackoutWorld [ 2 ])
+
+    // The simulation still accepted the order into the pipeline.
+    Assert.Contains(CommandAccepted(CommandId.ofInt 1, agent 2, { X = 4; Y = 2 }), bodies r)
+    // But the Communication phase could not reach the recipient.
+    Assert.Equal<_[]>([| (CommandId.ofInt 1, agent 2, UnableToCommunicate) |], undeliveredIn r)
+    Assert.Equal(None, (agentOf (agent 2) r.State).Destination)
+    // The agent never moves.
+    Assert.Equal({ X = 0; Y = 2 }, (agentOf (agent 2) r.State).Position)
+
+[<Fact>]
+let ``communication delivery is deterministic across two runs`` () =
+    let run () =
+        stepWith
+            [| cmd 1 (agent 2) { X = 4; Y = 2 }; cmd 3 (agent 4) { X = 2; Y = 4 } |]
+            (commsBlackoutWorld [ 2 ])
+
+    let r1 = run ()
+    let r2 = run ()
+    Assert.True(bodies r1 = bodies r2)
+    Assert.Equal(r1.StateHash, r2.StateHash)
+
+[<Fact>]
+let ``a multi-recipient order delivers to the reachable recipients and reports only the cut-off one`` () =
+    let order =
+        Command.moveToMany (CommandId.ofInt 5) 0L [ agent 1; agent 2; agent 3 ] { X = 5; Y = 3 } Routine Standard
+
+    let r = stepWith [| order |] (commsBlackoutWorld [ 2 ])
+
+    Assert.Equal(Some { X = 5; Y = 3 }, (agentOf (agent 1) r.State).Destination)
+    Assert.Equal(Some { X = 5; Y = 3 }, (agentOf (agent 3) r.State).Destination)
+    Assert.Equal(None, (agentOf (agent 2) r.State).Destination)
+    Assert.Equal<_[]>([| (CommandId.ofInt 5, agent 2, UnableToCommunicate) |], undeliveredIn r)
+
+[<Fact>]
+let ``an undelivered order does not cancel a destination the recipient already held`` () =
+    // Agent 2 is already en route to (5,5) and is now comms-blacked-out; a new
+    // order to (0,0) cannot reach it, so the old order continues unchanged.
+    let w = commsBlackoutWorld [ 2 ]
+
+    let w =
+        { w with
+            Agents =
+                w.Agents
+                |> Array.map (fun a ->
+                    if a.Id = agent 2 then
+                        { a with Destination = Some { X = 5; Y = 5 } }
+                    else
+                        a) }
+
+    let r = stepWith [| cmd 1 (agent 2) { X = 0; Y = 0 } |] w
+
+    Assert.Equal<_[]>([| (CommandId.ofInt 1, agent 2, UnableToCommunicate) |], undeliveredIn r)
+    Assert.Equal(Some { X = 5; Y = 5 }, (agentOf (agent 2) r.State).Destination)

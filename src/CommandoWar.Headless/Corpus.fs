@@ -83,30 +83,34 @@ module Corpus =
     /// objective area, one extraction area, no targets. `enemies` is `[]` for
     /// every entry except `perception-contact` (TASK-026): `rawScenario` used
     /// to hard-wire no enemy deployments, so the first enemy-bearing entry
-    /// needed this generalisation. `Scenario.validate` and `World.ofScenario`
-    /// already deploy friendly-then-enemy in ascending id order.
+    /// needed this generalisation. `commsBlackout` is `[]` for every entry
+    /// except `lost-comms` (TASK-027): the agent ids it names get
+    /// `CommunicationAvailable = false`, so the Communication phase emits
+    /// `OrderUndelivered` and drops any order to them. `Scenario.validate` and
+    /// `World.ofScenario` already deploy friendly-then-enemy in ascending id
+    /// order.
     let private rawScenario
         (id: string)
         (width: int)
         (height: int)
         (friendly: (int * Cell) list)
         (enemies: (int * Cell) list)
+        (commsBlackout: int list)
         (terrain: RawTerrainCell list)
         (objective: Cell)
         (extraction: Cell)
         : RawScenario =
+        let deployment (a, c) : RawDeployment =
+            { AgentId = a
+              Cell = c
+              CommunicationAvailable = not (List.contains a commsBlackout) }
+
         { ContentVersion = ScenarioContent.Version
           Id = id
           Width = width
           Height = height
-          FriendlyDeployments =
-            friendly
-            |> List.map (fun (a, c) -> { AgentId = a; Cell = c })
-            |> List.toArray
-          EnemyDeployments =
-            enemies
-            |> List.map (fun (a, c) -> { AgentId = a; Cell = c })
-            |> List.toArray
+          FriendlyDeployments = friendly |> List.map deployment |> List.toArray
+          EnemyDeployments = enemies |> List.map deployment |> List.toArray
           ObjectiveAreas = [| { AreaId = "objective"; Cell = objective } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = extraction } |]
           StaticTargets = [||]
@@ -144,7 +148,7 @@ module Corpus =
     /// (rows 7..8 open). A `MoveTo (10,3)` forces a detour around the gap.
     let private wallDetourWorld () : WorldState =
         worldOf (
-            rawScenario "corpus-wall-detour" 12 9 [ 0, { X = 1; Y = 3 } ] [] [ for y in 0..6 -> wall 5 y ] { X = 11; Y = 0 } { X = 0; Y = 8 }
+            rawScenario "corpus-wall-detour" 12 9 [ 0, { X = 1; Y = 3 } ] [] [] [ for y in 0..6 -> wall 5 y ] { X = 11; Y = 0 } { X = 0; Y = 8 }
         )
 
     /// One friendly agent at (1,4); the target (5,4) is passable but its four
@@ -158,6 +162,7 @@ module Corpus =
                 8
                 [ 0, { X = 1; Y = 4 } ]
                 []
+                []
                 [ wall 4 4; wall 6 4; wall 5 3; wall 5 5 ]
                 { X = 7; Y = 0 }
                 { X = 0; Y = 7 }
@@ -170,7 +175,7 @@ module Corpus =
     /// one tick, then both reach their destinations by tick 12.
     let private convergingRoutesWorld () : WorldState =
         worldOf (
-            rawScenario "corpus-converging-routes" 8 8 [ 0, { X = 3; Y = 0 }; 1, { X = 0; Y = 3 } ] [] [] { X = 7; Y = 7 } { X = 0; Y = 0 }
+            rawScenario "corpus-converging-routes" 8 8 [ 0, { X = 3; Y = 0 }; 1, { X = 0; Y = 3 } ] [] [] [] { X = 7; Y = 7 } { X = 0; Y = 0 }
         )
 
     /// One friendly agent at (0,0) ordered to (4,0), open terrain except
@@ -179,7 +184,7 @@ module Corpus =
     /// (TASK-018 sub-cell movement progress) before the agent enters it; every
     /// other cell is entered in the usual single tick.
     let private slowTerrainWorld () : WorldState =
-        worldOf (rawScenario "corpus-slow-terrain" 8 8 [ 0, { X = 0; Y = 0 } ] [] [ costly 1 0 3 ] { X = 7; Y = 7 } { X = 0; Y = 7 })
+        worldOf (rawScenario "corpus-slow-terrain" 8 8 [ 0, { X = 0; Y = 0 } ] [] [] [ costly 1 0 3 ] { X = 7; Y = 7 } { X = 0; Y = 7 })
 
     /// Three friendly agents in a line at (1,3), (2,3), (3,3), all ordered east
     /// to (11,3). Each tick the lead agent has a free cell ahead, so the
@@ -193,6 +198,7 @@ module Corpus =
                 12
                 9
                 [ 0, { X = 1; Y = 3 }; 1, { X = 2; Y = 3 }; 2, { X = 3; Y = 3 } ]
+                []
                 []
                 []
                 { X = 11; Y = 3 }
@@ -210,6 +216,7 @@ module Corpus =
                 8
                 8
                 [ 0, { X = 3; Y = 3 }; 1, { X = 4; Y = 3 } ]
+                []
                 []
                 []
                 { X = 7; Y = 7 }
@@ -233,8 +240,30 @@ module Corpus =
                 8
                 [ 0, { X = 1; Y = 5 } ]
                 [ 1, { X = 9; Y = 1 } ]
+                []
                 [ for y in 0..3 -> opaqueWall 6 y ]
                 { X = 9; Y = 5 }
+                { X = 0; Y = 7 }
+        )
+
+    /// One friendly agent 0 at (1,4) with `CommunicationAvailable = false`
+    /// (an authored comms blackout), ordered east to (6,4) on tick 1. Command
+    /// intake accepts the order (`CommandAccepted`), but the Communication
+    /// phase cannot reach the recipient, so it emits `OrderUndelivered` and
+    /// drops the order: no `Destination` is ever written and the agent never
+    /// moves. The "Lost communication" vertical-slice scenario
+    /// (`docs/05` section 16; TASK-027, backlog B-016).
+    let private lostCommsWorld () : WorldState =
+        worldOf (
+            rawScenario
+                "corpus-lost-comms"
+                8
+                8
+                [ 0, { X = 1; Y = 4 } ]
+                []
+                [ 0 ]
+                []
+                { X = 7; Y = 0 }
                 { X = 0; Y = 7 }
         )
 
@@ -308,7 +337,18 @@ module Corpus =
                + "enemy deployment (TASK-026, backlog B-015; the 'Unknown threat' shape, docs/05 section 16)."
              InitialStateNote = "Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile)"
              InitialState = perceptionContactWorld
-             TickCount = 14L } |]
+             TickCount = 14L }
+           { Name = "lost-comms"
+             Description =
+               "One friendly agent 0 at (1,4) with CommunicationAvailable = false (an authored comms blackout), "
+               + "ordered east to (6,4) on tick 1. Command intake accepts the order (CommandAccepted), but the "
+               + "Communication phase cannot reach the recipient, so it emits OrderUndelivered and drops the order: "
+               + "no Destination is written and the agent never moves. The 'Lost communication' vertical-slice "
+               + "scenario (docs/05 section 16; TASK-027, backlog B-016). CommunicationAvailable is static authored "
+               + "data, excluded from Canonical.encode (the Terrain precedent), so Canonical.FormatVersion stays 3."
+             InitialStateNote = "Corpus lost-comms scenario (8 x 8, seed 20260904, 1 friendly, comms blackout)"
+             InitialState = lostCommsWorld
+             TickCount = 4L } |]
 
     // --- entry paths and loading ----------------------------------------
 

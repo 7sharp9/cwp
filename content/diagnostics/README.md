@@ -38,6 +38,8 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `swap-standoff-tick-001.svg` | SVG of the same frame: each blocked cell as a red dashed box labelled `B<occupant id>`, alongside each agent's route polyline. |
 | `perception-contact-tick-005.ascii.txt` | The `content/replays/perception-contact` corpus entry (TASK-026) at tick 5: friendly agent 0 has just cleared the opaque wall at x=6 and its line of sight to the stationary hostile agent 1 at `(9,1)` opens. The Perception phase emits `ContactObserved` (both ways — perception is symmetric) and the Tactical-knowledge phase adds the contact to `WorldState.TacticalKnowledge`, so the overlays section carries `known contact (9,1): agent 1  confidence 1000  seen tick 5` and the events line two `contact-observed` markers. |
 | `perception-contact-tick-005.svg` | SVG of the same frame: the last-known contact cell as a purple (`#805ad5`) dashed ring labelled `?1`, over the (still-accurate) hostile agent circle. |
+| `lost-comms-tick-001.ascii.txt` | The `content/replays/lost-comms` corpus entry (TASK-027) at tick 1: friendly agent 0 at `(1,4)` has `CommunicationAvailable = false`, so the order to `(6,4)` is accepted by command intake but dropped by the Communication phase. The roster line shows `no-comms`, the agent is still `at rest`, the overlays section carries `undelivered order (1,4): agent 0  command 1  (communication unavailable)`, and the events line carries `order-undelivered`. |
+| `lost-comms-tick-001.svg` | SVG of the same frame: the blacked-out agent circled by a dashed red (`#e53e3e`) ring, and its cell marked by a red dashed box with a struck-through diagonal and an `!0` label. |
 
 ## Regeneration
 
@@ -66,13 +68,14 @@ $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 ```
 
 `converging-routes-tick-003.*`, `slow-terrain-tick-002.*`,
-`swap-standoff-tick-001.*`, and `perception-contact-tick-005.*` are not
-produced by the `render` verb: each entry's initial state is corpus-owned
-(`Corpus.all`), not the shared fixture or demo scenario `render` knows about.
-All are regenerated the same way — `DiagnosticRender.runFrames` over the named
-`Corpus.all` entry and its committed `.cwlog`, at the tick named in the file —
-using the exact helper (`convergingRoutesFrames ()` / `slowTerrainFrames ()` /
-`swapStandoffFrames ()` / `perceptionContactFrames ()`) the corresponding
+`swap-standoff-tick-001.*`, `perception-contact-tick-005.*`, and
+`lost-comms-tick-001.*` are not produced by the `render` verb: each entry's
+initial state is corpus-owned (`Corpus.all`), not the shared fixture or demo
+scenario `render` knows about. All are regenerated the same way —
+`DiagnosticRender.runFrames` over the named `Corpus.all` entry and its
+committed `.cwlog`, at the tick named in the file — using the exact helper
+(`convergingRoutesFrames ()` / `slowTerrainFrames ()` / `swapStandoffFrames ()`
+/ `perceptionContactFrames ()` / `lostCommsFrames ()`) the corresponding
 `DiagnosticsTests.fs` fact uses to compare against these files, so a
 regeneration and its test cannot silently disagree.
 

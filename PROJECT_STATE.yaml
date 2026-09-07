@@ -5,19 +5,55 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-07 (TASK-026 accepted and merged to main; nothing selected)
+  updated: 2026-09-07 (TASK-027 implemented on branch, in review)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-027
+  task_file: tasks/TASK-027-COMMUNICATION-AND-ORDER-DELIVERY.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-07
   note: >-
-    2026-09-07: nothing selected. TASK-026 (backlog B-015, observations and
-    shared squad tactical knowledge — first phase consumer of the Sight
-    module) implemented, accepted by Dave, and merged to main (branch
+    2026-09-07: TASK-027 (backlog B-016, communication constraints and order
+    delivery — the communication-failure half) implemented on branch
+    task-027-communication-and-order-delivery off main at cd434b6. Committed
+    locally, not pushed. In review, not yet accepted.
+
+    Five central decisions confirmed with Dave before the phase bodies: (A)
+    static per-agent CommunicationAvailable reachability check, no PRNG, flag
+    excluded from Canonical.encode like Terrain; (B) the pending order is
+    transient (a StepState-local list, not canonical) so Canonical.FormatVersion
+    stays 3 and no hash re-pins; (C) radio range / delay / jamming /
+    radio-destroyed / report aging split to a new B-016b; (D) OrderUndelivered
+    only, no OrderDelivered success event (with zero delay it duplicates
+    CommandAccepted); (E) no ADR.
+
+    commandIntake now records an accepted order as a pending order rather than
+    writing AgentState.Destination; the new Communication phase (slot 2)
+    delivers it (writes Destination) to a recipient with
+    CommunicationAvailable = true, or emits OrderUndelivered
+    (UnableToCommunicate) and drops it. New AgentState.CommunicationAvailable
+    (static, default true, excluded from Canonical.encode), RawDeployment /
+    Deployment.CommunicationAvailable, EventBody.OrderUndelivered +
+    DeliveryFailure DU, Overlay.UndeliveredOrder +
+    AgentMarker.CommunicationAvailable, new lost-comms corpus entry + golden.
+
+    ZERO re-pin: -- corpus (9/9 PASS) and -- fixture (format 3,
+    0x50BFA007EDFC42FE / 0xD9D6EC3DDC1D602F, 33 events) byte-identical before
+    and after, with and without --regenerate; no content/diagnostics golden
+    moved; -- replay-file envelope-full checkpoints OK at canonical 3.
+    216 -> 228 green; dotnet build 0/0; src/CommandoWar.Sim packages
+    FSharp.Core only. No ADR.
+    (docs/ledger/2026-09-07-TASK-027-communication-and-order-delivery.md)
+
+    B-016 -> done (communication half); new B-016b (range/delay/jamming/
+    radio-destroyed/report aging) proposed; B-017 (staged order appraisal)
+    now has "Was the order received?" as a real fact.
+
+    Prior context: TASK-026 (backlog B-015, observations and shared squad
+    tactical knowledge — first phase consumer of the Sight module) implemented,
+    accepted by Dave, and merged to main (branch
     task-026-perception-and-tactical-knowledge, --no-ff; branch deleted; not
     pushed).
 

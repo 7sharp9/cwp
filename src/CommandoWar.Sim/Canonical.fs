@@ -85,6 +85,15 @@ module Canonical =
     // (TASK-018) IS written: unlike `Route`, it cannot be recomputed from
     // `Position` alone (`Position` does not change while an edge is in
     // progress), so it is genuine new state, not a derived cache.
+    //
+    // `AgentState.CommunicationAvailable` (TASK-027) is also deliberately NOT
+    // written: at this stage it is STATIC authored scenario data
+    // (`Deployment.CommunicationAvailable`), set once at tick 0 and never
+    // mutated during a run, so — like `Terrain` under the ADR-0002 amendment —
+    // it cannot diverge and is out of the canonical image. A comms-derived
+    // behaviour bug still surfaces in the hash within one tick via `Position`.
+    // When B-016b makes comms availability per-tick mutable it enters the
+    // image and `FormatVersion` bumps then.
     let private writeAgent (w: Writer) (a: AgentState) =
         w.I32(AgentId.value a.Id)
         w.I32(sideCode a.Side)
