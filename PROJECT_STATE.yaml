@@ -43,10 +43,9 @@ active_work:
     (ReplaySerialisation.serialise is the in-memory command-stream emitter it
     targets).
 
-    Local branches not pushed: task-024-025-026-drafts (drafts +
-    reconciliation), task-024-issue-tick-semantics (superseded — TASK-024 on
-    main), task-025-replay-command-serialisation (merged to main). main is
-    ahead of origin/main by the TASK-025 commits — left for Dave to push.
+    All feature branches merged into main and deleted; `main` is the only
+    local branch. `main` is ahead of `origin/main` by the TASK-025 commits
+    (implement + accept + merge) — left for Dave to push.
 
     Earlier this session (2026-09-06): TASK-021 (B-046), TASK-022 (B-047),
     TASK-023 (B-048) recorded as accepted by Dave; TASK-023's
