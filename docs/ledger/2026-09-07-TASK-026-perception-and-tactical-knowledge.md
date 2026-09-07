@@ -375,4 +375,12 @@ Regeneration commands are in `content/diagnostics/README.md`.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-07)
+- Notes: perception + shared squad tactical knowledge as real `Simulation`
+  phases; `AgentState.VisibleContacts` a non-canonical derived cache,
+  `WorldState.TacticalKnowledge` genuine canonical state, `Canonical.FormatVersion`
+  bumped 2 -> 3 (every pinned hash re-pinned, behaviour-neutral for the
+  fixture / seven `.cwlog` / `envelope-full`, confirmed by unchanged tick and
+  event counts). New `Perception.fs` leaf, new `perception-contact` corpus
+  entry, new `Overlay.KnownContact`. `206 -> 216` green. Merged to `main`
+  (`--no-ff`, branch deleted; not pushed).

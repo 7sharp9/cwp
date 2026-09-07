@@ -5,60 +5,54 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-07 (TASK-026 implemented on branch, in review)
+  updated: 2026-09-07 (TASK-026 accepted and merged to main; nothing selected)
 
 active_work:
-  selected_task: TASK-026
-  task_file: tasks/TASK-026-PERCEPTION-AND-TACTICAL-KNOWLEDGE.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-07
   note: >-
-    2026-09-07: TASK-026 (backlog B-015, observations and shared squad
-    tactical knowledge — first phase consumer of the Sight module) implemented
-    on branch task-026-perception-and-tactical-knowledge off main. Committed
-    locally, NOT pushed; awaiting Dave's review (task file `review`).
+    2026-09-07: nothing selected. TASK-026 (backlog B-015, observations and
+    shared squad tactical knowledge — first phase consumer of the Sight
+    module) implemented, accepted by Dave, and merged to main (branch
+    task-026-perception-and-tactical-knowledge, --no-ff; branch deleted; not
+    pushed).
 
-    Three central decisions confirmed with Dave before the canonical encoder
-    / phase bodies were written: full retained decaying tactical-knowledge
-    store (not the narrowed cut); PerceptionConfig module literals
-    SightRange = 10 (Chebyshev), ConfidenceFull = 1000,
-    ConfidenceBandDrop = 250, StaleAfter = 20, ExpireAfter = 60; symmetric
-    raw visibility (both sides get AgentState.VisibleContacts) with
-    friendly-squad-only WorldState.TacticalKnowledge (hostile picture + enemy
-    doctrine stay B-022).
+    Three central decisions were confirmed with Dave before the canonical
+    encoder / phase bodies were written: full retained decaying
+    tactical-knowledge store (not the narrowed cut); PerceptionConfig module
+    literals SightRange = 10 (Chebyshev), ConfidenceFull = 1000,
+    ConfidenceBandDrop = 250, StaleAfter = 20, ExpireAfter = 60; symmetric raw
+    visibility (both sides get AgentState.VisibleContacts) with
+    friendly-squad-only WorldState.TacticalKnowledge.
 
-    New leaf src/CommandoWar.Sim/Perception.fs (PerceptionConfig,
-    visibleContactsFor / sweep / mergeKnowledge; pure, total, integer-only).
-    Real Perception (12.3) and TacticalKnowledge (12.4) phases in
-    Simulation.fs. AgentState.VisibleContacts is a non-canonical derived cache
-    (excluded from Canonical.encode, the Route precedent);
+    New leaf src/CommandoWar.Sim/Perception.fs. AgentState.VisibleContacts is
+    a non-canonical derived cache (excluded from Canonical.encode);
     WorldState.TacticalKnowledge is genuine canonical state, so
     Canonical.FormatVersion bumped 2 -> 3 with a full BEHAVIOUR-NEUTRAL re-pin
     (fixture + all seven .cwlog corpus entries + envelope-full.{cwreplay,md} —
     tick counts and event counts byte-identical; every committed scenario is
-    enemy-free). DemoScenario has one hostile, so demo.html legitimately gains
-    the new KnownContact overlay + contact-observed markers (it is not one of
-    the seven). New ContactObserved / ContactExpired events; new
-    Overlay.KnownContact in both Diagnostics.frame and frameOf. New
-    enemy-bearing corpus entry perception-contact (14 ticks, 12 events) +
-    golden perception-contact-tick-005.*.
-
-    206 -> 216 green (+5 SimulationTests, +1 DeterminismPropertyTests property
-    at 200 cases, +1 CanonicalHashTests, +2 DiagnosticsTests, +1 CorpusTests
-    theory case); dotnet build 0/0; -- corpus 8/8 PASS; -- fixture format 3,
-    33 events unchanged; -- replay-file envelope-full checkpoints OK;
-    src/CommandoWar.Sim packages FSharp.Core only. No ADR (ADR-0002 amendment
-    governs the format bump).
+    enemy-free). New ContactObserved / ContactExpired events; new
+    Overlay.KnownContact in Diagnostics.frame and frameOf; new enemy-bearing
+    corpus entry perception-contact (14 ticks, 12 events) + golden.
+    206 -> 216 green; dotnet build 0/0; -- corpus 8/8 PASS; -- fixture
+    format 3, 33 events unchanged; src/CommandoWar.Sim packages FSharp.Core
+    only. No ADR (ADR-0002 amendment governs the bump).
     (docs/ledger/2026-09-07-TASK-026-perception-and-tactical-knowledge.md)
 
-    B-016 / B-017 / B-019 / B-022 are now unblocked (they consume
-    WorldState.TacticalKnowledge / AgentState.VisibleContacts). No drafted
-    TASK-027.
+    All P3 command-loop and perception foundations are now in place. Newly
+    unblocked P3 work (each consumes WorldState.TacticalKnowledge /
+    AgentState.VisibleContacts): B-016 (communication constraints and report
+    aging), B-017 (staged order appraisal — needs B-016), B-019 (basic
+    hitscan combat and directional cover). No task file drafted for any of
+    them yet.
 
-    main is ahead of origin/main by the earlier TASK-025 commits plus the
-    new task-026 branch — all left for Dave to push.
+    All feature branches merged into main and deleted; `main` is the only
+    local branch and is ahead of origin/main by the TASK-025 and TASK-026
+    commits — left for Dave to push.
 
     Earlier this session (2026-09-06): TASK-021 (B-046), TASK-022 (B-047),
     TASK-023 (B-048) recorded as accepted by Dave; TASK-023's

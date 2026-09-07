@@ -1,6 +1,6 @@
 # TASK-026: Observations and shared squad tactical knowledge
 
-Status: review
+Status: done (2026-09-07, accepted by Dave)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-015
