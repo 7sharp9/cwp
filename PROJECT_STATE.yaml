@@ -5,20 +5,20 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-07 (TASK-024 implemented, pending acceptance; TASK-025/026 drafted)
+  updated: 2026-09-07 (TASK-024 accepted; nothing selected; TASK-025/026 ready)
 
 active_work:
-  selected_task: TASK-024
-  task_file: tasks/TASK-024-ISSUE-TICK-SEMANTICS.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-07
   note: >-
-    2026-09-07: TASK-024 (backlog B-044, issue-tick / submission-tick
-    semantics — mandatory before G3) implemented, pending Dave's acceptance.
-    On the recommended resolutions: PlayerCommand.IssueTick renamed to
-    IssuedAtTick (only that field; RecordedCommand.Tick kept with a
+    2026-09-07: nothing selected. TASK-024 (backlog B-044, issue-tick /
+    submission-tick semantics — mandatory before G3) implemented and accepted
+    by Dave. On the recommended resolutions: PlayerCommand.IssueTick renamed
+    to IssuedAtTick (only that field; RecordedCommand.Tick kept with a
     clarifying doc comment — the two are independent, and the legacy .cwlog
     collapses them); one new CommandRejection case IssueTickOutOfRange
     (IssuedAtTick must be in [0, currentTick]; a stale command is still
@@ -30,15 +30,20 @@ active_work:
     (0xAFA35198CC6BD8D4, 33 events) byte-identical; no ADR.
     (docs/ledger/2026-09-07-TASK-024-issue-tick-semantics.md)
 
-    B-045 / TASK-025 (production replay-command serialisation — mandatory
-    before G3) moves to ready on Dave's acceptance of TASK-024. Its task file
-    is complete (recommends a separate new versioned lossless hand-rolled
-    replay-command format in CommandoWar.Sim, .cwlog frozen at v1, corpus not
-    migrated — that is B-049). B-015 / TASK-026 (observations and shared
-    squad tactical knowledge; first Sight-module phase consumer;
-    Canonical.FormatVersion 2 -> 3) is ready and independent of TASK-024/025.
-    (docs/ledger/2026-09-06-TASK-025-drafted.md,
-    docs/ledger/2026-09-06-TASK-026-drafted.md)
+    Both remaining P3 tasks with a complete file are now ready:
+      - TASK-025 (backlog B-045, production replay-command serialisation —
+        mandatory before G3). Two decisions to settle at selection: text vs
+        binary format (task recommends text), and command-log-plus-header vs
+        whole-ReplayRecord serialisation (task now recommends the former —
+        the initial state stays a scenario / builder reference, not a
+        serialised WorldState, keeping the task M). Recommended NEXT.
+      - TASK-026 (backlog B-015, observations and shared squad tactical
+        knowledge; first Sight-module phase consumer; Canonical.FormatVersion
+        2 -> 3 with a behaviour-neutral re-pin). Independent of TASK-024/025.
+
+    Branches: task-024-025-026-drafts (drafts + reconciliation) and
+    task-024-issue-tick-semantics (stacks the TASK-024 implementation on top),
+    both off main, neither pushed — left for Dave to PR.
 
     Earlier this session (2026-09-06): TASK-021 (B-046), TASK-022 (B-047),
     TASK-023 (B-048) recorded as accepted by Dave; TASK-023's

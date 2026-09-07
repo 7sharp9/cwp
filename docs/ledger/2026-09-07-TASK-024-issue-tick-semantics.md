@@ -218,7 +218,11 @@ All from the repository root, on branch `task-024-issue-tick-semantics`.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-07)
 - Notes: implemented on the recommended resolutions per "proceed with
-  recommendation". Decision 1 (one field renamed, not both) is the call most
-  worth confirming.
+  recommendation" and accepted the same session. Decision 1 (only
+  `PlayerCommand.IssueTick` renamed, `RecordedCommand.Tick` kept) accepted as
+  the smaller change; the symmetric `SubmitAtTick` rename is not required. The
+  two forced mechanical edits (`CorpusTests.fs` one token,
+  `Program.describeReplayError` one arm) accepted. B-045 / TASK-025 moves to
+  `ready`.

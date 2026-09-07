@@ -1,7 +1,10 @@
 # TASK-025: Production replay-command serialisation
 
-Status: proposed (complete task file; TASK-024 / B-044 implemented 2026-09-07
-and pending Dave's acceptance — this moves to `ready` on that acceptance)
+Status: ready (TASK-024 / B-044 accepted 2026-09-07). Two decisions to settle
+at selection: **text vs binary** format (Central decision 3 — task recommends
+text) and **command-log-only vs whole-`ReplayRecord`** serialisation (Central
+decision 2 — see the note there; command-log-plus-header is the smaller, more
+likely-right scope and keeps the task M).
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-045 — **mandatory before G3**
@@ -47,11 +50,11 @@ after this task).
   is an explicitly versioned format that fails loudly on an unknown version,
   which is exactly what this task builds.
 
-Depends on **TASK-024 / B-044**: the format must serialise whatever tick
-fields TASK-024 settles (`IssuedAtTick`, and `SubmitAtTick` if that rename is
-taken). B-045 stays `proposed` until TASK-024 is `done`, then moves to
-`ready` (backlog section 1: `ready` requires satisfied dependencies).
-Independent of TASK-022, TASK-023, TASK-026.
+Depended on **TASK-024 / B-044** (accepted 2026-09-07): the format serialises
+the tick fields TASK-024 settled — `PlayerCommand.IssuedAtTick` (the issue
+tick, in the envelope) and `RecordedCommand.Tick` (the delivery tick, kept
+un-renamed), which are independent. Independent of TASK-022, TASK-023,
+TASK-026.
 
 ## Required reading
 
@@ -120,15 +123,25 @@ Add a **new format**, do not grow the `.cwlog` line grammar.
   evidence run replays from it.
 - Keep `.cwlog` **frozen at `Version = 1`**, explicitly a legacy
   fixture-script format. It maps a line to the degenerate envelope
-  (one recipient, `Routine` / `Standard`, `IssuedAtTick == SubmitAtTick`).
+  (one recipient, `Routine` / `Standard`, `IssuedAtTick == RecordedCommand.Tick`).
 
 ### Decision 2 — the format lives in `CommandoWar.Sim`, serialises the typed replay model, adds no dependency
 
 - New module, e.g. `src/CommandoWar.Sim/ReplaySerialisation.fs` (or an
-  addition to `Replay.fs`), owning `serialise` / `parse` over
-  `RecordedCommand[]` — and, recommended, over the whole `ReplayRecord`
-  (`Meta`, `Seed`, `InitialState`-or-a-scenario-reference, `TickCount`,
-  `Log`, `Checkpoints`), so a single file is a complete replay.
+  addition to `Replay.fs`), owning `serialise` / `parse` over the **command
+  log plus a small header** — `Version`, `Seed`, `TickCount`, `Meta`
+  (`Build` / `Scenario`), optional `Checkpoints`, and the ordered
+  `RecordedCommand[]`. **Not the whole `InitialState`.** Serialising a full
+  `WorldState` (every agent, the terrain grid, random state, and — after
+  TASK-026 — tactical knowledge) losslessly to text is a much larger job and
+  a moving target as canonical state grows; it also duplicates
+  `Scenario` / `Corpus.fs`, which already own initial-state construction. The
+  initial state stays a named scenario / builder reference (the `.cwlog`
+  model: `Corpus.fs` supplies the `WorldState`), recorded in `Meta.Scenario`
+  and, ideally, pinned by a scenario content hash so a mismatched builder is
+  caught. A single-file "whole replay including initial state" format is a
+  clean follow-up once B-045's format and B-049's builder exist; it is **out
+  of scope here** and keeps this task M.
 - **`CommandoWar.Sim`, not `CommandoWar.Headless`.** `.cwlog` sits in
   Headless because it is a spike convenience; the production replay format is
   a first-class part of the determinism contract (`docs/04` sections 16–17)
@@ -155,10 +168,10 @@ Text format requirements (whichever concrete grammar is chosen):
   versions clearly. It does not guess migrations.").
 - Deterministic output: fixed field order, integers only, no floats, no
   culture-sensitive formatting, stable line order (the existing
-  `(SubmitAtTick, Sequence)` sort). Round-tripping is idempotent —
+  `(RecordedCommand.Tick, Sequence)` sort). Round-tripping is idempotent —
   `parse >> serialise` and `serialise >> parse` are identity on valid input.
 - Every accepted-command field representable: `Id`, `IssuedAtTick`,
-  `SubmitAtTick`, `Sequence`, `Issuer`, `Recipients` (a list), `Urgency`,
+  the delivery tick (`RecordedCommand.Tick`), `Sequence`, `Issuer`, `Recipients` (a list), `Urgency`,
   `RiskTolerance`, `Intent`. `Intent` is `MoveTo target` today; the grammar
   must have room for the later intents (`Hold` / `Suppress` / `Assault` /
   `Withdraw`) without a version bump for each — e.g. an intent keyword plus
@@ -184,7 +197,7 @@ Instead, prove the new format with:
 
 - **round-trip property / unit tests** over generated and hand-built
   `RecordedCommand[]` covering multi-recipient, every `Urgency`, every
-  `RiskTolerance`, `IssuedAtTick != SubmitAtTick`, and a non-`move` intent
+  `RiskTolerance`, `IssuedAtTick` different from the delivery tick, and a non-`move` intent
   placeholder if the grammar admits one;
 - **at least one committed replay fixture in the new format** exercising a
   full envelope (e.g. a 3-recipient `MoveTo` with `Urgency = Immediate`,
@@ -300,7 +313,7 @@ evidence in the `content/replays/` sense, not a diagnostic-frame golden.
 - [ ] `serialise` then `parse` is identity, and `parse` then `serialise` is
       identity, on valid input — proven over generated `RecordedCommand[]`
       that includes multi-recipient commands, every `Urgency`, every
-      `RiskTolerance`, and `IssuedAtTick != SubmitAtTick`
+      `RiskTolerance`, and `IssuedAtTick` different from the delivery tick
       (`ReplayTests.fs`, a property at >= 200 cases).
 - [ ] An unknown format version is rejected with a typed error naming the
       version; no migration is attempted (`ReplayTests.fs`).
