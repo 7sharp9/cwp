@@ -85,7 +85,7 @@
   <rect x="112" y="48" width="16" height="16" fill="none" stroke="#dd6b20" stroke-width="3"/>
   <rect x="48" y="48" width="16" height="16" fill="none" stroke="#d53f8c" stroke-width="2" stroke-dasharray="2,2"/>
   <text x="49" y="62" font-family="monospace" font-size="9" fill="#d53f8c">R0</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 3  hash 0xB4D9F38804F79D68  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 3  hash 0xA05326D276394923  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 2  cover-edges 0  events 2</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

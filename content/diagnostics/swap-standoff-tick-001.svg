@@ -89,7 +89,7 @@
   <text x="65" y="62" font-family="monospace" font-size="9" fill="#c53030">B1</text>
   <rect x="48" y="48" width="16" height="16" fill="none" stroke="#c53030" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="49" y="62" font-family="monospace" font-size="9" fill="#c53030">B0</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 1  hash 0xA976DE20340B5163  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 1  hash 0x7EFEFA56056A1994  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 2  cover-edges 0  events 4</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

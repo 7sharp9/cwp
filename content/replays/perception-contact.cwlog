@@ -1,0 +1,9 @@
+# Replay corpus entry: perception-contact (command-log format v1).
+# Initial state: Corpus perception-contact scenario (12 x 8, seed 20260904),
+# one friendly agent 0 at (1,5) and one stationary hostile agent 1 at (9,1)
+# behind an opaque impassable wall at x=6, rows 0..3. The friendly is ordered
+# east to (9,5); once it clears the wall it observes the hostile (TASK-026
+# perception + shared squad tactical knowledge, backlog B-015).
+version 1
+
+1 0 move 9 5

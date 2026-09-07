@@ -94,7 +94,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0xE13D7540912C7E25UL, f.Hash.Value)
+    Assert.Equal(0x50BFA007EDFC42FEUL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -265,6 +265,24 @@ let ``a hand-built Obstructed overlay renders through the ASCII and SVG renderer
     // Byte-identical without the overlay (regression guard for the goldens).
     Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
 
+[<Fact>]
+let ``a hand-built KnownContact overlay renders through the ASCII and SVG renderers`` () =
+    let f = Diagnostics.frame (DemoScenario.initialState ())
+
+    let withContact =
+        { f with
+            Overlays = [| KnownContact({ X = 9; Y = 1 }, AgentId.ofInt 1, 1000, 5L) |] }
+
+    let ascii = DiagnosticRender.Ascii withContact
+    Assert.Contains("overlays:", ascii)
+    Assert.Contains("known contact (9,1): agent 1  confidence 1000  seen tick 5", ascii)
+
+    let svg = DiagnosticRender.Svg withContact
+    Assert.Contains("stroke=\"#805ad5\"", svg)
+    Assert.Contains("fill=\"#805ad5\">?1</text>", svg)
+    // Byte-identical without the overlay (regression guard for the goldens).
+    Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
+
 // --- reservation: the converging-routes corpus entry (TASK-017) --------
 
 let private corpusDir = Path.Combine(AppContext.BaseDirectory, "replays")
@@ -290,7 +308,8 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | Cells _
         | SightRay _
         | PlannedPath _
-        | Obstructed _ -> None) with
+        | Obstructed _
+        | KnownContact _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -350,7 +369,8 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | Cells _
             | SightRay _
             | PlannedPath _
-            | Reserved _ -> None)
+            | Reserved _
+            | KnownContact _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -358,6 +378,57 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
 
     Assert.Equal(golden "swap-standoff-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
     Assert.Equal(golden "swap-standoff-tick-001.svg", DiagnosticRender.Svg tick1)
+
+// --- perception: the perception-contact corpus entry (TASK-026) --------
+
+let private perceptionContactFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "perception-contact")
+
+    match Corpus.loadLog corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives a KnownContact overlay for the perception-contact entry's first sighting (byte-equal to the goldens)`` () =
+    // Tick 5: friendly agent 0 clears the opaque wall at x=6 and its line of
+    // sight to the stationary hostile agent 1 at (9,1) opens. The Perception
+    // phase emits ContactObserved (both ways — perception is symmetric) and
+    // the Tactical-knowledge phase adds the contact to the shared squad
+    // picture, so `frameOf` derives one KnownContact overlay alongside the
+    // friendly's PlannedPath.
+    let frames = perceptionContactFrames ()
+    let tick5 = frames.[5]
+
+    match
+        tick5.Overlays
+        |> Array.tryPick (function
+            | KnownContact(cell, contact, confidence, lastSeenTick) -> Some(cell, contact, confidence, lastSeenTick)
+            | Cells _
+            | SightRay _
+            | PlannedPath _
+            | Reserved _
+            | Obstructed _ -> None)
+    with
+    | Some(cell, contact, confidence, lastSeenTick) ->
+        Assert.Equal({ X = 9; Y = 1 }, cell)
+        Assert.Equal(AgentId.ofInt 1, contact)
+        Assert.Equal(1000, confidence)
+        Assert.Equal(5L, lastSeenTick)
+    | None -> Assert.Fail($"expected one KnownContact overlay, got {tick5.Overlays}")
+
+    Assert.Contains(tick5.Events, fun (e: EventMarker) -> e.Kind = "contact-observed")
+
+    // The hostile stays out of the shared picture until the wall is cleared:
+    // tick 4's frame carries no KnownContact overlay.
+    Assert.DoesNotContain(
+        frames.[4].Overlays,
+        (function
+        | KnownContact _ -> true
+        | _ -> false)
+    )
+
+    Assert.Equal(golden "perception-contact-tick-005.ascii.txt", DiagnosticRender.Ascii tick5)
+    Assert.Equal(golden "perception-contact-tick-005.svg", DiagnosticRender.Svg tick5)
 
 [<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =
@@ -395,12 +466,12 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0xE13D7540912C7E25UL, frames.[0].Hash.Value)
-    Assert.Equal(0xAFA35198CC6BD8D4UL, frames.[40].Hash.Value)
+    Assert.Equal(0x50BFA007EDFC42FEUL, frames.[0].Hash.Value)
+    Assert.Equal(0xD9D6EC3DDC1D602FUL, frames.[40].Hash.Value)
     Assert.Equal(33, frames |> Array.sumBy (fun f -> f.Events.Length))
 
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0xAFA35198CC6BD8D4UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0xD9D6EC3DDC1D602FUL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(33, outcome.Events.Length)

@@ -50,4 +50,4 @@ overlays:
 
 events: none
 
-tick 0 | hash 0x371EC720496F4DAD (format 2) | draws 0 | agents 2 | cover-edges 0 | events 0
+tick 0 | hash 0x413E8C7CEE84FF6A (format 3) | draws 0 | agents 2 | cover-edges 0 | events 0

@@ -392,6 +392,17 @@ type WorldState =
 
 Fields should be added only when an implemented behaviour requires them.
 
+Realised so far (`src/CommandoWar.Sim/Domain.fs`): `Tick`, `Bounds`,
+`Terrain` (TASK-010), `Agents` (ascending by id), `Random` (TASK-003), and
+**`TacticalKnowledge: Contact[]`** (TASK-026, backlog B-015) — the friendly
+squad's shared contact picture, ascending by contact id, each
+`{ Contact: AgentId; LastKnownCell: Cell; LastSeenTick: int64;
+Confidence: int }`. It is genuine per-tick canonical state (it carries memory
+the current positions cannot reproduce) and is in `Canonical.encode`
+(`Canonical.FormatVersion` 3). `Squads`, `Orders`, `Projectiles`, `Mission`
+are not implemented yet. There is no `SquadStore`: every `Friendly` agent is
+the one squad (formation grouping is B-011d).
+
 ## 11. Agent state
 
 The vertical-slice agent needs:
@@ -410,6 +421,17 @@ The vertical-slice agent needs:
 - current execution state.
 
 Fatigue, persistent personality dimensions, interpersonal relations, inventory grids, and skill trees are deferred.
+
+Realised so far (`src/CommandoWar.Sim/Domain.fs` `AgentState`): identity,
+side, logical position, movement state (`Progress`, `Destination`, the derived
+`Route` cache), and **`VisibleContacts: AgentId[]`** (TASK-026) — the
+opposing-side agents this agent can currently see, rewritten from scratch each
+tick by the Perception phase. Like `Route`, it is a **non-canonical derived
+cache** (a pure function of every agent's position, the immutable terrain, and
+`PerceptionConfig`) and is excluded from `Canonical.encode`. Life and wound
+state, weapon and ammunition, current order and commitment, discipline, trust,
+stress, suppression, communication availability, and execution state are not
+implemented yet.
 
 ## 12. Tick phases
 
@@ -452,11 +474,40 @@ identity or commander model.
 - emit observations;
 - update current visible-contact state.
 
+Realised by TASK-026 (backlog B-015): `Simulation.perception`, the first phase
+consumer of the `Sight` module (section 9). For every agent, in ascending id
+order, `AgentState.VisibleContacts` is re-derived from scratch — the
+opposing-side agents within `PerceptionConfig.SightRange` (an integer
+**Chebyshev** cell radius, `10`) **and** in `Sight.visible` line of sight over
+the immutable terrain. Both sides are swept
+(`docs/05_COMMAND_AND_AGENT_AI.md` section 12). A `ContactObserved` event is
+emitted only when a contact *enters* an observer's visibility (a new sighting),
+not every tick it stays visible (section 14). `VisibleContacts` is a
+non-canonical derived cache (section 17, section 11). Hazards, muzzle flashes,
+and impact observations wait for combat (B-019).
+
 ### 12.4 Tactical knowledge
 
 - merge reports into squad contacts;
 - retain last known position, confidence, and observation tick;
 - decay or expire stale contacts according to explicit rules.
+
+Realised by TASK-026: `Simulation.tacticalKnowledge`. Every `Friendly` agent
+is the squad (no `SquadStore`); every friendly's observations this tick are
+immediately in the one shared `WorldState.TacticalKnowledge`
+(`docs/05` section 3 "may share contacts instantly"). `Perception.mergeKnowledge`
+upserts every contact seen this tick with the observed cell,
+`LastSeenTick = tick`, `Confidence = PerceptionConfig.ConfidenceFull` (`1000`
+on the section 4 `0..1000` scale); a contact unseen for
+`PerceptionConfig.StaleAfter` (`20`) ticks drops one band
+(`ConfidenceBandDrop`, `250`); a contact unseen for
+`PerceptionConfig.ExpireAfter` (`60`) ticks is removed, emitting
+`ContactExpired`. The store is kept ascending by contact id. It is **genuine
+per-tick canonical state** (`LastSeenTick` and the decaying `Confidence` carry
+memory the current positions cannot reproduce), so it is in `Canonical.encode`
+and `Canonical.FormatVersion` bumped **2 -> 3** (section 17). A **hostile**
+squad picture, enemy doctrine reacting to it, and communication range / delay /
+failure are B-016 / B-022; per-agent private beliefs are `docs/05` section 17.
 
 ### 12.5 Appraisal
 
@@ -578,6 +629,18 @@ Minimum categories:
 
 Do not emit a flood of low-value events solely because every field changed.
 
+Realised so far: command accepted / rejected (TASK-020, TASK-024); movement
+started / blocked / completed / yielded / obstructed (TASK-015 / TASK-017 /
+TASK-022); and, for "contact observed or reported", **`ContactObserved of
+observer * contact * at`** and **`ContactExpired of contact * lastKnownCell`**
+(TASK-026). `ContactObserved` fires on a new sighting only — the tick a
+contact enters an observer's `VisibleContacts` — never per tick while it stays
+visible. `ContactExpired` fires only when a contact is removed from the shared
+squad picture after `PerceptionConfig.ExpireAfter` unseen ticks. Within a
+tick, contact events are ordered after command outcomes and before movement
+outcomes (every `ContactObserved` in ascending `(observer, contact)` id order,
+then every `ContactExpired` in ascending contact id order).
+
 ## 15. Render snapshot
 
 The snapshot includes:
@@ -665,6 +728,20 @@ terrain lands (backlog B-019) or any phase otherwise mutates terrain. This is
 recorded in the ADR-0002 amendment "Static authoritative data and the
 canonical image".
 
+TASK-026 note: `WorldState.TacticalKnowledge` (the friendly squad's shared
+contact picture) **is** written — a tactical-knowledge section after the
+agents: an explicit contact count, then each `Contact` in ascending contact-id
+order (contact id, last-known cell x/y, `LastSeenTick`, `Confidence`), all
+fixed-width big-endian. Unlike `AgentState.Route` / `VisibleContacts`, it
+cannot be recomputed from the current tick's positions — `LastSeenTick` and
+the decaying `Confidence` are per-tick memory — so under the ADR-0002
+amendment it entered the canonical image and `Canonical.FormatVersion` bumped
+**2 -> 3**. The re-pin was behaviour-neutral: every committed scenario is
+enemy-free, so the section is always zero-length at every pinned checkpoint
+and tick counts / event counts are unchanged (TASK-026 ledger).
+`AgentState.VisibleContacts` is **not** written (the `Route` precedent).
+`firstDifferingSection` gains a `"TacticalKnowledge"` label.
+
 ## 18. Save state
 
 Save-state support is not required for the first command-loop proof. Replay from the start is sufficient for short scenarios. If load times become material, add periodic snapshots through a versioned format and ADR.
@@ -714,7 +791,11 @@ At minimum:
 - entity IDs are unique;
 - state hash is independent of presentation state;
 - every refusal and adaptation contains at least one structured reason;
-- same replay inputs reproduce recorded checkpoints within the supported boundary.
+- same replay inputs reproduce recorded checkpoints within the supported boundary;
+- every contact in `WorldState.TacticalKnowledge` was observed by a friendly
+  on its own `LastSeenTick` and is within `PerceptionConfig.ExpireAfter` ticks
+  of that sighting; a surviving contact's `LastSeenTick` never decreases
+  (TASK-026; `DeterminismPropertyTests` property 6).
 
 ## 21. Authored scenario and content version
 

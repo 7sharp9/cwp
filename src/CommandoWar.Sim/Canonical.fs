@@ -29,8 +29,20 @@ module Canonical =
     /// before this version every traversed cell costs `Terrain.BaseMoveCost`
     /// (threshold = increment = 1), so `Progress` is 0 at every post-tick
     /// checkpoint: the move is a byte-layout change, not a behaviour change.
+    ///
+    /// 3 (TASK-026): `encode` gained a tactical-knowledge section
+    /// (`WorldState.TacticalKnowledge`, docs/04 section 12.4) — the friendly
+    /// squad's retained contact picture, which carries per-tick memory
+    /// (`Contact.LastSeenTick`, the decaying `Contact.Confidence`) that no
+    /// other field reproduces, so under the ADR-0002 amendment it must be in
+    /// the canonical image. `AgentState.VisibleContacts` (TASK-026) is NOT
+    /// written — it is a derived cache, like `Route`. Every scenario pinned
+    /// before this version has zero enemy deployments, so `TacticalKnowledge`
+    /// is empty at every checkpoint and the moved hashes are a byte-layout
+    /// change, not a behaviour change (tick counts and event counts unchanged;
+    /// TASK-026 ledger).
     [<Literal>]
-    let FormatVersion = 2
+    let FormatVersion = 3
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -87,6 +99,20 @@ module Canonical =
             w.I32 cell.X
             w.I32 cell.Y
 
+    // The friendly squad's shared tactical picture (TASK-026,
+    // `WorldState.TacticalKnowledge`, docs/04 section 12.4). Genuine per-tick
+    // canonical state: `LastSeenTick` and the decaying `Confidence` cannot be
+    // recomputed from the current tick's positions. Contacts are written in
+    // ascending contact-id order with an explicit count, fixed-width
+    // big-endian, exactly like agents. `AgentState.VisibleContacts` is a
+    // derived cache and is NOT written (the `Route` precedent).
+    let private writeContact (w: Writer) (c: Contact) =
+        w.I32(AgentId.value c.Contact)
+        w.I32 c.LastKnownCell.X
+        w.I32 c.LastKnownCell.Y
+        w.I64 c.LastSeenTick
+        w.I32 c.Confidence
+
     /// Encodes authoritative world state to its canonical byte form.
     let encode (world: WorldState) : byte[] =
         let w = Writer()
@@ -100,6 +126,11 @@ module Canonical =
         w.I32 agents.Length
         for a in agents do
             writeAgent w a
+
+        let contacts = world.TacticalKnowledge |> Array.sortBy (fun c -> c.Contact)
+        w.I32 contacts.Length
+        for c in contacts do
+            writeContact w c
 
         w.ToArray()
 
@@ -116,7 +147,12 @@ module Canonical =
               w.I32 world.Bounds.Width
               w.I32 world.Bounds.Height)
           section "Random" (fun w -> writeRandom w world.Random)
-          section "AgentCount" (fun w -> w.I32 world.Agents.Length) ]
+          section "AgentCount" (fun w -> w.I32 world.Agents.Length)
+          section "TacticalKnowledge" (fun w ->
+              let contacts = world.TacticalKnowledge |> Array.sortBy (fun c -> c.Contact)
+              w.I32 contacts.Length
+              for c in contacts do
+                  writeContact w c) ]
 
     /// Best-effort identification of the first canonical section (or agent)
     /// that differs between two states. Returns `None` when the canonical

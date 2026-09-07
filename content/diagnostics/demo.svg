@@ -107,7 +107,7 @@
   <circle cx="8" cy="8" r="5" fill="#2b6cb0" stroke="#ffffff" stroke-width="1"/>
   <circle cx="8" cy="24" r="5" fill="#2b6cb0" stroke="#ffffff" stroke-width="1"/>
   <circle cx="184" cy="120" r="5" fill="#c53030" stroke="#ffffff" stroke-width="1"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 0  hash 0xC00902D2EFEEC43F  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 0  hash 0x57CDAA89331C5662  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 0</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

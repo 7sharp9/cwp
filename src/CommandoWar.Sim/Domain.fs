@@ -29,11 +29,41 @@ type MovementPath =
       Cursor: int
       Cost: int }
 
+/// One contact in the squad's shared tactical picture (TASK-026,
+/// `docs/05_COMMAND_AND_AGENT_AI.md` section 3 "Squad tactical picture",
+/// `docs/04_SIMULATION_SPEC.md` section 12.4). The Tactical-knowledge phase
+/// merges every friendly's observations this tick into one array of these,
+/// sorted ascending by `Contact` id (stable iteration, `docs/04` section 6).
+///
+/// This store **has memory**: `LastSeenTick` and the decaying `Confidence`
+/// cannot be recomputed from the current tick's positions (a contact stays in
+/// the picture, with an ageing confidence, for `PerceptionConfig.ExpireAfter`
+/// ticks after it was last seen). It is therefore **genuine per-tick canonical
+/// state**, not a derived cache — unlike `AgentState.VisibleContacts` — so it
+/// enters `Canonical.encode` and `Canonical.FormatVersion` is `3` (the
+/// ADR-0002 amendment "Static authoritative data and the canonical image").
+type Contact =
+    { /// The observed agent's id. Identity is always known at this stage
+      /// (`docs/05` section 3 "contact ID when identity is known"); a
+      /// suspected-only contact without an id is deferred.
+      Contact: AgentId
+      /// The cell the contact was last observed in.
+      LastKnownCell: Cell
+      /// The tick a friendly last saw this contact. Non-decreasing until the
+      /// contact expires and is removed.
+      LastSeenTick: int64
+      /// Confidence on the `docs/04` section 4 `0..1000` scale:
+      /// `PerceptionConfig.ConfidenceFull` while the contact is currently
+      /// seen or was seen within `PerceptionConfig.StaleAfter` ticks, dropping
+      /// one band (`PerceptionConfig.ConfidenceBandDrop`) once it goes stale.
+      Confidence: int }
+
 /// Minimal authoritative agent state for the simulation skeleton: identity,
 /// side, logical position, movement progress within the current edge, an
-/// optional movement destination, and the (non-canonical, derived) path the
-/// agent is following toward it. Facing and stance are deferred until a real
-/// movement model exists.
+/// optional movement destination, the (non-canonical, derived) path the
+/// agent is following toward it, and the (non-canonical, derived) set of
+/// opposing agents it can currently see. Facing and stance are deferred until
+/// a real movement model exists.
 type AgentState =
     { Id: AgentId
       Side: Side
@@ -57,7 +87,20 @@ type AgentState =
       /// cache: recomputed deterministically from `(Position, Destination,
       /// Terrain)` by the Navigation and movement phase, and excluded from
       /// `Canonical.encode`. `None` when the agent has no destination.
-      Route: MovementPath option }
+      Route: MovementPath option
+      /// The opposing-side agents this agent can currently see, ascending by
+      /// id (TASK-026, `docs/04` section 12.3 "current visible contacts").
+      /// Rewritten from scratch every tick by the Perception phase.
+      ///
+      /// A **non-canonical derived cache**, on the identical argument that
+      /// keeps `Route` out of `Canonical.encode`: it is a pure deterministic
+      /// function of every agent's `Position`, the immutable `Terrain`, and
+      /// the `PerceptionConfig` constants (`Sight.visible` is total, pure,
+      /// integer-only). Two runs of the same inputs produce identical
+      /// `VisibleContacts`, so it cannot diverge and is **excluded** from
+      /// `Canonical.encode` (`docs/04` section 17). Empty at rest and for an
+      /// agent with no opposing agent in sight range and line of sight.
+      VisibleContacts: AgentId[] }
 
 /// Minimal authoritative world state: an integer tick, the logical grid
 /// bounds, the authoritative terrain grid, the agents ordered by ascending
@@ -75,6 +118,19 @@ type WorldState =
       /// (docs/04_SIMULATION_SPEC.md section 17; ADR-0002 amendment).
       Terrain: Terrain
       Agents: AgentState[]
+      /// The friendly squad's shared tactical picture (TASK-026, backlog
+      /// B-015; `docs/04` section 10, 12.4). Ascending by contact id. The
+      /// Tactical-knowledge phase upserts every contact a friendly saw this
+      /// tick, ages contacts unseen for `PerceptionConfig.StaleAfter` ticks,
+      /// and removes contacts unseen for `PerceptionConfig.ExpireAfter` ticks.
+      ///
+      /// Unlike `Terrain` and `AgentState.Route` / `VisibleContacts`, this
+      /// **is** in `Canonical.encode`: it carries per-tick memory
+      /// (`LastSeenTick`, the decaying `Confidence`) that no other field can
+      /// reproduce (see `Contact`). Adding it bumped `Canonical.FormatVersion`
+      /// 2 -> 3. A hostile squad picture and enemy doctrine reacting to it are
+      /// backlog B-022; per-agent private beliefs are `docs/05` section 17.
+      TacticalKnowledge: Contact[]
       /// The authoritative deterministic random stream. It is threaded through
       /// every step and is part of the canonical state hash. No gameplay phase
       /// draws from it yet (TASK-003 wires the stream; gameplay draws arrive
@@ -84,12 +140,13 @@ type WorldState =
 [<RequireQualifiedAccess>]
 module Agent =
 
-    /// Creates an agent at rest (no destination, no route, no progress) at
-    /// the given position.
+    /// Creates an agent at rest (no destination, no route, no progress, no
+    /// visible contacts) at the given position.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
           Position = position
           Progress = 0
           Destination = None
-          Route = None }
+          Route = None
+          VisibleContacts = [||] }

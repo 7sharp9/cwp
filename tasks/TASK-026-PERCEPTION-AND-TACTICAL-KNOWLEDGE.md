@@ -1,11 +1,50 @@
 # TASK-026: Observations and shared squad tactical knowledge
 
-Status: ready
+Status: done (2026-09-07, accepted by Dave)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-015
-Size: M (the `Canonical.FormatVersion` bump is the heaviest part; may be L if
-the first enemy-bearing corpus work runs large — implementer flags)
+Size: M (landed at M — the retained decaying store was ~40 lines in a new leaf
+module; the heaviest part was the `Canonical.FormatVersion` 2 -> 3 re-pin, as
+expected)
+
+## Outcome (2026-09-07)
+
+Implemented on branch `task-026-perception-and-tactical-knowledge` (committed
+locally, not pushed). All three central decisions were confirmed with Dave
+before the canonical encoder / phase bodies were written:
+
+- **Decision 3:** the full retained decaying store landed
+  (`StaleAfter` / `ExpireAfter` / `ContactExpired`), not the narrowed cut.
+- **Decision 5:** `PerceptionConfig` module literals —
+  `SightRange = 10` (Chebyshev), `ConfidenceFull = 1000`,
+  `ConfidenceBandDrop = 250`, `StaleAfter = 20`, `ExpireAfter = 60`.
+  One-line reasons in `src/CommandoWar.Sim/Perception.fs` and the ledger.
+- **Decision 6:** confirmed as drafted — symmetric `VisibleContacts` for both
+  sides, friendly-squad-only `TacticalKnowledge`.
+
+`Canonical.FormatVersion` 2 -> 3; the re-pin is behaviour-neutral for the
+fixture and all seven `.cwlog` corpus entries (tick counts and event counts
+identical, hashes in the ledger). It also re-pinned
+`content/replays/envelope-full.{cwreplay,md}` (TASK-025, drafted after this
+task file — `ReplaySerialisation.parse` rejects a `canonical` mismatch, so the
+data file had to move; still behaviour-neutral, 24 ticks / 72 events
+unchanged). `DemoScenario` is the one committed scenario with a hostile, so
+its goldens gained real perception behaviour (a `KnownContact` overlay and
+four `contact-observed` markers) — allowed, since it is not one of the seven.
+
+`dotnet test` 206 -> 216. New: five `SimulationTests` perception facts; a
+`DeterminismPropertyTests` property (`MaxTest = 200`) that every squad contact
+was genuinely visible to a friendly on its `LastSeenTick` (recomputed
+independently), within `ExpireAfter`, with a non-decreasing `LastSeenTick` and
+a valid confidence band; a `CanonicalHashTests` fact for the new section /
+`firstDifferingSection`; a hand-built `KnownContact` overlay fact and the
+`perception-contact` golden fact in `DiagnosticsTests`. New corpus entry
+`perception-contact` (12 x 8, one friendly + one hostile behind an opaque
+wall; 14 ticks, 12 events).
+
+Full detail:
+`docs/ledger/2026-09-07-TASK-026-perception-and-tactical-knowledge.md`.
 
 ## Objective
 
@@ -370,52 +409,65 @@ authoritative tactical state (`TacticalKnowledge`) and derived spatial state
 
 ## Acceptance criteria
 
-- [ ] `Simulation.step`'s `Perception` phase populates `AgentState.VisibleContacts`
+- [x] `Simulation.step`'s `Perception` phase populates `AgentState.VisibleContacts`
       from `Sight.visible` over `Terrain` within `SightRange`, for both sides,
       and emits `ContactObserved` on a new sighting only; `VisibleContacts` is
-      excluded from `Canonical.encode` (code review of `Canonical.fs`).
-- [ ] A `SimulationTests` fact: a friendly with unobstructed LOS to a hostile
+      excluded from `Canonical.encode` (`Canonical.fs` `writeAgent` unchanged;
+      `Perception.fs`; `SimulationTests` "a friendly with clear line of sight
+      … observes it and shares it").
+- [x] A `SimulationTests` fact: a friendly with unobstructed LOS to a hostile
       within range observes it; the contact is in `WorldState.TacticalKnowledge`
       with `LastSeenTick = ` the current tick; an opaque wall placed between
-      them removes the observation and the contact ages out.
-- [ ] A `SimulationTests` fact: two friendlies, only one with LOS to a
+      them removes the observation (fact "an opaque cell between a friendly and
+      a hostile blocks the observation entirely"), and the ages-out path is the
+      dedicated stale/expire fact below.
+- [x] A `SimulationTests` fact: two friendlies, only one with LOS to a
       hostile, both have that contact in the shared `TacticalKnowledge` the
-      same tick (instant squad sharing).
-- [ ] A `SimulationTests` fact: a hostile beyond `SightRange` with clear LOS
-      is **not** observed.
-- [ ] A contact seen then lost drops a confidence band after `StaleAfter`
+      same tick ("two friendlies, only one with line of sight … share the
+      contact the same tick").
+- [x] A `SimulationTests` fact: a hostile beyond `SightRange` with clear LOS
+      is **not** observed (with a `dx = 10` control that IS observed).
+- [x] A contact seen then lost drops a confidence band after `StaleAfter`
       unseen ticks and is removed with a `ContactExpired` event after
-      `ExpireAfter` (`SimulationTests`).
-- [ ] `Canonical.FormatVersion` is `3`; `Canonical.encode` has a
+      `ExpireAfter` ("a contact seen then lost drops a confidence band after
+      StaleAfter and expires with ContactExpired after ExpireAfter").
+- [x] `Canonical.FormatVersion` is `3`; `Canonical.encode` has a
       tactical-knowledge section in canonical order; `firstDifferingSection`
-      reports it. The fixture, all seven `content/replays/*.md` tables, and
-      the hash-bearing `content/diagnostics/*` goldens are re-pinned, with
-      **unchanged tick counts and event counts** for every pre-existing
-      entry; the old and new hash for each is recorded in the ledger.
-- [ ] A new property (>= 200 cases): every `TacticalKnowledge` contact was
-      observed within `ExpireAfter` ticks and `LastSeenTick` is non-decreasing
-      until expiry; the reduced counterexample and seed print on failure.
-      Properties 1–5 pass unmodified.
-- [ ] At least one new corpus entry with an enemy deployment where a friendly
-      observes a hostile: `CORPUS.md` row, committed hash table, passes
-      `CorpusTests.fs` and `cwheadless corpus`.
-- [ ] `Overlay.KnownContact` derived in both `frame` and `frameOf`, rendered
-      in `Ascii` and `Svg`, covered by a hand-built unit test and a committed
-      `content/diagnostics/` golden byte-compared by `DiagnosticsTests.fs`;
-      the `FS0025` sites are listed in the ledger with their fixes.
-- [ ] Every pre-existing `SightTests` / `PathfindingTests` / `ScenarioTests` /
-      `ReplayTests` fact passes unmodified; `SimulationTests` / `CorpusTests` /
-      `FixtureTests` / `DiagnosticsTests` / `DeterminismPropertyTests` pass
-      with only pinned-hash values and additive facts changed.
-- [ ] `dotnet build CommandoWar.slnx -c Release` = 0 warnings, 0 errors;
+      reports it (`CanonicalHashTests` "the tactical-knowledge section is in
+      the canonical image and firstDifferingSection names it"). The fixture,
+      all seven `content/replays/*.md` tables, `envelope-full.{cwreplay,md}`,
+      and every hash-bearing `content/diagnostics/*` golden re-pinned;
+      **unchanged tick counts and event counts** for every pre-existing entry;
+      old/new hashes in the ledger table.
+- [x] A new property (`MaxTest = 200`): every `TacticalKnowledge` contact was
+      genuinely visible to a friendly on its `LastSeenTick` (recomputed via
+      `Perception.visibleContactsFor`), within `ExpireAfter`, with a
+      non-decreasing `LastSeenTick` and a valid confidence band. FsCheck prints
+      the reduced counterexample and seed on failure. Properties 1–5 unmodified.
+- [x] New corpus entry `perception-contact` (enemy deployment; friendly clears
+      an opaque wall and observes a hostile): `CORPUS.md` row, committed
+      `.cwlog` + `.md`, passes `CorpusTests.fs` (`[<Theory>]`) and
+      `cwheadless corpus` (8/8 PASS).
+- [x] `Overlay.KnownContact` derived in both `frame` and `frameOf`, rendered
+      in `Ascii` (text line) and `Svg` (purple dashed ring `?<id>`), covered by
+      a hand-built `DiagnosticsTests` fact and the committed
+      `content/diagnostics/perception-contact-tick-005.{ascii.txt,svg}` golden;
+      `FS0025` sites listed in the ledger with their fixes.
+- [x] Every pre-existing `SightTests` / `PathfindingTests` / `ScenarioTests` /
+      `ReplayTests` fact passes (only pinned-hash literals and `canonical 2 ->
+      3` strings changed); `SimulationTests` / `CorpusTests` / `FixtureTests` /
+      `DiagnosticsTests` / `DeterminismPropertyTests` pass with only
+      pinned-hash values and additive facts changed.
+- [x] `dotnet build CommandoWar.slnx -c Release` = 0/0;
       `dotnet list src/CommandoWar.Sim package --include-transitive` =
-      `FSharp.Core` only; source scan of `src/CommandoWar.Sim` clean (no
-      `float`, `Stopwatch`, `DateTime`, `System.Random`, `godot`).
-- [ ] `docs/04` sections 10 / 11 / 12.3 / 12.4 / 14 / 17, `docs/05` section 3,
-      `docs/09` sections 2.2 / 2.3 / 2.4, backlog row (B-015 `-> done`),
-      ledger index row + detail file, `PROJECT_STATE.yaml` updated. "Pinned
-      facts" `Canonical.FormatVersion` `-> 3`, "Shared fixture" hashes, and
-      "Green tests" count refreshed.
+      `FSharp.Core 10.1.303` only; source scan of `src/CommandoWar.Sim` clean
+      (matches are pre-existing doc-comment prose only).
+- [x] `docs/04` sections 10 / 11 / 12.3 / 12.4 / 14 / 17 / 20, `docs/05`
+      section 3, `docs/09` sections 2.2 / 2.3 / 2.4, backlog row
+      (B-015 `-> done`; B-016 / B-017 / B-019 / B-022 unblocked note),
+      ledger index row + detail file, `PROJECT_STATE.yaml`. "Pinned facts"
+      `Canonical.FormatVersion` `-> 3`, "Shared fixture" hashes, "Green tests"
+      `206 -> 216`.
 
 ## Required verification
 

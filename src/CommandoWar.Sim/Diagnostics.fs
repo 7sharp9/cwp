@@ -98,16 +98,20 @@ type EventMarker =
 ///   * B-010 pathfinding     -> `PlannedPath` (realised by TASK-013);
 ///   * B-011b reservation    -> `Reserved` (realised by TASK-017);
 ///   * B-047 cell occupancy  -> `Obstructed` (realised by TASK-022);
+///   * B-015 perception      -> `KnownContact` (realised by TASK-026);
 ///   * B-019 combat          -> a fire-line case (shooter, target).
 ///
 /// B-019 does not exist yet: no such case is defined.
-/// `Diagnostics.frame` produces no overlay. `Diagnostics.frameOf` produces one
-/// `PlannedPath` per agent following a route (TASK-015), one `Reserved` per
-/// cell contested this tick (TASK-017), and one `Obstructed` per cell an agent
-/// was held out of this tick (TASK-022); every other overlay is populated by a
-/// caller (a test, or `cwheadless render --los` / `--path`). `Cells` is the
-/// generic non-speculative shape: a labelled set of cells a renderer can
-/// always fall back to.
+/// `Diagnostics.frame` produces one `KnownContact` per contact in
+/// `WorldState.TacticalKnowledge` (bare authoritative state carries the squad
+/// picture, so `frame` can draw it — unlike `Reserved` / `Obstructed`, which
+/// need a completed step). `Diagnostics.frameOf` produces the same
+/// `KnownContact` set plus one `PlannedPath` per agent following a route
+/// (TASK-015), one `Reserved` per cell contested this tick (TASK-017), and one
+/// `Obstructed` per cell an agent was held out of this tick (TASK-022); every
+/// other overlay is populated by a caller (a test, or `cwheadless render
+/// --los` / `--path`). `Cells` is the generic non-speculative shape: a
+/// labelled set of cells a renderer can always fall back to.
 type Overlay =
     /// A labelled set of cells.
     | Cells of label: string * cells: Cell[]
@@ -140,6 +144,15 @@ type Overlay =
     /// obstructed cell from this tick's `MovementObstructed` events;
     /// `Diagnostics.frame` never emits one.
     | Obstructed of cell: Cell * occupant: AgentId
+    /// One contact in the friendly squad's shared tactical picture (TASK-026,
+    /// `WorldState.TacticalKnowledge`, docs/04 section 12.4): `contact` was
+    /// last seen at `cell` on tick `lastSeenTick` with `confidence` on the
+    /// `0..1000` scale. Both `Diagnostics.frame` and `Diagnostics.frameOf`
+    /// derive one per contact, ascending by contact id — the squad picture is
+    /// on `WorldState`, so a bare state carries it. The overlay is the
+    /// "known-versus-authoritative" surface risk R-023 asks for: the contact's
+    /// last-known cell can lag the hostile's real `AgentMarker` position.
+    | KnownContact of cell: Cell * contact: AgentId * confidence: int * lastSeenTick: int64
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -222,11 +235,24 @@ module Diagnostics =
         | MovementBlocked(_, at, target) -> { Kind = "movement-blocked"; Cells = [| at; target |] }
         | MovementYielded(_, at, contested, _) -> { Kind = "movement-yielded"; Cells = [| at; contested |] }
         | MovementObstructed(_, at, blocked, _) -> { Kind = "movement-obstructed"; Cells = [| at; blocked |] }
+        | ContactObserved(_, _, at) -> { Kind = "contact-observed"; Cells = [| at |] }
+        | ContactExpired(_, lastKnownCell) -> { Kind = "contact-expired"; Cells = [| lastKnownCell |] }
+
+    /// A `KnownContact` overlay per contact in the friendly squad's shared
+    /// tactical picture (TASK-026), ascending by contact id. Reads
+    /// `WorldState.TacticalKnowledge`, which is genuine canonical state, so
+    /// both `frame` and `frameOf` derive this — unlike `Reserved` /
+    /// `Obstructed`, which only a completed step can produce.
+    let private knownContactOverlays (world: WorldState) : Overlay[] =
+        world.TacticalKnowledge
+        |> Array.sortBy (fun c -> c.Contact)
+        |> Array.map (fun c -> KnownContact(c.LastKnownCell, c.Contact, c.Confidence, c.LastSeenTick))
 
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
     /// (a bare `WorldState` carries no per-tick event history); use
-    /// `frameOf` for the this-tick event markers.
+    /// `frameOf` for the this-tick event markers. `Overlays` carries the
+    /// `KnownContact` set (the squad picture is on `WorldState`).
     let frame (world: WorldState) : DiagnosticFrame =
         { Tick = world.Tick
           Bounds = world.Bounds
@@ -234,7 +260,7 @@ module Diagnostics =
           Edges = coverEdges world
           Agents = agentMarkers world
           Events = [||]
-          Overlays = [||]
+          Overlays = knownContactOverlays world
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
 
@@ -267,7 +293,9 @@ module Diagnostics =
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
-            | MovementObstructed _ -> None)
+            | MovementObstructed _
+            | ContactObserved _
+            | ContactExpired _ -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, winner) -> Reserved(cell, winner, result.State.Tick))
 
@@ -286,7 +314,9 @@ module Diagnostics =
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
-            | MovementYielded _ -> None)
+            | MovementYielded _
+            | ContactObserved _
+            | ContactExpired _ -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, occupant) -> Obstructed(cell, occupant))
 
@@ -294,8 +324,9 @@ module Diagnostics =
     /// world, plus this tick's event markers, a `PlannedPath` overlay for every
     /// agent still following a route, a `Reserved` overlay for every cell
     /// contested this tick, an `Obstructed` overlay for every cell an agent was
-    /// held out of this tick, and the post-step canonical hash recorded on the
-    /// `StepResult`. Total, pure, deterministic.
+    /// held out of this tick, a `KnownContact` overlay per squad contact, and
+    /// the post-step canonical hash recorded on the `StepResult`. Total, pure,
+    /// deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
         { frame result.State with
             Events = result.Events |> Array.map eventMarker
@@ -303,5 +334,6 @@ module Diagnostics =
                 Array.concat
                     [ routeOverlays result.State
                       reservationOverlays result
-                      obstructionOverlays result ]
+                      obstructionOverlays result
+                      knownContactOverlays result.State ]
             Hash = result.StateHash }

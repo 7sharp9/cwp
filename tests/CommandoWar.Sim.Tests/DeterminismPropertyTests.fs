@@ -107,6 +107,7 @@ let private randomCaseGen: Gen<RandomCase> =
               Bounds = bounds
               Terrain = terrain
               Agents = agents
+              TacticalKnowledge = [||]
               Random = SplitMix64.create (uint64 seed) }
 
         let! tickCount = Gen.choose (5, 15)
@@ -330,3 +331,128 @@ let ``Pathfinding.find on valid random terrain returns the true minimum cost and
             || not (Terrain.passable terrain start)
             || not (Terrain.passable terrain goal)
         | BudgetExhausted _ -> true)
+
+// --- property 6: the shared tactical picture is grounded in observation ----
+// TASK-026. Extends the fixed-scenario SimulationTests perception facts to a
+// generated space of small worlds with a few hostiles. For every post-tick
+// state, every contact in `WorldState.TacticalKnowledge` (a) was genuinely
+// visible to some friendly on its own `LastSeenTick` (recomputed independently
+// through `Perception.visibleContactsFor`), (b) is within `ExpireAfter` ticks
+// of that sighting, (c) carries one of the two valid confidence bands, and (d)
+// has a `LastSeenTick` that never moves backwards while the contact survives.
+
+let private perceptionCaseGen: Gen<RandomCase> =
+    gen {
+        let! bounds = boundsGen
+        let! terrain = terrainGen bounds
+        let n = bounds.Width * bounds.Height
+
+        let passableCells =
+            [| 0 .. n - 1 |]
+            |> Array.filter (fun i -> terrain.Movement.[i] = Passable)
+            |> Array.map (cellOf bounds)
+
+        let! shuffled = Gen.shuffle passableCells
+        let! friendlyCount = Gen.choose (1, 3)
+        let! hostileCount = Gen.choose (1, 2)
+        let want = friendlyCount + hostileCount
+        let taken = shuffled |> Array.truncate (min want passableCells.Length)
+        let fCount = min friendlyCount taken.Length
+
+        let agents =
+            taken
+            |> Array.mapi (fun i c ->
+                let side = if i < fCount then Friendly else Hostile
+                Agent.create (AgentId.ofInt i) side c)
+
+        let! seed = Gen.choose (0, System.Int32.MaxValue)
+
+        let world: WorldState =
+            { Tick = 0L
+              Bounds = bounds
+              Terrain = terrain
+              Agents = agents
+              TacticalKnowledge = [||]
+              Random = SplitMix64.create (uint64 seed) }
+
+        let! tickCount = Gen.choose (5, 15)
+
+        // Commands only ever address friendlies (a hostile recipient is
+        // rejected at intake anyway); targets are arbitrary in-bounds cells.
+        let commandGen =
+            gen {
+                let! tick = Gen.choose (1, tickCount)
+                let! agentIdx = Gen.choose (0, max 0 (fCount - 1))
+                let! x = Gen.choose (0, bounds.Width - 1)
+                let! y = Gen.choose (0, bounds.Height - 1)
+                return tick, agentIdx, ({ X = x; Y = y }: Cell)
+            }
+
+        let! raw =
+            gen {
+                let! count = Gen.choose (0, fCount * 3)
+                return! Gen.arrayOfLength count commandGen
+            }
+
+        return
+            { World = world
+              Commands = toRecordedCommands agents raw
+              TickCount = int64 tickCount }
+    }
+
+/// Replays a case into the ordered post-tick states, index 0 = tick 0.
+let private statesOf (case: RandomCase) : WorldState[] =
+    let commandsForTick t =
+        case.Commands |> Array.filter (fun c -> c.Tick = t) |> Array.map (fun c -> c.Command)
+
+    let acc = ResizeArray<WorldState>()
+    acc.Add case.World
+    let mutable s = case.World
+
+    for tick in 1L .. case.TickCount do
+        s <- (Simulation.step SimConfig.standard (commandsForTick tick) s).State
+        acc.Add s
+
+    acc.ToArray()
+
+[<Property(MaxTest = 200)>]
+let ``every squad contact was seen by a friendly within ExpireAfter, with a non-decreasing LastSeenTick and a valid confidence band`` () =
+    Prop.forAll (Arb.fromGen perceptionCaseGen) (fun case ->
+        let states = statesOf case
+        let bands =
+            Set.ofList
+                [ PerceptionConfig.ConfidenceFull
+                  PerceptionConfig.ConfidenceFull - PerceptionConfig.ConfidenceBandDrop ]
+
+        // Recompute, from the state as it stood at the START of `tick`
+        // (= post-tick state `tick - 1`), whether some friendly could see
+        // `contact` — the same inputs the Perception phase used that tick.
+        let seenAt (tick: int64) (contact: AgentId) =
+            if tick < 1L || int tick > states.Length - 1 then
+                false
+            else
+                let pre = states.[int tick - 1]
+
+                pre.Agents
+                |> Array.exists (fun a ->
+                    a.Side = Friendly
+                    && Perception.visibleContactsFor pre.Terrain a pre.Agents |> Array.contains contact)
+
+        seq { 1 .. states.Length - 1 }
+        |> Seq.forall (fun i ->
+            let cur = states.[i]
+            let prev = states.[i - 1]
+
+            cur.TacticalKnowledge
+            |> Array.forall (fun c ->
+                let withinExpiry = cur.Tick - c.LastSeenTick < int64 PerceptionConfig.ExpireAfter
+                let seenNotFuture = c.LastSeenTick >= 1L && c.LastSeenTick <= cur.Tick
+                let validBand = Set.contains c.Confidence bands
+                let grounded = seenAt c.LastSeenTick c.Contact
+
+                let nonDecreasing =
+                    match prev.TacticalKnowledge |> Array.tryFind (fun p -> p.Contact = c.Contact) with
+                    | Some p -> c.LastSeenTick >= p.LastSeenTick
+                    | None -> true
+
+                withinExpiry && seenNotFuture && validBand && grounded && nonDecreasing)))

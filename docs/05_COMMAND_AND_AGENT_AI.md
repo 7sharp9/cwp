@@ -61,6 +61,22 @@ The squad stores reported contacts:
 
 The first implementation may share contacts instantly when communication is available. Private persistent beliefs are deferred.
 
+Realised by TASK-026 (backlog B-015): `Simulation.perception` and
+`Simulation.tacticalKnowledge` (`docs/04` sections 12.3, 12.4). An agent's
+current observations are `AgentState.VisibleContacts` (opposing agents within
+`PerceptionConfig.SightRange` and in `Sight.visible` line of sight); the squad
+tactical picture is `WorldState.TacticalKnowledge` — one array of
+`{ Contact; LastKnownCell; LastSeenTick; Confidence }`, shared instantly
+across every `Friendly` agent (there is no `SquadStore`), with confidence
+dropping a band after `StaleAfter` unseen ticks and the contact removed after
+`ExpireAfter`. Perception is symmetric (a `Hostile` agent's
+`VisibleContacts` is populated too, so combat can validate line of fire for
+both sides), but the **shared picture is the friendly squad's only**: a
+hostile squad picture, enemy doctrine, and "suspected threat class or field of
+fire" are B-022. Source and reporting agent are not yet stored (identity is
+always known at this stage). Private persistent beliefs and confidence
+divergence between squad members stay deferred (section 17).
+
 ## 4. Orders
 
 Orders express intent and leave limited tactical discretion.

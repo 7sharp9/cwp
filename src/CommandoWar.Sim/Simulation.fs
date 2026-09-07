@@ -88,6 +88,7 @@ module World =
                               Bounds = bounds
                               Terrain = terrain
                               Agents = List.toArray sorted
+                              TacticalKnowledge = [||]
                               Random = SplitMix64.create seed }
 
     /// Builds a validated world at tick 0 with a SplitMix64 random stream
@@ -146,6 +147,10 @@ module Simulation =
           /// the Navigation and movement phase reads it for pathfinding.
           Terrain: Terrain
           mutable Agents: AgentState[]
+          /// The friendly squad's shared tactical picture, carried in from the
+          /// input `WorldState` and rewritten by the Tactical-knowledge phase
+          /// (TASK-026). Genuine per-tick canonical state.
+          mutable TacticalKnowledge: Contact[]
           /// The deterministic stream for this tick. No phase draws from it
           /// yet; a future gameplay phase reassigns it after each draw so the
           /// advanced state is carried forward.
@@ -250,6 +255,87 @@ module Simulation =
                                     agents.[idx] <- { agents.[idx] with Destination = Some target }
 
         s.Agents <- agents
+
+    // --- Phase: perception -------------------------------------------------
+    // Realised by TASK-026 (backlog B-015). The first phase consumer of the
+    // `Sight` module (TASK-012): "NOTHING in Simulation.step or any tick phase
+    // calls this module yet" is no longer true. For every agent, in ascending
+    // id order, `AgentState.VisibleContacts` is re-derived from scratch — the
+    // opposing-side agents within `PerceptionConfig.SightRange` Chebyshev cells
+    // and in `Sight.visible` line of sight over the immutable terrain (docs/04
+    // section 12.3: "clear current visibility ... update current
+    // visible-contact state"). Both sides are swept (docs/05 section 12).
+    //
+    // A `ContactObserved` event is emitted only when a contact enters an
+    // observer's visibility this tick — a new sighting, not every tick it
+    // stays visible (docs/04 section 14: "Do not emit a flood of low-value
+    // events"). Events are ordered ascending by `(observer, contact)` id.
+    //
+    // `VisibleContacts` is a pure deterministic function of every agent's
+    // `Position`, the immutable `Terrain`, and the `PerceptionConfig`
+    // constants, so — like `AgentState.Route` — it is a derived cache
+    // EXCLUDED from `Canonical.encode` (docs/04 section 17). This phase alone
+    // moves no pinned hash. The input `WorldState` is never mutated (the
+    // `commandIntake` / `navigationAndMovement` copy-before-write idiom).
+    let private perception (s: StepState) =
+        let agents = Array.copy s.Agents
+        let swept = Perception.sweep s.Terrain agents
+
+        for i in 0 .. agents.Length - 1 do
+            let a = agents.[i]
+            let seenNow = swept.[i]
+            let seenBefore = Set.ofArray a.VisibleContacts
+
+            for contactId in seenNow do
+                if not (Set.contains contactId seenBefore) then
+                    let contactCell = (agents |> Array.find (fun x -> x.Id = contactId)).Position
+                    emit (ContactObserved(a.Id, contactId, contactCell)) s
+
+            agents.[i] <- { a with VisibleContacts = seenNow }
+
+        s.Agents <- agents
+
+    // --- Phase: tactical knowledge ---------------------------------------
+    // Realised by TASK-026 (backlog B-015). Merges this tick's friendly
+    // observations into the one shared squad picture
+    // (`WorldState.TacticalKnowledge`, docs/04 section 12.4: "merge reports
+    // into squad contacts; retain last known position, confidence, and
+    // observation tick; decay or expire stale contacts according to explicit
+    // rules").
+    //
+    // Instant squad sharing (docs/05 section 3): every `Friendly` agent IS the
+    // squad (no `SquadStore` — B-011d / docs/05 section 17), so every
+    // friendly's `VisibleContacts` from the Perception phase is immediately in
+    // the shared store. `Perception.mergeKnowledge` upserts every contact seen
+    // this tick at `PerceptionConfig.ConfidenceFull`, drops one band after
+    // `PerceptionConfig.StaleAfter` unseen ticks, and removes a contact after
+    // `PerceptionConfig.ExpireAfter` unseen ticks — emitting `ContactExpired`
+    // on removal, ascending by contact id.
+    //
+    // The store IS genuine per-tick canonical state: `Contact.LastSeenTick`
+    // and the decaying `Contact.Confidence` carry memory the current tick's
+    // positions cannot reproduce, so under the ADR-0002 amendment it is in
+    // `Canonical.encode` and `Canonical.FormatVersion` is 3. A HOSTILE squad
+    // picture, enemy doctrine reacting to it, and communication constraints
+    // are B-016 / B-022.
+    let private tacticalKnowledge (s: StepState) =
+        let byId (id: AgentId) =
+            s.Agents |> Array.tryFind (fun x -> x.Id = id)
+
+        let seenThisTick =
+            s.Agents
+            |> Array.filter (fun a -> a.Side = Friendly)
+            |> Array.collect (fun a -> a.VisibleContacts)
+            |> Array.distinct
+            |> Array.choose (fun id -> byId id |> Option.map (fun x -> id, x.Position))
+            |> Map.ofArray
+
+        let store, expired = Perception.mergeKnowledge s.Tick s.TacticalKnowledge seenThisTick
+
+        for c in expired |> Array.sortBy (fun c -> c.Contact) do
+            emit (ContactExpired(c.Contact, c.LastKnownCell)) s
+
+        s.TacticalKnowledge <- store
 
     // --- Phase: navigation and movement -------------------------------------
     // Consumes the TASK-013 `Pathfinding` module (docs/04 section 8 "Initial
@@ -602,11 +688,11 @@ module Simulation =
     let private runPhase (commands: PlayerCommand list) (s: StepState) (phase: Phase) : unit =
         match phase with
         | CommandIntake -> commandIntake commands s
+        | Perception -> perception s
+        | TacticalKnowledge -> tacticalKnowledge s
         | NavigationAndMovement -> navigationAndMovement s
         | Output -> output s
         | Communication
-        | Perception
-        | TacticalKnowledge
         | Appraisal
         | CommitmentAndLocalAction
         | Combat
@@ -637,6 +723,7 @@ module Simulation =
               Bounds = state.Bounds
               Terrain = state.Terrain
               Agents = state.Agents
+              TacticalKnowledge = state.TacticalKnowledge
               Random = state.Random
               EventsRev = []
               Snapshot = { Tick = nextTick; Agents = [||] }
@@ -649,6 +736,7 @@ module Simulation =
             { state with
                 Tick = nextTick
                 Agents = acc.Agents
+                TacticalKnowledge = acc.TacticalKnowledge
                 Random = acc.Random }
 
         // Hashing runs strictly after the phase loop. `finalState` is already

@@ -1041,7 +1041,7 @@
   <polyline points="8,56 24,56 40,56 56,56 72,56 88,56 104,56 120,56 136,56 152,56 168,56 184,56 200,56 216,56 232,56 248,56 264,56 280,56 296,56 312,56 328,56 328,72 328,88 328,104 328,120 328,136 328,152 328,168 328,184 328,200 328,216 328,232" fill="none" stroke="#dd6b20" stroke-width="2"/>
   <circle cx="8" cy="56" r="4" fill="#2f855a" stroke="#ffffff" stroke-width="1"/>
   <rect x="320" y="224" width="16" height="16" fill="none" stroke="#dd6b20" stroke-width="3"/>
-  <text x="4" y="528" font-family="monospace" font-size="11" fill="#111111">tick 25  hash 0xC2CF53891C27B820  draws 0</text>
+  <text x="4" y="528" font-family="monospace" font-size="11" fill="#111111">tick 25  hash 0x85211392EFD8A68F  draws 0</text>
   <text x="4" y="542" font-family="monospace" font-size="11" fill="#111111">agents 6  cover-edges 0  events 1</text>
   <text x="4" y="556" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

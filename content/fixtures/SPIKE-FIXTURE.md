@@ -28,14 +28,14 @@ per-environment determinism contract (`docs/09_TEST_STRATEGY.md` section 3).
 | Grid bounds | 32 x 32 |
 | Seed | `20260902` (`0x0000000001352826`) |
 | PRNG | SplitMix64 v1 |
-| Canonical format version | 2 (TASK-018: `AgentState.Progress` added to `Canonical.encode`; always 0 in this fixture, see below) |
+| Canonical format version | 3 (TASK-026: tactical-knowledge section added to `Canonical.encode`; this fixture is enemy-free so it is empty at every tick, see below. TASK-018 added `AgentState.Progress`, also always 0 here) |
 | State hash | FNV-1a-64 over the canonical encoding |
 | Replay format version | 1 |
 | Command-log format version | 1 |
 | Tick count | 40 |
 | Agents at tick 0 | 6 friendly, `Setup.sixAgentWorld`, column `x = 0`, rows `y = 0..5` |
 | Command | tick 1: agent 3 `MoveTo (20, 14)`, `CommandId 1` |
-| Initial state hash (tick 0) | `0xE13D7540912C7E25` |
+| Initial state hash (tick 0) | `0x50BFA007EDFC42FE` |
 
 Under the pathfinding-driven movement executor (TASK-015; a straight cardinal
 line here, X axis then Y axis since the grid is flat) agent 3 travels 20
@@ -46,56 +46,59 @@ state. Total domain events: 33 (1 `CommandAccepted` + 31 `MovementStepped` +
 stream yet). Every traversed cell costs `Terrain.BaseMoveCost` (flat terrain),
 so `Terrain.moveCost` equals the per-tick progress increment: agent 3 still
 advances exactly one cell per tick, and `AgentState.Progress` is 0 at every
-post-tick checkpoint. The hashes below moved from the format-1 fixture solely
-because the canonical byte layout gained a field — not because this fixture's
-tick-by-tick behaviour changed (TASK-018 ledger).
+post-tick checkpoint. This fixture has **zero enemy deployments**, so
+`WorldState.TacticalKnowledge` (TASK-026) is empty at every tick too. The
+hashes below moved from the format-2 fixture solely because the canonical byte
+layout gained a tactical-knowledge section — not because this fixture's
+tick-by-tick behaviour changed (33 events, tick 40 unchanged; TASK-026 ledger,
+following the TASK-018 precedent).
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x5D8C8970F39771B2` |
-|    2 | `0x986FAB7690854608` |
-|    3 | `0x78C52861050C9DC2` |
-|    4 | `0xD40695B8FAFB561C` |
-|    5 | `0xBDF65E0D29AE9A42` |
-|    6 | `0xB0256E0D8E8C2E90` |
-|    7 | `0xAB9AF8816810B182` |
-|    8 | `0xF2F8B000576FE69C` |
-|    9 | `0x919F42D04CF1B922` |
-|   10 | `0xE2A8F9194D7A34C8` |
-|   11 | `0x7EED1056CB502CD2` |
-|   12 | `0xEF595793C31AF83C` |
-|   13 | `0x329F3AB2B2CBBEB2` |
-|   14 | `0xC767132B1E2EBDE0` |
-|   15 | `0x27D271EBF3B18B72` |
-|   16 | `0x3B2FA9658EB10ADC` |
-|   17 | `0xE60587050481C8B2` |
-|   18 | `0x0F62C2D1BBA02B88` |
-|   19 | `0x27C80E5B13FB6D22` |
-|   20 | `0xEED0A7B655AC8D1C` |
-|   21 | `0x82A85615AAE4D800` |
-|   22 | `0x95D3F98DB887CB64` |
-|   23 | `0xDF031A9CEAE912E0` |
-|   24 | `0xB5810624FE66B394` |
-|   25 | `0xC2CF53891C27B820` |
-|   26 | `0x73EBD725AB4924BC` |
-|   27 | `0xA03BA02B75A0DAD0` |
-|   28 | `0xE2FE27F5CD67C07C` |
-|   29 | `0x9CE2A92D40948A50` |
-|   30 | `0xE683753245907FD4` |
-|   31 | `0x92FF4C99EC571279` |
-|   32 | `0x0744CA8C28A3C39C` |
-|   33 | `0x9E14C1BE3A6A6367` |
-|   34 | `0xCB8897ABEC49C97A` |
-|   35 | `0xB22633B283235655` |
-|   36 | `0xB20CE024173DD318` |
-|   37 | `0xADCFC43BA52AD3F3` |
-|   38 | `0xA2AE579826CB3E86` |
-|   39 | `0x5CEE494A71BD65D1` |
-|   40 | `0xAFA35198CC6BD8D4` |
+|    1 | `0x49B5D8933477075D` |
+|    2 | `0x9B7976EEAD0CF14B` |
+|    3 | `0x2AC8DFDF044E6F49` |
+|    4 | `0xD4BB26B9DAD3F94B` |
+|    5 | `0x3219F84813D2CD9D` |
+|    6 | `0x83DD96A38C68B78B` |
+|    7 | `0x5947FF1393C23D51` |
+|    8 | `0x75E1D96B4C135DAB` |
+|    9 | `0x06EA316E0847421D` |
+|   10 | `0x38C44D4994B0B95B` |
+|   11 | `0x1E022A3B5CB6E109` |
+|   12 | `0x4BBEBC1FD441DABB` |
+|   13 | `0xAC647FAEF4D6F13D` |
+|   14 | `0x0348425CCC72CB7B` |
+|   15 | `0xF329C5C5106FC021` |
+|   16 | `0x47D35A76EAEFF03B` |
+|   17 | `0x53E2903512F26ADD` |
+|   18 | `0x5350B7222CE2AFAB` |
+|   19 | `0x50A59D79B0B0CF49` |
+|   20 | `0x46CAE398829007EB` |
+|   21 | `0xC43F76166D58364F` |
+|   22 | `0xE4630408EBD6CAA7` |
+|   23 | `0xB6A7315607E265BB` |
+|   24 | `0xE4C7CBD07E91F453` |
+|   25 | `0x85211392EFD8A68F` |
+|   26 | `0x9A44CD31131334D7` |
+|   27 | `0x63BD517A2A364BD3` |
+|   28 | `0x9A088554D5FA94BB` |
+|   29 | `0xBFE9F82658F4CDAF` |
+|   30 | `0x3C9EAC6F1AE744B7` |
+|   31 | `0xF670BB2CC2DDC64E` |
+|   32 | `0x45E777B5589C6EF7` |
+|   33 | `0xB56D5AFC5752237C` |
+|   34 | `0xAEF6C5B115E9BD45` |
+|   35 | `0xA2C4B26CFB1CEABA` |
+|   36 | `0x33F933880D9A5843` |
+|   37 | `0x7599080132EE3238` |
+|   38 | `0x6F2272B5F185CC01` |
+|   39 | `0x7B1341849D9FED86` |
+|   40 | `0xD9D6EC3DDC1D602F` |
 
-**Final state (tick 40) hash: `0xAFA35198CC6BD8D4`.** This is the value each
+**Final state (tick 40) hash: `0xD9D6EC3DDC1D602F`.** This is the value each
 framework host prints in its tick/hash overlay after running the fixture
 command to completion.
 
