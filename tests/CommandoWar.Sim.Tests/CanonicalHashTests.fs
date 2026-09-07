@@ -78,8 +78,9 @@ let ``the state hash is FNV-1a-64 over the canonical encoding`` () =
 [<Fact>]
 let ``the followed-path cache is outside the canonical image and the format version is unaffected by it`` () =
     // TASK-015: AgentState.Route is a derived cache, excluded from the hash.
-    // (Canonical.FormatVersion is 2 as of TASK-018 — AgentState.Progress, not
-    // Route — but nothing about that bump is exercised by this test.)
+    // (Canonical.FormatVersion is 3 as of TASK-026 — AgentState.Progress
+    // (TASK-018) and WorldState.TacticalKnowledge (TASK-026), not Route — but
+    // nothing about those bumps is exercised by this test.)
     let moved = (step [| move 1 0 { X = 5; Y = 0 } |] (world 1UL)).State
     let a0 = moved.Agents |> Array.find (fun a -> AgentId.value a.Id = 0)
     Assert.True(a0.Route.IsSome, "expected agent 0 to be following a route")
@@ -90,7 +91,7 @@ let ``the followed-path cache is outside the canonical image and the format vers
 
     Assert.Equal<byte[]>(Canonical.encode stripped, Canonical.encode moved)
     Assert.Equal(Hashing.hash stripped, Hashing.hash moved)
-    Assert.Equal(2, Canonical.FormatVersion)
+    Assert.Equal(3, Canonical.FormatVersion)
 
 // --- First-differing section -------------------------------------------
 
@@ -116,3 +117,24 @@ let ``firstDifferingSection points at Random when only the stream differs`` () =
     let a = world 1UL
     let struct (_, advanced) = SplitMix64.next a.Random
     Assert.Equal(Some "Random", Canonical.firstDifferingSection a { a with Random = advanced })
+
+[<Fact>]
+let ``the tactical-knowledge section is in the canonical image and firstDifferingSection names it`` () =
+    // TASK-026: WorldState.TacticalKnowledge is genuine per-tick canonical
+    // state. A world with a contact encodes to more bytes than one without,
+    // and the section is the first (and only) difference.
+    let a = world 1UL
+
+    let b =
+        { a with
+            TacticalKnowledge =
+                [| { Contact = AgentId.ofInt 9
+                     LastKnownCell = { X = 4; Y = 2 }
+                     LastSeenTick = 3L
+                     Confidence = PerceptionConfig.ConfidenceFull } |] }
+
+    Assert.NotEqual<byte[]>(Canonical.encode a, Canonical.encode b)
+    Assert.NotEqual(Hashing.hash a, Hashing.hash b)
+    Assert.Equal(Some "TacticalKnowledge", Canonical.firstDifferingSection a b)
+    // An empty store is the format-3 default and encodes identically to itself.
+    Assert.Equal(None, Canonical.firstDifferingSection a { a with TacticalKnowledge = [||] })

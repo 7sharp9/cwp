@@ -94,7 +94,8 @@ module DiagnosticRender =
                 | Cells _
                 | PlannedPath _
                 | Reserved _
-                | Obstructed _ -> None)
+                | Obstructed _
+                | KnownContact _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -117,7 +118,8 @@ module DiagnosticRender =
                 | Cells _
                 | SightRay _
                 | Reserved _
-                | Obstructed _ -> None)
+                | Obstructed _
+                | KnownContact _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -292,6 +294,15 @@ module DiagnosticRender =
                     )
                 | Obstructed(cell, occupant) ->
                     line (sprintf "  obstructed %s: held by agent %d" (cellText cell) (AgentId.value occupant))
+                | KnownContact(cell, contact, confidence, lastSeenTick) ->
+                    line (
+                        sprintf
+                            "  known contact %s: agent %d  confidence %d  seen tick %d"
+                            (cellText cell)
+                            (AgentId.value contact)
+                            confidence
+                            lastSeenTick
+                    )
 
         line ""
 
@@ -538,6 +549,25 @@ module DiagnosticRender =
                         (cell.X * s + 1)
                         (cell.Y * s + s - 2)
                         (AgentId.value occupant)
+                )
+            | KnownContact(cell, contact, _, _) ->
+                // The squad's last-known cell for a contact: a purple dashed
+                // ring labelled `?<id>`, deliberately distinct from a live
+                // agent circle. It can sit away from that agent's real
+                // `AgentMarker` position when the contact has moved unseen.
+                line (
+                    sprintf
+                        "  <circle cx=\"%d\" cy=\"%d\" r=\"6\" fill=\"none\" stroke=\"#805ad5\" stroke-width=\"2\" stroke-dasharray=\"3,2\"/>"
+                        (cell.X * s + mid)
+                        (cell.Y * s + mid)
+                )
+
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"9\" fill=\"#805ad5\">?%d</text>"
+                        (cell.X * s + 1)
+                        (cell.Y * s + s - 2)
+                        (AgentId.value contact)
                 )
 
         // Footer.

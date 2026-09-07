@@ -36,11 +36,28 @@ type EventBody =
     /// obstruction (a blocker that never moves) is a perception / appraisal
     /// concern (B-015 / B-017), not resolved here.
     | MovementObstructed of agent: AgentId * at: Cell * blocked: Cell * occupant: AgentId
+    /// `observer` newly sees `contact` (an opposing-side agent) at `at` this
+    /// tick (TASK-026, `docs/04` section 14 "contact observed or reported").
+    /// Emitted by the Perception phase on a *new* sighting only — the tick a
+    /// contact enters `observer`'s `VisibleContacts`, not every tick it stays
+    /// there (`docs/04` section 14 "Do not emit a flood of low-value events").
+    /// Both sides observe; only friendly observations reach the shared
+    /// `WorldState.TacticalKnowledge` (a hostile squad picture is B-022).
+    | ContactObserved of observer: AgentId * contact: AgentId * at: Cell
+    /// `contact` was removed from the friendly squad's shared
+    /// `TacticalKnowledge` this tick, having gone unseen for
+    /// `PerceptionConfig.ExpireAfter` ticks (TASK-026, `docs/04` section 12.4
+    /// "decay or expire stale contacts"). `lastKnownCell` is where it was last
+    /// observed. Emitted by the Tactical-knowledge phase on removal only.
+    | ContactExpired of contact: AgentId * lastKnownCell: Cell
 
 /// An immutable domain event tagged with the tick it occurred on. Within a
-/// single step, events are emitted in a stable order: command outcomes
-/// first, in ascending command id, then movement outcomes in ascending
-/// agent id.
+/// single step, events are emitted in a stable order: command outcomes first,
+/// in ascending command id; then this tick's perception events — every
+/// `ContactObserved` in ascending `(observer, contact)` id order, then every
+/// `ContactExpired` in ascending contact id order; then movement outcomes in
+/// ascending agent id. Perception runs before Navigation and movement
+/// (`Phases.order`), so a contact is observed at its start-of-tick position.
 type DomainEvent =
     { Tick: int64
       Body: EventBody }

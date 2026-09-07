@@ -723,3 +723,153 @@ let ``two agents converging on a cell held by a stationary third never enter it 
 
     Assert.True(sawYield, "expected a MovementYielded from the rival contest")
     Assert.True(sawObstruct, "expected a MovementObstructed on the stationary occupant")
+
+// --- Perception and shared squad tactical knowledge (TASK-026) ---------
+
+/// A world with the listed friendly and hostile agents (ids ascending from 0
+/// across both lists) on `terrain`.
+let private perceptionWorld (b: GridBounds) (friendly: (int * Cell) list) (hostile: (int * Cell) list) (t: Terrain) : WorldState =
+    let agents =
+        (friendly |> List.map (fun (i, c) -> Agent.create (agent i) Friendly c))
+        @ (hostile |> List.map (fun (i, c) -> Agent.create (agent i) Hostile c))
+
+    match World.create b 1UL agents with
+    | Ok w -> { w with Terrain = t }
+    | Error e -> failwith $"unexpected {e}"
+
+/// Opaque (sight-blocking) passable cells on an otherwise empty `b`-sized grid.
+let private opaqueCells (b: GridBounds) (cells: (int * int) list) : Terrain =
+    Terrain.build
+        b
+        (cells
+         |> List.map (fun (x, y) ->
+             { Cell = { X = x; Y = y }
+               Movement = Passable
+               Elevation = 0
+               MoveCost = Terrain.BaseMoveCost
+               Opaque = true })
+         |> List.toArray)
+        [||]
+
+let private contactOf (id: AgentId) (s: WorldState) =
+    s.TacticalKnowledge |> Array.tryFind (fun c -> c.Contact = id)
+
+[<Fact>]
+let ``a friendly with clear line of sight to an in-range hostile observes it and shares it in the squad picture`` () =
+    let b: GridBounds = { Width = 16; Height = 8 }
+    let w = perceptionWorld b [ 0, { X = 1; Y = 1 } ] [ 1, { X = 6; Y = 1 } ] (Terrain.empty b)
+    let r = stepIdle w // tick 1
+
+    Assert.Contains(ContactObserved(agent 0, agent 1, { X = 6; Y = 1 }), bodies r)
+    // Perception is symmetric: the hostile observes the friendly too.
+    Assert.Contains(ContactObserved(agent 1, agent 0, { X = 1; Y = 1 }), bodies r)
+
+    Assert.Equal<AgentId[]>([| agent 1 |], (agentOf (agent 0) r.State).VisibleContacts)
+
+    // Only the friendly's observation reaches the shared squad picture (the
+    // hostile squad picture is B-022).
+    let c = Assert.Single r.State.TacticalKnowledge
+    Assert.Equal(agent 1, c.Contact)
+    Assert.Equal({ X = 6; Y = 1 }, c.LastKnownCell)
+    Assert.Equal(1L, c.LastSeenTick)
+    Assert.Equal(PerceptionConfig.ConfidenceFull, c.Confidence)
+
+    // A new sighting emits ContactObserved once; a second idle tick with the
+    // contact still visible does not re-emit it (no per-tick flood).
+    let r2 = stepIdle r.State
+    Assert.DoesNotContain(bodies r2, (function ContactObserved _ -> true | _ -> false))
+    Assert.Equal(2L, (contactOf (agent 1) r2.State).Value.LastSeenTick)
+
+[<Fact>]
+let ``an opaque cell between a friendly and a hostile blocks the observation entirely`` () =
+    let b: GridBounds = { Width = 16; Height = 8 }
+    let t = opaqueCells b [ 3, 1 ]
+    let w = perceptionWorld b [ 0, { X = 1; Y = 1 } ] [ 1, { X = 6; Y = 1 } ] t
+    let r = stepIdle w
+
+    Assert.DoesNotContain(bodies r, (function ContactObserved _ -> true | _ -> false))
+    Assert.Empty((agentOf (agent 0) r.State).VisibleContacts)
+    Assert.Empty(r.State.TacticalKnowledge)
+
+[<Fact>]
+let ``a hostile beyond SightRange with clear line of sight is not observed`` () =
+    // PerceptionConfig.SightRange is a Chebyshev radius of 10.
+    let b: GridBounds = { Width = 30; Height = 6 }
+    let farWorld = perceptionWorld b [ 0, { X = 1; Y = 1 } ] [ 1, { X = 13; Y = 1 } ] (Terrain.empty b) // dx = 12
+    let rFar = stepIdle farWorld
+    Assert.DoesNotContain(bodies rFar, (function ContactObserved _ -> true | _ -> false))
+    Assert.Empty(rFar.State.TacticalKnowledge)
+
+    // Control: at exactly the range cap (dx = 10) the same clear line of sight
+    // does produce the observation.
+    let edgeWorld = perceptionWorld b [ 0, { X = 1; Y = 1 } ] [ 1, { X = 11; Y = 1 } ] (Terrain.empty b)
+    let rEdge = stepIdle edgeWorld
+    Assert.Contains(ContactObserved(agent 0, agent 1, { X = 11; Y = 1 }), bodies rEdge)
+
+[<Fact>]
+let ``two friendlies, only one with line of sight to a hostile, share the contact the same tick`` () =
+    let b: GridBounds = { Width = 24; Height = 24 }
+    // Friendly 0 has a clear short line to the hostile; friendly 1 is far
+    // enough that the hostile is outside its own SightRange.
+    let w =
+        perceptionWorld b [ 0, { X = 1; Y = 1 }; 1, { X = 1; Y = 20 } ] [ 2, { X = 6; Y = 1 } ] (Terrain.empty b)
+
+    let r = stepIdle w
+
+    Assert.Equal<AgentId[]>([| agent 2 |], (agentOf (agent 0) r.State).VisibleContacts)
+    Assert.Empty((agentOf (agent 1) r.State).VisibleContacts)
+
+    // Instant squad sharing: the contact is in the one shared picture even
+    // though friendly 1 never saw it.
+    let c = Assert.Single r.State.TacticalKnowledge
+    Assert.Equal(agent 2, c.Contact)
+    Assert.Equal(1L, c.LastSeenTick)
+
+[<Fact>]
+let ``a contact seen then lost drops a confidence band after StaleAfter and expires with ContactExpired after ExpireAfter`` () =
+    let b: GridBounds = { Width = 40; Height = 6 }
+    let w = perceptionWorld b [ 0, { X = 2; Y = 1 } ] [ 1, { X = 6; Y = 3 } ] (Terrain.empty b)
+
+    // Walk the friendly far east, out of sight of the stationary hostile.
+    let mutable st =
+        (stepWith [| Command.moveTo (CommandId.ofInt 1) 0L (agent 0) { X = 39; Y = 1 } |] w).State
+
+    let seenThisTick (s: WorldState) =
+        match contactOf (agent 1) s with
+        | Some c -> c.LastSeenTick = s.Tick
+        | None -> false
+
+    Assert.True(seenThisTick st, "the hostile should be seen on the command tick")
+
+    while seenThisTick st do
+        st <- (stepIdle st).State
+
+    let lastSeen = (contactOf (agent 1) st).Value.LastSeenTick
+    Assert.True(lastSeen >= 1L)
+    // Just lost, before StaleAfter: still full confidence.
+    Assert.Equal(PerceptionConfig.ConfidenceFull, (contactOf (agent 1) st).Value.Confidence)
+
+    // At lastSeen + StaleAfter the confidence drops exactly one band.
+    while st.Tick < lastSeen + int64 PerceptionConfig.StaleAfter do
+        st <- (stepIdle st).State
+
+    Assert.Equal(
+        PerceptionConfig.ConfidenceFull - PerceptionConfig.ConfidenceBandDrop,
+        (contactOf (agent 1) st).Value.Confidence
+    )
+
+    // At lastSeen + ExpireAfter the contact is removed and ContactExpired fires.
+    let mutable expired: (int64 * Cell) option = None
+
+    while st.Tick < lastSeen + int64 PerceptionConfig.ExpireAfter do
+        let r = stepIdle st
+
+        for e in r.Events do
+            match e.Body with
+            | ContactExpired(c, cell) when c = agent 1 -> expired <- Some(e.Tick, cell)
+            | _ -> ()
+
+        st <- r.State
+
+    Assert.Equal(Some(lastSeen + int64 PerceptionConfig.ExpireAfter, { X = 6; Y = 3 }), expired)
+    Assert.Equal(None, contactOf (agent 1) st)

@@ -87,4 +87,4 @@ agents:
 
 events: none
 
-tick 40 | hash 0xAFA35198CC6BD8D4 (format 2) | draws 0 | agents 6 | cover-edges 0 | events 0
+tick 40 | hash 0xD9D6EC3DDC1D602F (format 3) | draws 0 | agents 6 | cover-edges 0 | events 0

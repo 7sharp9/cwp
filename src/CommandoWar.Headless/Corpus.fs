@@ -59,6 +59,16 @@ module Corpus =
           MoveCost = 0
           Opaque = false }
 
+    /// An impassable cell that also blocks line of sight — for `perception-contact`,
+    /// the wall a friendly must clear before it can see the hostile beyond it
+    /// (the "Unknown threat" shape, `docs/05` section 16).
+    let private opaqueWall (x: int) (y: int) : RawTerrainCell =
+        { Cell = { X = x; Y = y }
+          Class = "impassable"
+          Elevation = 0
+          MoveCost = 0
+          Opaque = true }
+
     /// A passable cell whose entry cost is above `Terrain.BaseMoveCost` (the
     /// `PathDemo` "costly" precedent) — for `slow-terrain`, the one cell
     /// whose crossing takes more than one tick (TASK-018 sub-cell progress).
@@ -70,12 +80,17 @@ module Corpus =
           Opaque = false }
 
     /// Fills the common `RawScenario` fields: one "reach" objective on an
-    /// objective area, one extraction area, no enemies, no targets.
+    /// objective area, one extraction area, no targets. `enemies` is `[]` for
+    /// every entry except `perception-contact` (TASK-026): `rawScenario` used
+    /// to hard-wire no enemy deployments, so the first enemy-bearing entry
+    /// needed this generalisation. `Scenario.validate` and `World.ofScenario`
+    /// already deploy friendly-then-enemy in ascending id order.
     let private rawScenario
         (id: string)
         (width: int)
         (height: int)
         (friendly: (int * Cell) list)
+        (enemies: (int * Cell) list)
         (terrain: RawTerrainCell list)
         (objective: Cell)
         (extraction: Cell)
@@ -88,7 +103,10 @@ module Corpus =
             friendly
             |> List.map (fun (a, c) -> { AgentId = a; Cell = c })
             |> List.toArray
-          EnemyDeployments = [||]
+          EnemyDeployments =
+            enemies
+            |> List.map (fun (a, c) -> { AgentId = a; Cell = c })
+            |> List.toArray
           ObjectiveAreas = [| { AreaId = "objective"; Cell = objective } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = extraction } |]
           StaticTargets = [||]
@@ -126,7 +144,7 @@ module Corpus =
     /// (rows 7..8 open). A `MoveTo (10,3)` forces a detour around the gap.
     let private wallDetourWorld () : WorldState =
         worldOf (
-            rawScenario "corpus-wall-detour" 12 9 [ 0, { X = 1; Y = 3 } ] [ for y in 0..6 -> wall 5 y ] { X = 11; Y = 0 } { X = 0; Y = 8 }
+            rawScenario "corpus-wall-detour" 12 9 [ 0, { X = 1; Y = 3 } ] [] [ for y in 0..6 -> wall 5 y ] { X = 11; Y = 0 } { X = 0; Y = 8 }
         )
 
     /// One friendly agent at (1,4); the target (5,4) is passable but its four
@@ -139,6 +157,7 @@ module Corpus =
                 8
                 8
                 [ 0, { X = 1; Y = 4 } ]
+                []
                 [ wall 4 4; wall 6 4; wall 5 3; wall 5 5 ]
                 { X = 7; Y = 0 }
                 { X = 0; Y = 7 }
@@ -151,7 +170,7 @@ module Corpus =
     /// one tick, then both reach their destinations by tick 12.
     let private convergingRoutesWorld () : WorldState =
         worldOf (
-            rawScenario "corpus-converging-routes" 8 8 [ 0, { X = 3; Y = 0 }; 1, { X = 0; Y = 3 } ] [] { X = 7; Y = 7 } { X = 0; Y = 0 }
+            rawScenario "corpus-converging-routes" 8 8 [ 0, { X = 3; Y = 0 }; 1, { X = 0; Y = 3 } ] [] [] { X = 7; Y = 7 } { X = 0; Y = 0 }
         )
 
     /// One friendly agent at (0,0) ordered to (4,0), open terrain except
@@ -160,7 +179,7 @@ module Corpus =
     /// (TASK-018 sub-cell movement progress) before the agent enters it; every
     /// other cell is entered in the usual single tick.
     let private slowTerrainWorld () : WorldState =
-        worldOf (rawScenario "corpus-slow-terrain" 8 8 [ 0, { X = 0; Y = 0 } ] [ costly 1 0 3 ] { X = 7; Y = 7 } { X = 0; Y = 7 })
+        worldOf (rawScenario "corpus-slow-terrain" 8 8 [ 0, { X = 0; Y = 0 } ] [] [ costly 1 0 3 ] { X = 7; Y = 7 } { X = 0; Y = 7 })
 
     /// Three friendly agents in a line at (1,3), (2,3), (3,3), all ordered east
     /// to (11,3). Each tick the lead agent has a free cell ahead, so the
@@ -174,6 +193,7 @@ module Corpus =
                 12
                 9
                 [ 0, { X = 1; Y = 3 }; 1, { X = 2; Y = 3 }; 2, { X = 3; Y = 3 } ]
+                []
                 []
                 { X = 11; Y = 3 }
                 { X = 0; Y = 8 }
@@ -191,8 +211,31 @@ module Corpus =
                 8
                 [ 0, { X = 3; Y = 3 }; 1, { X = 4; Y = 3 } ]
                 []
+                []
                 { X = 7; Y = 7 }
                 { X = 0; Y = 0 }
+        )
+
+    /// One friendly agent at (1,5) ordered east to (9,5), and a stationary
+    /// hostile agent 1 at (9,1) behind an opaque impassable wall at x = 6,
+    /// rows 0..3. While the friendly is west of the wall its line of sight to
+    /// the hostile is blocked, even though the hostile is well inside
+    /// `PerceptionConfig.SightRange`; once the friendly clears the wall the
+    /// Perception phase records the contact (`ContactObserved`) and the
+    /// Tactical-knowledge phase puts it in the shared squad picture
+    /// (`WorldState.TacticalKnowledge`). The first corpus entry with an enemy
+    /// deployment and the "Unknown threat" shape (`docs/05` section 16).
+    let private perceptionContactWorld () : WorldState =
+        worldOf (
+            rawScenario
+                "corpus-perception-contact"
+                12
+                8
+                [ 0, { X = 1; Y = 5 } ]
+                [ 1, { X = 9; Y = 1 } ]
+                [ for y in 0..3 -> opaqueWall 6 y ]
+                { X = 9; Y = 5 }
+                { X = 0; Y = 7 }
         )
 
     /// Every corpus entry, in a fixed order.
@@ -254,7 +297,18 @@ module Corpus =
                + "every tick and neither agent ever leaves its start cell (only the tick counter advances)."
              InitialStateNote = "Corpus swap-standoff scenario (8 x 8, seed 20260904)"
              InitialState = swapStandoffWorld
-             TickCount = 4L } |]
+             TickCount = 4L }
+           { Name = "perception-contact"
+             Description =
+               "One friendly agent at (1,5) ordered east to (9,5); a stationary hostile agent 1 at (9,1) behind an "
+               + "opaque impassable wall at x=6, rows 0..3. The hostile is inside PerceptionConfig.SightRange from "
+               + "the start but line of sight is blocked; once the friendly clears the wall the Perception phase "
+               + "emits ContactObserved and the Tactical-knowledge phase adds the contact to the shared squad "
+               + "picture (WorldState.TacticalKnowledge, Canonical.FormatVersion 3). The first corpus entry with an "
+               + "enemy deployment (TASK-026, backlog B-015; the 'Unknown threat' shape, docs/05 section 16)."
+             InitialStateNote = "Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile)"
+             InitialState = perceptionContactWorld
+             TickCount = 14L } |]
 
     // --- entry paths and loading ----------------------------------------
 

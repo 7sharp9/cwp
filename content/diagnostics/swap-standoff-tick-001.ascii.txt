@@ -41,4 +41,4 @@ overlays:
 
 events: command-accepted@(4,3); command-accepted@(3,3); movement-obstructed@(3,3),(4,3); movement-obstructed@(4,3),(3,3)
 
-tick 1 | hash 0xA976DE20340B5163 (format 2) | draws 0 | agents 2 | cover-edges 0 | events 4
+tick 1 | hash 0x7EFEFA56056A1994 (format 3) | draws 0 | agents 2 | cover-edges 0 | events 4

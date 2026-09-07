@@ -5,47 +5,60 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-07 (TASK-025 accepted and merged to main; TASK-026 ready)
+  updated: 2026-09-07 (TASK-026 implemented on branch, in review)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-026
+  task_file: tasks/TASK-026-PERCEPTION-AND-TACTICAL-KNOWLEDGE.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-07
   note: >-
-    2026-09-07: nothing selected. TASK-025 (backlog B-045, production
-    replay-command serialisation — mandatory before G3) implemented, accepted
-    by Dave, and merged to main (branch task-025-replay-command-serialisation,
-    --no-ff; not pushed). Both selection decisions were confirmed with Dave:
-    deterministic line-based text (not binary); header + RecordedCommand[]
-    (the initial WorldState stays a named scenario / builder reference, not
-    serialised). New src/CommandoWar.Sim/ReplaySerialisation.fs — replay-command
-    file format v1 (independent of Replay.FormatVersion / CommandLog.Version /
-    Canonical.FormatVersion), hand-rolled parse/serialise (FSharp.Core only),
-    16-case typed ParseError, ofRecord/toReplayRecord bridges. New
-    cwheadless replay-file verb (exit 2 parse/validate, 3 checkpoint
-    divergence). New committed fixture content/replays/envelope-full.{cwreplay,md}
-    (3-recipient MoveTo, Immediate/Aggressive, issued tick 1 / delivered tick 2).
-    199 -> 206 green; dotnet build 0/0; -- corpus (7x PASS) / -- fixture
-    (0xAFA35198CC6BD8D4, 33 events, format 2) byte-identical with and without
-    --regenerate; Canonical.FormatVersion / CommandLogFile.Version /
-    Replay.FormatVersion / CommandLog.Version all unchanged; no ADR.
-    (docs/ledger/2026-09-07-TASK-025-replay-command-serialisation.md)
+    2026-09-07: TASK-026 (backlog B-015, observations and shared squad
+    tactical knowledge — first phase consumer of the Sight module) implemented
+    on branch task-026-perception-and-tactical-knowledge off main. Committed
+    locally, NOT pushed; awaiting Dave's review (task file `review`).
 
-    With B-044 and B-045 both done, the two mandatory-before-G3 command-loop
-    follow-ups are cleared. One P3 task with a complete file remains ready:
-      - TASK-026 (backlog B-015, observations and shared squad tactical
-        knowledge; first Sight-module phase consumer; Canonical.FormatVersion
-        2 -> 3 with a behaviour-neutral re-pin). Independent of TASK-024/025.
-    B-049 (shared F# fixture builder) now has its precondition met
-    (ReplaySerialisation.serialise is the in-memory command-stream emitter it
-    targets).
+    Three central decisions confirmed with Dave before the canonical encoder
+    / phase bodies were written: full retained decaying tactical-knowledge
+    store (not the narrowed cut); PerceptionConfig module literals
+    SightRange = 10 (Chebyshev), ConfidenceFull = 1000,
+    ConfidenceBandDrop = 250, StaleAfter = 20, ExpireAfter = 60; symmetric
+    raw visibility (both sides get AgentState.VisibleContacts) with
+    friendly-squad-only WorldState.TacticalKnowledge (hostile picture + enemy
+    doctrine stay B-022).
 
-    All feature branches merged into main and deleted; `main` is the only
-    local branch. `main` is ahead of `origin/main` by the TASK-025 commits
-    (implement + accept + merge) — left for Dave to push.
+    New leaf src/CommandoWar.Sim/Perception.fs (PerceptionConfig,
+    visibleContactsFor / sweep / mergeKnowledge; pure, total, integer-only).
+    Real Perception (12.3) and TacticalKnowledge (12.4) phases in
+    Simulation.fs. AgentState.VisibleContacts is a non-canonical derived cache
+    (excluded from Canonical.encode, the Route precedent);
+    WorldState.TacticalKnowledge is genuine canonical state, so
+    Canonical.FormatVersion bumped 2 -> 3 with a full BEHAVIOUR-NEUTRAL re-pin
+    (fixture + all seven .cwlog corpus entries + envelope-full.{cwreplay,md} —
+    tick counts and event counts byte-identical; every committed scenario is
+    enemy-free). DemoScenario has one hostile, so demo.html legitimately gains
+    the new KnownContact overlay + contact-observed markers (it is not one of
+    the seven). New ContactObserved / ContactExpired events; new
+    Overlay.KnownContact in both Diagnostics.frame and frameOf. New
+    enemy-bearing corpus entry perception-contact (14 ticks, 12 events) +
+    golden perception-contact-tick-005.*.
+
+    206 -> 216 green (+5 SimulationTests, +1 DeterminismPropertyTests property
+    at 200 cases, +1 CanonicalHashTests, +2 DiagnosticsTests, +1 CorpusTests
+    theory case); dotnet build 0/0; -- corpus 8/8 PASS; -- fixture format 3,
+    33 events unchanged; -- replay-file envelope-full checkpoints OK;
+    src/CommandoWar.Sim packages FSharp.Core only. No ADR (ADR-0002 amendment
+    governs the format bump).
+    (docs/ledger/2026-09-07-TASK-026-perception-and-tactical-knowledge.md)
+
+    B-016 / B-017 / B-019 / B-022 are now unblocked (they consume
+    WorldState.TacticalKnowledge / AgentState.VisibleContacts). No drafted
+    TASK-027.
+
+    main is ahead of origin/main by the earlier TASK-025 commits plus the
+    new task-026 branch — all left for Dave to push.
 
     Earlier this session (2026-09-06): TASK-021 (B-046), TASK-022 (B-047),
     TASK-023 (B-048) recorded as accepted by Dave; TASK-023's

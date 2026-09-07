@@ -36,6 +36,8 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `slow-terrain-tick-002.svg` | SVG of the same frame: a small progress number next to the agent's circle. |
 | `swap-standoff-tick-001.ascii.txt` | The `content/replays/swap-standoff` corpus entry (TASK-022) at tick 1: agent 0 `(3,3)` and agent 1 `(4,3)` are each ordered onto the other's cell, so the two-agent swap is blocked and both freeze. `Diagnostics.frameOf` derives one `Obstructed` overlay per blocked cell (`obstructed (x,y): held by agent N`) alongside each agent's `PlannedPath`, and the events line carries two `movement-obstructed` markers. |
 | `swap-standoff-tick-001.svg` | SVG of the same frame: each blocked cell as a red dashed box labelled `B<occupant id>`, alongside each agent's route polyline. |
+| `perception-contact-tick-005.ascii.txt` | The `content/replays/perception-contact` corpus entry (TASK-026) at tick 5: friendly agent 0 has just cleared the opaque wall at x=6 and its line of sight to the stationary hostile agent 1 at `(9,1)` opens. The Perception phase emits `ContactObserved` (both ways — perception is symmetric) and the Tactical-knowledge phase adds the contact to `WorldState.TacticalKnowledge`, so the overlays section carries `known contact (9,1): agent 1  confidence 1000  seen tick 5` and the events line two `contact-observed` markers. |
+| `perception-contact-tick-005.svg` | SVG of the same frame: the last-known contact cell as a purple (`#805ad5`) dashed ring labelled `?1`, over the (still-accurate) hostile agent circle. |
 
 ## Regeneration
 
@@ -63,16 +65,22 @@ $R render path $PATHS --format ascii --out content/diagnostics/path.ascii.txt
 $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 ```
 
-`converging-routes-tick-003.*`, `slow-terrain-tick-002.*`, and
-`swap-standoff-tick-001.*` are not produced by the `render` verb: each entry's
-initial state is corpus-owned (`Corpus.all`), not the shared fixture or demo
-scenario `render` knows about. All are regenerated the same way —
-`DiagnosticRender.runFrames` over the named `Corpus.all` entry and its
-committed `.cwlog`, at the tick named in the file — using the exact helper
-(`convergingRoutesFrames ()` / `slowTerrainFrames ()` /
-`swapStandoffFrames ()`) the corresponding `DiagnosticsTests.fs` fact uses to
-compare against these files, so a regeneration and its test cannot silently
-disagree.
+`converging-routes-tick-003.*`, `slow-terrain-tick-002.*`,
+`swap-standoff-tick-001.*`, and `perception-contact-tick-005.*` are not
+produced by the `render` verb: each entry's initial state is corpus-owned
+(`Corpus.all`), not the shared fixture or demo scenario `render` knows about.
+All are regenerated the same way — `DiagnosticRender.runFrames` over the named
+`Corpus.all` entry and its committed `.cwlog`, at the tick named in the file —
+using the exact helper (`convergingRoutesFrames ()` / `slowTerrainFrames ()` /
+`swapStandoffFrames ()` / `perceptionContactFrames ()`) the corresponding
+`DiagnosticsTests.fs` fact uses to compare against these files, so a
+regeneration and its test cannot silently disagree.
+
+The `demo.html` scrubber's moving ticks (8-20) also carry the `KnownContact`
+overlay: `DemoScenario` deploys one hostile agent, so once Perception runs
+(TASK-026) the friendly agents observe it and it enters the shared squad
+picture. `demo.ascii.txt` / `demo.svg` render tick 0 (before any perception),
+so they show only terrain.
 
 `render` also accepts a command-log path in place of `fixture` / `demo` / `los` /
 `path` (replayed against the shared fixture initial state), an optional

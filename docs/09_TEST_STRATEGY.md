@@ -75,9 +75,16 @@ whose passable costs span the full valid `[BaseMoveCost, MaxMoveCost]` range
 cannot catch a suboptimal path). TASK-022 added a fifth: after every tick of
 every generated case, distinct live agents hold distinct cells — the "an
 entity cannot occupy two cells at once" invariant in its pairwise form, which
-property 2 (passable cells only) does not check. The remaining items name
-systems not yet implemented (vehicles, commitments, death, canonical
-serialization round-trip, appraisal, objectives) and stay proposed.
+property 2 (passable cells only) does not check. TASK-026 added a sixth
+(`MaxTest = 200`, over a generator that places 1-3 friendlies and 1-2
+hostiles): every contact in `WorldState.TacticalKnowledge` after a tick was
+genuinely visible to some friendly on its own `LastSeenTick` (recomputed
+independently through `Perception.visibleContactsFor` over the pre-tick
+state), is within `PerceptionConfig.ExpireAfter` ticks of that sighting,
+carries one of the two valid confidence bands, and has a `LastSeenTick` that
+never decreases while the contact survives. The remaining items name systems
+not yet implemented (vehicles, commitments, death, canonical serialization
+round-trip, appraisal, objectives) and stay proposed.
 
 Randomly generated cases must print the reduced counterexample and seed.
 
@@ -100,8 +107,18 @@ Partially realised for the choke-point item by the replay corpus
 (`content/replays/`, section 2.4): `converging-routes` (TASK-017, two agents
 contend for one cell and one yields) and `follow-chain` / `swap-standoff`
 (TASK-022, a vacation chain that resolves each tick and a two-agent swap that
-deadlocks with both agents emitting `MovementObstructed`). The rest name
-systems not yet implemented.
+deadlocks with both agents emitting `MovementObstructed`).
+
+Partially realised for **"enemy does not target an unobserved player
+position"** and the **"Unknown threat"** scenario shape (`docs/05` section 16)
+by TASK-026: the `perception-contact` corpus entry places a hostile inside
+`PerceptionConfig.SightRange` but behind an opaque wall — it is not in
+`WorldState.TacticalKnowledge` until the friendly clears the wall, and
+`SimulationTests` pins that an opaque cell blocks the observation entirely and
+that a hostile beyond `SightRange` is not observed. The **targeting** half
+(the enemy not firing on an unobserved position) needs the hostile squad
+picture and enemy doctrine, which are B-022. The rest name systems not yet
+implemented.
 
 Each scenario should specify:
 
@@ -149,7 +166,10 @@ resolve every edge in a single tick, so none of them alone would catch a
 sub-cell-progress regression — and, from TASK-022, a "follow-chain" entry (a
 three-agent vacation chain that resolves every tick) and a "swap-standoff"
 entry (a two-agent position swap that deadlocks, both agents emitting
-`MovementObstructed` every tick). `Corpus.fs`
+`MovementObstructed` every tick), and, from TASK-026, a "perception-contact"
+entry — the **first with an enemy deployment** (one friendly, one stationary
+hostile behind an opaque wall): the friendly clears the wall and the contact
+enters `WorldState.TacticalKnowledge` (`Canonical.FormatVersion` 3). `Corpus.fs`
 (`CommandoWar.Headless`) owns the name -> `WorldState` registry and the
 check/regenerate logic; `cwheadless corpus [--regenerate]` is the CLI form and
 `tests/CommandoWar.Sim.Tests/CorpusTests.fs` is an in-suite `[<Theory>]` over

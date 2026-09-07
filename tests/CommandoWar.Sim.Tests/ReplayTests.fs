@@ -431,7 +431,7 @@ let ``ReplaySerialisation round-trips the full field matrix: multi-recipient, ev
 
 [<Fact>]
 let ``ReplaySerialisation.parse rejects an unknown format version and attempts no migration`` () =
-    let bumped = "version 999\nseed 1\nticks 4\ncanonical 2\nbuild b\nscenario s\n"
+    let bumped = "version 999\nseed 1\nticks 4\ncanonical 3\nbuild b\nscenario s\n"
 
     match RS.parse bumped with
     | Error(RS.UnsupportedFormatVersion(_, found, supported)) ->
@@ -457,7 +457,7 @@ let ``ReplaySerialisation.parse rejects a command log that is not in (tick, sequ
             [ "version 1"
               "seed 1"
               "ticks 8"
-              "canonical 2"
+              "canonical 3"
               "build b"
               "scenario s"
               "command 5 0 1 5 routine standard test 0 move 1 1"
@@ -477,10 +477,10 @@ let ``ReplaySerialisation parses a hand-written full envelope the legacy cwlog c
               "version 1"
               "seed 20260902"
               "ticks 12"
-              "canonical 2"
+              "canonical 3"
               "build cwheadless"
               "scenario spike-fixture"
-              "initial-hash 0xE13D7540912C7E25"
+              "initial-hash 0x50BFA007EDFC42FE"
               "command 2 0 1 1 immediate aggressive fixture:spike 3,4,5 move 20 14"
               "" ]
 
@@ -489,7 +489,7 @@ let ``ReplaySerialisation parses a hand-written full envelope the legacy cwlog c
     | Ok file ->
         Assert.Equal(20260902UL, file.Seed)
         Assert.Equal(12L, file.TickCount)
-        Assert.Equal(Some 0xE13D7540912C7E25UL, file.InitialHash)
+        Assert.Equal(Some 0x50BFA007EDFC42FEUL, file.InitialHash)
         let c = Assert.Single file.Commands
         Assert.Equal(2L, c.Tick)
         Assert.Equal(1L, c.Command.IssuedAtTick)
@@ -515,12 +515,12 @@ let private replaysDir = Path.Combine(AppContext.BaseDirectory, "replays")
 /// `checkpoint` lines) and envelope-full.md (as the per-tick table). Pinned
 /// here a third way so a determinism regression fails this fact directly.
 let private envelopeFullHashes =
-    [| 0x5FABC350D63F6F3EUL; 0x45A1FB5F0F9C8AF3UL; 0x5A970C9946F376A1UL; 0x9B1AEDD62235A377UL
-       0xEE082B61D4868A61UL; 0xADB8332182B5DF33UL; 0x249C18C9776F39E9UL; 0xD14C0E7299F38B1FUL
-       0x4819D9644A71D3C9UL; 0x28B213CBC8952D93UL; 0xC9D1E55CE2849D11UL; 0x3F7394ABA2BED6C7UL
-       0x295053F9B0379E31UL; 0x9BFAABFCE7F76213UL; 0x67BEA936AE60AF69UL; 0x776AAF1B1B1AB47FUL
-       0x151B3170E9F3E209UL; 0x48F48E3264190AB3UL; 0xFF71F4130E42E3C1UL; 0x577793AED300D4B7UL
-       0xC35DCC176BDB6CC1UL; 0xAE3583ABED756CC7UL; 0xD7A561497F041105UL; 0x5028174266E2BF6FUL |]
+    [| 0x7F61018E60700D55UL; 0xE5224F773E774224UL; 0xA5BD2FE4613A885AUL; 0x5F55F90A0B5331C8UL
+       0xAF4CC50EF3E2E382UL; 0x3CCD22AD382F041CUL; 0x7ADA46F638E12FF2UL; 0x93A0402A1EAF94B8UL
+       0x1D4D494F97500E2AUL; 0x9688354C5999AB54UL; 0x5A1D6613ED23300AUL; 0x409EF2EC77CB3CD8UL
+       0x37161F6C64AFA472UL; 0x3DBA1BC5D1C9737CUL; 0xF11EFDE85DC60752UL; 0x10B544C849B13748UL
+       0xBC74FEBD78A4170AUL; 0xA58A1A075B699A44UL; 0xBD3C728769ADC77AUL; 0x4B745CF8769DE6A8UL
+       0x135AECE475C9EEC2UL; 0x652559E69CAB70A8UL; 0x07ADF960581EC576UL; 0x4E5963A2C8C83660UL |]
 
 [<Fact>]
 let ``the committed envelope-full replay parses, replays, and matches its file checkpoints, its md table, and a fresh run`` () =

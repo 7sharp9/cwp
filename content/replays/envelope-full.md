@@ -26,35 +26,39 @@ See `content/replays/CORPUS.md`.
 | Command file | `envelope-full.cwreplay` |
 | Initial state | Shared spike fixture (`Setup.sixAgentWorld`, 32 x 32, seed 20260902) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0xE13D7540912C7E25` |
-| Final hash (tick 24) | `0x5028174266E2BF6F` |
+| Initial hash (tick 0) | `0x50BFA007EDFC42FE` |
+| Final hash (tick 24) | `0x4E5963A2C8C83660` |
 | Domain events | 72 |
+
+_Re-pinned by TASK-026 (`Canonical.FormatVersion` 2 -> 3, tactical-knowledge
+section). The spike fixture is enemy-free, so the tick count (24) and the
+domain-event count (72) are unchanged: this is a byte-layout re-pin._
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x5FABC350D63F6F3E` |
-|    2 | `0x45A1FB5F0F9C8AF3` |
-|    3 | `0x5A970C9946F376A1` |
-|    4 | `0x9B1AEDD62235A377` |
-|    5 | `0xEE082B61D4868A61` |
-|    6 | `0xADB8332182B5DF33` |
-|    7 | `0x249C18C9776F39E9` |
-|    8 | `0xD14C0E7299F38B1F` |
-|    9 | `0x4819D9644A71D3C9` |
-|   10 | `0x28B213CBC8952D93` |
-|   11 | `0xC9D1E55CE2849D11` |
-|   12 | `0x3F7394ABA2BED6C7` |
-|   13 | `0x295053F9B0379E31` |
-|   14 | `0x9BFAABFCE7F76213` |
-|   15 | `0x67BEA936AE60AF69` |
-|   16 | `0x776AAF1B1B1AB47F` |
-|   17 | `0x151B3170E9F3E209` |
-|   18 | `0x48F48E3264190AB3` |
-|   19 | `0xFF71F4130E42E3C1` |
-|   20 | `0x577793AED300D4B7` |
-|   21 | `0xC35DCC176BDB6CC1` |
-|   22 | `0xAE3583ABED756CC7` |
-|   23 | `0xD7A561497F041105` |
-|   24 | `0x5028174266E2BF6F` |
+|    1 | `0x7F61018E60700D55` |
+|    2 | `0xE5224F773E774224` |
+|    3 | `0xA5BD2FE4613A885A` |
+|    4 | `0x5F55F90A0B5331C8` |
+|    5 | `0xAF4CC50EF3E2E382` |
+|    6 | `0x3CCD22AD382F041C` |
+|    7 | `0x7ADA46F638E12FF2` |
+|    8 | `0x93A0402A1EAF94B8` |
+|    9 | `0x1D4D494F97500E2A` |
+|   10 | `0x9688354C5999AB54` |
+|   11 | `0x5A1D6613ED23300A` |
+|   12 | `0x409EF2EC77CB3CD8` |
+|   13 | `0x37161F6C64AFA472` |
+|   14 | `0x3DBA1BC5D1C9737C` |
+|   15 | `0xF11EFDE85DC60752` |
+|   16 | `0x10B544C849B13748` |
+|   17 | `0xBC74FEBD78A4170A` |
+|   18 | `0xA58A1A075B699A44` |
+|   19 | `0xBD3C728769ADC77A` |
+|   20 | `0x4B745CF8769DE6A8` |
+|   21 | `0x135AECE475C9EEC2` |
+|   22 | `0x652559E69CAB70A8` |
+|   23 | `0x07ADF960581EC576` |
+|   24 | `0x4E5963A2C8C83660` |

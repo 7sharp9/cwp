@@ -37,6 +37,7 @@ content and none needs an on-disk format (backlog B-024).
 | `slow-terrain` | A single agent crossing one cell whose `Terrain.moveCost` (3) exceeds `Terrain.BaseMoveCost` (1): `AgentState.Progress` accumulates over two ticks before the agent enters the cell on the third (TASK-018 sub-cell movement progress); every other cell is entered in the usual single tick. |
 | `follow-chain` | Three agents in a line all ordered the same way, the lead with a free cell ahead: TASK-022's vacation-chain resolution advances the whole chain on the same tick, every tick, with no `MovementObstructed`. |
 | `swap-standoff` | Two agents each ordered onto the other's cell: a two-agent position swap is blocked (TASK-022), neither is ever a first mover, both emit `MovementObstructed` every tick and neither leaves its start cell. |
+| `perception-contact` | **The first entry with an enemy deployment** (TASK-026). One friendly at (1,5) ordered east to (9,5); one stationary hostile at (9,1) behind an opaque impassable wall at x=6, rows 0..3. The hostile is inside `PerceptionConfig.SightRange` from the start, but line of sight is blocked until the friendly clears the wall at tick 5 — then the Perception phase emits `ContactObserved` and the Tactical-knowledge phase adds the contact to `WorldState.TacticalKnowledge`. The "Unknown threat" shape (`docs/05` section 16). |
 
 ## Production replay-command format (TASK-025, backlog B-045)
 
@@ -52,6 +53,14 @@ serialised `WorldState`.
 | Entry | Shows |
 |---|---|
 | `envelope-full` | A three-recipient `MoveTo` (agents 3, 4, 5), `Urgency = Immediate`, `RiskTolerance = Aggressive`, issued on tick 1 and delivered on tick 2, over the spike-fixture initial state (24 ticks). The envelope `.cwlog` cannot express. |
+
+**Re-pinned by TASK-026** (`Canonical.FormatVersion` 2 -> 3, tactical-knowledge
+section added to `Canonical.encode`): `envelope-full.cwreplay`'s `canonical`
+line, `initial-hash`, and 24 `checkpoint` hashes, and `envelope-full.md`, all
+moved. The spike-fixture initial state is enemy-free, so this is a byte-layout
+re-pin: the command, the 24 ticks, and the 72 domain events are unchanged.
+`ReplaySerialisation.parse` rejects a `canonical` value that does not match the
+build, so the data file had to move even though no serialisation code changed.
 
 `envelope-full.cwreplay` carries its own per-tick `checkpoint` hashes;
 `envelope-full.md` is the same table in the shape above.
