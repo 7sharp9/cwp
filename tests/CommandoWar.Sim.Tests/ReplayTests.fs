@@ -1,7 +1,13 @@
 module CommandoWar.Sim.Tests.ReplayTests
 
+open System
+open System.IO
 open Xunit
+open FsCheck
+open FsCheck.FSharp
+open FsCheck.Xunit
 open CommandoWar.Sim
+open CommandoWar.Headless
 
 let private config = SimConfig.standard
 let private bounds: GridBounds = { Width = 8; Height = 8 }
@@ -228,3 +234,332 @@ let ``replay rejects a command log that reuses a command id across ticks`` () =
         Assert.Equal(CommandId.ofInt 42, id)
         Assert.True(first < second)
     | other -> Assert.Fail($"expected DuplicateCommandIdInLog, got {other}")
+
+// --- Production replay-command serialisation (TASK-025, backlog B-045) ------
+// ReplaySerialisation: a versioned line-based text format for the accepted
+// command log plus a small header. The legacy .cwlog cannot carry a
+// multi-recipient envelope, Urgency / RiskTolerance, or an IssuedAtTick
+// distinct from the delivery tick (TASK-024); this format can.
+
+module RS = ReplaySerialisation
+
+let private urgencyGen = Gen.elements [ Routine; Immediate ]
+let private riskGen = Gen.elements [ Cautious; Standard; Aggressive ]
+let private issuerGen = Gen.elements [ "fixture:spike"; "corpus"; "test"; "cwheadless"; "replay-runner" ]
+let private metaTextGen = Gen.elements [ "cwheadless"; "spike build 7"; "corpus-gen"; "b" ]
+
+/// A full-width pseudo-random uint64 from two 32-bit halves.
+let private u64Gen: Gen<uint64> =
+    Gen.map2
+        (fun (a: int) (b: int) -> (uint64 (uint32 a) <<< 32) ||| uint64 (uint32 b))
+        (Gen.choose (Int32.MinValue, Int32.MaxValue))
+        (Gen.choose (Int32.MinValue, Int32.MaxValue))
+
+let private recipientsGen: Gen<AgentId list> =
+    gen {
+        let! k = Gen.choose (1, 5)
+        let! shuffled = Gen.shuffle [| 0..29 |]
+        return shuffled |> Array.take k |> Array.toList |> List.map AgentId.ofInt
+    }
+
+/// One command's envelope core, before (Tick, Sequence) are assigned.
+type private CmdCore =
+    { DeliveryTick: int64
+      IssuedAtTick: int64
+      Id: int
+      Urgency: Urgency
+      Risk: RiskTolerance
+      Recipients: AgentId list
+      Target: Cell
+      Issuer: string }
+
+let private cmdCoreGen (tickCount: int64) : Gen<CmdCore> =
+    gen {
+        let! deliveryTick = Gen.choose (1, int tickCount)
+        // Bias toward an issue tick strictly before delivery, but include the
+        // "issued on the delivery tick" degenerate case.
+        let! offset = Gen.frequency [ 1, Gen.constant 0; 4, Gen.choose (1, deliveryTick) ]
+        let! id = Gen.choose (0, 100000)
+        let! urgency = urgencyGen
+        let! risk = riskGen
+        let! recipients = recipientsGen
+        let! x = Gen.choose (-5, 40)
+        let! y = Gen.choose (-5, 40)
+        let! issuer = issuerGen
+
+        return
+            { DeliveryTick = int64 deliveryTick
+              IssuedAtTick = int64 (deliveryTick - offset)
+              Id = id
+              Urgency = urgency
+              Risk = risk
+              Recipients = recipients
+              Target = { X = x; Y = y }
+              Issuer = issuer }
+    }
+
+/// A canonically ordered `ReplayCommandFile`: commands ascending by
+/// (Tick, Sequence), checkpoints ascending by tick, exactly what `serialise`
+/// emits, so `parse (serialise f) = Ok f` is a real round-trip.
+let private replayFileGen: Gen<RS.ReplayCommandFile> =
+    gen {
+        let! seed = u64Gen
+        let! tickCount = Gen.choose (1, 40) |> Gen.map int64
+        let! build = metaTextGen
+        let! scenario = metaTextGen
+        let! initialHash = Gen.optionOf u64Gen
+
+        let! nCheckpoints = Gen.choose (0, 10)
+        let! cpTicks = Gen.listOfLength nCheckpoints (Gen.choose (1, int tickCount + 3))
+        let! cpHashes = Gen.listOfLength nCheckpoints u64Gen
+
+        let checkpoints =
+            List.zip cpTicks cpHashes
+            |> List.distinctBy fst
+            |> List.sortBy fst
+            |> List.map (fun (t, h) ->
+                { Tick = int64 t
+                  Hash = { Format = Canonical.FormatVersion; Value = h } })
+            |> List.toArray
+
+        let! nCmds = Gen.choose (0, 12)
+        let! cores = Gen.listOfLength nCmds (cmdCoreGen tickCount)
+
+        let commands =
+            cores
+            |> List.sortBy (fun c -> c.DeliveryTick)
+            |> List.groupBy (fun c -> c.DeliveryTick)
+            |> List.collect (fun (tick, group) ->
+                group
+                |> List.mapi (fun seq c ->
+                    { Tick = tick
+                      Sequence = seq
+                      Command =
+                        { Id = CommandId.ofInt c.Id
+                          IssuedAtTick = c.IssuedAtTick
+                          Recipients = c.Recipients
+                          Urgency = c.Urgency
+                          RiskTolerance = c.Risk
+                          Intent = MoveTo c.Target }
+                      Issuer = c.Issuer }))
+            |> List.toArray
+
+        return
+            { Version = RS.FormatVersion
+              Seed = seed
+              TickCount = tickCount
+              CanonicalFormat = Canonical.FormatVersion
+              Meta = { Build = build; Scenario = scenario }
+              InitialHash = initialHash
+              Checkpoints = checkpoints
+              Commands = commands }
+    }
+
+[<Property(MaxTest = 200)>]
+let ``ReplaySerialisation round-trips every envelope field over generated command logs`` () =
+    Prop.forAll (Arb.fromGen replayFileGen) (fun file ->
+        let text = RS.serialise file
+
+        match RS.parse text with
+        | Error e -> failwith $"parse of serialised output failed: {RS.describeError e}"
+        | Ok parsed ->
+            // serialise >> parse is identity ...
+            if parsed <> file then
+                failwith "serialise >> parse changed the value"
+            // ... and parse >> serialise is identity on that valid input.
+            RS.serialise parsed = text)
+
+[<Fact>]
+let ``ReplaySerialisation round-trips the full field matrix: multi-recipient, every urgency and risk, a distinct issue tick`` () =
+    // The generated property above covers this space open-endedly; this fact
+    // pins every point in the matrix the acceptance criteria name explicitly.
+    let recipientSets =
+        [ [ 0 ]; [ 2; 5 ]; [ 3; 4; 5 ]; [ 9; 1; 4; 7 ] ] |> List.map (List.map AgentId.ofInt)
+
+    let cmd tick issuedAt seq id urgency risk recipients : RecordedCommand =
+        { Tick = tick
+          Sequence = seq
+          Command =
+            { Id = CommandId.ofInt id
+              IssuedAtTick = issuedAt
+              Recipients = recipients
+              Urgency = urgency
+              RiskTolerance = risk
+              Intent = MoveTo { X = 7; Y = -2 } }
+          Issuer = "matrix" }
+
+    let commands =
+        [ for u in [ Routine; Immediate ] do
+              for r in [ Cautious; Standard; Aggressive ] do
+                  for recipients in recipientSets -> u, r, recipients ]
+        |> List.mapi (fun i (u, r, recipients) ->
+            let tick = int64 (i + 1)
+            // half the commands issued strictly before delivery, half on it
+            let issuedAt = if i % 2 = 0 then tick - 1L else tick
+            cmd tick (max 0L issuedAt) 0 (100 + i) u r recipients)
+        |> List.toArray
+
+    let file: RS.ReplayCommandFile =
+        { Version = RS.FormatVersion
+          Seed = 12345678UL
+          TickCount = int64 commands.Length + 1L
+          CanonicalFormat = Canonical.FormatVersion
+          Meta = { Build = "matrix build"; Scenario = "matrix scenario" }
+          InitialHash = Some 0xABCDEF0123456789UL
+          Checkpoints = [| { Tick = 1L; Hash = { Format = Canonical.FormatVersion; Value = 42UL } } |]
+          Commands = commands }
+
+    let text = RS.serialise file
+
+    match RS.parse text with
+    | Error e -> Assert.Fail(RS.describeError e)
+    | Ok parsed ->
+        Assert.Equal(file, parsed)
+        Assert.Equal(text, RS.serialise parsed)
+
+    // the matrix really does contain every point
+    Assert.Contains(commands, (fun c -> List.length c.Command.Recipients > 1))
+    Assert.Equal<Set<Urgency>>(
+        Set.ofList [ Routine; Immediate ],
+        commands |> Array.map (fun c -> c.Command.Urgency) |> Set.ofArray
+    )
+    Assert.Equal<Set<RiskTolerance>>(
+        Set.ofList [ Cautious; Standard; Aggressive ],
+        commands |> Array.map (fun c -> c.Command.RiskTolerance) |> Set.ofArray
+    )
+    Assert.Contains(commands, (fun c -> c.Command.IssuedAtTick <> c.Tick))
+
+[<Fact>]
+let ``ReplaySerialisation.parse rejects an unknown format version and attempts no migration`` () =
+    let bumped = "version 999\nseed 1\nticks 4\ncanonical 2\nbuild b\nscenario s\n"
+
+    match RS.parse bumped with
+    | Error(RS.UnsupportedFormatVersion(_, found, supported)) ->
+        Assert.Equal("999", found)
+        Assert.Equal(RS.FormatVersion, supported)
+    | other -> Assert.Fail($"expected UnsupportedFormatVersion, got {other}")
+
+[<Fact>]
+let ``ReplaySerialisation.parse rejects a canonical-format mismatch`` () =
+    let text = "version 1\nseed 1\nticks 4\ncanonical 99\nbuild b\nscenario s\n"
+
+    match RS.parse text with
+    | Error(RS.CanonicalFormatMismatch(_, found, expected)) ->
+        Assert.Equal(99, found)
+        Assert.Equal(Canonical.FormatVersion, expected)
+    | other -> Assert.Fail($"expected CanonicalFormatMismatch, got {other}")
+
+[<Fact>]
+let ``ReplaySerialisation.parse rejects a command log that is not in (tick, sequence) order`` () =
+    let text =
+        String.concat
+            "\n"
+            [ "version 1"
+              "seed 1"
+              "ticks 8"
+              "canonical 2"
+              "build b"
+              "scenario s"
+              "command 5 0 1 5 routine standard test 0 move 1 1"
+              "command 3 0 2 3 routine standard test 0 move 2 2"
+              "" ]
+
+    match RS.parse text with
+    | Error(RS.CommandsOutOfOrder _) -> ()
+    | other -> Assert.Fail($"expected CommandsOutOfOrder, got {other}")
+
+[<Fact>]
+let ``ReplaySerialisation parses a hand-written full envelope the legacy cwlog cannot express`` () =
+    let text =
+        String.concat
+            "\n"
+            [ "# a full envelope"
+              "version 1"
+              "seed 20260902"
+              "ticks 12"
+              "canonical 2"
+              "build cwheadless"
+              "scenario spike-fixture"
+              "initial-hash 0xE13D7540912C7E25"
+              "command 2 0 1 1 immediate aggressive fixture:spike 3,4,5 move 20 14"
+              "" ]
+
+    match RS.parse text with
+    | Error e -> Assert.Fail(RS.describeError e)
+    | Ok file ->
+        Assert.Equal(20260902UL, file.Seed)
+        Assert.Equal(12L, file.TickCount)
+        Assert.Equal(Some 0xE13D7540912C7E25UL, file.InitialHash)
+        let c = Assert.Single file.Commands
+        Assert.Equal(2L, c.Tick)
+        Assert.Equal(1L, c.Command.IssuedAtTick)
+        Assert.Equal<AgentId list>([ 3; 4; 5 ] |> List.map AgentId.ofInt, c.Command.Recipients)
+        Assert.Equal(Immediate, c.Command.Urgency)
+        Assert.Equal(Aggressive, c.Command.RiskTolerance)
+        Assert.Equal(MoveTo { X = 20; Y = 14 }, c.Command.Intent)
+        Assert.Equal("fixture:spike", c.Issuer)
+        // parse >> serialise is identity on this canonical input (the comment
+        // and the trailing blank line are the only difference).
+        let stripped =
+            text.Split('\n')
+            |> Array.filter (fun l -> l <> "" && not (l.StartsWith "#"))
+            |> String.concat "\n"
+
+        Assert.Equal(stripped + "\n", RS.serialise file)
+
+// --- the committed new-format fixture --------------------------------------
+
+let private replaysDir = Path.Combine(AppContext.BaseDirectory, "replays")
+
+/// The tick-1..24 hashes committed in both envelope-full.cwreplay (as
+/// `checkpoint` lines) and envelope-full.md (as the per-tick table). Pinned
+/// here a third way so a determinism regression fails this fact directly.
+let private envelopeFullHashes =
+    [| 0x5FABC350D63F6F3EUL; 0x45A1FB5F0F9C8AF3UL; 0x5A970C9946F376A1UL; 0x9B1AEDD62235A377UL
+       0xEE082B61D4868A61UL; 0xADB8332182B5DF33UL; 0x249C18C9776F39E9UL; 0xD14C0E7299F38B1FUL
+       0x4819D9644A71D3C9UL; 0x28B213CBC8952D93UL; 0xC9D1E55CE2849D11UL; 0x3F7394ABA2BED6C7UL
+       0x295053F9B0379E31UL; 0x9BFAABFCE7F76213UL; 0x67BEA936AE60AF69UL; 0x776AAF1B1B1AB47FUL
+       0x151B3170E9F3E209UL; 0x48F48E3264190AB3UL; 0xFF71F4130E42E3C1UL; 0x577793AED300D4B7UL
+       0xC35DCC176BDB6CC1UL; 0xAE3583ABED756CC7UL; 0xD7A561497F041105UL; 0x5028174266E2BF6FUL |]
+
+[<Fact>]
+let ``the committed envelope-full replay parses, replays, and matches its file checkpoints, its md table, and a fresh run`` () =
+    let file =
+        match RS.parse (File.ReadAllText(Path.Combine(replaysDir, "envelope-full.cwreplay"))) with
+        | Ok f -> f
+        | Error e -> failwith $"envelope-full.cwreplay did not parse: {RS.describeError e}"
+
+    // The envelope carries what .cwlog cannot.
+    let c = Assert.Single file.Commands
+    Assert.True(List.length c.Command.Recipients > 1, "expected a multi-recipient command")
+    Assert.Equal(Immediate, c.Command.Urgency)
+    Assert.Equal(Aggressive, c.Command.RiskTolerance)
+    Assert.NotEqual(c.Tick, c.Command.IssuedAtTick)
+
+    // Replay it from the scenario the file names.
+    let initial = Setup.sixAgentWorld { Width = 32; Height = 32 } 20260902UL
+    Assert.Equal(Some (Hashing.hash initial).Value, file.InitialHash)
+
+    let outcome = RS.toReplayRecord initial file |> Replay.run config |> okOrFail
+    let runHashes = outcome.TickHashes |> Array.map (fun cp -> cp.Hash.Value)
+
+    // 1. fresh run == the pinned array.
+    Assert.Equal<uint64[]>(envelopeFullHashes, runHashes)
+
+    // 2. fresh run == the file's own checkpoint lines.
+    let fileHashes = file.Checkpoints |> Array.map (fun cp -> cp.Hash.Value)
+    Assert.Equal<uint64[]>(runHashes, fileHashes)
+
+    // 3. fresh run == the committed envelope-full.md table.
+    match Corpus.parseTable (File.ReadAllText(Path.Combine(replaysDir, "envelope-full.md"))) with
+    | Error m -> Assert.Fail($"envelope-full.md: {m}")
+    | Ok table ->
+        Assert.Equal(24L, table.TickCount)
+        Assert.Equal((Hashing.hash initial).Value, table.InitialHash)
+        Assert.Equal(runHashes.[runHashes.Length - 1], table.FinalHash)
+        Assert.Equal(outcome.Events.Length, table.EventCount)
+
+        Assert.Equal<(int64 * uint64)[]>(
+            outcome.TickHashes |> Array.map (fun cp -> cp.Tick, cp.Hash.Value),
+            table.TickHashes
+        )

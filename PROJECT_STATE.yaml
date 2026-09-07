@@ -5,7 +5,7 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-07 (TASK-024 accepted; nothing selected; TASK-025/026 ready)
+  updated: 2026-09-07 (TASK-025 accepted and merged to main; TASK-026 ready)
 
 active_work:
   selected_task: none
@@ -15,35 +15,38 @@ active_work:
   blockers: []
   updated: 2026-09-07
   note: >-
-    2026-09-07: nothing selected. TASK-024 (backlog B-044, issue-tick /
-    submission-tick semantics — mandatory before G3) implemented and accepted
-    by Dave. On the recommended resolutions: PlayerCommand.IssueTick renamed
-    to IssuedAtTick (only that field; RecordedCommand.Tick kept with a
-    clarifying doc comment — the two are independent, and the legacy .cwlog
-    collapses them); one new CommandRejection case IssueTickOutOfRange
-    (IssuedAtTick must be in [0, currentTick]; a stale command is still
-    accepted — following an outdated order is B-017 appraisal's call, not a
-    validation rule); command identity is NOT authoritative state — a new
-    ReplayError.DuplicateCommandIdInLog is checked by Replay.validate,
-    WorldState gains no field, Canonical.FormatVersion stays 2. 194 -> 199
-    green; dotnet build 0/0; -- corpus (7x PASS) / -- fixture
-    (0xAFA35198CC6BD8D4, 33 events) byte-identical; no ADR.
-    (docs/ledger/2026-09-07-TASK-024-issue-tick-semantics.md)
+    2026-09-07: nothing selected. TASK-025 (backlog B-045, production
+    replay-command serialisation — mandatory before G3) implemented, accepted
+    by Dave, and merged to main (branch task-025-replay-command-serialisation,
+    --no-ff; not pushed). Both selection decisions were confirmed with Dave:
+    deterministic line-based text (not binary); header + RecordedCommand[]
+    (the initial WorldState stays a named scenario / builder reference, not
+    serialised). New src/CommandoWar.Sim/ReplaySerialisation.fs — replay-command
+    file format v1 (independent of Replay.FormatVersion / CommandLog.Version /
+    Canonical.FormatVersion), hand-rolled parse/serialise (FSharp.Core only),
+    16-case typed ParseError, ofRecord/toReplayRecord bridges. New
+    cwheadless replay-file verb (exit 2 parse/validate, 3 checkpoint
+    divergence). New committed fixture content/replays/envelope-full.{cwreplay,md}
+    (3-recipient MoveTo, Immediate/Aggressive, issued tick 1 / delivered tick 2).
+    199 -> 206 green; dotnet build 0/0; -- corpus (7x PASS) / -- fixture
+    (0xAFA35198CC6BD8D4, 33 events, format 2) byte-identical with and without
+    --regenerate; Canonical.FormatVersion / CommandLogFile.Version /
+    Replay.FormatVersion / CommandLog.Version all unchanged; no ADR.
+    (docs/ledger/2026-09-07-TASK-025-replay-command-serialisation.md)
 
-    Both remaining P3 tasks with a complete file are now ready:
-      - TASK-025 (backlog B-045, production replay-command serialisation —
-        mandatory before G3). Two decisions to settle at selection: text vs
-        binary format (task recommends text), and command-log-plus-header vs
-        whole-ReplayRecord serialisation (task now recommends the former —
-        the initial state stays a scenario / builder reference, not a
-        serialised WorldState, keeping the task M). Recommended NEXT.
+    With B-044 and B-045 both done, the two mandatory-before-G3 command-loop
+    follow-ups are cleared. One P3 task with a complete file remains ready:
       - TASK-026 (backlog B-015, observations and shared squad tactical
         knowledge; first Sight-module phase consumer; Canonical.FormatVersion
         2 -> 3 with a behaviour-neutral re-pin). Independent of TASK-024/025.
+    B-049 (shared F# fixture builder) now has its precondition met
+    (ReplaySerialisation.serialise is the in-memory command-stream emitter it
+    targets).
 
-    Branches: task-024-025-026-drafts (drafts + reconciliation) and
-    task-024-issue-tick-semantics (stacks the TASK-024 implementation on top),
-    both off main, neither pushed — left for Dave to PR.
+    Local branches not pushed: task-024-025-026-drafts (drafts +
+    reconciliation), task-024-issue-tick-semantics (superseded — TASK-024 on
+    main), task-025-replay-command-serialisation (merged to main). main is
+    ahead of origin/main by the TASK-025 commits — left for Dave to push.
 
     Earlier this session (2026-09-06): TASK-021 (B-046), TASK-022 (B-047),
     TASK-023 (B-048) recorded as accepted by Dave; TASK-023's

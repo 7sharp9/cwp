@@ -547,12 +547,17 @@ and `RiskTolerance` (`Cautious | Standard | Aggressive`). `Urgency`,
 `RiskTolerance`, and `IssuedAtTick` are **inert beyond validation** —
 `docs/05` section 5 stage 4 / section 14 name them as appraisal inputs, but
 appraisal (B-017) does not exist and nothing reads them yet. Still **out of
-this partial envelope**: issuer identity (not modelled — one player). The
-remaining mandatory-before-G3 follow-up is **B-045** (the production
-replay-command serialisation — after TASK-020 the legacy `.cwlog` fixture
-grammar can no longer express a full accepted command; it now also cannot
-express an `IssuedAtTick` distinct from the delivery tick). B-044 (issue-tick
-semantics) is done.
+this partial envelope**: issuer identity (not modelled — one player).
+
+**On-disk form realised by TASK-025 (backlog B-045).** The full accepted
+envelope now has a lossless serialisation:
+`src/CommandoWar.Sim/ReplaySerialisation.fs` (replay-command format v1), a
+versioned line-based text format carrying `Id`, the delivery and issue ticks,
+`Sequence`, `Issuer`, the `Recipients` list, `Urgency`, `RiskTolerance`, and
+`Intent`. The legacy `.cwlog` fixture grammar (frozen at v1) cannot express
+multi-recipient addressing, the two enum fields, or a distinct `IssuedAtTick`;
+`.cwreplay` can. B-044 and B-045 (the two mandatory-before-G3 command-loop
+follow-ups) are both done.
 
 ## 14. Events
 
@@ -604,6 +609,26 @@ A replay file records:
 Playback rejects incompatible versions clearly. It does not guess migrations.
 
 Realised by TASK-003: `src/CommandoWar.Sim/Replay.fs`. `ReplayRecord` (format version 1) carries the canonical-format version, provenance metadata, seed, tick-0 initial state, tick count, and a `CommandLog` (version 1) of `RecordedCommand { Tick; Sequence; Command; Issuer }`, where `Tick` is the delivery tick — independent of the envelope's `Command.IssuedAtTick` (section 2; TASK-024). `Replay.run` rejects unsupported replay, command-log, and canonical-format versions, a non-tick-0 initial state, a seed inconsistent with the initial stream, out-of-range or non-monotonic commands, and (TASK-024) a log that reuses one `CommandId` on two ticks (`DuplicateCommandIdInLog`), each with a typed `ReplayError`.
+
+On-disk replay-command serialisation realised by TASK-025 (backlog B-045):
+`src/CommandoWar.Sim/ReplaySerialisation.fs`, **replay-command file format
+version 1** — a hand-rolled, deterministic, line-based text format
+(`FSharp.Core` only, no new package). It serialises the header (its own format
+version, seed, tick count, canonical-format version, `ReplayMeta`, an optional
+initial-state hash, optional per-tick checkpoint hashes) plus the ordered
+`RecordedCommand[]`; it does **not** serialise `WorldState` — the initial state
+stays a named scenario / builder reference (`Meta.Scenario`), resolved by the
+caller. `parse` rejects an unknown file-format version with a typed
+`ParseError` and attempts no migration; a canonical-format mismatch, an
+out-of-order command or checkpoint block, and every malformed field are typed
+errors naming the source line. `parse` and `serialise` are mutual inverses on
+valid input. This file-format version is independent of `Replay.FormatVersion`,
+`CommandLog.Version`, and `Canonical.FormatVersion`, none of which move.
+`cwheadless replay-file <path>` parses, replays, prints the per-tick hash table
+and the ordered accepted commands, and exits 2 on a parse/validate failure or 3
+on a checkpoint divergence. The legacy `.cwlog` stays the frozen
+fixture-script format for the seven existing corpus entries (corpus migration
+is B-049).
 
 ## 17. State hashing
 

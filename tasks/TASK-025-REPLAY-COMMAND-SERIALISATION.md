@@ -1,14 +1,58 @@
 # TASK-025: Production replay-command serialisation
 
-Status: ready (TASK-024 / B-044 accepted 2026-09-07). Two decisions to settle
-at selection: **text vs binary** format (Central decision 3 — task recommends
-text) and **command-log-only vs whole-`ReplayRecord`** serialisation (Central
-decision 2 — see the note there; command-log-plus-header is the smaller, more
-likely-right scope and keeps the task M).
+Status: done (2026-09-07, accepted by Dave)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-045 — **mandatory before G3**
 Size: M
+
+## Outcome
+
+Implemented 2026-09-07 in a headless session. Both selection decisions were
+put to Dave and confirmed before the parser was written:
+
+- **Central decision 3 — text, not binary.** A deterministic line-based text
+  format: readable for G3 traces, diffable for divergence and code review,
+  matches the `.cwlog` / `content/replays/*.md` precedent.
+- **Central decision 2 — header + command log, initial state stays a scenario
+  reference.** The file carries the header (its own format version, seed, tick
+  count, canonical-format version, `ReplayMeta`, an optional initial-state
+  hash, optional per-tick checkpoint hashes) and the ordered
+  `RecordedCommand[]`. It does **not** serialise `WorldState` — the initial
+  state is resolved by name from `Corpus.all` (the `.cwlog` model). Confirmed
+  sound against `Corpus.fs`: corpus initial states are `unit -> WorldState`
+  builders in code, and `Replay.record` already takes `initial` separately.
+
+- **New `src/CommandoWar.Sim/ReplaySerialisation.fs`** — replay-command file
+  format **v1** (`ReplaySerialisation.FormatVersion`, independent of
+  `Replay.FormatVersion` / `CommandLog.Version` / `Canonical.FormatVersion`).
+  `FSharp.Core` only, hand-rolled. `ReplayCommandFile` record, `serialise` /
+  `parse` (strict directive order -> idempotent round-trip; integer
+  parse/format forced culture-invariant), a 16-case typed `ParseError` +
+  `describeError`, `ofRecord` / `toReplayRecord` bridges to `ReplayRecord` +
+  `Replay.run`.
+- **`cwheadless replay-file <path>`** — new verb (the existing `replay` verb
+  keeps its `.cwlog` meaning). Parses, resolves the scenario against
+  `Corpus.all`, checks the initial-state hash, `Replay.run`, prints the
+  per-tick hash table and the ordered accepted commands. Exit `2` on a
+  parse/validate failure, `3` on a checkpoint divergence, `0` otherwise.
+- **`content/replays/envelope-full.{cwreplay,md}`** — the committed new-format
+  fixture: a three-recipient `MoveTo` (agents 3/4/5), `Urgency = Immediate`,
+  `RiskTolerance = Aggressive`, issued tick 1 / delivered tick 2, on the
+  spike-fixture initial state, 24 ticks (initial `0xE13D7540912C7E25`, final
+  `0x5028174266E2BF6F`, 72 events). `ReplayTests` cross-checks the file's
+  `checkpoint` lines, the `.md` table, a pinned hash array, and a fresh
+  `Replay.run`.
+- **`199 -> 206` green** (+7 `ReplayTests`: a round-trip property at
+  `MaxTest = 200`, a full-field-matrix round-trip fact, unknown-version /
+  canonical-mismatch / out-of-order rejection, a hand-written full-envelope
+  parse fact, the committed-fixture cross-check). `dotnet build` `0/0`;
+  `-- corpus` (7x PASS) / `-- fixture` (`0xAFA35198CC6BD8D4`, 33 events,
+  format 2) byte-identical with and without `--regenerate`;
+  `Canonical.FormatVersion` / `CommandLogFile.Version` / `Replay.FormatVersion`
+  / `CommandLog.Version` all unchanged; `src/CommandoWar.Sim` packages
+  `FSharp.Core` only. `CommandLogFile.fs` doc-comment pointer only. No ADR.
+  Detail: `docs/ledger/2026-09-07-TASK-025-replay-command-serialisation.md`.
 
 ## Objective
 
@@ -307,35 +351,35 @@ evidence in the `content/replays/` sense, not a diagnostic-frame golden.
 
 ## Acceptance criteria
 
-- [ ] A new versioned replay-command format exists in `CommandoWar.Sim`, with
+- [x] A new versioned replay-command format exists in `CommandoWar.Sim`, with
       a hand-rolled parser and serializer; `dotnet list src/CommandoWar.Sim
       package --include-transitive` is `FSharp.Core` only.
-- [ ] `serialise` then `parse` is identity, and `parse` then `serialise` is
+- [x] `serialise` then `parse` is identity, and `parse` then `serialise` is
       identity, on valid input — proven over generated `RecordedCommand[]`
       that includes multi-recipient commands, every `Urgency`, every
       `RiskTolerance`, and `IssuedAtTick` different from the delivery tick
       (`ReplayTests.fs`, a property at >= 200 cases).
-- [ ] An unknown format version is rejected with a typed error naming the
+- [x] An unknown format version is rejected with a typed error naming the
       version; no migration is attempted (`ReplayTests.fs`).
-- [ ] At least one committed replay fixture in the new format carries a full
+- [x] At least one committed replay fixture in the new format carries a full
       envelope the legacy `.cwlog` cannot express (multi-recipient, non-default
       `Urgency` / `RiskTolerance`, distinct issue tick), has a committed
       per-tick hash table, and is replayed and checked by `dotnet test` (and
       by `cwheadless` if registered in `Corpus.all`).
-- [ ] `cwheadless` can run a replay file in the new format and print its
+- [x] `cwheadless` can run a replay file in the new format and print its
       per-tick hash table and ordered accepted commands; a parse/validate
       failure exits `2`, a checkpoint divergence exits `3`.
-- [ ] `.cwlog` grammar, `CommandLogFile.Version`, `Replay.FormatVersion`,
+- [x] `.cwlog` grammar, `CommandLogFile.Version`, `Replay.FormatVersion`,
       `CommandLog.Version`, `Canonical.FormatVersion` (`2`), and
       `ScenarioContent.Version` are all unchanged; the seven existing corpus
       `.md` tables and `content/fixtures/SPIKE-FIXTURE.md` are byte-identical
       (`-- corpus` / `-- fixture` with no `--regenerate`).
-- [ ] Every pre-existing `ReplayTests` / `CorpusTests` / `FixtureTests` /
+- [x] Every pre-existing `ReplayTests` / `CorpusTests` / `FixtureTests` /
       `DeterminismPropertyTests` / `SimulationTests` fact passes unmodified.
-- [ ] `dotnet build CommandoWar.slnx -c Release` = 0 warnings, 0 errors;
+- [x] `dotnet build CommandoWar.slnx -c Release` = 0 warnings, 0 errors;
       source scan of `src/CommandoWar.Sim` clean (no `float`, no new
       dependency, no `System.Text.Json`).
-- [ ] `docs/04` sections 13 / 16, `docs/09` section 2.4, backlog row (B-045
+- [x] `docs/04` sections 13 / 16, `docs/09` section 2.4, backlog row (B-045
       `-> done`), ledger index row + detail file, `PROJECT_STATE.yaml`, task
       status updated. "Green tests" pinned fact refreshed.
 

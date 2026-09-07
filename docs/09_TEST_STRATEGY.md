@@ -161,6 +161,23 @@ the first differing canonical section and both sides' random-draw counts via
 `Divergence.compare`. Generative property tests (needs a new dependency) and
 component-level subhashes in the report are deferred to **B-012b**.
 
+Extended by TASK-025 (backlog B-045): the production replay-command
+serialisation, `src/CommandoWar.Sim/ReplaySerialisation.fs` (replay-command
+file format v1). `ReplayTests.fs` adds a `parse`/`serialise` round-trip
+property (`MaxTest = 200`) over generated command logs covering multi-recipient
+commands, every `Urgency`, every `RiskTolerance`, and an `IssuedAtTick` distinct
+from the delivery tick; an explicit full-field-matrix round-trip fact; typed
+rejection of an unknown file-format version (no guessed migration), a
+canonical-format mismatch, and an out-of-order command block; and one committed
+new-format fixture, `content/replays/envelope-full.cwreplay` (a three-recipient
+`MoveTo`, `Urgency = Immediate`, `RiskTolerance = Aggressive`, issued a tick
+before delivery — an envelope the legacy `.cwlog` cannot express), replayed and
+cross-checked against its own `checkpoint` lines, the committed
+`envelope-full.md` per-tick table, and a fresh `Replay.run`. `cwheadless
+replay-file <path>` is the CLI form (exit 2 on parse/validate failure, 3 on
+checkpoint divergence). The divergence report fields above are unchanged: this
+task only changes how the command log reaches `Replay.run` from disk.
+
 Do not promise replay compatibility across arbitrary future versions. Version the format and fail explicitly when migration is unavailable.
 
 ### 2.5 Content tests

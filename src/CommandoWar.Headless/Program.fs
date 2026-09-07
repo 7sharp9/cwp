@@ -129,6 +129,128 @@ let private cmdReplay (args: string list) : int =
         eprintfn "usage: cwheadless replay <command-log> [--ticks N]"
         Exit.usage
 
+/// Resolves a replay-command file's `scenario` reference to its tick-0
+/// `WorldState`. The initial state is not serialised (TASK-025 Central
+/// decision 2): it is a named builder reference, resolved here against the
+/// same `Corpus.all` registry the `.cwlog` corpus uses.
+let private resolveScenario (name: string) : (unit -> WorldState) option =
+    Corpus.all
+    |> Array.tryFind (fun e -> e.Name = name)
+    |> Option.map (fun e -> e.InitialState)
+
+/// Runs and inspects a replay file in the production replay-command format
+/// (`ReplaySerialisation`). Parses it, resolves the named scenario to an
+/// initial state, replays it, and prints the per-tick authoritative-state
+/// hash table and the ordered accepted commands (the readable decision
+/// trace). Exit `2` on a parse or replay/validate failure, `3` if the file
+/// carries checkpoint hashes that disagree with the fresh run.
+let private cmdReplayFile (args: string list) : int =
+    match args with
+    | [ path ] ->
+        if not (File.Exists path) then
+            eprintfn "error: replay file not found: %s" path
+            Exit.usage
+        else
+            match ReplaySerialisation.parse (File.ReadAllText path) with
+            | Error e ->
+                eprintfn "parse error: %s: %s" path (ReplaySerialisation.describeError e)
+                Exit.replayError
+            | Ok file ->
+                match resolveScenario file.Meta.Scenario with
+                | None ->
+                    eprintfn "error: %s: unknown scenario '%s' (not in Corpus.all)" path file.Meta.Scenario
+                    Exit.replayError
+                | Some build ->
+                    let initial = build ()
+                    let initialHash = (Hashing.hash initial).Value
+
+                    match file.InitialHash with
+                    | Some pinned when pinned <> initialHash ->
+                        eprintfn
+                            "error: %s: initial-state hash mismatch: file pins %s, scenario '%s' builds %s"
+                            path (hxv pinned) file.Meta.Scenario (hxv initialHash)
+                        Exit.replayError
+                    | _ ->
+                        let record = ReplaySerialisation.toReplayRecord initial file
+
+                        match Replay.run SimConfig.standard record with
+                        | Error e ->
+                            eprintfn "replay error: %s" (describeReplayError e)
+                            Exit.replayError
+                        | Ok outcome ->
+                            printfn "# replay-file %s" path
+                            printfn "scenario     : %s (initial hash %s)" file.Meta.Scenario (hxv initialHash)
+                            printfn "build        : %s" file.Meta.Build
+                            printfn "format       : replay-command v%d, canonical %d" file.Version file.CanonicalFormat
+                            printfn "tick count   : %d" file.TickCount
+                            printfn ""
+                            printfn "accepted commands (%d):" file.Commands.Length
+
+                            for c in file.Commands do
+                                let recipients =
+                                    c.Command.Recipients
+                                    |> List.map (AgentId.value >> string)
+                                    |> String.concat ","
+
+                                let intent =
+                                    match c.Command.Intent with
+                                    | MoveTo t -> sprintf "move (%d,%d)" t.X t.Y
+
+                                printfn
+                                    "    tick %d seq %d  id %d  issued@%d  %A/%A  -> [%s]  %s"
+                                    c.Tick c.Sequence (CommandId.value c.Command.Id) c.Command.IssuedAtTick
+                                    c.Command.Urgency c.Command.RiskTolerance recipients intent
+
+                            printfn ""
+                            printfn "per-tick authoritative state hash:"
+                            printfn ""
+                            printfn "| tick | state hash          |"
+                            printfn "|-----:|---------------------|"
+
+                            for cp in outcome.TickHashes do
+                                printfn "| %4d | %s |" cp.Tick (hx cp.Hash)
+
+                            printfn ""
+                            printOutcomeTail outcome
+
+                            // Checkpoint divergence check (exit 3).
+                            if file.Checkpoints.Length = 0 then
+                                printfn ""
+                                printfn "checkpoints  : none in file"
+                                Exit.ok
+                            else
+                                let actual =
+                                    outcome.TickHashes |> Array.map (fun cp -> cp.Tick, cp.Hash.Value) |> Map.ofArray
+
+                                let firstBad =
+                                    file.Checkpoints
+                                    |> Array.tryPick (fun cp ->
+                                        match Map.tryFind cp.Tick actual with
+                                        | Some h when h = cp.Hash.Value -> None
+                                        | Some h -> Some(cp.Tick, cp.Hash.Value, Some h)
+                                        | None -> Some(cp.Tick, cp.Hash.Value, None))
+
+                                match firstBad with
+                                | None ->
+                                    printfn ""
+                                    printfn "checkpoints  : OK (%d ticks match the file's committed hashes)"
+                                        file.Checkpoints.Length
+                                    Exit.ok
+                                | Some(tick, expected, actualHash) ->
+                                    eprintfn ""
+                                    eprintfn "DIVERGED %s: this build disagrees with the file's committed checkpoints" path
+                                    eprintfn "  first bad tick : %d" tick
+                                    eprintfn "  expected hash  : %s  (committed in %s)" (hxv expected) path
+
+                                    match actualHash with
+                                    | Some h -> eprintfn "  actual hash    : %s  (this build)" (hxv h)
+                                    | None -> eprintfn "  actual hash    : (no tick %d in the run)" tick
+
+                                    Exit.diverged
+    | _ ->
+        eprintfn "usage: cwheadless replay-file <replay-command-file>"
+        Exit.usage
+
 let private cmdCompare (args: string list) : int =
     match args with
     | pathA :: pathB :: rest ->
@@ -471,7 +593,8 @@ let private usage () =
     printfn ""
     printfn "usage:"
     printfn "  cwheadless step <N>                              step N ticks from the fixture, print tick + hash"
-    printfn "  cwheadless replay <command-log> [--ticks N]      replay a command log against the fixture"
+    printfn "  cwheadless replay <command-log> [--ticks N]      replay a legacy .cwlog against the fixture"
+    printfn "  cwheadless replay-file <replay-command-file>     replay a production replay-command file (ReplaySerialisation)"
     printfn "  cwheadless compare <log-a> <log-b> [--ticks N]   report the first authoritative divergence"
     printfn "  cwheadless fixture                               emit the pinned shared fixture + per-tick hashes"
     printfn "  cwheadless render <target> [opts]                render diagnostic frames (target: fixture | demo | los | path | <command-log>)"
@@ -481,10 +604,14 @@ let private usage () =
     printfn "exit codes: %d ok, %d usage/IO, %d replay error, %d divergence detected"
         Exit.ok Exit.usage Exit.replayError Exit.diverged
     printfn ""
-    printfn "command-log format (v%d), one directive per line:" CommandLogFile.Version
+    printfn "legacy command-log format (.cwlog, v%d), one directive per line:" CommandLogFile.Version
     printfn "  # comment"
     printfn "  version 1"
     printfn "  <tick> <agentId> move <x> <y>"
+    printfn ""
+    printfn "production replay-command format (.cwreplay, v%d): a versioned header" ReplaySerialisation.FormatVersion
+    printfn "  (seed, ticks, canonical, build, scenario, optional initial-hash / checkpoints)"
+    printfn "  plus 'command <tick> <seq> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> move <x> <y>'"
 
 [<EntryPoint>]
 let main argv =
@@ -494,6 +621,7 @@ let main argv =
         Exit.ok
     | "step" :: rest -> cmdStep rest
     | "replay" :: rest -> cmdReplay rest
+    | "replay-file" :: rest -> cmdReplayFile rest
     | "compare" :: rest -> cmdCompare rest
     | [ "fixture" ] -> cmdFixture ()
     | "render" :: rest -> cmdRender rest
