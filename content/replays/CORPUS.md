@@ -38,6 +38,37 @@ content and none needs an on-disk format (backlog B-024).
 | `follow-chain` | Three agents in a line all ordered the same way, the lead with a free cell ahead: TASK-022's vacation-chain resolution advances the whole chain on the same tick, every tick, with no `MovementObstructed`. |
 | `swap-standoff` | Two agents each ordered onto the other's cell: a two-agent position swap is blocked (TASK-022), neither is ever a first mover, both emit `MovementObstructed` every tick and neither leaves its start cell. |
 
+## Production replay-command format (TASK-025, backlog B-045)
+
+`envelope-full.cwreplay` is the first committed replay in the **production
+replay-command format** (`src/CommandoWar.Sim/ReplaySerialisation.fs`,
+replay-command file format v1) — a versioned, lossless, line-based text format
+that carries the whole accepted-command envelope the legacy `.cwlog` cannot:
+multi-recipient addressing, `Urgency`, `RiskTolerance`, and an `IssuedAtTick`
+distinct from the delivery tick (TASK-024). Its initial state is a **named
+scenario reference** (`spike-fixture`, resolved from `Corpus.all`), not a
+serialised `WorldState`.
+
+| Entry | Shows |
+|---|---|
+| `envelope-full` | A three-recipient `MoveTo` (agents 3, 4, 5), `Urgency = Immediate`, `RiskTolerance = Aggressive`, issued on tick 1 and delivered on tick 2, over the spike-fixture initial state (24 ticks). The envelope `.cwlog` cannot express. |
+
+`envelope-full.cwreplay` carries its own per-tick `checkpoint` hashes;
+`envelope-full.md` is the same table in the shape above.
+`tests/CommandoWar.Sim.Tests/ReplayTests.fs` cross-checks the file's
+checkpoints, the `.md` table, a pinned hash array, and a fresh `Replay.run`
+against one another. It is **not** in `Corpus.all` (that path is `.cwlog` + a
+generated `.md` only), so `cwheadless corpus` does not touch it; run it with:
+
+```sh
+dotnet run --project src/CommandoWar.Headless -c Release -- replay-file content/replays/envelope-full.cwreplay
+```
+
+which prints the per-tick hash table and the ordered accepted commands and
+exits `2` on a parse/validate failure, `3` on a checkpoint divergence. The
+seven `.cwlog` entries are unaffected; migrating them to the new format is
+backlog B-049.
+
 ## Regeneration
 
 From the repository root, after `dotnet build CommandoWar.slnx -c Release`:

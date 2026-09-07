@@ -1,0 +1,42 @@
+# Replay corpus entry: envelope-full (replay-command format v1).
+#
+# The first committed replay in the production replay-command format
+# (src/CommandoWar.Sim/ReplaySerialisation.fs, TASK-025 / backlog B-045). It
+# carries a full accepted-command envelope the legacy .cwlog cannot express:
+# a three-recipient MoveTo (agents 3, 4, 5), Urgency = immediate,
+# RiskTolerance = aggressive, issued on tick 1 and delivered on tick 2.
+#
+# Initial state: the shared spike fixture (Setup.sixAgentWorld, 32 x 32,
+# seed 20260902) — resolved by name from Corpus.all, not serialised.
+version 1
+seed 20260902
+ticks 24
+canonical 2
+build cwheadless
+scenario spike-fixture
+initial-hash 0xE13D7540912C7E25
+checkpoint 1 0x5FABC350D63F6F3E
+checkpoint 2 0x45A1FB5F0F9C8AF3
+checkpoint 3 0x5A970C9946F376A1
+checkpoint 4 0x9B1AEDD62235A377
+checkpoint 5 0xEE082B61D4868A61
+checkpoint 6 0xADB8332182B5DF33
+checkpoint 7 0x249C18C9776F39E9
+checkpoint 8 0xD14C0E7299F38B1F
+checkpoint 9 0x4819D9644A71D3C9
+checkpoint 10 0x28B213CBC8952D93
+checkpoint 11 0xC9D1E55CE2849D11
+checkpoint 12 0x3F7394ABA2BED6C7
+checkpoint 13 0x295053F9B0379E31
+checkpoint 14 0x9BFAABFCE7F76213
+checkpoint 15 0x67BEA936AE60AF69
+checkpoint 16 0x776AAF1B1B1AB47F
+checkpoint 17 0x151B3170E9F3E209
+checkpoint 18 0x48F48E3264190AB3
+checkpoint 19 0xFF71F4130E42E3C1
+checkpoint 20 0x577793AED300D4B7
+checkpoint 21 0xC35DCC176BDB6CC1
+checkpoint 22 0xAE3583ABED756CC7
+checkpoint 23 0xD7A561497F041105
+checkpoint 24 0x5028174266E2BF6F
+command 2 0 1 1 immediate aggressive fixture:spike 3,4,5 move 20 14

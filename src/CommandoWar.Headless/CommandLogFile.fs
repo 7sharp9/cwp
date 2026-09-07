@@ -3,14 +3,16 @@ namespace CommandoWar.Headless
 open CommandoWar.Sim
 
 /// Minimal, versioned, line-based command-log text format for the framework
-/// spikes and the test corpus. It is deliberately tiny: it is a **legacy
-/// fixture-script format, not the production replay-command format**
+/// spikes and the test corpus. It is deliberately tiny: it is a **frozen
+/// legacy fixture-script format, not the production replay-command format**
 /// (TASK-020). It cannot express multi-recipient addressing, `Urgency`,
-/// `RiskTolerance`, or an `IssuedAtTick` distinct from the delivery tick; a
-/// versioned lossless serialisation of the full accepted envelope is backlog
-/// B-045. Replay/divergence semantics live in `CommandoWar.Sim`; this module
-/// only turns text into the typed `RecordedCommand[]` those functions already
-/// accept.
+/// `RiskTolerance`, or an `IssuedAtTick` distinct from the delivery tick. The
+/// production, lossless serialisation of the full accepted envelope is
+/// `CommandoWar.Sim.ReplaySerialisation` (replay-command format v1, TASK-025 /
+/// backlog B-045); this `.cwlog` grammar and its `Version` are frozen and are
+/// not extended to carry those fields. Replay/divergence semantics live in
+/// `CommandoWar.Sim`; this module only turns text into the typed
+/// `RecordedCommand[]` those functions already accept.
 ///
 /// Grammar (UTF-8, one directive per line):
 ///
