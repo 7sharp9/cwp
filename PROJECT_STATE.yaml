@@ -5,7 +5,7 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-07 (TASK-025 implemented, pending acceptance; TASK-026 ready)
+  updated: 2026-09-07 (TASK-025 accepted and merged to main; TASK-026 ready)
 
 active_work:
   selected_task: none
@@ -15,11 +15,11 @@ active_work:
   blockers: []
   updated: 2026-09-07
   note: >-
-    2026-09-07: TASK-025 (backlog B-045, production replay-command
-    serialisation — mandatory before G3) implemented on branch
-    task-025-replay-command-serialisation (off main; TASK-024 is merged to
-    main), pending Dave's acceptance. Both selection decisions confirmed with
-    Dave: deterministic line-based text (not binary); header + RecordedCommand[]
+    2026-09-07: nothing selected. TASK-025 (backlog B-045, production
+    replay-command serialisation — mandatory before G3) implemented, accepted
+    by Dave, and merged to main (branch task-025-replay-command-serialisation,
+    --no-ff; not pushed). Both selection decisions were confirmed with Dave:
+    deterministic line-based text (not binary); header + RecordedCommand[]
     (the initial WorldState stays a named scenario / builder reference, not
     serialised). New src/CommandoWar.Sim/ReplaySerialisation.fs — replay-command
     file format v1 (independent of Replay.FormatVersion / CommandLog.Version /
@@ -43,9 +43,10 @@ active_work:
     (ReplaySerialisation.serialise is the in-memory command-stream emitter it
     targets).
 
-    Branches not yet PR'd: task-024-025-026-drafts (drafts + reconciliation),
-    task-024-issue-tick-semantics (superseded — TASK-024 is on main),
-    task-025-replay-command-serialisation (this task) — left for Dave to PR.
+    Local branches not pushed: task-024-025-026-drafts (drafts +
+    reconciliation), task-024-issue-tick-semantics (superseded — TASK-024 on
+    main), task-025-replay-command-serialisation (merged to main). main is
+    ahead of origin/main by the TASK-025 commits — left for Dave to push.
 
     Earlier this session (2026-09-06): TASK-021 (B-046), TASK-022 (B-047),
     TASK-023 (B-048) recorded as accepted by Dave; TASK-023's

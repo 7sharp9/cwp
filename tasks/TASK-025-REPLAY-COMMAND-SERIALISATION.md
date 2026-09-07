@@ -1,6 +1,6 @@
 # TASK-025: Production replay-command serialisation
 
-Status: done (2026-09-07, pending Dave's acceptance)
+Status: done (2026-09-07, accepted by Dave)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-045 — **mandatory before G3**

@@ -8,7 +8,7 @@ of HEAD). Branch `task-025-replay-command-serialisation`.
 **Environment:** Windows 11 Pro 26200; .NET SDK 10.0.303; .NET 10.0.11;
 xUnit 2.9.3; FsCheck / FsCheck.Xunit 3.3.4
 **Status change:** `tasks/TASK-025-REPLAY-COMMAND-SERIALISATION.md`
-`ready -> done` (implemented 2026-09-07, pending Dave's acceptance);
+`ready -> done` (implemented and accepted by Dave 2026-09-07);
 `docs/11_BACKLOG.md` TASK-025 row + B-045 `ready -> done`, B-049 precondition
 note; `PROJECT_STATE.yaml` `active_work.selected_task` `none -> TASK-025 -> none`.
 No `Canonical.FormatVersion` change (stays `2`); no committed hash moved.
@@ -260,6 +260,9 @@ All from the repository root, on branch `task-025-replay-command-serialisation`.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: both selection decisions (text format; header + command log) were
-  confirmed with Dave before the parser was written.
+- Accepted: yes (2026-09-07)
+- Notes: both selection decisions (deterministic line-based text; header +
+  command log with the initial state as a scenario reference) were confirmed
+  with Dave before the parser was written. `replay-file` verb name (vs. the
+  taken `replay`) and the fixture living outside `Corpus.all` (guarded by the
+  `ReplayTests` four-way cross-check instead) accepted. Merged to `main`.
