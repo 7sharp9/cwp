@@ -28,12 +28,27 @@ type RiskTolerance =
 /// `docs/04_SIMULATION_SPEC.md` section 13 envelope (TASK-020): command id,
 /// recipients, issue tick, urgency and risk tolerance are present. Issuer
 /// identity is deliberately not modelled (the vertical slice has one player).
-/// `IssueTick` is carried for replay but its semantics are unresolved and
-/// eligibility/scheduling by issue tick is not enforced — backlog B-044,
-/// mandatory before G3.
+///
+/// `IssuedAtTick` (TASK-024, renamed from `IssueTick`) is the tick on which
+/// the order was issued by the commander. It is **envelope provenance and a
+/// future appraisal input** (`docs/05_COMMAND_AND_AGENT_AI.md` section 5
+/// stage 4 / section 14: an order is aged from when it was issued), carried
+/// inside the authoritative command envelope and replayed verbatim. It is a
+/// **different concept** from `RecordedCommand.Tick` (`Replay.fs`), the
+/// caller-owned tick on which the command is delivered to command intake; the
+/// two are independent, and the legacy `.cwlog` fixture-script format
+/// collapses them to its single tick field. Command intake enforces one rule
+/// on it: `IssuedAtTick` must be in `[0, currentTick]` — a command cannot
+/// have been issued in the future or before tick 0
+/// (`CommandRejection.IssueTickOutOfRange`). Staleness (a long-delayed
+/// order) is not a validation concern; whether to follow an outdated order is
+/// agent appraisal's judgement (backlog B-017).
 type PlayerCommand =
     { Id: CommandId
-      IssueTick: int64
+      /// The tick the commander issued this order on. Provenance and a future
+      /// appraisal input; independent of the delivery tick. Must lie in
+      /// `[0, currentTick]` at command intake.
+      IssuedAtTick: int64
       /// The agents this one command addresses. Generalised from a single
       /// `Agent` field by TASK-020. `Command.moveTo` builds a one-element
       /// list; `Command.moveToMany` builds a multi-recipient one. Command
@@ -78,8 +93,19 @@ type CommandRejection =
     /// command batch. Every command sharing that id is rejected and none is
     /// processed, so the outcome does not depend on batch order (the batch is
     /// stably sorted by id in `Simulation.step`). Scoped to one tick's batch;
-    /// cross-tick duplicate-id tracking is out of scope (backlog B-044).
+    /// cross-tick duplicate-id tracking is a **replay-log** invariant, not
+    /// authoritative state — `Replay.validate` rejects a log that reuses a
+    /// `CommandId` on two ticks (`ReplayError.DuplicateCommandIdInLog`), and
+    /// `WorldState` holds no command history (TASK-024).
     | DuplicateCommandId of command: CommandId
+    /// Ineligible: `issuedAtTick` is outside `[0, tick]` — the command claims
+    /// to have been issued in the future (after the tick being processed) or
+    /// before tick 0 (TASK-024, `docs/04_SIMULATION_SPEC.md` section 2 "a
+    /// command becomes eligible on a specified tick"). Whole-command
+    /// rejection, one `CommandRejected`. A command issued on an *earlier*
+    /// tick and delivered now is accepted: staleness is appraisal's concern
+    /// (backlog B-017), not command intake's.
+    | IssueTickOutOfRange of issuedAtTick: int64 * tick: int64
 
 [<RequireQualifiedAccess>]
 module Command =
@@ -87,10 +113,12 @@ module Command =
     /// Builds a single-recipient move command with the default envelope
     /// (`Urgency = Routine`, `RiskTolerance = Standard`). The four-argument
     /// signature is unchanged since TASK-003, so every existing call site is
-    /// unaffected by the TASK-020 generalisation.
-    let moveTo (id: CommandId) (issueTick: int64) (agent: AgentId) (target: Cell) : PlayerCommand =
+    /// unaffected by the TASK-020 generalisation or the TASK-024
+    /// `issueTick -> issuedAtTick` parameter rename (callers pass it
+    /// positionally).
+    let moveTo (id: CommandId) (issuedAtTick: int64) (agent: AgentId) (target: Cell) : PlayerCommand =
         { Id = id
-          IssueTick = issueTick
+          IssuedAtTick = issuedAtTick
           Recipients = [ agent ]
           Urgency = Routine
           RiskTolerance = Standard
@@ -103,14 +131,14 @@ module Command =
     /// tolerance (backlog B-045).
     let moveToMany
         (id: CommandId)
-        (issueTick: int64)
+        (issuedAtTick: int64)
         (agents: AgentId list)
         (target: Cell)
         (urgency: Urgency)
         (riskTolerance: RiskTolerance)
         : PlayerCommand =
         { Id = id
-          IssueTick = issueTick
+          IssuedAtTick = issuedAtTick
           Recipients = agents
           Urgency = urgency
           RiskTolerance = riskTolerance

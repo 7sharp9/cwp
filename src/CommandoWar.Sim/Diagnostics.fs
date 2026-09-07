@@ -215,6 +215,7 @@ module Diagnostics =
         | CommandRejected(_, DuplicateRecipient _) -> { Kind = "command-rejected"; Cells = [||] }
         | CommandRejected(_, UnauthorisedRecipient _) -> { Kind = "command-rejected"; Cells = [||] }
         | CommandRejected(_, DuplicateCommandId _) -> { Kind = "command-rejected"; Cells = [||] }
+        | CommandRejected(_, IssueTickOutOfRange _) -> { Kind = "command-rejected"; Cells = [||] }
         | CommandRejected(_, TargetOutOfBounds target) -> { Kind = "command-rejected"; Cells = [| target |] }
         | MovementStepped(_, from, into) -> { Kind = "movement-stepped"; Cells = [| from; into |] }
         | MovementCompleted(_, at) -> { Kind = "movement-completed"; Cells = [| at |] }

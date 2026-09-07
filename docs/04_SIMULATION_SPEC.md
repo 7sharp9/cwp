@@ -17,6 +17,25 @@ This document specifies the authoritative tactical simulation for the vertical s
 
 Do not use floating-point `dt` in authoritative systems.
 
+Realised by TASK-024 (backlog B-044): a player command carries two
+independent tick values. `RecordedCommand.Tick` (`Replay.fs`) is the
+**delivery tick** — the tick whose command-intake phase consumes the command,
+owned by whoever schedules the run (the headless runner, the replay runner,
+later a client command queue). `PlayerCommand.IssuedAtTick` (renamed from
+`IssueTick`) is **when the commander issued the order** — envelope provenance
+and a future appraisal input (`docs/05` section 5 stage 4 / section 14),
+replayed verbatim. The two are not constrained equal; the legacy `.cwlog`
+fixture format collapses them to its single tick field. Command intake
+enforces one eligibility rule: `IssuedAtTick` must lie in
+`[0, currentTick]` — a command issued in the future or before tick 0 is
+rejected (`CommandRejection.IssueTickOutOfRange`). A command issued on an
+earlier tick and delivered now is **accepted**: staleness is a tactical
+judgement for agent appraisal (backlog B-017), not a command-intake rule, so
+no give-up horizon is applied. Command scheduling and identity are **not**
+authoritative state — `WorldState` holds no command history; cross-tick
+`CommandId` uniqueness is a replay-log invariant
+(`ReplayError.DuplicateCommandIdInLog`, checked by `Replay.validate`).
+
 ## 3. Initial determinism contract
 
 For the same:
@@ -400,20 +419,25 @@ Fatigue, persistent personality dimensions, interpersonal relations, inventory g
 - reject malformed, unauthorised, impossible-to-address, or duplicate commands;
 - record accepted commands before effects are applied.
 
-Partially realised by TASK-020 (`Simulation.commandIntake`): the batch is
-stably sorted by command id in `Simulation.step`, then, in order — every
-command in a group that shares a `CommandId` within this tick's batch is
-rejected (`DuplicateCommandId`, order-independent, none processed); each
-surviving command is checked whole (`EmptyRecipients` -> `DuplicateRecipient`
--> `TargetOutOfBounds`, first failure short-circuits with one
-`CommandRejected` and no per-recipient events); then each recipient is checked
-in ascending `AgentId` order (`UnknownAgent` -> `UnauthorisedRecipient` for a
-`Hostile`-side agent -> accept), emitting `CommandAccepted` **before** the
-destination is written. One accept/reject event per (command, recipient) pair.
-The agent array is copied once per phase invocation. **Issue-tick validation
-is not implemented**: `IssueTick` is carried but unenforced and its semantics
-are unresolved (backlog B-044, mandatory before G3). "Unauthorised" here is
-only the friendly/hostile-side check — no issuer identity or commander model.
+Partially realised by TASK-020 and extended by TASK-024
+(`Simulation.commandIntake`): the batch is stably sorted by command id in
+`Simulation.step`, then, in order — every command in a group that shares a
+`CommandId` within this tick's batch is rejected (`DuplicateCommandId`,
+order-independent, none processed); each surviving command is checked whole
+(`IssueTickOutOfRange` when `IssuedAtTick` is outside `[0, currentTick]` ->
+`EmptyRecipients` -> `DuplicateRecipient` -> `TargetOutOfBounds`, first
+failure short-circuits with one `CommandRejected` and no per-recipient
+events); then each recipient is checked in ascending `AgentId` order
+(`UnknownAgent` -> `UnauthorisedRecipient` for a `Hostile`-side agent ->
+accept), emitting `CommandAccepted` **before** the destination is written.
+One accept/reject event per (command, recipient) pair. The agent array is
+copied once per phase invocation. Issue-tick eligibility is now enforced
+(TASK-024): `IssuedAtTick` — renamed from `IssueTick`, distinct from the
+delivery tick (section 2) — must be `>= 0` and not after the tick being
+processed; a stale (long-delayed) command is still accepted, since following
+an outdated order is an appraisal decision (B-017), not a validation one.
+"Unauthorised" here is still only the friendly/hostile-side check — no issuer
+identity or commander model.
 
 ### 12.2 Communication
 
@@ -513,19 +537,22 @@ An envelope supplies command ID, issuer, recipients, issue tick, urgency, and ri
 
 A command can be syntactically valid but tactically refused by an agent. Command validation and agent appraisal are separate concepts.
 
-**Partially realised by TASK-020.** `PlayerCommand` carries `Id`, `Recipients:
-AgentId list` (generalised from a single agent; `Command.moveTo` builds a
-one-element list, `Command.moveToMany` a multi-recipient one), `IssueTick`,
-`Urgency` (`Routine | Immediate`) and `RiskTolerance` (`Cautious | Standard |
-Aggressive`). `Urgency` and `RiskTolerance` are **inert envelope data** —
-`docs/05` section 5 stage 4 names them as appraisal-resolve inputs, but
+**Partially realised by TASK-020, extended by TASK-024.** `PlayerCommand`
+carries `Id`, `Recipients: AgentId list` (generalised from a single agent;
+`Command.moveTo` builds a one-element list, `Command.moveToMany` a
+multi-recipient one), `IssuedAtTick` (renamed from `IssueTick` — the tick the
+order was issued, distinct from the delivery tick and range-checked at
+command intake, section 2 / section 12.1), `Urgency` (`Routine | Immediate`)
+and `RiskTolerance` (`Cautious | Standard | Aggressive`). `Urgency`,
+`RiskTolerance`, and `IssuedAtTick` are **inert beyond validation** —
+`docs/05` section 5 stage 4 / section 14 name them as appraisal inputs, but
 appraisal (B-017) does not exist and nothing reads them yet. Still **out of
-this partial envelope**: issuer identity (not modelled — one player) and
-issue-tick eligibility/scheduling (`IssueTick` carried but unenforced,
-semantics unresolved). Each has a mandatory-before-G3 follow-up: **B-044**
-(issue-tick / submission-tick semantics) and **B-045** (the production
+this partial envelope**: issuer identity (not modelled — one player). The
+remaining mandatory-before-G3 follow-up is **B-045** (the production
 replay-command serialisation — after TASK-020 the legacy `.cwlog` fixture
-grammar can no longer express a full accepted command).
+grammar can no longer express a full accepted command; it now also cannot
+express an `IssuedAtTick` distinct from the delivery tick). B-044 (issue-tick
+semantics) is done.
 
 ## 14. Events
 
@@ -576,7 +603,7 @@ A replay file records:
 
 Playback rejects incompatible versions clearly. It does not guess migrations.
 
-Realised by TASK-003: `src/CommandoWar.Sim/Replay.fs`. `ReplayRecord` (format version 1) carries the canonical-format version, provenance metadata, seed, tick-0 initial state, tick count, and a `CommandLog` (version 1) of `RecordedCommand { Tick; Sequence; Command; Issuer }`. `Replay.run` rejects unsupported replay, command-log, and canonical-format versions, a non-tick-0 initial state, a seed inconsistent with the initial stream, and out-of-range or non-monotonic commands, each with a typed `ReplayError`.
+Realised by TASK-003: `src/CommandoWar.Sim/Replay.fs`. `ReplayRecord` (format version 1) carries the canonical-format version, provenance metadata, seed, tick-0 initial state, tick count, and a `CommandLog` (version 1) of `RecordedCommand { Tick; Sequence; Command; Issuer }`, where `Tick` is the delivery tick — independent of the envelope's `Command.IssuedAtTick` (section 2; TASK-024). `Replay.run` rejects unsupported replay, command-log, and canonical-format versions, a non-tick-0 initial state, a seed inconsistent with the initial stream, out-of-range or non-monotonic commands, and (TASK-024) a log that reuses one `CommandId` on two ticks (`DuplicateCommandIdInLog`), each with a typed `ReplayError`.
 
 ## 17. State hashing
 

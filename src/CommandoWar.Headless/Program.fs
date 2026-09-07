@@ -29,6 +29,8 @@ let private describeReplayError (e: ReplayError) : string =
         $"command log not strictly ascending at index {index}: ({pt},{ps}) then ({ct},{cs})"
     | CommandOutsideReplayRange(index, tick, tickCount) ->
         $"command {index} at tick {tick} is outside the replay range 1..{tickCount}"
+    | DuplicateCommandIdInLog(id, first, second) ->
+        $"command id {CommandId.value id} is reused: commands at index {first} and {second}"
 
 let private agentLine (a: AgentState) =
     let dest =

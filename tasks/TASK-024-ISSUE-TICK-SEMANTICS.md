@@ -1,10 +1,46 @@
 # TASK-024: Issue-tick / submission-tick semantics
 
-Status: ready
+Status: done (2026-09-07, implemented; pending Dave's acceptance)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-044 — **mandatory before G3**
 Size: S–M
+
+## Outcome
+
+Implemented 2026-09-07 in a single headless session, on the recommended
+resolutions (Dave: "proceed with recommendation").
+
+- **Decision 1 — one field renamed, not both.** `PlayerCommand.IssueTick ->
+  `IssuedAtTick`, with a doc comment pinning it as issue-time provenance /
+  future appraisal input. `RecordedCommand.Tick` kept, with an expanded doc
+  comment pinning it as the caller-owned delivery tick and stating its
+  independence. `RecordedCommand.Tick` is already documented and unambiguous;
+  renaming it would have been ~15 compiler-checked sites of pure churn on
+  replay-log plumbing that TASK-025 reworks anyway, and `.cwlog` already
+  collapses the two. Field access `c.Command.IssueTick` in `CorpusTests.fs`
+  (one token) was updated; every other caller passes `issuedAtTick`
+  positionally and is unchanged.
+- **Decision 2 — one rejection case.** `CommandRejection.IssueTickOutOfRange
+  of issuedAtTick: int64 * tick: int64`, rejected when
+  `IssuedAtTick < 0 || IssuedAtTick > s.Tick`. One whole-command check,
+  ordered first (after the batch-level duplicate-id-group rejection). Named
+  after `MoveCostOutOfRange` (TASK-021).
+- **Decision 3 — no staleness horizon** at command intake (recorded, flagged
+  for B-016 / B-017).
+- **Decision 4 — the two ticks are independent**; `.cwlog` maps its one field
+  to both.
+- **Decision 5 — command identity is not authoritative state.** New
+  `ReplayError.DuplicateCommandIdInLog of id * firstIndex * secondIndex`,
+  checked in `Replay.validate` (via `Array.groupBy` on `Command.Id`, after
+  the monotonic and range checks). `WorldState` gains no field;
+  `Canonical.FormatVersion` stays `2`.
+- **Decision 6 — no bump, no hash re-pin, no ADR.** `-- corpus` (7x PASS) and
+  `-- fixture` (`0xAFA35198CC6BD8D4`, 33 events, format 2) byte-identical
+  before and after. `194 -> 199` green (+4 `SimulationTests`, +1
+  `ReplayTests`). `dotnet build` `0/0`; `src/CommandoWar.Sim` packages
+  `FSharp.Core` only. Detail:
+  `docs/ledger/2026-09-07-TASK-024-issue-tick-semantics.md`.
 
 ## Objective
 
@@ -293,40 +329,40 @@ test enumerates `CommandRejection` cases exhaustively, extend it there.
 
 ## Acceptance criteria
 
-- [ ] `PlayerCommand.IssueTick` is renamed to `IssuedAtTick` with a doc
-      comment stating it is issue-time provenance and a future appraisal
-      input, distinct from the submission/delivery tick; `Command.moveTo` and
-      `Command.moveToMany` keep their argument order with the renamed
-      parameter (`Commands.fs`).
-- [ ] Either `RecordedCommand.Tick` is renamed to `SubmitAtTick`, or it
-      carries a new doc comment pinning it as the submission/delivery tick
-      and stating its independence from `IssuedAtTick`; the choice and its
-      reason are in the ledger (`Replay.fs`).
-- [ ] `commandIntake` rejects a command whose `IssuedAtTick` is greater than
-      the tick being processed with one `CommandRejected` (`IssuedInFuture`
-      or equivalent), and rejects `IssuedAtTick < 0`; a command issued on the
-      running tick and a command issued several ticks earlier both accept
-      (`SimulationTests.fs`).
-- [ ] `Replay.validate` (and/or `CommandLog.create` / `CommandLogFile.parse`)
-      rejects a command log in which one `CommandId` appears on two different
-      ticks, with a typed `ReplayError`; `WorldState` gains no command-history
-      field (`ReplayTests.fs`; code review of `Domain.fs` / `Simulation.fs`).
-- [ ] `CommandLogFile.parse` maps the single `.cwlog` tick field to both
-      `SubmitAtTick` and `IssuedAtTick`; the `.cwlog` grammar and
-      `CommandLogFile.Version` are unchanged (`CommandLogFile.fs`).
-- [ ] `Canonical.FormatVersion` unchanged (`2`); `-- corpus` and
+- [x] `PlayerCommand.IssueTick` renamed to `IssuedAtTick` with a doc comment
+      stating it is issue-time provenance and a future appraisal input,
+      distinct from the delivery tick; `Command.moveTo` / `Command.moveToMany`
+      keep their argument order with the renamed parameter (`Commands.fs`).
+- [x] `RecordedCommand.Tick` kept (Decision 1), with an expanded doc comment
+      pinning it as the delivery / submission tick and stating its
+      independence from `IssuedAtTick`; the choice and its reason are in the
+      Outcome section and the ledger (`Replay.fs`).
+- [x] `commandIntake` rejects `IssuedAtTick > s.Tick` and `IssuedAtTick < 0`
+      with one `CommandRejected(IssueTickOutOfRange(issuedAtTick, tick))`; a
+      command issued on the running tick and one issued two ticks earlier
+      both accept — four `SimulationTests` facts.
+- [x] `Replay.validate` rejects a command log in which one `CommandId`
+      appears on two different ticks (`DuplicateCommandIdInLog`);
+      `WorldState` gains no command-history field (`ReplayTests.fs`; code
+      review of `Domain.fs` / `Simulation.fs` — unchanged).
+- [x] `CommandLogFile.parse` maps the single `.cwlog` tick field to both
+      `RecordedCommand.Tick` and `IssuedAtTick` (unchanged behaviour, doc
+      comment added); the `.cwlog` grammar and `CommandLogFile.Version` are
+      unchanged.
+- [x] `Canonical.FormatVersion` unchanged (`2`); `-- corpus` (7x PASS) and
       `-- fixture` reproduce every committed hash with no `--regenerate`;
       every pre-existing `SimulationTests` / `ReplayTests` / `CorpusTests` /
-      `FixtureTests` / `DeterminismPropertyTests` fact passes unmodified.
-- [ ] `dotnet build CommandoWar.slnx -c Release` = 0 warnings, 0 errors;
+      `FixtureTests` / `DeterminismPropertyTests` fact passes unmodified
+      (`194` of the `199` are the prior suite).
+- [x] `dotnet build CommandoWar.slnx -c Release` = 0 warnings, 0 errors;
       `dotnet list src/CommandoWar.Sim package --include-transitive` =
       `FSharp.Core` only; source scan of `src/CommandoWar.Sim` clean.
-- [ ] `docs/04` sections 2 / 12.1 / 13 / 16, `docs/09` section 2.1, backlog
+- [x] `docs/04` sections 2 / 12.1 / 13 / 16, `docs/09` section 2.1, backlog
       row, ledger index row + detail file, `PROJECT_STATE.yaml`, task status
-      updated. "Green tests" pinned fact refreshed with the new count.
-- [ ] The completion report names TASK-025 / B-045 as the follow-up that
-      carries the two ticks in a real on-disk format and states that B-045
-      can move to `ready` now that this task is done.
+      updated. "Green tests" pinned fact refreshed to `199`.
+- [x] The completion report names TASK-025 / B-045 as the follow-up carrying
+      the two ticks in a real on-disk format, and B-045 / B-044 are moved so
+      B-045 can go `ready` now this task is done.
 
 ## Required verification
 

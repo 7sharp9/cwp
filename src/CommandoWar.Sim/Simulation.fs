@@ -170,24 +170,40 @@ module Simulation =
     // --- Phase: command intake ------------------------------------------------
     // Validate and apply move commands (docs/04 section 12.1: "reject
     // malformed, unauthorised, impossible-to-address, or duplicate commands;
-    // record accepted commands before effects are applied"). Commands arrive
+    // record accepted commands before effects are applied"; docs/04 section 2:
+    // "a command becomes eligible on a specified tick"). Commands arrive
     // already sorted by command id (Simulation.step). Validation order:
     //
     //   1. batch-level: a CommandId that appears more than once in this tick's
     //      batch rejects EVERY command in that group (DuplicateCommandId), none
     //      processed — order-independent, since the batch sort is stable and a
     //      "first wins" rule would let a caller change the result by reordering
-    //      an invalid batch. Cross-tick duplicate-id tracking is out (B-044).
+    //      an invalid batch. Cross-tick duplicate-id tracking is a replay-log
+    //      invariant (Replay.validate / DuplicateCommandIdInLog), NOT
+    //      authoritative state — WorldState holds no command history (TASK-024).
     //   2. per surviving command, whole-command checks that short-circuit with
-    //      one CommandRejected and no per-recipient events: empty recipients
-    //      (EmptyRecipients) -> repeated recipient (DuplicateRecipient) ->
-    //      target in bounds (TargetOutOfBounds, checked once — a MoveTo target
-    //      is equally out of bounds for every recipient).
+    //      one CommandRejected and no per-recipient events:
+    //        a. issue-tick eligibility (TASK-024): PlayerCommand.IssuedAtTick
+    //           must lie in [0, s.Tick] — a command issued in the future or
+    //           before tick 0 is rejected IssueTickOutOfRange. A command issued
+    //           on an earlier tick and delivered now IS accepted: staleness is
+    //           an appraisal judgement (B-017), not a validation rule, so no
+    //           give-up horizon is applied here. IssuedAtTick is otherwise
+    //           inert until appraisal reads it.
+    //        b. empty recipients (EmptyRecipients) -> repeated recipient
+    //           (DuplicateRecipient) -> target in bounds (TargetOutOfBounds,
+    //           checked once — a MoveTo target is equally out of bounds for
+    //           every recipient).
     //   3. per-recipient checks in ascending AgentId order regardless of
     //      authoring order (stable entity ordering): unknown agent
     //      (UnknownAgent) -> hostile-side agent (UnauthorisedRecipient) ->
     //      accept. CommandAccepted is emitted BEFORE the destination is
     //      written, per 12.1.
+    //
+    // The delivery tick (RecordedCommand.Tick in Replay.fs) and the envelope's
+    // IssuedAtTick are independent concepts: the caller / replay runner owns
+    // when a command reaches this phase; IssuedAtTick only records when it was
+    // issued. The legacy .cwlog format collapses the two to its single field.
     //
     // The agent array is copied once per phase invocation, not once per
     // accepted command (content/benchmarks/BASELINE.md recorded the old
@@ -211,6 +227,8 @@ module Simulation =
         for cmd in commands do
             if Set.contains cmd.Id duplicatedIds then
                 emit (CommandRejected(cmd.Id, DuplicateCommandId cmd.Id)) s
+            elif cmd.IssuedAtTick < 0L || cmd.IssuedAtTick > s.Tick then
+                emit (CommandRejected(cmd.Id, IssueTickOutOfRange(cmd.IssuedAtTick, s.Tick))) s
             else
                 match cmd.Intent with
                 | MoveTo target ->

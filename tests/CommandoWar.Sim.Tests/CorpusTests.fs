@@ -73,7 +73,7 @@ let ``a perturbed command log is reported as a table mismatch at the first diver
                 match c.Command.Intent with
                 | MoveTo _ ->
                     { c with
-                        Command = Command.moveTo c.Command.Id c.Command.IssueTick c.Command.Agent { X = 9; Y = 3 } })
+                        Command = Command.moveTo c.Command.Id c.Command.IssuedAtTick c.Command.Agent { X = 9; Y = 3 } })
 
         match Corpus.run entry cmds, Corpus.run entry perturbed with
         | Ok reference, Ok candidate ->

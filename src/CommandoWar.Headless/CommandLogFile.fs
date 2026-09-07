@@ -3,11 +3,14 @@ namespace CommandoWar.Headless
 open CommandoWar.Sim
 
 /// Minimal, versioned, line-based command-log text format for the framework
-/// spikes. It is deliberately tiny: the only authoritative command the
-/// simulation understands today is `MoveTo` (see `CommandoWar.Sim.Commands`),
-/// so a full serialiser would be premature. Replay/divergence semantics live
-/// in `CommandoWar.Sim`; this module only turns text into the typed
-/// `RecordedCommand[]` those functions already accept.
+/// spikes and the test corpus. It is deliberately tiny: it is a **legacy
+/// fixture-script format, not the production replay-command format**
+/// (TASK-020). It cannot express multi-recipient addressing, `Urgency`,
+/// `RiskTolerance`, or an `IssuedAtTick` distinct from the delivery tick; a
+/// versioned lossless serialisation of the full accepted envelope is backlog
+/// B-045. Replay/divergence semantics live in `CommandoWar.Sim`; this module
+/// only turns text into the typed `RecordedCommand[]` those functions already
+/// accept.
 ///
 /// Grammar (UTF-8, one directive per line):
 ///
@@ -16,9 +19,12 @@ open CommandoWar.Sim
 ///   <tick> <agentId> move <x> <y>
 ///
 /// Blank lines are ignored. `tick` is the 1-based tick whose command-intake
-/// phase consumes the command. Commands are assigned a `CommandId` from their
-/// order of appearance in the file (first directive = id 1) and a per-tick
-/// `Sequence` from their order within that tick.
+/// phase consumes the command; this one field is mapped to **both**
+/// `RecordedCommand.Tick` (the delivery tick) and the envelope's
+/// `PlayerCommand.IssuedAtTick` — the degenerate case of an order issued on
+/// the tick it is delivered (TASK-024). Commands are assigned a `CommandId`
+/// from their order of appearance in the file (first directive = id 1) and a
+/// per-tick `Sequence` from their order within that tick.
 [<RequireQualifiedAccess>]
 module CommandLogFile =
 

@@ -13,7 +13,12 @@ namespace CommandoWar.Sim
 /// audit a run. The record schema is versioned through the enclosing
 /// `CommandLog`.
 type RecordedCommand =
-    { /// The tick whose command-intake phase consumes this command.
+    { /// The tick whose command-intake phase consumes this command — the
+      /// delivery / submission tick, owned by whoever schedules the replay.
+      /// Independent of the envelope's `PlayerCommand.IssuedAtTick` (when the
+      /// order was *issued*); the two may differ, and the legacy `.cwlog`
+      /// format collapses them to one field (TASK-024). Playback keys every
+      /// per-tick command batch on this value.
       Tick: int64
       /// Deterministic tie-break order within the tick: unique and ascending.
       Sequence: int
@@ -84,6 +89,14 @@ type ReplayError =
     | InvalidTickCount of tickCount: int64
     | NonMonotonicCommandLog of index: int * previous: struct (int64 * int) * current: struct (int64 * int)
     | CommandOutsideReplayRange of index: int * tick: int64 * tickCount: int64
+    /// One `CommandId` appears on two different recorded commands in the log
+    /// (`firstIndex` before `secondIndex`, in `(Tick, Sequence)` order). A
+    /// command id is unique for the life of a run; a reused id is a malformed
+    /// log, not a guessed repair (TASK-024). Within-tick duplicates are also
+    /// rejected at command intake (`CommandRejection.DuplicateCommandId`);
+    /// this is the cross-tick guard, kept in the replay layer because command
+    /// identity is not authoritative state.
+    | DuplicateCommandIdInLog of id: CommandId * firstIndex: int * secondIndex: int
 
 [<RequireQualifiedAccess>]
 module RecordedCommand =
@@ -162,9 +175,7 @@ module Replay =
                     else
                         None)
 
-            match monotonicError with
-            | Some err -> Error err
-            | None ->
+            let rangeError =
                 commands
                 |> Array.mapi (fun i c -> i, c)
                 |> Array.tryPick (fun (i, c) ->
@@ -172,9 +183,24 @@ module Replay =
                         Some(CommandOutsideReplayRange(i, c.Tick, record.TickCount))
                     else
                         None)
-                |> function
-                    | Some err -> Error err
-                    | None -> Ok()
+
+            // A CommandId is unique for the life of a run. Array.groupBy keeps
+            // keys in first-appearance order and members in original order, so
+            // the reported (id, firstIndex, secondIndex) is deterministic.
+            let duplicateIdError =
+                commands
+                |> Array.mapi (fun i c -> i, c.Command.Id)
+                |> Array.groupBy snd
+                |> Array.tryPick (fun (id, occurrences) ->
+                    if occurrences.Length > 1 then
+                        let idx = occurrences |> Array.map fst |> Array.sort
+                        Some(DuplicateCommandIdInLog(id, idx.[0], idx.[1]))
+                    else
+                        None)
+
+            match monotonicError |> Option.orElse rangeError |> Option.orElse duplicateIdError with
+            | Some err -> Error err
+            | None -> Ok()
 
     /// Reconstructs the authoritative run described by `record`: initial state
     /// plus command log plus the random stream carried in the initial state.

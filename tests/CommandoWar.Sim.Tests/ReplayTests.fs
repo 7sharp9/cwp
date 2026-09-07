@@ -206,3 +206,25 @@ let ``replay rejects a command scheduled outside the run`` () =
         Assert.Equal(9L, tick)
         Assert.Equal(3L, tickCount)
     | other -> Assert.Fail($"expected CommandOutsideReplayRange, got {other}")
+
+[<Fact>]
+let ``replay rejects a command log that reuses a command id across ticks`` () =
+    // The delivery tick and the envelope issue tick are independent (TASK-024):
+    // each command is issued the tick before it is delivered, and the two
+    // records still share CommandId 42, which is the malformed part.
+    let reused (tick: int64) (agentIdx: int) (dest: Cell) : RecordedCommand =
+        { Tick = tick
+          Sequence = 0
+          Command = Command.moveTo (CommandId.ofInt 42) (tick - 1L) (AgentId.ofInt agentIdx) dest
+          Issuer = "test" }
+
+    let log =
+        CommandLog.create [| reused 1L 0 { X = 3; Y = 0 }; reused 3L 1 { X = 3; Y = 1 } |]
+
+    let record = Replay.record ReplayMeta.unspecified (world 1UL) 4L log
+
+    match Replay.run config record with
+    | Error(DuplicateCommandIdInLog(id, first, second)) ->
+        Assert.Equal(CommandId.ofInt 42, id)
+        Assert.True(first < second)
+    | other -> Assert.Fail($"expected DuplicateCommandIdInLog, got {other}")

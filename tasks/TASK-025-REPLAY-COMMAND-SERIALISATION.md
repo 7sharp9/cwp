@@ -1,7 +1,7 @@
 # TASK-025: Production replay-command serialisation
 
-Status: proposed (complete task file; blocked on TASK-024 / B-044 before it
-can move to `ready`)
+Status: proposed (complete task file; TASK-024 / B-044 implemented 2026-09-07
+and pending Dave's acceptance — this moves to `ready` on that acceptance)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-045 — **mandatory before G3**

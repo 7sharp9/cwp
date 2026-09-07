@@ -38,8 +38,14 @@ ascending `AgentId` order; a `Hostile`-side recipient rejected
 empty `Recipients` list rejected `EmptyRecipients`; a repeated recipient
 rejected `DuplicateRecipient` as a whole command; two same-tick commands
 sharing a `CommandId` both rejected `DuplicateCommandId` with a byte-identical
-result whichever order the batch arrives in. Issue-tick eligibility is not
-covered because it is not implemented (backlog B-044).
+result whichever order the batch arrives in. Issue-tick eligibility is
+covered by TASK-024 (backlog B-044): a command issued after the tick being
+processed, and one with a negative `IssuedAtTick`, are rejected
+`IssueTickOutOfRange`; a command issued on the running tick, and one issued
+several ticks earlier and delivered now, are accepted (no staleness horizon).
+`ReplayTests.fs` covers the cross-tick guard — a command log reusing one
+`CommandId` on two ticks is rejected `DuplicateCommandIdInLog` by
+`Replay.validate`.
 
 ### 2.2 Property tests
 

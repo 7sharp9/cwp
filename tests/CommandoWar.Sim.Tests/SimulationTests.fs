@@ -495,6 +495,53 @@ let ``two commands in one tick sharing a command id are both rejected and neithe
     Assert.True(bodies forward = bodies reverse)
     Assert.Equal(Hashing.hash forward.State, Hashing.hash reverse.State)
 
+// --- Issue-tick eligibility (TASK-024) ----------------------------------
+
+/// A single-recipient move issued on `issuedAtTick` (vs `cmd`, which fixes it
+/// at 0). Command intake requires `issuedAtTick` in [0, currentTick].
+let private cmdIssuedAt (id: int) (issuedAtTick: int64) (target: AgentId) (dest: Cell) =
+    Command.moveTo (CommandId.ofInt id) issuedAtTick target dest
+
+[<Fact>]
+let ``a command issued after the tick being processed is rejected IssueTickOutOfRange`` () =
+    // world () is at tick 0; stepWith processes tick 1.
+    let r = stepWith [| cmdIssuedAt 1 2L (agent 0) { X = 3; Y = 0 } |] (world ())
+
+    Assert.Contains(CommandRejected(CommandId.ofInt 1, IssueTickOutOfRange(2L, 1L)), bodies r)
+    Assert.DoesNotContain(bodies r, (function CommandAccepted _ -> true | _ -> false))
+    Assert.Equal(None, (agentOf (agent 0) r.State).Destination)
+
+[<Fact>]
+let ``a command issued on the tick being processed is accepted`` () =
+    let dest = { X = 3; Y = 0 }
+    let r = stepWith [| cmdIssuedAt 1 1L (agent 0) dest |] (world ())
+
+    Assert.Contains(CommandAccepted(CommandId.ofInt 1, agent 0, dest), bodies r)
+    Assert.Equal(Some dest, (agentOf (agent 0) r.State).Destination)
+
+[<Fact>]
+let ``a command issued on an earlier tick and delivered now is accepted, with no staleness rejection`` () =
+    // Advance to tick 2, then deliver a command issued back on tick 1.
+    let st = (stepIdle (stepIdle (world ())).State).State
+    Assert.Equal(2L, st.Tick)
+    let dest = { X = 3; Y = 0 }
+    let r = stepWith [| cmdIssuedAt 1 1L (agent 0) dest |] st
+
+    Assert.Contains(CommandAccepted(CommandId.ofInt 1, agent 0, dest), bodies r)
+    Assert.DoesNotContain(
+        bodies r,
+        (function
+        | CommandRejected(_, IssueTickOutOfRange _) -> true
+        | _ -> false)
+    )
+
+[<Fact>]
+let ``a command with a negative issued-at tick is rejected IssueTickOutOfRange`` () =
+    let r = stepWith [| cmdIssuedAt 1 -1L (agent 0) { X = 3; Y = 0 } |] (world ())
+
+    Assert.Contains(CommandRejected(CommandId.ofInt 1, IssueTickOutOfRange(-1L, 1L)), bodies r)
+    Assert.DoesNotContain(bodies r, (function CommandAccepted _ -> true | _ -> false))
+
 [<Fact>]
 let ``World.create rejects duplicate agent ids`` () =
     let result =
