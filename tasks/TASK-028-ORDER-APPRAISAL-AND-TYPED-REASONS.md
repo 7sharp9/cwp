@@ -1,7 +1,8 @@
 # TASK-028: Staged order appraisal and typed reasons
 
-Status: review (implemented 2026-09-08 on branch `task-028-order-appraisal`;
-central decisions A–H confirmed with Dave 2026-09-08 before the phase bodies)
+Status: done (implemented 2026-09-08 on branch `task-028-order-appraisal`;
+central decisions A–H confirmed with Dave 2026-09-08 before the phase bodies;
+accepted by Dave and merged to `main` 2026-09-08)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-017 and is the G3 keystone

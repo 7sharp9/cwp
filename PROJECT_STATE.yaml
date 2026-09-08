@@ -5,19 +5,21 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-08 (TASK-027 accepted and merged to main; TASK-028 implemented on branch, in review)
+  updated: 2026-09-08 (TASK-028 accepted and merged to main; no task selected)
 
 active_work:
-  selected_task: TASK-028
-  task_file: tasks/TASK-028-ORDER-APPRAISAL-AND-TYPED-REASONS.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-08
   note: >-
     2026-09-08: TASK-028 (backlog B-017, staged order appraisal and typed
-    reasons) implemented on branch task-028-order-appraisal off the TASK-027
-    merge on main. Committed locally, not pushed. In review, not yet accepted.
+    reasons) accepted by Dave and merged to main (--no-ff, branch
+    task-028-order-appraisal deleted; not pushed). main build 0/0, 242 green,
+    -- corpus 10/10, -- fixture format 4 / 34 events, -- replay-file
+    envelope-full OK at canonical 4. No task selected.
 
     Prelude: TASK-027 (backlog B-016, communication constraints and order
     delivery) was committed on its branch but unaccepted; confirmed with Dave,

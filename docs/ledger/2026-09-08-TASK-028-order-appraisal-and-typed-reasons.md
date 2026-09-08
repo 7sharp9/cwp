@@ -442,4 +442,23 @@ by a hand-built `DiagnosticsTests` fact and the committed
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-08)
+- Notes: the Appraisal phase (12.5) is a real phase in `Phases.order` slot 5
+  over the new `Appraisal.fs` leaf. The Communication phase writes the new
+  canonical `AgentState.Order` (and resets `Disposition`) instead of
+  `Destination`; the Appraisal phase runs stages 1-4, produces an
+  `OrderDisposition`, emits `OrderAppraised`, and on `Accepted` writes
+  `Destination`. `AgentState.Order` / `.Disposition` enter `Canonical.encode`;
+  static `AgentState.Discipline` stays out (the `CommunicationAvailable`
+  precedent); `Canonical.FormatVersion` `3 -> 4` with a full re-pin that is
+  behaviour-neutral for movement — confirmed: build 0/0, 242 green, `-- corpus`
+  10/10, `-- fixture` format 4 / 34 events, `-- replay-file envelope-full` OK at
+  canonical 4, `corpus --regenerate` a byte-identical zero diff, `git status`
+  clean, `src/CommandoWar.Sim` packages `FSharp.Core` only, source scan clean.
+  New `exposed-approach` corpus entry (the G3 divergence: agent 0 `Refused
+  RouteTooExposed (Some 2)`, agent 1 `Accepted`), `blocked-goal` repurposed to
+  `Unable(NoKnownRoute)` at appraisal (tick/event count unchanged). New
+  `Overlay.OrderAppraisal` (`frame` + `frameOf`), ASCII + SVG renderers, new
+  `exposed-approach-tick-001.*` and `blocked-goal-tick-001.*` goldens. No ADR.
+  Merged to `main` (`--no-ff`, branch `task-028-order-appraisal` deleted; not
+  pushed).
