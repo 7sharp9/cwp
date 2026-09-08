@@ -40,6 +40,10 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `perception-contact-tick-005.svg` | SVG of the same frame: the last-known contact cell as a purple (`#805ad5`) dashed ring labelled `?1`, over the (still-accurate) hostile agent circle. |
 | `lost-comms-tick-001.ascii.txt` | The `content/replays/lost-comms` corpus entry (TASK-027) at tick 1: friendly agent 0 at `(1,4)` has `CommunicationAvailable = false`, so the order to `(6,4)` is accepted by command intake but dropped by the Communication phase. The roster line shows `no-comms`, the agent is still `at rest`, the overlays section carries `undelivered order (1,4): agent 0  command 1  (communication unavailable)`, and the events line carries `order-undelivered`. |
 | `lost-comms-tick-001.svg` | SVG of the same frame: the blacked-out agent circled by a dashed red (`#e53e3e`) ring, and its cell marked by a red dashed box with a struck-through diagonal and an `!0` label. |
+| `exposed-approach-tick-001.ascii.txt` | The `content/replays/exposed-approach` corpus entry (TASK-028) at tick 1: two friendlies ordered along the same approach past the observed hostile agent 2 at `(10,4)`. The Appraisal phase (12.5) judges the two orders against the near-identical exposure differently — the overlays section carries `order appraisal (1,3): agent 0  refused route-too-exposed threat-agent-2  exposed …` and `order appraisal (2,5): agent 1  accepted  exposed …`, and the events line carries two `order-appraised` markers. The G3 evidence: two agents appraise the same intent differently for inspectable reasons. |
+| `exposed-approach-tick-001.svg` | SVG of the same frame: each agent's exposed route cells as translucent red squares, a red `R` glyph at the refused agent's cell and a green `A` at the accepted agent's, alongside agent 1's route polyline and the `?2` known-contact ring. |
+| `blocked-goal-tick-001.ascii.txt` | The `content/replays/blocked-goal` corpus entry (TASK-028) at tick 1: the target `(5,4)` is ringed by impassable cells, so stage 2 (`Pathfinding`) fails and the Appraisal phase refuses the order — the overlays section carries `order appraisal (1,4): agent 0  unable no-known-route` and the events line `order-appraised` (no `movement-blocked`). |
+| `blocked-goal-tick-001.svg` | SVG of the same frame: a grey `U` glyph at the agent's cell (no exposed cells, no route). |
 
 ## Regeneration
 
@@ -68,14 +72,16 @@ $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 ```
 
 `converging-routes-tick-003.*`, `slow-terrain-tick-002.*`,
-`swap-standoff-tick-001.*`, `perception-contact-tick-005.*`, and
-`lost-comms-tick-001.*` are not produced by the `render` verb: each entry's
+`swap-standoff-tick-001.*`, `perception-contact-tick-005.*`,
+`lost-comms-tick-001.*`, `exposed-approach-tick-001.*`, and
+`blocked-goal-tick-001.*` are not produced by the `render` verb: each entry's
 initial state is corpus-owned (`Corpus.all`), not the shared fixture or demo
 scenario `render` knows about. All are regenerated the same way —
 `DiagnosticRender.runFrames` over the named `Corpus.all` entry and its
 committed `.cwlog`, at the tick named in the file — using the exact helper
 (`convergingRoutesFrames ()` / `slowTerrainFrames ()` / `swapStandoffFrames ()`
-/ `perceptionContactFrames ()` / `lostCommsFrames ()`) the corresponding
+/ `perceptionContactFrames ()` / `lostCommsFrames ()` / `exposedApproachFrames ()`,
+and an inline `runFrames` for `blocked-goal`) the corresponding
 `DiagnosticsTests.fs` fact uses to compare against these files, so a
 regeneration and its test cannot silently disagree.
 

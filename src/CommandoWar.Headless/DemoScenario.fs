@@ -76,9 +76,9 @@ module DemoScenario =
           Width = bounds.Width
           Height = bounds.Height
           FriendlyDeployments =
-            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true }
-               { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true } |]
-          EnemyDeployments = [| { AgentId = 5; Cell = { X = 11; Y = 7 }; CommunicationAvailable = true } |]
+            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault }
+               { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
+          EnemyDeployments = [| { AgentId = 5; Cell = { X = 11; Y = 7 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
           ObjectiveAreas = [| { AreaId = "ridge-top"; Cell = { X = 4; Y = 4 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 0; Y = 7 } } |]
           StaticTargets = [||]

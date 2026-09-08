@@ -71,6 +71,19 @@ type EventBody =
     /// Both sides observe; only friendly observations reach the shared
     /// `WorldState.TacticalKnowledge` (a hostile squad picture is B-022).
     | ContactObserved of observer: AgentId * contact: AgentId * at: Cell
+    /// The Appraisal phase judged `agent`'s current order `command` this tick
+    /// (TASK-028, backlog B-017; `docs/04` section 14 "order appraisal
+    /// outcome", section 12.5). `disposition` carries the outcome and, for
+    /// `Refused` / `Unable`, the primary and supporting `DecisionReason`s (the
+    /// `docs/04` section 20 invariant "every refusal contains at least one
+    /// structured reason" holds by construction). Emitted for **every**
+    /// appraisal, including the mundane `Accepted` — the G3 developer trace
+    /// (`docs/07` section 9 criterion 11) must be able to explain any
+    /// appraisal. Never emitted on a tick where the order is unchanged and
+    /// already appraised (the "reappraise only on material triggers" rule,
+    /// `docs/04` section 12.5). On `Accepted` the phase also writes
+    /// `AgentState.Destination`; on `Refused` / `Unable` it writes none.
+    | OrderAppraised of agent: AgentId * command: CommandId * disposition: OrderDisposition
     /// `contact` was removed from the friendly squad's shared
     /// `TacticalKnowledge` this tick, having gone unseen for
     /// `PerceptionConfig.ExpireAfter` ticks (TASK-026, `docs/04` section 12.4
@@ -87,11 +100,15 @@ type EventBody =
 ///   3. this tick's perception events — every `ContactObserved` ascending
 ///      `(observer, contact)`, then every `ContactExpired` ascending contact
 ///      id (from the Perception / Tactical-knowledge phases);
-///   4. movement outcomes, ascending agent id.
+///   4. order appraisal outcomes, ascending agent id (`OrderAppraised`, from
+///      the Appraisal phase — TASK-028; runs after Perception / Tactical
+///      knowledge, before movement);
+///   5. movement outcomes, ascending agent id.
 /// The order follows `Phases.order` (Command intake, Communication,
-/// Perception, Tactical knowledge, Navigation and movement), so a contact is
-/// observed at its start-of-tick position and a delivered order takes effect
-/// the same tick.
+/// Perception, Tactical knowledge, Appraisal, Navigation and movement), so a
+/// contact is observed at its start-of-tick position, an order is appraised
+/// against this tick's tactical picture, and a delivered-and-accepted order
+/// takes effect the same tick.
 type DomainEvent =
     { Tick: int64
       Body: EventBody }

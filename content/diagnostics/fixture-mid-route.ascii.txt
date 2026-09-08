@@ -87,7 +87,8 @@ agents:
 
 overlays:
   path (0,3) -> (20,14): reached, cost 31
+  order appraisal (20,8): agent 3  accepted
 
 events: movement-stepped@(20,7),(20,8)
 
-tick 25 | hash 0x85211392EFD8A68F (format 3) | draws 0 | agents 6 | cover-edges 0 | events 1
+tick 25 | hash 0x8DB6A62B58BB64D3 (format 4) | draws 0 | agents 6 | cover-edges 0 | events 1

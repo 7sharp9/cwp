@@ -115,7 +115,8 @@ module World =
             |> Array.sortBy (fun d -> d.Agent)
             |> Array.map (fun d ->
                 { Agent.create d.Agent d.Side d.Cell with
-                    CommunicationAvailable = d.CommunicationAvailable })
+                    CommunicationAvailable = d.CommunicationAvailable
+                    Discipline = d.Discipline })
             |> Array.toList
 
         build scenario.Map scenario.Terrain seed agents
@@ -150,15 +151,16 @@ module Simulation =
           Terrain: Terrain
           mutable Agents: AgentState[]
           /// Orders accepted by Command intake this tick and not yet delivered
-          /// to their recipients, as `(command, recipient, target)` (TASK-027,
-          /// backlog B-016). Populated by `commandIntake`, drained by
-          /// `communication` in the same tick: a reachable recipient's
-          /// `Destination` is written, an unreachable one gets an
+          /// to their recipients, as `(recipient, order)` (TASK-027, backlog
+          /// B-016; the `ReceivedOrder` payload added by TASK-028). Populated
+          /// by `commandIntake`, drained by `communication` in the same tick: a
+          /// reachable recipient's `AgentState.Order` is written (and its
+          /// `Disposition` reset), an unreachable one gets an
           /// `OrderUndelivered` event. Zero delivery delay, so this list never
           /// survives past the Communication phase and is not canonical state
           /// (`docs/04` section 12.2; TASK-024 "`WorldState` holds no command
           /// history"). Delayed delivery is backlog B-016b.
-          mutable PendingOrders: (CommandId * AgentId * Cell) list
+          mutable PendingOrders: (AgentId * ReceivedOrder) list
           /// The friendly squad's shared tactical picture, carried in from the
           /// input `WorldState` and rewritten by the Tactical-knowledge phase
           /// (TASK-026). Genuine per-tick canonical state.
@@ -218,15 +220,16 @@ module Simulation =
     //      destination reaches the agent, per 12.1.
     //
     // TASK-027 (backlog B-016): command intake no longer writes
-    // AgentState.Destination. An accepted (command, recipient, target) is
-    // RECORDED as a pending order (s.PendingOrders); the Communication phase
-    // (12.2), which runs next, DELIVERS it — writes Destination for a recipient
-    // whose CommunicationAvailable is true, or emits OrderUndelivered for one
-    // that cannot be reached. An accepted order therefore takes effect one
-    // phase later, still the SAME tick when communication is available (zero
-    // delivery delay). Nothing in Phases.order runs between Command intake and
-    // Communication, so this split changes no observable end-of-tick state for
-    // a comms-available recipient.
+    // AgentState.Destination. An accepted order is RECORDED as a pending order
+    // (s.PendingOrders); the Communication phase (12.2), which runs next,
+    // DELIVERS it. TASK-028 (backlog B-017): the pending order carries the
+    // whole ReceivedOrder envelope (command, intent, issue tick, urgency, risk
+    // tolerance), and the Communication phase writes AgentState.Order (not
+    // Destination) for a reachable recipient; the Appraisal phase (12.5) then
+    // judges it and writes Destination on Accepted. An accepted order takes
+    // effect three phases later, still the SAME tick when communication is
+    // available and the order is Accepted (nothing between Command intake and
+    // Appraisal reads Destination).
     //
     // The delivery tick (RecordedCommand.Tick in Replay.fs) and the envelope's
     // IssuedAtTick are independent concepts: the caller / replay runner owns
@@ -248,7 +251,7 @@ module Simulation =
             |> List.choose (fun (id, n) -> if n > 1 then Some id else None)
             |> Set.ofList
 
-        let pending = ResizeArray<CommandId * AgentId * Cell>()
+        let pending = ResizeArray<AgentId * ReceivedOrder>()
 
         for cmd in commands do
             if Set.contains cmd.Id duplicatedIds then
@@ -273,35 +276,44 @@ module Simulation =
                                     emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
                                 | Some _ ->
                                     emit (CommandAccepted(cmd.Id, recipient, target)) s
-                                    pending.Add(cmd.Id, recipient, target)
+
+                                    pending.Add(
+                                        recipient,
+                                        { Command = cmd.Id
+                                          Intent = cmd.Intent
+                                          IssuedAtTick = cmd.IssuedAtTick
+                                          Urgency = cmd.Urgency
+                                          RiskTolerance = cmd.RiskTolerance }
+                                    )
 
         s.PendingOrders <- List.ofSeq pending
 
     // --- Phase: communication --------------------------------------------
-    // Realised by TASK-027 (backlog B-016). Turns the docs/04 section 12.2
-    // no-op into a real phase: "determine which recipients receive an order
-    // this tick ... communication failure must be explicit, not silently
-    // ignored". For every order Command intake accepted this tick
-    // (s.PendingOrders), in ascending (recipient, command) id order:
+    // Realised by TASK-027 (backlog B-016); reworked by TASK-028 (backlog
+    // B-017). Turns the docs/04 section 12.2 no-op into a real phase:
+    // "determine which recipients receive an order this tick ... communication
+    // failure must be explicit, not silently ignored". For every order Command
+    // intake accepted this tick (s.PendingOrders), in ascending
+    // (recipient, command) id order:
     //
-    //   * recipient CommunicationAvailable = true  -> write Destination (the
-    //     copy-before-write idiom). Zero delivery delay: the order takes
-    //     effect this tick. No success event — CommandAccepted (at intake,
-    //     carrying the destination cell) already records it; an OrderDelivered
-    //     event arrives with delayed delivery (backlog B-016b).
+    //   * recipient CommunicationAvailable = true  -> write AgentState.Order
+    //     (the whole ReceivedOrder) and RESET AgentState.Disposition to None,
+    //     via the copy-before-write idiom. NOT Destination — that is the
+    //     Appraisal phase's job now (TASK-028). Zero delivery delay: the
+    //     Appraisal phase (12.5), which runs three phases later this same
+    //     tick, judges the order. No success event (backlog B-016b).
     //   * recipient CommunicationAvailable = false -> emit OrderUndelivered
-    //     (reason UnableToCommunicate) and DROP the order. A Destination the
-    //     recipient already held is left untouched: an undelivered new order
-    //     does not cancel an order in progress (docs/05 section 16 "Lost
-    //     communication" — the trace shows communication failure, not
-    //     disobedience).
+    //     (reason UnableToCommunicate) and DROP the order. An Order the
+    //     recipient already held (and any Destination it produced) is left
+    //     untouched: an undelivered new order does not cancel an order in
+    //     progress (docs/05 section 16 "Lost communication" — the trace shows
+    //     communication failure, not disobedience).
     //
-    // CommunicationAvailable is STATIC authored scenario data at this stage
-    // (Deployment.CommunicationAvailable), excluded from Canonical.encode like
-    // Terrain (ADR-0002 amendment). Radio range, non-zero delay, dynamic
-    // jamming, and radio-destroyed are backlog B-016b; that task makes comms
-    // availability per-tick mutable and bumps Canonical.FormatVersion then.
-    // This phase draws nothing from the deterministic stream.
+    // A fresh Order overwrites any prior one and resets Disposition to None, so
+    // the Appraisal phase re-appraises it (docs/05 section 14 "a new order is
+    // received"). CommunicationAvailable is STATIC authored scenario data,
+    // excluded from Canonical.encode (ADR-0002 amendment; B-016b). This phase
+    // draws nothing from the deterministic stream.
     let private communication (s: StepState) =
         match s.PendingOrders with
         | [] -> ()
@@ -313,16 +325,16 @@ module Simulation =
 
             let ordered =
                 orders
-                |> List.sortBy (fun (cmd, recipient, _) -> AgentId.value recipient, CommandId.value cmd)
+                |> List.sortBy (fun (recipient, order) -> AgentId.value recipient, CommandId.value order.Command)
 
-            for cmd, recipient, target in ordered do
+            for recipient, order in ordered do
                 // Command intake already rejected an unknown recipient
                 // (UnknownAgent) against this same array, and no phase between
                 // adds or removes an agent, so the lookup always succeeds.
                 match Map.tryFind recipient indexOf with
                 | Some idx when agents.[idx].CommunicationAvailable ->
-                    agents.[idx] <- { agents.[idx] with Destination = Some target }
-                | Some _ -> emit (OrderUndelivered(cmd, recipient, UnableToCommunicate)) s
+                    agents.[idx] <- { agents.[idx] with Order = Some order; Disposition = None }
+                | Some _ -> emit (OrderUndelivered(order.Command, recipient, UnableToCommunicate)) s
                 | None -> ()
 
             s.Agents <- agents
@@ -409,6 +421,85 @@ module Simulation =
             emit (ContactExpired(c.Contact, c.LastKnownCell)) s
 
         s.TacticalKnowledge <- store
+
+    // --- Phase: appraisal -------------------------------------------------
+    // Realised by TASK-028 (backlog B-017). Turns the docs/04 section 12.5
+    // no-op into a real phase: "appraise newly received orders; reappraise
+    // only on material triggers, not every tick without need; emit outcome and
+    // structured reasons". Runs after Perception / Tactical knowledge (so it
+    // judges the order against this tick's known picture) and before
+    // Navigation (so an Accepted order's Destination is followed the same
+    // tick).
+    //
+    // For every agent, in ascending id order:
+    //
+    //   1. Housekeeping. An agent that holds an Accepted order, has no
+    //      Destination, and stands on the order's target has FULFILLED it
+    //      (movement completed last tick) -> clear Order and Disposition, no
+    //      event.
+    //   2. Fast path. Order present and Disposition already Some -> nothing.
+    //      This is "reappraise only on material triggers": an unchanged,
+    //      already-appraised order is not re-judged and emits no event. The
+    //      only in-scope trigger is "a new order is received", which the
+    //      Communication phase encodes by resetting Disposition to None.
+    //   3. Appraise. Order present and Disposition None (fresh, or reset by a
+    //      superseding order): run Appraisal.appraise over the terrain, the
+    //      shared TacticalKnowledge, and the agent's static Discipline. Clear
+    //      any Destination a superseded order left, then on Accepted write
+    //      Destination (unless already at the target); on Refused / Unable
+    //      write none. Emit OrderAppraised(agent, command, disposition) — for
+    //      EVERY outcome, including the mundane Accepted (the G3 developer
+    //      trace must explain any appraisal, docs/07 section 9 criterion 11).
+    //
+    // The Appraisal phase does NOT write the AgentState.Route cache: the
+    // Navigation phase recomputes the route from Destination exactly as it
+    // does today (a small pure duplication of the stage-2 Pathfinding call,
+    // preferred over coupling the phases). No PRNG draw (B-019 owns the
+    // stream's first gameplay consumer). Commitments, the finite executor, and
+    // stage-5 safer adaptation are B-018; suppression / stress / trust and the
+    // other reappraisal triggers are B-021.
+    let private appraisal (s: StepState) =
+        let terrain = s.Terrain
+        let threats = s.TacticalKnowledge
+        let budget = terrain.Bounds.Width * terrain.Bounds.Height
+        let agents = Array.copy s.Agents
+
+        for i in 0 .. agents.Length - 1 do
+            let a = agents.[i]
+
+            match a.Order with
+            | None -> ()
+            | Some o ->
+                let (MoveTo target) = o.Intent
+
+                match a.Disposition with
+                | Some Accepted when a.Destination = None && a.Position = target ->
+                    // Order fulfilled: movement completed last tick.
+                    agents.[i] <- { a with Order = None; Disposition = None }
+                | Some _ ->
+                    // Already appraised, order unchanged: no re-appraisal.
+                    ()
+                | None ->
+                    let disposition, _ =
+                        Appraisal.appraise terrain threats a.Discipline o a.Position budget
+
+                    // On Accepted, hand the target to Navigation as the
+                    // Destination (which clears any Destination a superseded
+                    // order left). An order to the agent's own cell is
+                    // Accepted with Destination = the cell; Navigation then
+                    // emits MovementCompleted and clears it, exactly as the
+                    // pre-TASK-028 Communication write did. On Refused / Unable
+                    // the agent holds no Destination.
+                    let destination =
+                        match disposition with
+                        | Accepted -> Some target
+                        | Refused _
+                        | Unable _ -> None
+
+                    agents.[i] <- { a with Disposition = Some disposition; Destination = destination }
+                    emit (OrderAppraised(a.Id, o.Command, disposition)) s
+
+        s.Agents <- agents
 
     // --- Phase: navigation and movement -------------------------------------
     // Consumes the TASK-013 `Pathfinding` module (docs/04 section 8 "Initial
@@ -764,9 +855,9 @@ module Simulation =
         | Communication -> communication s
         | Perception -> perception s
         | TacticalKnowledge -> tacticalKnowledge s
+        | Appraisal -> appraisal s
         | NavigationAndMovement -> navigationAndMovement s
         | Output -> output s
-        | Appraisal
         | CommitmentAndLocalAction
         | Combat
         | StateConsequences
@@ -776,9 +867,10 @@ module Simulation =
 
     /// Advances the world by exactly one integer tick. Runs every phase in
     /// `Phases.order`: accepting commands at `CommandIntake`, delivering the
-    /// accepted orders to reachable recipients at `Communication`, and
-    /// resolving movement at `NavigationAndMovement`. Emits ordered domain
-    /// events and a render snapshot from authoritative state.
+    /// accepted orders to reachable recipients at `Communication`, judging them
+    /// at `Appraisal` (writing `Destination` on `Accepted`), and resolving
+    /// movement at `NavigationAndMovement`. Emits ordered domain events and a
+    /// render snapshot from authoritative state.
     let step (config: SimConfig) (commands: PlayerCommand[]) (state: WorldState) : StepResult =
         if config.TicksPerSecond <= 0 then
             invalidArg (nameof config) "TicksPerSecond must be positive"

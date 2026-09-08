@@ -42,6 +42,28 @@ module DiagnosticRender =
 
     let private cellText (c: Cell) = sprintf "(%d,%d)" c.X c.Y
 
+    /// Short text for an appraisal `DecisionReason` (TASK-028). Structured
+    /// values only; no free prose the model does not carry.
+    let private reasonText (r: DecisionReason) : string =
+        match r with
+        | NoKnownRoute -> "no-known-route"
+        | RouteTooExposed None -> "route-too-exposed"
+        | RouteTooExposed(Some id) -> sprintf "route-too-exposed threat-agent-%d" (AgentId.value id)
+
+    /// Short text for an `OrderDisposition` (TASK-028).
+    let private dispositionText (d: OrderDisposition) : string =
+        match d with
+        | Accepted -> "accepted"
+        | Refused(primary, _) -> sprintf "refused %s" (reasonText primary)
+        | Unable(primary, _) -> sprintf "unable %s" (reasonText primary)
+
+    /// The single-letter SVG glyph and stroke colour for an `OrderDisposition`.
+    let private dispositionGlyph (d: OrderDisposition) : string * string =
+        match d with
+        | Accepted -> "A", "#2f855a"
+        | Refused _ -> "R", "#c53030"
+        | Unable _ -> "U", "#718096"
+
     /// Steps `initial` through `log` for `tickCount` ticks and collects the
     /// diagnostic frame at every tick: index 0 is tick 0 (`Diagnostics.frame`
     /// of the initial state, no events), index `i` is tick `i`
@@ -96,7 +118,8 @@ module DiagnosticRender =
                 | Reserved _
                 | Obstructed _
                 | KnownContact _
-                | UndeliveredOrder _ -> None)
+                | UndeliveredOrder _
+                | OrderAppraisal _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -121,7 +144,8 @@ module DiagnosticRender =
                 | Reserved _
                 | Obstructed _
                 | KnownContact _
-                | UndeliveredOrder _ -> None)
+                | UndeliveredOrder _
+                | OrderAppraisal _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -316,6 +340,21 @@ module DiagnosticRender =
                             (cellText at)
                             (AgentId.value recipient)
                             (CommandId.value command)
+                    )
+                | OrderAppraisal(agent, at, disposition, exposedCells) ->
+                    let exposed =
+                        if exposedCells.Length = 0 then
+                            ""
+                        else
+                            "  exposed " + (exposedCells |> Array.map cellText |> String.concat " ")
+
+                    line (
+                        sprintf
+                            "  order appraisal %s: agent %d  %s%s"
+                            (cellText at)
+                            (AgentId.value agent)
+                            (dispositionText disposition)
+                            exposed
                     )
 
         line ""
@@ -615,6 +654,30 @@ module DiagnosticRender =
                         (at.X * s + 1)
                         (at.Y * s + s - 2)
                         (AgentId.value recipient)
+                )
+            | OrderAppraisal(_, at, disposition, exposedCells) ->
+                // The Appraisal phase's outcome for one agent's order
+                // (TASK-028): the exposed candidate-route cells as translucent
+                // red squares, then a disposition-coloured corner glyph
+                // (A accepted / R refused / U unable) at the agent's cell,
+                // deliberately unlike a PlannedPath polyline or a KnownContact
+                // ring.
+                for c in exposedCells do
+                    line (
+                        sprintf
+                            "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"#c53030\" fill-opacity=\"0.25\"/>"
+                            (c.X * s) (c.Y * s) s s
+                    )
+
+                let glyph, colour = dispositionGlyph disposition
+
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"9\" font-weight=\"bold\" fill=\"%s\">%s</text>"
+                        (at.X * s + s - 7)
+                        (at.Y * s + 9)
+                        colour
+                        glyph
                 )
 
         // Footer.

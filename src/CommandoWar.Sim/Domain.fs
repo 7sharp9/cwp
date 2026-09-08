@@ -58,6 +58,83 @@ type Contact =
       /// one band (`PerceptionConfig.ConfidenceBandDrop`) once it goes stale.
       Confidence: int }
 
+/// What a command asks an agent to do (moved here from `Commands.fs` by
+/// TASK-028: `AgentState.Order` below carries a `PlayerIntent`, and `Domain.fs`
+/// compiles before `Commands.fs`). Only movement is needed for the vertical
+/// slice; `Hold`, `Suppress`, `Assault` and `Withdraw`
+/// (`docs/04_SIMULATION_SPEC.md` section 13) are added by later tasks (B-030).
+type PlayerIntent = MoveTo of target: Cell
+
+/// How urgently an order should be acted on, relative to an agent's current
+/// activity (moved here from `Commands.fs` by TASK-028). `docs/05` section 5
+/// stage 4 names "urgency ... encoded by the order" as a resolve-threshold
+/// input; TASK-028's Appraisal phase reads it (`AppraisalConfig.UrgencyImmediate`).
+type Urgency =
+    | Routine
+    | Immediate
+
+/// How much risk an order sanctions (moved here from `Commands.fs` by
+/// TASK-028). `docs/05` section 5 stage 4 names "risk tolerance encoded by the
+/// order" as a resolve-threshold input; TASK-028's Appraisal phase reads it
+/// (`AppraisalConfig.RiskCautious` / `RiskAggressive`).
+type RiskTolerance =
+    | Cautious
+    | Standard
+    | Aggressive
+
+/// An order that has been delivered to an agent and awaits (or already holds)
+/// an appraisal outcome (TASK-028, backlog B-017; `docs/04` section 11
+/// "current order", section 12.5). The Communication phase (12.2) writes this
+/// from the accepted `PlayerCommand` and resets `AgentState.Disposition` to
+/// `None`; the Appraisal phase (12.5) reads it.
+///
+/// **Genuine canonical per-tick state** (`Canonical.FormatVersion` 4): it
+/// carries `IssuedAtTick` provenance that lives only in the command envelope,
+/// and it survives ticks so appraisal is not re-run every tick (`docs/04`
+/// section 12.5 "reappraise only on material triggers"). Cleared when the
+/// order is fulfilled (the agent reaches the target) or superseded by a new
+/// order.
+type ReceivedOrder =
+    { Command: CommandId
+      Intent: PlayerIntent
+      IssuedAtTick: int64
+      Urgency: Urgency
+      RiskTolerance: RiskTolerance }
+
+/// A typed reason for an appraisal outcome (TASK-028; `docs/05` section 7
+/// "structured reasons" — "do not add prose-only reasons; UI text is derived
+/// from structured values"). TASK-028 realises only the two reasons its staged
+/// checks can produce; the rest of the `docs/05` vocabulary
+/// (`RouteBlocked`, `HeavySuppression`, `CriticallyWounded`, `MissingCapability`,
+/// `TargetNotKnown`, ...) arrives with the systems that can trigger it
+/// (B-019 / B-020 / B-021). The doc's `ContactId` is `AgentId` in the code.
+type DecisionReason =
+    /// Stage 2: no known traversable route connects the agent's cell to the
+    /// order target (`Pathfinding.findWithin` returned `NoPath` /
+    /// `BudgetExhausted` / `InvalidEndpoint`).
+    | NoKnownRoute
+    /// Stage 4: the known route's exposure to observed threats exceeds the
+    /// agent's resolve threshold. `threat` is the single highest-contributing
+    /// contact from `WorldState.TacticalKnowledge`, or `None` when the
+    /// pressure is diffuse.
+    | RouteTooExposed of threat: AgentId option
+
+/// The agent's appraisal of its current `Order` (TASK-028; `docs/05` section
+/// 6). TASK-028 subset: `Adapted` (stage 5 safer adaptation) is B-018 and
+/// `Delayed` (a `ResumeCondition` mechanism) is B-021 — neither gets a case,
+/// per `AGENTS.md` "do not build speculative type machinery".
+///
+/// `Refused` and `Unable` carry a primary `DecisionReason` **by construction**,
+/// so the `docs/04` section 20 invariant "every refusal and adaptation
+/// contains at least one structured reason" holds without a separate check.
+/// **Genuine canonical per-tick state** (`Canonical.FormatVersion` 4) — the
+/// "already appraised, unchanged" fast path in the Appraisal phase reads it,
+/// and a `Refused` outcome persists (with its reasons) for an idle agent.
+type OrderDisposition =
+    | Accepted
+    | Refused of primary: DecisionReason * supporting: DecisionReason[]
+    | Unable of primary: DecisionReason * supporting: DecisionReason[]
+
 /// Minimal authoritative agent state for the simulation skeleton: identity,
 /// side, logical position, movement progress within the current edge, an
 /// optional movement destination, the (non-canonical, derived) path the
@@ -101,6 +178,38 @@ type AgentState =
       /// `Canonical.encode` (`docs/04` section 17). Empty at rest and for an
       /// agent with no opposing agent in sight range and line of sight.
       VisibleContacts: AgentId[]
+      /// The order currently delivered to this agent (TASK-028, backlog
+      /// B-017; `docs/04` section 11 "current order", section 12.5). The
+      /// Communication phase writes it (and resets `Disposition` to `None`);
+      /// the Appraisal phase reads it. **Genuine canonical per-tick state**
+      /// (`ReceivedOrder`): it carries `IssuedAtTick` provenance and survives
+      /// ticks so appraisal is not re-run every tick. `None` when the agent
+      /// holds no order; cleared when the order is fulfilled or superseded.
+      Order: ReceivedOrder option
+      /// This agent's appraisal outcome for `Order` (TASK-028). `None` until
+      /// the Appraisal phase has run on the current `Order`; `Some` once
+      /// appraised. **Genuine canonical per-tick state** — the Appraisal
+      /// phase's "already appraised, unchanged" fast path reads it, and a
+      /// `Refused` outcome persists (with its reasons) for an idle agent. The
+      /// Appraisal phase writes `Destination` only when this is `Some Accepted`.
+      Disposition: OrderDisposition option
+      /// This agent's discipline (TASK-028, backlog B-017; `docs/05` section
+      /// 8 "stable trait influencing willingness to maintain a valid
+      /// commitment under pressure"). A non-negative integer used only in the
+      /// stage-4 resolve threshold (`AppraisalConfig.DisciplineResolveWeight`).
+      ///
+      /// **Static authoritative data at this stage**: set once from the
+      /// authored scenario (`Deployment.Discipline`, default
+      /// `AppraisalConfig.DisciplineDefault`) and never mutated during a run.
+      /// Like `CommunicationAvailable` it is therefore **excluded** from
+      /// `Canonical.encode` (`docs/04` section 17; the ADR-0002 amendment) —
+      /// both runs load the identical value at tick 0 and it cannot diverge.
+      /// A discipline-driven behaviour difference still surfaces in the hash
+      /// within one tick through the agent's `Disposition` and `Position`.
+      /// Dynamic discipline (and stress / trust) is backlog B-021; that task
+      /// moves it into the canonical image and bumps `Canonical.FormatVersion`,
+      /// exactly as the amendment specifies.
+      Discipline: int
       /// Whether an order issued this tick reaches this agent (TASK-027,
       /// backlog B-016; `docs/04` section 11 "communication availability",
       /// section 12.2). The Communication phase writes `Destination` for a
@@ -161,10 +270,19 @@ type WorldState =
 [<RequireQualifiedAccess>]
 module Agent =
 
+    /// The discipline of an agent from a construction path that authored none
+    /// (`Agent.create`, `World.create`, `Setup.sixAgentWorld`). Kept as a
+    /// literal here to avoid a module-ordering dependency on `Appraisal.fs`;
+    /// `AppraisalConfig.DisciplineDefault` carries the same value and documents
+    /// the scale. `World.ofScenario` overrides it with `Deployment.Discipline`.
+    [<Literal>]
+    let DisciplineDefault = 3
+
     /// Creates an agent at rest (no destination, no route, no progress, no
-    /// visible contacts, communication available) at the given position.
-    /// `World.ofScenario` overrides `CommunicationAvailable` from the authored
-    /// deployment; every other construction path takes the default `true`.
+    /// visible contacts, no order, communication available, default discipline)
+    /// at the given position. `World.ofScenario` overrides
+    /// `CommunicationAvailable` and `Discipline` from the authored deployment;
+    /// every other construction path takes the defaults.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -173,4 +291,7 @@ module Agent =
           Destination = None
           Route = None
           VisibleContacts = [||]
+          Order = None
+          Disposition = None
+          Discipline = DisciplineDefault
           CommunicationAvailable = true }

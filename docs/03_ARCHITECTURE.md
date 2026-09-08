@@ -143,12 +143,17 @@ Changing phase order is an architectural decision because it changes outcomes. R
 
 Realised so far (`src/CommandoWar.Sim/Simulation.fs`, `Phases.order`): step 1
 (TASK-020 / TASK-024), step 2 — "apply communication and order delivery" —
-TASK-027: command intake records an accepted order as a pending order and the
-Communication phase delivers it (writes `AgentState.Destination`) to a
+TASK-027 / TASK-028: command intake records an accepted order as a pending
+order and the Communication phase delivers it — writes `AgentState.Order` to a
 recipient with `CommunicationAvailable = true`, or emits `OrderUndelivered` and
-drops it for one that cannot be reached; steps 3–4 (TASK-026), steps 7–8
-(TASK-015 / TASK-017 / TASK-018 / TASK-022), step 13 (ongoing), step 14
-(TASK-003). Steps 5–6 and 9–12 are still no-ops.
+drops it; steps 3–4 (TASK-026); step 5 — "appraise new or materially changed
+orders" — TASK-028: the Appraisal phase judges each delivered order
+(`Pathfinding` feasibility, then route exposure to known threats vs a
+Discipline-derived resolve threshold), emits `OrderAppraised` with a typed
+`OrderDisposition`, and on `Accepted` writes `AgentState.Destination`; steps
+7–8 (TASK-015 / TASK-017 / TASK-018 / TASK-022), step 13 (ongoing), step 14
+(TASK-003). Step 6 (commitments / finite executor) and steps 9–12 are still
+no-ops.
 
 ## 8. Module layout inside the simulation project
 

@@ -36,7 +36,8 @@ agents:
 overlays:
   path (1,5) -> (9,5): reached, cost 8
   known contact (9,1): agent 1  confidence 1000  seen tick 5
+  order appraisal (6,5): agent 0  accepted  exposed (6,5) (7,5) (8,5) (9,5)
 
 events: contact-observed@(9,1); contact-observed@(5,5); movement-stepped@(5,5),(6,5)
 
-tick 5 | hash 0xD67AA520876E76BB (format 3) | draws 0 | agents 2 | cover-edges 0 | events 3
+tick 5 | hash 0xF72BE90D2ACE0BBF (format 4) | draws 0 | agents 2 | cover-edges 0 | events 3

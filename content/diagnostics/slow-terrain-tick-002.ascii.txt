@@ -34,7 +34,8 @@ agents:
 
 overlays:
   path (0,0) -> (4,0): reached, cost 6
+  order appraisal (0,0): agent 0  accepted
 
 events: none
 
-tick 2 | hash 0xEF4FDD23DB5254A8 (format 3) | draws 0 | agents 1 | cover-edges 0 | events 0
+tick 2 | hash 0x7422ADF25AD5B738 (format 4) | draws 0 | agents 1 | cover-edges 0 | events 0

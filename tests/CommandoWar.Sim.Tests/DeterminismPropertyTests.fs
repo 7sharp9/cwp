@@ -527,3 +527,100 @@ let ``a comms-blacked-out agent never receives a command destination and never m
                     | _ -> true)
 
             inert && deliveryEventsOk)
+
+
+// --- property 8: order appraisal outcomes are consistent and PRNG-free ----
+// TASK-028. `appraisalCaseGen` is `perceptionCaseGen` (1-3 friendlies, 1-2
+// hostiles on an open-ish grid) with a random non-negative `Discipline` per
+// friendly. For every post-tick state and every appraised order:
+//   (a) `Refused` / `Unable` write no `Destination`;
+//   (b) `Accepted` writes `Destination = Some target`, unless the agent is
+//       already on the target (the arrival tick, before the fulfilment
+//       housekeeping clears the order);
+//   (c) an `Accepted` order's target is still reachable from the agent's
+//       current cell, and an `Unable(NoKnownRoute)` order's target is still
+//       unreachable — both threat-independent, so robust across contact decay;
+//   (d) a `Disposition` is only ever `Some` when the agent holds an `Order`;
+//   (e) every `OrderAppraised(a, _, disp)` event matches agent `a`'s stored
+//       `Disposition` at the end of the tick that emitted it;
+//   (f) no appraisal draws from the deterministic stream.
+
+let private appraisalCaseGen: Gen<RandomCase> =
+    gen {
+        let! case = perceptionCaseGen
+        let! disciplines = Gen.arrayOfLength case.World.Agents.Length (Gen.choose (0, 8))
+
+        let agents =
+            case.World.Agents
+            |> Array.mapi (fun i a ->
+                if a.Side = Friendly then { a with Discipline = disciplines.[i] } else a)
+
+        return { case with World = { case.World with Agents = agents } }
+    }
+
+[<Property(MaxTest = 200)>]
+let ``every appraisal outcome is consistent with a fresh recompute and draws no randomness`` () =
+    Prop.forAll (Arb.fromGen appraisalCaseGen) (fun case ->
+        match replayOf case with
+        | Error e -> failwith $"replay of a generated case failed: {e}"
+        | Ok outcome ->
+            let budget = case.World.Bounds.Width * case.World.Bounds.Height
+
+            let reachable (w: WorldState) (from: Cell) (target: Cell) =
+                from = target
+                || (match Pathfinding.findWithin w.Terrain from target budget with
+                    | Found(cells, _) -> cells.Length >= 2
+                    | _ -> false)
+
+            let dispositionsOk =
+                outcome.TickStates
+                |> Array.forall (fun st ->
+                    st.Agents
+                    |> Array.forall (fun a ->
+                        match a.Order, a.Disposition with
+                        | Some o, Some d ->
+                            let (MoveTo target) = o.Intent
+
+                            match d with
+                            | Accepted ->
+                                (a.Destination = Some target || a.Position = target)
+                                && reachable st a.Position target
+                            | Refused(RouteTooExposed _, _) -> a.Destination = None
+                            | Refused(NoKnownRoute, _) -> false
+                            | Unable(NoKnownRoute, _) ->
+                                a.Destination = None && not (reachable st a.Position target)
+                            | Unable _ -> a.Destination = None
+                        | None, Some _ -> false
+                        | _ -> true))
+
+            // (e): re-derive each tick's events and check the OrderAppraised
+            // ones against the post-tick disposition.
+            let mutable prev = case.World
+            let mutable eventsOk = true
+
+            for tick in 1L .. case.TickCount do
+                let cmds =
+                    case.Commands
+                    |> Array.filter (fun c -> c.Tick = tick)
+                    |> Array.map (fun c -> c.Command)
+
+                let r = Simulation.step SimConfig.standard cmds prev
+
+                for e in r.Events do
+                    match e.Body with
+                    | OrderAppraised(agentId, _, disp) ->
+                        if
+                            not (
+                                r.State.Agents
+                                |> Array.exists (fun a -> a.Id = agentId && a.Disposition = Some disp)
+                            )
+                        then
+                            eventsOk <- false
+                    | _ -> ()
+
+                prev <- r.State
+
+            let noDraws =
+                outcome.TickStates |> Array.forall (fun st -> st.Random.Draws = 0UL)
+
+            dispositionsOk && eventsOk && noDraws)

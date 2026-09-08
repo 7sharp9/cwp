@@ -1,6 +1,6 @@
 # Replay corpus entry: perception-contact
 
-One friendly agent at (1,5) ordered east to (9,5); a stationary hostile agent 1 at (9,1) behind an opaque impassable wall at x=6, rows 0..3. The hostile is inside PerceptionConfig.SightRange from the start but line of sight is blocked; once the friendly clears the wall the Perception phase emits ContactObserved and the Tactical-knowledge phase adds the contact to the shared squad picture (WorldState.TacticalKnowledge, Canonical.FormatVersion 3). The first corpus entry with an enemy deployment (TASK-026, backlog B-015; the 'Unknown threat' shape, docs/05 section 16).
+One friendly agent at (1,5) ordered east to (9,5); a stationary hostile agent 1 at (9,1) behind an opaque impassable wall at x=6, rows 0..3. The hostile is inside PerceptionConfig.SightRange from the start but line of sight is blocked; once the friendly clears the wall the Perception phase emits ContactObserved and the Tactical-knowledge phase adds the contact to the shared squad picture (WorldState.TacticalKnowledge). The first corpus entry with an enemy deployment (TASK-026, backlog B-015; the 'Unknown threat' shape, docs/05 section 16). The order is issued on tick 1, before the contact is known, so it is Accepted at appraisal and not re-judged when the contact appears (TASK-028; reappraisal on a knowledge change is B-021).
 
 Regenerate every corpus hash table from the repository root:
 
@@ -16,25 +16,25 @@ See `content/replays/CORPUS.md`.
 | Command log | `perception-contact.cwlog` |
 | Initial state | Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile) |
 | Tick count | 14 |
-| Initial hash (tick 0) | `0xDAA3BCA323164178` |
-| Final hash (tick 14) | `0x320C6FE6BC2544DF` |
-| Domain events | 12 |
+| Initial hash (tick 0) | `0x66E6821517F73AF5` |
+| Final hash (tick 14) | `0xCF052F4E1331FFB2` |
+| Domain events | 13 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xFD02FE7828A82B37` |
-|    2 | `0x186E8DB79AB716B1` |
-|    3 | `0xF82262B511EF94CF` |
-|    4 | `0x3EE9480E565B08ED` |
-|    5 | `0xD67AA520876E76BB` |
-|    6 | `0x20476F0B99F03694` |
-|    7 | `0x0915A520FC553EB5` |
-|    8 | `0x7978F2E81C02492B` |
-|    9 | `0x95CF8C1DB0F80017` |
-|   10 | `0xC8FE4729A933BC07` |
-|   11 | `0xD939A57CCAE6D143` |
-|   12 | `0x37995F56A190F57B` |
-|   13 | `0x9AB1BA3F07A2A4BF` |
-|   14 | `0x320C6FE6BC2544DF` |
+|    1 | `0x5F262D8C12960BC3` |
+|    2 | `0x57B5AF8272ACFF29` |
+|    3 | `0xE25C02B68384FDCB` |
+|    4 | `0xFA52F62A0F041E15` |
+|    5 | `0xF72BE90D2ACE0BBF` |
+|    6 | `0xD566A75AEEE36A6C` |
+|    7 | `0xB291993BEC378659` |
+|    8 | `0x7A8B99A37939D523` |
+|    9 | `0x64A1C885A7EEA15A` |
+|   10 | `0x4831BA88E392C47A` |
+|   11 | `0xB94E94F6DA7411BE` |
+|   12 | `0x13AF84D5192C3C26` |
+|   13 | `0x4BC0C141CB5CEDE2` |
+|   14 | `0xCF052F4E1331FFB2` |

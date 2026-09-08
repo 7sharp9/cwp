@@ -1,15 +1,50 @@
 # TASK-028: Staged order appraisal and typed reasons
 
-Status: ready (drafted 2026-09-08 on branch `task-028-order-appraisal`;
-central decisions confirmed with Dave 2026-09-08 before the phase bodies)
+Status: review (implemented 2026-09-08 on branch `task-028-order-appraisal`;
+central decisions A–H confirmed with Dave 2026-09-08 before the phase bodies)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-017 and is the G3 keystone
 Size: M
 
-## Outcome
+## Outcome (2026-09-08)
 
-_To be filled on completion._
+Implemented on branch `task-028-order-appraisal` off the TASK-027 merge on
+`main` (committed locally, not pushed). TASK-027 was accepted and merged first
+(recorded acceptance, `--no-ff` merge, branch deleted). All eight central
+decisions confirmed with Dave and implemented as recommended (Decision B: Dave
+asked for the recommendation — excluded `Discipline` from the canonical image,
+matching the `CommunicationAvailable` precedent).
+
+The Appraisal phase (12.5) is a real phase over a new `Appraisal` leaf module.
+The Communication phase writes a new canonical `AgentState.Order` and resets
+`AgentState.Disposition` instead of writing `Destination`; the Appraisal phase
+runs stages 1–4 (stage 1 guaranteed upstream; stage 2 `Pathfinding`
+feasibility; stage 3 route exposure to *known* threats; stage 4 exposure vs a
+`Discipline` / `RiskTolerance` / `Urgency` threshold), produces an
+`OrderDisposition` (`Accepted | Refused of reasons | Unable of reasons`), emits
+`OrderAppraised`, and on `Accepted` writes `Destination`. New static
+`AgentState.Discipline` (excluded from `Canonical.encode`). `AppraisalConfig`
+holds all thresholds as integer literals; no PRNG draw.
+
+`Canonical.FormatVersion` **3 → 4** with a full re-pin — behaviour-neutral for
+movement (tick counts unchanged on all ten entries; event counts move by one
+`OrderAppraised` per order), except `blocked-goal` (now `Unable(NoKnownRoute)`
+at appraisal instead of `MovementBlocked` at navigation — same tick/event
+count) and `lost-comms` (order dropped at Communication, no appraisal). New
+`exposed-approach` corpus entry + golden (the G3 divergence: two friendlies,
+`Discipline` 1 and 6, same exposed order → one `Refused`, one `Accepted`); new
+`blocked-goal-tick-001` golden.
+
+`228 → 242` green (+9 `SimulationTests`, +3 `DiagnosticsTests`, +1
+`DeterminismPropertyTests` property 8 at 200 cases, +1 `CorpusTests` theory
+case). `dotnet build` 0/0;
+`-- corpus` 10/10; `-- fixture` format 4, 34 events; `-- replay-file
+envelope-full` OK at canonical 4; `src/CommandoWar.Sim` packages `FSharp.Core`
+only. No ADR.
+
+Full detail:
+`docs/ledger/2026-09-08-TASK-028-order-appraisal-and-typed-reasons.md`.
 
 ## Objective
 
@@ -716,33 +751,33 @@ must not. Re-running `corpus --regenerate` must be a zero diff.
 
 ## Acceptance criteria
 
-- [ ] The Appraisal phase (12.5) is a real phase function in `Simulation.fs`,
+- [x] The Appraisal phase (12.5) is a real phase function in `Simulation.fs`,
       in its `Phases.order` slot 5, with a "Realised by TASK-028" header
       comment; `runPhase` has a real `Appraisal` arm and `Appraisal` is out of
       the no-op list.
-- [ ] The Communication phase writes `AgentState.Order` (and resets
+- [x] The Communication phase writes `AgentState.Order` (and resets
       `Disposition`) instead of `Destination`; its header comment states the
       change. `commandIntake` records a `ReceivedOrder` in `PendingOrders`.
-- [ ] `AgentState.Order: ReceivedOrder option`, `AgentState.Disposition:
+- [x] `AgentState.Order: ReceivedOrder option`, `AgentState.Disposition:
       OrderDisposition option` (both in `Canonical.encode`), `AgentState.Discipline:
       int` (**not** in `Canonical.encode`); `PlayerIntent` / `Urgency` /
       `RiskTolerance` moved to `Domain.fs`; `Agent.create` defaults; doc
       comments distinguishing canonical memory from static data.
-- [ ] `OrderDisposition` (`Accepted | Refused of primary * supporting | Unable
+- [x] `OrderDisposition` (`Accepted | Refused of primary * supporting | Unable
       of primary * supporting`) and `DecisionReason` (`NoKnownRoute |
       RouteTooExposed of threat: AgentId option`) DUs; `AppraisalConfig`
       module literals in the new `Appraisal.fs` leaf; `Appraisal.routeExposure`
       / `Appraisal.appraise` pure/total/integer-only.
-- [ ] `RawDeployment.Discipline` / `Deployment.Discipline`; `Scenario.validate`
+- [x] `RawDeployment.Discipline` / `Deployment.Discipline`; `Scenario.validate`
       rejects a negative Discipline (`NegativeDiscipline`) and round-trips a
       valid one (`ScenarioTests` fact); `World.ofScenario` wires it.
-- [ ] `OrderAppraised of agent * command * disposition` event; the `Events.fs`
+- [x] `OrderAppraised of agent * command * disposition` event; the `Events.fs`
       ordering doc comment renumbered (after `ContactObserved` / `ContactExpired`,
       before movement, ascending agent id). Every exhaustive `EventBody` match
       armed; FS0025 sites + fixes in the ledger.
-- [ ] `Canonical.FormatVersion` `3 → 4`; `writeAgent` encodes `Order` +
+- [x] `Canonical.FormatVersion` `3 → 4`; `writeAgent` encodes `Order` +
       `Disposition`; `Discipline` deliberately not written (comment).
-- [ ] `SimulationTests` facts:
+- [x] `SimulationTests` facts:
   - a clear-route, enemy-free order is `Accepted` and `Destination` is written
     the same tick (movement begins that tick, exactly the pre-TASK-028
     behaviour for a delivered order);
@@ -760,25 +795,25 @@ must not. Re-running `corpus --regenerate` must be a zero diff.
   - appraisal never returns `Accepted` after a stage-2 failure (`docs/09`
     section 2.2), as a focused fact;
   - two runs of the same world + commands emit byte-identical events + hashes.
-- [ ] A `DeterminismPropertyTests` property (`MaxTest >= 200`; generator places
+- [x] A `DeterminismPropertyTests` property (`MaxTest >= 200`; generator places
       1–2 known threats and varies `Discipline`): every `AgentState.Disposition`
       after a tick equals a fresh `Appraisal.appraise` over the pre-tick state
       (no `Accepted` when stage 2 failed; a `Refused` / `Unable` carries a
       primary reason; `Destination` is `Some` iff the disposition is
       `Accepted` and the agent is not already at the target); `Random.Draws`
       unchanged (no PRNG draw). Properties 1–7 unmodified.
-- [ ] New corpus entry `exposed-approach` (two friendlies, different
+- [x] New corpus entry `exposed-approach` (two friendlies, different
       `Discipline`, same exposed approach past a known hostile — one `Refused`,
       one `Accepted`): `CORPUS.md` row, committed `.cwlog` + `.md`, passes
       `CorpusTests` `[<Theory>]` and `cwheadless corpus`.
-- [ ] `blocked-goal` repurposed: its `.md` description and its tick-1 golden
+- [x] `blocked-goal` repurposed: its `.md` description and its tick-1 golden
       (and `lost-comms-tick-001.*`, sharing the hash) reflect
       `OrderAppraised(Unable(NoKnownRoute, [||]))` at tick 1; tick count 5,
       event count 2, both unchanged.
-- [ ] Diagnostics: `Overlay.OrderAppraisal` derived in `frame` and `frameOf`,
+- [x] Diagnostics: `Overlay.OrderAppraisal` derived in `frame` and `frameOf`,
       rendered in `Ascii` + `Svg`, covered by a hand-built `DiagnosticsTests`
       fact and the committed `exposed-approach-tick-001.*` golden.
-- [ ] `Canonical.FormatVersion` 3 → 4 re-pin complete and behaviour-neutral:
+- [x] `Canonical.FormatVersion` 3 → 4 re-pin complete and behaviour-neutral:
       `cwheadless corpus` 10/10 (nine re-pinned + `exposed-approach`),
       `cwheadless fixture` `format 4`, `cwheadless replay-file
       envelope-full.cwreplay` checkpoints OK at `canonical 4`; `git diff
@@ -786,13 +821,13 @@ must not. Re-running `corpus --regenerate` must be a zero diff.
       + the new entry; re-running `corpus --regenerate` is a zero diff; every
       `content/diagnostics/` golden shows only footer/hash/appraisal-marker
       changes; **no tick count moved**.
-- [ ] `dotnet build CommandoWar.slnx -c Release` = 0/0; `dotnet list
+- [x] `dotnet build CommandoWar.slnx -c Release` = 0/0; `dotnet list
       src/CommandoWar.Sim package --include-transitive` = `FSharp.Core` only;
       source scan of `src/CommandoWar.Sim` clean (`float` / `Stopwatch` /
       `DateTime` / `System.Random` / `godot`).
-- [ ] `dotnet test CommandoWar.slnx -c Release` green — state the new count;
+- [x] `dotnet test CommandoWar.slnx -c Release` green — state the new count;
       name each added fact and the property's case count.
-- [ ] Docs updated (see below).
+- [x] Docs updated (see below).
 
 ## Required verification
 

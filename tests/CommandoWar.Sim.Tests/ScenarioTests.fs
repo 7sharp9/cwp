@@ -18,10 +18,10 @@ let private goodRaw () : RawScenario =
       Width = 16
       Height = 16
       FriendlyDeployments =
-        [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true }
-           { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true }
-           { AgentId = 2; Cell = { X = 0; Y = 2 }; CommunicationAvailable = true } |]
-      EnemyDeployments = [| { AgentId = 10; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true } |]
+        [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault }
+           { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault }
+           { AgentId = 2; Cell = { X = 0; Y = 2 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
+      EnemyDeployments = [| { AgentId = 10; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
       ObjectiveAreas = [| { AreaId = "observation"; Cell = { X = 8; Y = 8 } } |]
       ExtractionAreas = [| { AreaId = "exfil"; Cell = { X = 1; Y = 15 } } |]
       StaticTargets = [| { TargetId = "bridge"; Cell = { X = 8; Y = 0 } } |]
@@ -99,11 +99,12 @@ let private errorsOf (raw: RawScenario) : ScenarioError list =
 
 [<Fact>]
 let ``the content version is independent of the canonical and replay versions`` () =
-    // TASK-010 bumped the content version to 2 (authored terrain layer); the
-    // canonical and replay versions are unmoved. Independent constants: this
-    // test documents the intent, not an inequality.
+    // The three version constants move independently: ScenarioContent.Version
+    // is 2 (TASK-010 authored terrain layer), Canonical.FormatVersion is 4
+    // (TASK-018 / TASK-026 / TASK-028), Replay.FormatVersion is 1. This test
+    // documents the intent, not an inequality.
     Assert.Equal(2, ScenarioContent.Version)
-    Assert.Equal(3, Canonical.FormatVersion)
+    Assert.Equal(4, Canonical.FormatVersion)
     Assert.Equal(1, Replay.FormatVersion)
 
 // --- the happy path -------------------------------------------------
@@ -196,7 +197,7 @@ let ``non-positive map dimensions are reported`` () =
 [<Fact>]
 let ``a duplicate deployment agent id is reported once`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = 1; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = 1; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |] }
 
     let es = errorsOf raw
     Assert.Contains(DuplicateDeploymentId 1, es)
@@ -205,14 +206,14 @@ let ``a duplicate deployment agent id is reported once`` () =
 [<Fact>]
 let ``a negative deployment agent id is reported`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = -3; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = -3; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |] }
 
     Assert.Contains(NegativeDeploymentId -3, errorsOf raw)
 
 [<Fact>]
 let ``a deployment outside the map is reported with its cell and the bounds`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 99; Y = 0 }; CommunicationAvailable = true } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 99; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |] }
 
     Assert.Contains(
         DeploymentOutOfMap(10, { X = 99; Y = 0 }, { Width = 16; Height = 16 }),
@@ -222,7 +223,7 @@ let ``a deployment outside the map is reported with its cell and the bounds`` ()
 [<Fact>]
 let ``two deployments sharing a cell are reported with both agent ids`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |] }
 
     Assert.Contains(DeploymentCellShared({ X = 0; Y = 0 }, [ 0; 10 ]), errorsOf raw)
 
@@ -321,7 +322,7 @@ let ``validation reports every fault in one pass`` () =
     let raw =
         { goodRaw () with
             ContentVersion = 3
-            EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 }; CommunicationAvailable = true } |]
+            EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
             Objectives = [| objective 2 "orbit" |]
             TerrainLayer =
                 Some
@@ -643,7 +644,7 @@ let private fixtureScenario () : Scenario =
       Id = "spike-fixture"
       Width = Fixture.bounds.Width
       Height = Fixture.bounds.Height
-      FriendlyDeployments = [| for i in 0..5 -> { AgentId = i; Cell = { X = 0; Y = i }; CommunicationAvailable = true } |]
+      FriendlyDeployments = [| for i in 0..5 -> { AgentId = i; Cell = { X = 0; Y = i }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
       EnemyDeployments = [||]
       ObjectiveAreas = [| { AreaId = "observation"; Cell = { X = 20; Y = 14 } } |]
       ExtractionAreas = [| { AreaId = "exfil"; Cell = { X = 0; Y = 0 } } |]
@@ -657,7 +658,7 @@ let private fixtureScenario () : Scenario =
 let ``the six-agent fixture as a Scenario reproduces the pinned initial hash`` () =
     match World.ofScenario (fixtureScenario ()) Fixture.Seed with
     | Error e -> Assert.Fail($"World.ofScenario failed: {e}")
-    | Ok world -> Assert.Equal(0x50BFA007EDFC42FEUL, (Hashing.hash world).Value)
+    | Ok world -> Assert.Equal(0x55F43D66C7AECB7FUL, (Hashing.hash world).Value)
 
 [<Fact>]
 let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the pinned final hash`` () =
@@ -675,4 +676,4 @@ let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the
         let cmds = if tick = Fixture.CommandIssueTick then [| command |] else [||]
         state <- (Simulation.step SimConfig.standard cmds state).State
 
-    Assert.Equal(0xD9D6EC3DDC1D602FUL, (Hashing.hash state).Value)
+    Assert.Equal(0x7737282578E821C6UL, (Hashing.hash state).Value)

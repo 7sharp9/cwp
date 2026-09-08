@@ -1,28 +1,10 @@
 namespace CommandoWar.Sim
 
-/// What a command asks an agent to do. Only movement is needed for the
-/// framework spikes; Hold, Suppress, Assault and Withdraw
-/// (docs/04_SIMULATION_SPEC.md section 13) are added by later tasks.
-type PlayerIntent =
-    | MoveTo of target: Cell
-
-/// How urgently an order should be acted on, relative to an agent's current
-/// activity. Inert envelope data (TASK-020): `docs/05_COMMAND_AND_AGENT_AI.md`
-/// section 5 stage 4 names "urgency ... encoded by the order" as a
-/// resolve-threshold input, but order appraisal (backlog B-017) does not exist
-/// yet and nothing reads this value.
-type Urgency =
-    | Routine
-    | Immediate
-
-/// How much risk an order sanctions. Inert envelope data (TASK-020):
-/// `docs/05_COMMAND_AND_AGENT_AI.md` section 5 stage 4 names "risk tolerance
-/// encoded by the order" as a resolve-threshold input; carried through the
-/// envelope, not consumed (backlog B-017).
-type RiskTolerance =
-    | Cautious
-    | Standard
-    | Aggressive
+// `PlayerIntent`, `Urgency`, and `RiskTolerance` moved to `Domain.fs` (TASK-028):
+// `AgentState.Order` carries a `PlayerIntent`, and `Domain.fs` compiles before
+// this file. `docs/05` section 5 stage 4 names `Urgency` and `RiskTolerance` as
+// appraisal resolve-threshold inputs; the Appraisal phase (12.5) now reads
+// them, so they are no longer "inert envelope data".
 
 /// A player command envelope. This is a **partial** realisation of the
 /// `docs/04_SIMULATION_SPEC.md` section 13 envelope (TASK-020): command id,

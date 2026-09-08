@@ -75,7 +75,8 @@
   <polyline points="8,8 24,8 40,8 56,8 72,8" fill="none" stroke="#dd6b20" stroke-width="2"/>
   <circle cx="8" cy="8" r="4" fill="#2f855a" stroke="#ffffff" stroke-width="1"/>
   <rect x="64" y="0" width="16" height="16" fill="none" stroke="#dd6b20" stroke-width="3"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 2  hash 0xEF4FDD23DB5254A8  draws 0</text>
+  <text x="9" y="9" font-family="monospace" font-size="9" font-weight="bold" fill="#2f855a">A</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 2  hash 0x7422ADF25AD5B738  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 1  cover-edges 0  events 0</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

@@ -123,7 +123,14 @@ type Deployment =
       /// that makes the Communication phase emit `OrderUndelivered` for this
       /// recipient. Static — carried onto `AgentState.CommunicationAvailable`
       /// by `World.ofScenario` and never mutated during a run.
-      CommunicationAvailable: bool }
+      CommunicationAvailable: bool
+      /// This agent's discipline (TASK-028, backlog B-017; `docs/05` section
+      /// 8). A non-negative integer read only by the Appraisal phase's
+      /// stage-4 resolve threshold. Static — carried onto
+      /// `AgentState.Discipline` by `World.ofScenario` and never mutated
+      /// during a run. `Scenario.validate` rejects a negative value
+      /// (`NegativeDiscipline`).
+      Discipline: int }
 
 /// A named point of interest: an objective area or an extraction area. The
 /// slice needs a single cell per area; a rectangular region is a later
@@ -187,13 +194,16 @@ type Scenario =
 
 // --- raw (unvalidated) input -----------------------------------------
 
-/// Unvalidated authored deployment: an agent id, a cell, and whether the
-/// agent can receive orders (`CommunicationAvailable`, TASK-027 — `true` for
-/// an ordinary deployment, `false` for an authored comms blackout).
+/// Unvalidated authored deployment: an agent id, a cell, whether the agent
+/// can receive orders (`CommunicationAvailable`, TASK-027 — `true` for an
+/// ordinary deployment, `false` for an authored comms blackout), and the
+/// agent's `Discipline` (TASK-028 — a non-negative integer; the Appraisal
+/// phase's stage-4 resolve input).
 type RawDeployment =
     { AgentId: int
       Cell: Cell
-      CommunicationAvailable: bool }
+      CommunicationAvailable: bool
+      Discipline: int }
 
 /// Unvalidated authored area marker.
 type RawArea = { AreaId: string; Cell: Cell }
@@ -284,6 +294,9 @@ type ScenarioError =
     | NonPositiveMapDimensions of width: int * height: int
     | DuplicateDeploymentId of agent: int
     | NegativeDeploymentId of agent: int
+    /// An authored `Discipline` below 0 (TASK-028). Discipline is a
+    /// non-negative resolve-threshold input; a negative value has no meaning.
+    | NegativeDiscipline of agent: int * value: int
     | DeploymentOutOfMap of agent: int * cell: Cell * bounds: GridBounds
     | DeploymentCellShared of cell: Cell * agents: int list
     | DuplicateObjectiveId of objective: int
@@ -386,6 +399,10 @@ module Scenario =
 
         for id in deploymentIds |> Array.filter (fun i -> i < 0) |> Array.distinct |> Array.sort do
             report (NegativeDeploymentId id)
+
+        for d, _ in deployments |> Array.sortBy (fun (d, _) -> d.AgentId) do
+            if d.Discipline < 0 then
+                report (NegativeDiscipline(d.AgentId, d.Discipline))
 
         if mapOk then
             for d, _ in deployments do
@@ -612,7 +629,8 @@ module Scenario =
                     { Agent = AgentId.ofInt d.AgentId
                       Side = side
                       Cell = d.Cell
-                      CommunicationAvailable = d.CommunicationAvailable })
+                      CommunicationAvailable = d.CommunicationAvailable
+                      Discipline = d.Discipline })
 
             Ok
                 { Id = ScenarioId.ofString raw.Id

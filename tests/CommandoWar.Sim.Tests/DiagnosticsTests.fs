@@ -94,7 +94,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0x50BFA007EDFC42FEUL, f.Hash.Value)
+    Assert.Equal(0x55F43D66C7AECB7FUL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -131,27 +131,40 @@ let ``the mid-route fixture frame renders agent 3's followed path (byte-equal to
 
     let mid = frames.[25]
 
-    match mid.Overlays with
-    | [| PlannedPath(from, target, cells, cost, reached) |] ->
+    // Two overlays now: the PlannedPath from the stored Route, and the
+    // OrderAppraisal for agent 3's still-Accepted order (TASK-028).
+    match mid.Overlays |> Array.tryPick (function
+        | PlannedPath(from, target, cells, cost, reached) -> Some(from, target, cells, cost, reached)
+        | _ -> None) with
+    | Some(from, target, cells, cost, reached) ->
         Assert.Equal({ X = 0; Y = 3 }, from)
         Assert.Equal({ X = 20; Y = 14 }, target)
         Assert.Equal(31, cost)
         Assert.True(reached)
         Assert.Equal({ X = 0; Y = 3 }, cells.[0])
         Assert.Equal({ X = 20; Y = 14 }, cells.[cells.Length - 1])
-    | other -> Assert.Fail($"expected one PlannedPath overlay, got {other}")
+    | None -> Assert.Fail($"expected a PlannedPath overlay, got {mid.Overlays}")
+
+    Assert.Contains(mid.Overlays, (function
+        | OrderAppraisal(a, _, Accepted, _) -> AgentId.value a = 3
+        | _ -> false))
 
     Assert.Equal(golden "fixture-mid-route.ascii.txt", DiagnosticRender.Ascii mid)
     Assert.Equal(golden "fixture-mid-route.svg", DiagnosticRender.Svg mid)
 
 [<Fact>]
-let ``frameOf emits no overlay once every agent is at rest`` () =
+let ``frameOf emits no overlay once every agent is at rest and its order is cleared`` () =
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    // Agent 3 arrives at tick 31; tick 32 onward carries no route.
+    // Agent 3 arrives at tick 31 (route cleared); its Accepted order lingers
+    // one more tick as an OrderAppraisal overlay until the Appraisal phase's
+    // fulfilment housekeeping clears Order / Disposition at tick 32 (Appraisal
+    // runs before Navigation, so it sees the arrival only next tick). From
+    // tick 32 on, nothing.
     Assert.NotEmpty(frames.[30].Overlays)
-    Assert.Empty(frames.[31].Overlays)
+    Assert.NotEmpty(frames.[31].Overlays)
+    Assert.Empty(frames.[32].Overlays)
     Assert.Empty(frames.[40].Overlays)
 
 // --- renderers: distinct features and determinism ----------------------
@@ -301,6 +314,32 @@ let ``a hand-built UndeliveredOrder overlay renders through the ASCII and SVG re
     Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
 
 [<Fact>]
+let ``a hand-built OrderAppraisal overlay renders through the ASCII and SVG renderers`` () =
+    // TASK-028: a Refused disposition with a threat, and its exposed route
+    // cells.
+    let f = Diagnostics.frame (DemoScenario.initialState ())
+
+    let withAppraisal =
+        { f with
+            Overlays =
+                [| OrderAppraisal(
+                       AgentId.ofInt 0,
+                       { X = 2; Y = 3 },
+                       Refused(RouteTooExposed(Some(AgentId.ofInt 5)), [||]),
+                       [| { X = 3; Y = 3 }; { X = 4; Y = 3 } |]
+                   ) |] }
+
+    let ascii = DiagnosticRender.Ascii withAppraisal
+    Assert.Contains("overlays:", ascii)
+    Assert.Contains("order appraisal (2,3): agent 0  refused route-too-exposed threat-agent-5  exposed (3,3) (4,3)", ascii)
+
+    let svg = DiagnosticRender.Svg withAppraisal
+    Assert.Contains("fill=\"#c53030\">R</text>", svg)
+    Assert.Contains("fill=\"#c53030\" fill-opacity=\"0.25\"", svg)
+    // Byte-identical without the overlay (regression guard for the goldens).
+    Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
+
+[<Fact>]
 let ``AgentMarker.CommunicationAvailable is carried and rendered only when an agent cannot receive orders`` () =
     // TASK-027: the marker is on every agent, but the renderers surface it
     // only for a blacked-out agent (the Progress-omitted-at-0 precedent).
@@ -346,7 +385,8 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | PlannedPath _
         | Obstructed _
         | UndeliveredOrder _
-        | KnownContact _ -> None) with
+        | KnownContact _
+        | OrderAppraisal _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -408,7 +448,8 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | PlannedPath _
             | Reserved _
             | UndeliveredOrder _
-            | KnownContact _ -> None)
+            | KnownContact _
+            | OrderAppraisal _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -446,7 +487,8 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | PlannedPath _
             | Reserved _
             | Obstructed _
-            | UndeliveredOrder _ -> None)
+            | UndeliveredOrder _
+            | OrderAppraisal _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -496,7 +538,8 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | PlannedPath _
             | Reserved _
             | Obstructed _
-            | KnownContact _ -> None)
+            | KnownContact _
+            | OrderAppraisal _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)
@@ -512,6 +555,57 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
 
     Assert.Equal(golden "lost-comms-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
     Assert.Equal(golden "lost-comms-tick-001.svg", DiagnosticRender.Svg tick1)
+
+// --- order appraisal: the exposed-approach corpus entry (TASK-028) -----
+
+let private exposedApproachFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "exposed-approach")
+
+    match Corpus.loadLog corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives divergent OrderAppraisal overlays for the exposed-approach entry (byte-equal to the goldens)`` () =
+    // Tick 1: agent 0 (Discipline 1) Refuses the exposed order, agent 1
+    // (Discipline 6) Accepts it — the G3 divergence.
+    let tick1 = (exposedApproachFrames ()).[1]
+
+    let appraisals =
+        tick1.Overlays
+        |> Array.choose (function
+            | OrderAppraisal(a, _, d, _) -> Some(AgentId.value a, d)
+            | _ -> None)
+        |> Array.sortBy fst
+
+    Assert.Equal(2, appraisals.Length)
+
+    match appraisals.[0], appraisals.[1] with
+    | (0, Refused(RouteTooExposed(Some t), _)), (1, Accepted) -> Assert.Equal(AgentId.ofInt 2, t)
+    | other -> Assert.Fail($"expected agent 0 Refused / agent 1 Accepted, got {other}")
+
+    Assert.Equal(2, tick1.Events |> Array.filter (fun e -> e.Kind = "order-appraised") |> Array.length)
+    Assert.Equal(golden "exposed-approach-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
+    Assert.Equal(golden "exposed-approach-tick-001.svg", DiagnosticRender.Svg tick1)
+
+[<Fact>]
+let ``frameOf shows blocked-goal's order as Unable at appraisal (byte-equal to the goldens)`` () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "blocked-goal")
+
+    let frames =
+        match Corpus.loadLog corpusDir entry with
+        | Error m -> failwith m
+        | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+    let tick1 = frames.[1]
+
+    Assert.Contains(tick1.Overlays, (function
+        | OrderAppraisal(a, _, Unable(NoKnownRoute, _), _) -> AgentId.value a = 0
+        | _ -> false))
+
+    Assert.DoesNotContain(tick1.Events, (fun (e: EventMarker) -> e.Kind = "movement-blocked"))
+    Assert.Equal(golden "blocked-goal-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
+    Assert.Equal(golden "blocked-goal-tick-001.svg", DiagnosticRender.Svg tick1)
 
 [<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =
@@ -549,12 +643,12 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0x50BFA007EDFC42FEUL, frames.[0].Hash.Value)
-    Assert.Equal(0xD9D6EC3DDC1D602FUL, frames.[40].Hash.Value)
-    Assert.Equal(33, frames |> Array.sumBy (fun f -> f.Events.Length))
+    Assert.Equal(0x55F43D66C7AECB7FUL, frames.[0].Hash.Value)
+    Assert.Equal(0x7737282578E821C6UL, frames.[40].Hash.Value)
+    Assert.Equal(34, frames |> Array.sumBy (fun f -> f.Events.Length))
 
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0xD9D6EC3DDC1D602FUL, (Hashing.hash outcome.FinalState).Value)
-        Assert.Equal(33, outcome.Events.Length)
+        Assert.Equal(0x7737282578E821C6UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(34, outcome.Events.Length)
