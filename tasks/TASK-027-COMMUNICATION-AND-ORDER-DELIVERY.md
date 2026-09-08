@@ -1,8 +1,9 @@
 # TASK-027: Communication constraints and order delivery
 
-Status: review (implemented 2026-09-07 on branch
+Status: done (implemented 2026-09-07 on branch
 `task-027-communication-and-order-delivery`; central decisions confirmed with
-Dave 2026-09-07 before the phase bodies)
+Dave 2026-09-07 before the phase bodies; accepted by Dave and merged to `main`
+2026-09-08)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises the communication half of backlog B-016

@@ -311,4 +311,18 @@ hand-built `DiagnosticsTests` facts and the committed
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-08)
+- Notes: the Communication phase (12.2) is a real phase; `commandIntake`
+  records an accepted order as a `StepState`-local pending order and the
+  Communication phase delivers it (`Destination` written) to a
+  `CommunicationAvailable = true` recipient or emits
+  `OrderUndelivered(UnableToCommunicate)` and drops it. New static
+  `AgentState.CommunicationAvailable` excluded from `Canonical.encode` (the
+  `Terrain` precedent), so `Canonical.FormatVersion` stays 3 and every pinned
+  hash / tick count / event count on the nine pre-existing entries is
+  byte-identical (confirmed: `-- corpus` 9/9, `-- fixture` unchanged with and
+  without `--regenerate`, `-- replay-file envelope-full` OK at canonical 3).
+  New `OrderUndelivered` event + `DeliveryFailure` DU, new
+  `Overlay.UndeliveredOrder` + `AgentMarker.CommunicationAvailable`, new
+  `lost-comms` corpus entry + golden. `216 -> 228` green. No ADR. Merged to
+  `main` (`--no-ff`, branch deleted; not pushed).
