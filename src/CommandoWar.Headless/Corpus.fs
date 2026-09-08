@@ -103,7 +103,11 @@ module Corpus =
         let deployment (a, c) : RawDeployment =
             { AgentId = a
               Cell = c
-              CommunicationAvailable = not (List.contains a commsBlackout) }
+              CommunicationAvailable = not (List.contains a commsBlackout)
+              // Every `rawScenario` entry uses the default discipline; the one
+              // entry that needs per-agent discipline (`exposed-approach`,
+              // TASK-028) has its own builder.
+              Discipline = AppraisalConfig.DisciplineDefault }
 
         { ContentVersion = ScenarioContent.Version
           Id = id
@@ -267,6 +271,49 @@ module Corpus =
                 { X = 0; Y = 7 }
         )
 
+    /// Two friendlies on open ground ordered along the same exposed approach
+    /// past a stationary hostile (a machine-gun position) the squad can see
+    /// from the start. Agent 0 (`Discipline 1`) at (1,3) is ordered to (11,3);
+    /// agent 1 (`Discipline 6`) at (1,5) is ordered to (11,5). Both routes run
+    /// the same distance past the known threat at (10,4), so exposure is
+    /// near-identical — the divergence is discipline alone: on tick 1 the
+    /// Appraisal phase `Refuses` agent 0's order (`RouteTooExposed`, no
+    /// `Destination`, it never moves) and `Accepts` agent 1's (`Destination`
+    /// written, it walks the approach). The G3 evidence scenario
+    /// (`docs/07` section 9 criterion 2: "at least two soldiers appraise the
+    /// same order differently for traceable reasons"; TASK-028, backlog B-017).
+    let private exposedApproachWorld () : WorldState =
+        let friendly (a: int) (c: Cell) (discipline: int) : RawDeployment =
+            { AgentId = a
+              Cell = c
+              CommunicationAvailable = true
+              Discipline = discipline }
+
+        worldOf
+            { ContentVersion = ScenarioContent.Version
+              Id = "corpus-exposed-approach"
+              Width = 12
+              Height = 8
+              FriendlyDeployments = [| friendly 0 { X = 1; Y = 3 } 1; friendly 1 { X = 1; Y = 5 } 6 |]
+              EnemyDeployments =
+                [| { AgentId = 2
+                     Cell = { X = 10; Y = 4 }
+                     CommunicationAvailable = true
+                     Discipline = AppraisalConfig.DisciplineDefault } |]
+              ObjectiveAreas = [| { AreaId = "objective"; Cell = { X = 11; Y = 4 } } |]
+              ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 0; Y = 7 } } |]
+              StaticTargets = [||]
+              Objectives =
+                [| { Id = 1
+                     Kind = "reach"
+                     AreaRef = "objective"
+                     TargetRef = ""
+                     HoldTicks = 0
+                     ExtractAgentIds = [||]
+                     IsOptional = false } |]
+              TerrainLayer = None
+              FailOnFriendlyForceEliminated = true }
+
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
         [| { Name = "spike-fixture"
@@ -333,8 +380,10 @@ module Corpus =
                + "opaque impassable wall at x=6, rows 0..3. The hostile is inside PerceptionConfig.SightRange from "
                + "the start but line of sight is blocked; once the friendly clears the wall the Perception phase "
                + "emits ContactObserved and the Tactical-knowledge phase adds the contact to the shared squad "
-               + "picture (WorldState.TacticalKnowledge, Canonical.FormatVersion 3). The first corpus entry with an "
-               + "enemy deployment (TASK-026, backlog B-015; the 'Unknown threat' shape, docs/05 section 16)."
+               + "picture (WorldState.TacticalKnowledge). The first corpus entry with an "
+               + "enemy deployment (TASK-026, backlog B-015; the 'Unknown threat' shape, docs/05 section 16). The "
+               + "order is issued on tick 1, before the contact is known, so it is Accepted at appraisal and not "
+               + "re-judged when the contact appears (TASK-028; reappraisal on a knowledge change is B-021)."
              InitialStateNote = "Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile)"
              InitialState = perceptionContactWorld
              TickCount = 14L }
@@ -344,11 +393,25 @@ module Corpus =
                + "ordered east to (6,4) on tick 1. Command intake accepts the order (CommandAccepted), but the "
                + "Communication phase cannot reach the recipient, so it emits OrderUndelivered and drops the order: "
                + "no Destination is written and the agent never moves. The 'Lost communication' vertical-slice "
-               + "scenario (docs/05 section 16; TASK-027, backlog B-016). CommunicationAvailable is static authored "
-               + "data, excluded from Canonical.encode (the Terrain precedent), so Canonical.FormatVersion stays 3."
+               + "scenario (docs/05 section 16; TASK-027, backlog B-016). Because the order is dropped, no "
+               + "AgentState.Order is written and the Appraisal phase (TASK-028) never runs on it: this is the one "
+               + "entry with no OrderAppraised event."
              InitialStateNote = "Corpus lost-comms scenario (8 x 8, seed 20260904, 1 friendly, comms blackout)"
              InitialState = lostCommsWorld
-             TickCount = 4L } |]
+             TickCount = 4L }
+           { Name = "exposed-approach"
+             Description =
+               "Two friendlies ordered along the same exposed approach past a stationary hostile (a machine-gun "
+               + "position) the squad sees from the start: agent 0 (Discipline 1) at (1,3) -> (11,3), agent 1 "
+               + "(Discipline 6) at (1,5) -> (11,5), both on tick 1, both routes the same distance past the known "
+               + "threat at (10,4). The divergence is discipline alone: on tick 1 the Appraisal phase (12.5) "
+               + "Refuses agent 0's order (RouteTooExposed, no Destination, it never moves) and Accepts agent 1's "
+               + "(Destination written, it walks the approach). The G3 evidence scenario (docs/07 section 9 "
+               + "criterion 2; TASK-028, backlog B-017; Canonical.FormatVersion 4)."
+             InitialStateNote =
+               "Corpus exposed-approach scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / 6 + 1 hostile)"
+             InitialState = exposedApproachWorld
+             TickCount = 12L } |]
 
     // --- entry paths and loading ----------------------------------------
 

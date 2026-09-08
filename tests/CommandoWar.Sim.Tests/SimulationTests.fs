@@ -243,22 +243,44 @@ let ``the agent follows exactly the Pathfinding path for its destination`` () =
     Assert.Equal<Cell[]>(expected, visited.ToArray())
 
 [<Fact>]
-let ``a move to a fully walled-off cell emits MovementBlocked and clears the destination`` () =
-    // (5,5) is passable but its four cardinal neighbours are impassable.
+let ``a move to a fully walled-off cell is Unable NoKnownRoute at appraisal`` () =
+    // (5,5) is passable but its four cardinal neighbours are impassable, so
+    // stage 2 (Pathfinding) has no route: the Appraisal phase (TASK-028)
+    // refuses the order before the Navigation phase ever sees a Destination.
     let t = impassable [ 5, 4; 5, 6; 4, 5; 6, 5 ]
     let a = agent 0
     let r = stepWith [| cmd 1 a { X = 5; Y = 5 } |] (worldWith t)
-    Assert.Contains(MovementBlocked(a, { X = 0; Y = 0 }, { X = 5; Y = 5 }), bodies r)
+    Assert.Equal(Some(Unable(NoKnownRoute, [||])), (agentOf a r.State).Disposition)
+    Assert.DoesNotContain("movement-blocked", bodies r |> Array.map (fun b -> $"{b}"))
     Assert.Equal(None, (agentOf a r.State).Destination)
     Assert.Equal({ X = 0; Y = 0 }, (agentOf a r.State).Position)
 
 [<Fact>]
-let ``a move onto an impassable cell is accepted at intake then blocked by the executor`` () =
+let ``a move onto an impassable cell is accepted at intake then Unable at appraisal`` () =
     let t = impassable [ 4, 4 ]
     let a = agent 0
     let r = stepWith [| cmd 1 a { X = 4; Y = 4 } |] (worldWith t)
     Assert.Contains(CommandAccepted(CommandId.ofInt 1, a, { X = 4; Y = 4 }), bodies r)
-    Assert.Contains(MovementBlocked(a, { X = 0; Y = 0 }, { X = 4; Y = 4 }), bodies r)
+    Assert.Equal(Some(Unable(NoKnownRoute, [||])), (agentOf a r.State).Disposition)
+    Assert.DoesNotContain("movement-blocked", bodies r |> Array.map (fun b -> $"{b}"))
+    Assert.Equal(None, (agentOf a r.State).Destination)
+
+[<Fact>]
+let ``the Navigation phase still emits MovementBlocked for a Destination with no path`` () =
+    // Appraisal now catches an infeasible order before the Navigation phase,
+    // so MovementBlocked is only reachable for a Destination set outside the
+    // order pipeline. Pin the movement-phase logic directly.
+    let t = impassable [ 5, 4; 5, 6; 4, 5; 6, 5 ]
+    let a = agent 0
+
+    let w =
+        { worldWith t with
+            Agents =
+                (worldWith t).Agents
+                |> Array.map (fun x -> if x.Id = a then { x with Destination = Some { X = 5; Y = 5 } } else x) }
+
+    let r = stepIdle w
+    Assert.Contains(MovementBlocked(a, { X = 0; Y = 0 }, { X = 5; Y = 5 }), bodies r)
     Assert.Equal(None, (agentOf a r.State).Destination)
 
 [<Fact>]
@@ -828,7 +850,17 @@ let ``two friendlies, only one with line of sight to a hostile, share the contac
 [<Fact>]
 let ``a contact seen then lost drops a confidence band after StaleAfter and expires with ContactExpired after ExpireAfter`` () =
     let b: GridBounds = { Width = 40; Height = 6 }
-    let w = perceptionWorld b [ 0, { X = 2; Y = 1 } ] [ 1, { X = 6; Y = 3 } ] (Terrain.empty b)
+    let w0 = perceptionWorld b [ 0, { X = 2; Y = 1 } ] [ 1, { X = 6; Y = 3 } ] (Terrain.empty b)
+
+    // The eastward order runs the friendly past the observed hostile, which
+    // the Appraisal phase (TASK-028) treats as exposure. This test is about
+    // contact decay, not appraisal — give agent 0 the discipline to accept the
+    // order so it actually walks away.
+    let w =
+        { w0 with
+            Agents =
+                w0.Agents
+                |> Array.map (fun a -> if a.Id = agent 0 then { a with Discipline = 12 } else a) }
 
     // Walk the friendly far east, out of sight of the stationary hostile.
     let mutable st =
@@ -965,3 +997,133 @@ let ``an undelivered order does not cancel a destination the recipient already h
 
     Assert.Equal<_[]>([| (CommandId.ofInt 1, agent 2, UnableToCommunicate) |], undeliveredIn r)
     Assert.Equal(Some { X = 5; Y = 5 }, (agentOf (agent 2) r.State).Destination)
+
+// --- Order appraisal and typed reasons (TASK-028) --------------------
+
+/// A `16 x 16` world with the listed friendlies `(id, cell, discipline)` and
+/// hostiles `(id, cell)`. All agents share line of sight on the open grid, so a
+/// hostile within `PerceptionConfig.SightRange` is observed on the first tick
+/// (Perception at phase 3, before Appraisal at phase 5).
+let private appraisalWorld (friendly: (int * Cell * int) list) (hostile: (int * Cell) list) : WorldState =
+    let agents =
+        (friendly
+         |> List.map (fun (i, c, d) -> { Agent.create (agent i) Friendly c with Discipline = d }))
+        @ (hostile |> List.map (fun (i, c) -> Agent.create (agent i) Hostile c))
+
+    match World.create { Width = 16; Height = 16 } 1UL agents with
+    | Ok w -> w
+    | Error e -> failwith $"unexpected {e}"
+
+let private dispositionOf (id: AgentId) (r: StepResult) = (agentOf id r.State).Disposition
+
+let private appraisedIn (r: StepResult) =
+    bodies r
+    |> Array.choose (function
+        | OrderAppraised(a, c, d) -> Some(a, c, d)
+        | _ -> None)
+
+[<Fact>]
+let ``a clear-route order with no known threat is Accepted and Destination is written the same tick`` () =
+    let w = appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] []
+    let r = stepWith [| cmd 1 (agent 0) { X = 10; Y = 5 } |] w
+
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) r)
+    Assert.Equal(Some { X = 10; Y = 5 }, (agentOf (agent 0) r.State).Destination)
+    // Navigation (phase 7) runs after Appraisal (phase 5), so the agent steps
+    // one cell this tick — exactly the pre-TASK-028 delivered-order behaviour.
+    Assert.Equal({ X = 2; Y = 5 }, (agentOf (agent 0) r.State).Position)
+    Assert.Contains(OrderAppraised(agent 0, CommandId.ofInt 1, Accepted), bodies r)
+
+[<Fact>]
+let ``an order with no known route is Unable NoKnownRoute and no Destination is written`` () =
+    // Target (5,4) is ringed by impassable cells; agent 0 starts at (0,0).
+    let w = worldWith (impassable [ (4, 4); (6, 4); (5, 3); (5, 5) ])
+    let r = stepWith [| cmd 1 (agent 0) { X = 5; Y = 4 } |] w
+
+    Assert.Equal(Some(Unable(NoKnownRoute, [||])), dispositionOf (agent 0) r)
+    Assert.Equal(None, (agentOf (agent 0) r.State).Destination)
+    // The Navigation phase never sees a Destination, so no MovementBlocked.
+    Assert.DoesNotContain("movement-blocked", bodies r |> Array.map (fun b -> $"{b}"))
+
+[<Fact>]
+let ``appraisal never returns Accepted after a hard feasibility failure`` () =
+    // docs/09 section 2.2.
+    let w = worldWith (impassable [ (4, 4); (6, 4); (5, 3); (5, 5) ])
+    let r = stepWith [| cmd 1 (agent 0) { X = 5; Y = 4 } |] w
+
+    match dispositionOf (agent 0) r with
+    | Some Accepted -> Assert.Fail "appraisal Accepted an order with no known route"
+    | Some(Unable(NoKnownRoute, _)) -> ()
+    | other -> Assert.Fail($"expected Unable NoKnownRoute, got {other}")
+
+[<Fact>]
+let ``an order along a route exposed to a known threat is Refused for a low-discipline agent`` () =
+    // Friendly 0 (Discipline 1) at (5,10) ordered east to (14,10); hostile 5 at
+    // (9,3) is within SightRange (Chebyshev 7) so it is observed on tick 1, and
+    // every route cell lies within AppraisalConfig.ThreatEngagementRange of it.
+    let w = appraisalWorld [ 0, { X = 5; Y = 10 }, 1 ] [ 5, { X = 9; Y = 3 } ]
+    let r = stepWith [| cmd 1 (agent 0) { X = 14; Y = 10 } |] w
+
+    match dispositionOf (agent 0) r with
+    | Some(Refused(RouteTooExposed(Some threat), _)) -> Assert.Equal(agent 5, threat)
+    | other -> Assert.Fail($"expected Refused RouteTooExposed (Some agent 5), got {other}")
+
+    Assert.Equal(None, (agentOf (agent 0) r.State).Destination)
+    Assert.Equal({ X = 5; Y = 10 }, (agentOf (agent 0) r.State).Position)
+
+[<Fact>]
+let ``the same exposed order is Accepted for a high-discipline agent (the G3 divergence)`` () =
+    let refuse = appraisalWorld [ 0, { X = 5; Y = 10 }, 1 ] [ 5, { X = 9; Y = 3 } ]
+    let accept = appraisalWorld [ 0, { X = 5; Y = 10 }, 6 ] [ 5, { X = 9; Y = 3 } ]
+    let order = cmd 1 (agent 0) { X = 14; Y = 10 }
+
+    match dispositionOf (agent 0) (stepWith [| order |] refuse) with
+    | Some(Refused(RouteTooExposed _, _)) -> ()
+    | other -> Assert.Fail($"low discipline: expected Refused, got {other}")
+
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) (stepWith [| order |] accept))
+
+[<Fact>]
+let ``directional cover on the exposed route drops exposure below the threshold`` () =
+    // Same exposed order as above (low discipline), but every route cell has
+    // authored low cover against fire from the north (where the threat sits),
+    // so AppraisalConfig.CoverMitigationPerLevel negates the per-cell pressure.
+    let routeCells = [ for x in 5..14 -> { X = x; Y = 10 } ]
+
+    let cover =
+        routeCells
+        |> List.map (fun c -> ({ Cell = c; Direction = North; Level = 3 }: AuthoredCover))
+        |> List.toArray
+
+    let w =
+        { appraisalWorld [ 0, { X = 5; Y = 10 }, 1 ] [ 5, { X = 9; Y = 3 } ] with
+            Terrain = Terrain.build { Width = 16; Height = 16 } [||] cover }
+
+    let r = stepWith [| cmd 1 (agent 0) { X = 14; Y = 10 } |] w
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) r)
+
+[<Fact>]
+let ``an Accepted order is not re-appraised on a later idle tick`` () =
+    let mutable st = appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] []
+    let mutable appraisals = 0
+
+    for t in 1..5 do
+        let cmds = if t = 1 then [| cmd 1 (agent 0) { X = 6; Y = 5 } |] else [||]
+        let r = stepWith cmds st
+        appraisals <- appraisals + (appraisedIn r).Length
+        st <- r.State
+
+    Assert.Equal(1, appraisals)
+
+[<Fact>]
+let ``order appraisal is deterministic across two runs and draws no randomness`` () =
+    let run () =
+        stepWith
+            [| cmd 1 (agent 0) { X = 14; Y = 10 } |]
+            (appraisalWorld [ 0, { X = 5; Y = 10 }, 1 ] [ 5, { X = 9; Y = 3 } ])
+
+    let r1 = run ()
+    let r2 = run ()
+    Assert.True(bodies r1 = bodies r2)
+    Assert.Equal(r1.StateHash, r2.StateHash)
+    Assert.Equal(0UL, r1.State.Random.Draws)

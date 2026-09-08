@@ -431,10 +431,21 @@ excluded from `Canonical.encode` — and **`CommunicationAvailable: bool`**
 (TASK-027) — whether an order issued this tick reaches the agent (default
 `true`; an authored `false` is a comms blackout). `CommunicationAvailable` is
 **static authored data** at this stage, excluded from `Canonical.encode` like
-`Terrain` (section 17; the ADR-0002 amendment). Life and wound state, weapon
-and ammunition, current order and commitment, discipline, trust, stress,
-suppression, and execution state are not implemented yet; dynamic communication
-availability (range, jamming, radio-destroyed) is backlog B-016b.
+`Terrain` (section 17; the ADR-0002 amendment).
+
+Realised by TASK-028 (backlog B-017): **`Order: ReceivedOrder option`** (the
+delivered order — command, intent, issue tick, urgency, risk tolerance) and
+**`Disposition: OrderDisposition option`** (the Appraisal phase's outcome —
+`Accepted | Refused of reasons | Unable of reasons`). Both are **genuine
+per-tick canonical state** (they carry memory the current tick's positions
+cannot reproduce and survive ticks so appraisal is not re-run every tick), so
+under the ADR-0002 amendment they are in `Canonical.encode` and
+`Canonical.FormatVersion` bumped **3 -> 4**. **`Discipline: int`** (the
+stage-4 resolve trait) is added too but is **static authored data**
+(`Deployment.Discipline`), excluded from the image like `CommunicationAvailable`;
+dynamic discipline / trust / stress is B-021. Life and wound state, weapon and
+ammunition, commitment and execution state are still not implemented; dynamic
+communication availability is B-016b.
 
 ## 12. Tick phases
 
@@ -477,18 +488,20 @@ identity or commander model.
 - voice and radio delay may initially be zero when in range;
 - communication failure must be explicit, not silently ignored.
 
-Realised by TASK-027 (backlog B-016): `Simulation.communication`. For every
-order Command intake accepted this tick, in ascending `(recipient, command)`
-id order:
+Realised by TASK-027 (backlog B-016), reworked by TASK-028 (backlog B-017):
+`Simulation.communication`. For every order Command intake accepted this tick,
+in ascending `(recipient, command)` id order:
 
-- recipient `AgentState.CommunicationAvailable = true`: write `Destination`
-  (zero delivery delay — the order takes effect this tick). No success event:
-  `CommandAccepted` (at intake, carrying the destination cell) already records
-  it; an `OrderDelivered` event arrives with delayed delivery (backlog B-016b).
+- recipient `AgentState.CommunicationAvailable = true`: write
+  `AgentState.Order` (the whole `ReceivedOrder`) and reset
+  `AgentState.Disposition` to `None`. **Not** `Destination` — the Appraisal
+  phase (12.5) writes that on an `Accepted` order, still the same tick (zero
+  delivery delay). No success event (backlog B-016b).
 - recipient `CommunicationAvailable = false`: emit `OrderUndelivered` (reason
-  `UnableToCommunicate`) and **drop** the order. A `Destination` the recipient
-  already held is left untouched — an undelivered new order does not cancel an
-  order in progress (`docs/05` section 16 "Lost communication").
+  `UnableToCommunicate`) and **drop** the order — no `Order` is written. An
+  `Order` (and any `Destination` it produced) the recipient already held is
+  left untouched: an undelivered new order does not cancel an order in
+  progress (`docs/05` section 16 "Lost communication").
 
 `CommunicationAvailable` is **static authored scenario data** at this stage
 (`Deployment.CommunicationAvailable`, default `true`; an authored `false` is a
@@ -547,11 +560,54 @@ failure are B-016 / B-022; per-agent private beliefs are `docs/05` section 17.
 - reappraise only on material triggers, not every tick without need;
 - emit outcome and structured reasons.
 
+Realised by TASK-028 (backlog B-017): `Simulation.appraisal`, consuming the
+`Appraisal` leaf module (`src/CommandoWar.Sim/Appraisal.fs`). The Communication
+phase (12.2) now writes `AgentState.Order` (a `ReceivedOrder`) and resets
+`AgentState.Disposition` to `None`; the Appraisal phase judges every agent whose
+`Order` is set and `Disposition` is `None` — a fresh order, or one a superseding
+order reset. Stages (`docs/05` section 5):
+
+- **stage 1** (comprehension / authority) is guaranteed upstream — command
+  intake rejects a `Hostile` recipient and an out-of-bounds target, and the
+  Communication phase only writes `Order` for a recipient it reached — so it
+  has no code and no `DecisionReason`;
+- **stage 2** (feasibility) is `Pathfinding.findWithin`; no route -> `Unable`
+  with `DecisionReason.NoKnownRoute`;
+- **stage 3** (tactical viability) is route exposure to the *known* threats in
+  `WorldState.TacticalKnowledge` only (never authoritative hostile positions):
+  a sum, over the stage-2 route cells, of per-threat pressure — non-zero only
+  where the cell is within `AppraisalConfig.ThreatEngagementRange` Chebyshev
+  cells of the threat's last-known cell and in `Sight.visible` line of sight
+  from it, reduced by `Terrain.cover` on the edge the fire arrives from;
+- **stage 4** (resolve) compares that exposure to a bounded integer threshold
+  from `AgentState.Discipline` and the order's `RiskTolerance` / `Urgency`
+  (`AppraisalConfig`); `<=` -> `Accepted`, over -> `Refused` with
+  `DecisionReason.RouteTooExposed`;
+- **stage 5** (safer adaptation) is deferred (B-018): there is no `Adapted`
+  outcome and no route recomputation.
+
+On `Accepted` the phase writes `AgentState.Destination` (which the Navigation
+phase then follows, the same tick); on `Refused` / `Unable` it writes none.
+Every appraisal emits one `OrderAppraised` event (section 14), including the
+mundane `Accepted`. The only reappraisal trigger in scope is "a new order is
+received" (`docs/05` section 14); an already-appraised, unchanged order is a
+no-op that emits nothing ("reappraise only on material triggers"). Suppression,
+stress, trust, hysteresis, and the exposure-band / knowledge-change triggers
+are B-021; commitments and the finite executor are B-018. No PRNG draw.
+`AgentState.Order` and `AgentState.Disposition` are genuine per-tick canonical
+state — `Canonical.FormatVersion` bumped **3 -> 4** (section 17);
+`AgentState.Discipline` is static authored data and stays out of the image.
+
 ### 12.6 Commitment and local action
 
 - accepted orders create or update a commitment;
 - the executor chooses the next finite action within that commitment;
 - a small ordered interrupt table may supersede the normal action.
+
+Not realised (B-018). Until then the Appraisal phase writes
+`AgentState.Destination` on an `Accepted` order and the Navigation phase
+follows it directly — there is no commitment store, finite action executor, or
+interrupt table.
 
 ### 12.7 Navigation and movement
 
@@ -626,11 +682,13 @@ carries `Id`, `Recipients: AgentId list` (generalised from a single agent;
 multi-recipient one), `IssuedAtTick` (renamed from `IssueTick` — the tick the
 order was issued, distinct from the delivery tick and range-checked at
 command intake, section 2 / section 12.1), `Urgency` (`Routine | Immediate`)
-and `RiskTolerance` (`Cautious | Standard | Aggressive`). `Urgency`,
-`RiskTolerance`, and `IssuedAtTick` are **inert beyond validation** —
-`docs/05` section 5 stage 4 / section 14 name them as appraisal inputs, but
-appraisal (B-017) does not exist and nothing reads them yet. Still **out of
-this partial envelope**: issuer identity (not modelled — one player).
+and `RiskTolerance` (`Cautious | Standard | Aggressive`). `Urgency` and
+`RiskTolerance` are read by the Appraisal phase's stage-4 resolve threshold
+(TASK-028; `AppraisalConfig`), carried onto `AgentState.Order`; `IssuedAtTick`
+is stored on the order as provenance (staleness is still deferred — B-021).
+`PlayerIntent`, `Urgency`, and `RiskTolerance` moved to `Domain.fs` (TASK-028)
+so `AgentState.Order` can reference them. Still **out of this partial
+envelope**: issuer identity (not modelled — one player).
 
 **On-disk form realised by TASK-025 (backlog B-045).** The full accepted
 envelope now has a lossless serialisation:
@@ -676,10 +734,15 @@ observer * contact * at`** and **`ContactExpired of contact * lastKnownCell`**
 (TASK-026). `ContactObserved` fires on a new sighting only — the tick a
 contact enters an observer's `VisibleContacts` — never per tick while it stays
 visible. `ContactExpired` fires only when a contact is removed from the shared
-squad picture after `PerceptionConfig.ExpireAfter` unseen ticks. Within a
-tick, contact events are ordered after command outcomes and before movement
-outcomes (every `ContactObserved` in ascending `(observer, contact)` id order,
-then every `ContactExpired` in ascending contact id order).
+squad picture after `PerceptionConfig.ExpireAfter` unseen ticks. For "order
+appraisal outcome", **`OrderAppraised of agent * command * disposition`**
+(TASK-028) — emitted by the Appraisal phase for every appraisal, including a
+mundane `Accepted`, and never on a tick where an already-appraised order is
+unchanged. Within a tick, events are ordered: command outcomes (ascending
+command id), then `OrderUndelivered` (ascending `(recipient, command)`), then
+`ContactObserved` (ascending `(observer, contact)`) then `ContactExpired`
+(ascending contact id), then `OrderAppraised` (ascending agent id), then
+movement outcomes (ascending agent id) — the `Phases.order` sequence.
 
 ## 15. Render snapshot
 
@@ -786,10 +849,26 @@ TASK-027 note: `AgentState.CommunicationAvailable` (whether an order reaches an
 agent) is **not** written. At this stage it is static authored scenario data
 (`Deployment.CommunicationAvailable`), set once at tick 0 and never mutated
 during a run, so — like `Terrain` under the ADR-0002 amendment — it cannot
-diverge and stays out of the canonical image. `Canonical.FormatVersion` stays
-`3`. A comms-derived behaviour bug still surfaces in the hash within one tick
-via the recipient's `Position`. It enters the image and the format version
-bumps when B-016b makes comms availability per-tick mutable.
+diverge and stays out of the canonical image. A comms-derived behaviour bug
+still surfaces in the hash within one tick via the recipient's `Position`. It
+enters the image and the format version bumps when B-016b makes comms
+availability per-tick mutable.
+
+TASK-028 note: `writeAgent` gained an `AgentState.Order` section (present tag;
+command id, intent tag + target, issue tick, urgency, risk tolerance) and an
+`AgentState.Disposition` section (present tag; outcome tag; for `Refused` /
+`Unable` the primary `DecisionReason` and a supporting-reason list). Both carry
+per-tick memory no other field reproduces (an order's `IssuedAtTick`; a
+persisting `Refused` outcome and its structured reasons), so under the ADR-0002
+amendment they are in the canonical image and `Canonical.FormatVersion` bumped
+**3 -> 4**. `AgentState.Discipline` is **not** written — static authored data
+(`Deployment.Discipline`), the same call as `CommunicationAvailable`. The
+re-pin was behaviour-neutral for movement: every committed scenario issues at
+most one order per agent along a clear enemy-free route, except `blocked-goal`
+(now `Unable(NoKnownRoute)` at appraisal instead of `MovementBlocked` at
+navigation — same tick count, same event count). Tick counts are unchanged for
+every entry; event counts moved by exactly one `OrderAppraised` per order
+(TASK-028 ledger).
 
 ## 18. Save state
 
@@ -848,7 +927,13 @@ At minimum:
 - an accepted order writes `AgentState.Destination` only for a recipient with
   `CommunicationAvailable = true`; an order to a recipient with `false` writes
   no `Destination`, leaves any existing one untouched, and emits exactly one
-  `OrderUndelivered` (TASK-027; `DeterminismPropertyTests` property 7).
+  `OrderUndelivered` (TASK-027; `DeterminismPropertyTests` property 7);
+- the Appraisal phase writes `AgentState.Destination` for an order iff its
+  `Disposition` is `Accepted`; it never returns `Accepted` after a stage-2
+  feasibility failure; a `Refused` or `Unable` disposition carries at least one
+  structured `DecisionReason` (by construction — the DU cases hold it), and
+  an already-appraised, unchanged order is not re-appraised
+  (TASK-028; `DeterminismPropertyTests` property 8).
 
 ## 21. Authored scenario and content version
 

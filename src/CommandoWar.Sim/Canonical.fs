@@ -41,8 +41,23 @@ module Canonical =
     /// is empty at every checkpoint and the moved hashes are a byte-layout
     /// change, not a behaviour change (tick counts and event counts unchanged;
     /// TASK-026 ledger).
+    ///
+    /// 4 (TASK-028): `writeAgent` gained the `AgentState.Order` and
+    /// `AgentState.Disposition` sections (docs/04 section 12.5 order
+    /// appraisal). Both carry per-tick memory no other field reproduces — an
+    /// order's `IssuedAtTick` lives only in the command envelope, and a
+    /// `Refused` disposition persists with its structured reasons for an idle
+    /// agent — so under the ADR-0002 amendment they are in the canonical
+    /// image. `AgentState.Discipline` (TASK-028) is NOT written: it is static
+    /// authored scenario data, like `CommunicationAvailable`. Every scenario
+    /// pinned before this version issues at most one order per agent along a
+    /// clear enemy-free route (except `blocked-goal`, whose order is now
+    /// `Unable(NoKnownRoute)` at appraisal — same tick count, same event
+    /// count), so the moved hashes are a byte-layout change plus one
+    /// `OrderAppraised` event per order; tick counts are unchanged (TASK-028
+    /// ledger).
     [<Literal>]
-    let FormatVersion = 3
+    let FormatVersion = 4
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -94,6 +109,75 @@ module Canonical =
     // behaviour bug still surfaces in the hash within one tick via `Position`.
     // When B-016b makes comms availability per-tick mutable it enters the
     // image and `FormatVersion` bumps then.
+    //
+    // `AgentState.Discipline` (TASK-028) is likewise NOT written — static
+    // authored scenario data (`Deployment.Discipline`), the same argument as
+    // `CommunicationAvailable`. A discipline-driven behaviour difference
+    // surfaces in the hash within one tick via `Disposition` / `Position`.
+    // B-021 makes discipline dynamic and bumps `FormatVersion` then.
+    //
+    // `AgentState.Order` and `AgentState.Disposition` (TASK-028) ARE written:
+    // they carry per-tick memory no other field reproduces (an order's
+    // `IssuedAtTick`; a persisting `Refused` outcome and its reasons), so
+    // under the ADR-0002 amendment they are in the canonical image.
+
+    let private reasonCode (r: DecisionReason) : int =
+        match r with
+        | NoKnownRoute -> 0
+        | RouteTooExposed _ -> 1
+
+    let private writeReason (w: Writer) (r: DecisionReason) =
+        w.I32(reasonCode r)
+
+        match r with
+        | NoKnownRoute -> ()
+        | RouteTooExposed threat ->
+            match threat with
+            | None -> w.U8 0uy
+            | Some id ->
+                w.U8 1uy
+                w.I32(AgentId.value id)
+
+    let private writeDisposition (w: Writer) (d: OrderDisposition) =
+        match d with
+        | Accepted -> w.I32 0
+        | Refused(primary, supporting) ->
+            w.I32 1
+            writeReason w primary
+            w.I32 supporting.Length
+            for r in supporting do
+                writeReason w r
+        | Unable(primary, supporting) ->
+            w.I32 2
+            writeReason w primary
+            w.I32 supporting.Length
+            for r in supporting do
+                writeReason w r
+
+    let private writeOrder (w: Writer) (o: ReceivedOrder) =
+        w.I32(CommandId.value o.Command)
+
+        match o.Intent with
+        | MoveTo target ->
+            w.I32 0
+            w.I32 target.X
+            w.I32 target.Y
+
+        w.I64 o.IssuedAtTick
+
+        w.I32(
+            match o.Urgency with
+            | Routine -> 0
+            | Immediate -> 1
+        )
+
+        w.I32(
+            match o.RiskTolerance with
+            | Cautious -> 0
+            | Standard -> 1
+            | Aggressive -> 2
+        )
+
     let private writeAgent (w: Writer) (a: AgentState) =
         w.I32(AgentId.value a.Id)
         w.I32(sideCode a.Side)
@@ -107,6 +191,18 @@ module Canonical =
             w.U8 1uy
             w.I32 cell.X
             w.I32 cell.Y
+
+        match a.Order with
+        | None -> w.U8 0uy
+        | Some o ->
+            w.U8 1uy
+            writeOrder w o
+
+        match a.Disposition with
+        | None -> w.U8 0uy
+        | Some d ->
+            w.U8 1uy
+            writeDisposition w d
 
     // The friendly squad's shared tactical picture (TASK-026,
     // `WorldState.TacticalKnowledge`, docs/04 section 12.4). Genuine per-tick

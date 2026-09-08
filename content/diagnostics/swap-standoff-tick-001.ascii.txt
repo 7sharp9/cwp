@@ -38,7 +38,9 @@ overlays:
   path (4,3) -> (3,3): reached, cost 1
   obstructed (4,3): held by agent 1
   obstructed (3,3): held by agent 0
+  order appraisal (3,3): agent 0  accepted
+  order appraisal (4,3): agent 1  accepted
 
-events: command-accepted@(4,3); command-accepted@(3,3); movement-obstructed@(3,3),(4,3); movement-obstructed@(4,3),(3,3)
+events: command-accepted@(4,3); command-accepted@(3,3); order-appraised; order-appraised; movement-obstructed@(3,3),(4,3); movement-obstructed@(4,3),(3,3)
 
-tick 1 | hash 0x7EFEFA56056A1994 (format 3) | draws 0 | agents 2 | cover-edges 0 | events 4
+tick 1 | hash 0xC35F8FD177938F39 (format 4) | draws 0 | agents 2 | cover-edges 0 | events 6

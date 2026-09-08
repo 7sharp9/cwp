@@ -6,9 +6,9 @@ tick 1
   0 ........
   1 ........
   2 ........
-  3 ........
-  4 .@......
-  5 ........
+  3 .....#..
+  4 .@..#.#.
+  5 .....#..
   6 ........
   7 ........
 
@@ -30,11 +30,11 @@ legend:
 movement-cost: uniform
 
 agents:
-  agent 0  friendly  (1,4)  at rest  no-comms
+  agent 0  friendly  (1,4)  at rest
 
 overlays:
-  undelivered order (1,4): agent 0  command 1  (communication unavailable)
+  order appraisal (1,4): agent 0  unable no-known-route
 
-events: command-accepted@(6,4); order-undelivered
+events: command-accepted@(5,4); order-appraised
 
-tick 1 | hash 0xB473F28537FC2BB4 (format 4) | draws 0 | agents 1 | cover-edges 0 | events 2
+tick 1 | hash 0x241B614DE1FE66E4 (format 4) | draws 0 | agents 1 | cover-edges 0 | events 2

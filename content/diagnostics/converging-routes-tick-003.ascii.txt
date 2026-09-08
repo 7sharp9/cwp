@@ -37,7 +37,9 @@ overlays:
   path (3,0) -> (3,7): reached, cost 7
   path (0,3) -> (7,3): reached, cost 7
   reserved (3,3): agent 0 (until tick 3)
+  order appraisal (3,3): agent 0  accepted
+  order appraisal (2,3): agent 1  accepted
 
 events: movement-stepped@(3,2),(3,3); movement-yielded@(2,3),(3,3)
 
-tick 3 | hash 0xA05326D276394923 (format 3) | draws 0 | agents 2 | cover-edges 0 | events 2
+tick 3 | hash 0x741146CF0E0B2827 (format 4) | draws 0 | agents 2 | cover-edges 0 | events 2

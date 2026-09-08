@@ -83,8 +83,8 @@ module PathDemo =
           Width = bounds.Width
           Height = bounds.Height
           FriendlyDeployments =
-            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true }
-               { AgentId = 1; Cell = { X = 0; Y = 11 }; CommunicationAvailable = true } |]
+            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault }
+               { AgentId = 1; Cell = { X = 0; Y = 11 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
           EnemyDeployments = [||]
           ObjectiveAreas = [| { AreaId = "crossing"; Cell = { X = 15; Y = 0 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 15; Y = 11 } } |]

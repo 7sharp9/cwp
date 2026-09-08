@@ -32,13 +32,14 @@ content and none needs an on-disk format (backlog B-024).
 |---|---|
 | `spike-fixture` | The framework-spike shared fixture (`Fixture.initialState ()`, 32 x 32, seed 20260902): agent 3 ordered to (20,14). The same 40-value sequence as `content/fixtures/SPIKE-FIXTURE.md`; `CorpusTests.fs` cross-checks it against `Fixture.run ()` so it is not an independent re-pin. |
 | `wall-detour` | A single agent detouring around an impassable wall (`Pathfinding.findWithin`, `docs/04` section 8 steps 2, 4, 5): TASK-015's replan branch structure without needing to mutate terrain mid-run. |
-| `blocked-goal` | A single agent whose target is unreachable: `Pathfinding` returns `NoPath`, the executor emits `MovementBlocked`, and the destination is cleared (no retry). |
+| `blocked-goal` | A single agent whose target is unreachable: the Appraisal phase (12.5, TASK-028) runs `Pathfinding.findWithin` at stage 2, gets `NoPath`, and refuses the order `Unable(NoKnownRoute)` — no `Destination` is written and the agent never moves. `docs/09` section 2.2 "appraisal never returns `Accepted` after a hard feasibility failure"; `docs/05` section 16 "Physical inability". |
 | `converging-routes` | Two agents whose routes cross the same cell on the same tick: `Simulation.navigationAndMovement`'s same-tick reservation resolves the contest (TASK-017), the lower-remaining-route agent enters the cell, and the other yields one tick before catching up. |
 | `slow-terrain` | A single agent crossing one cell whose `Terrain.moveCost` (3) exceeds `Terrain.BaseMoveCost` (1): `AgentState.Progress` accumulates over two ticks before the agent enters the cell on the third (TASK-018 sub-cell movement progress); every other cell is entered in the usual single tick. |
 | `follow-chain` | Three agents in a line all ordered the same way, the lead with a free cell ahead: TASK-022's vacation-chain resolution advances the whole chain on the same tick, every tick, with no `MovementObstructed`. |
 | `swap-standoff` | Two agents each ordered onto the other's cell: a two-agent position swap is blocked (TASK-022), neither is ever a first mover, both emit `MovementObstructed` every tick and neither leaves its start cell. |
 | `perception-contact` | **The first entry with an enemy deployment** (TASK-026). One friendly at (1,5) ordered east to (9,5); one stationary hostile at (9,1) behind an opaque impassable wall at x=6, rows 0..3. The hostile is inside `PerceptionConfig.SightRange` from the start, but line of sight is blocked until the friendly clears the wall at tick 5 — then the Perception phase emits `ContactObserved` and the Tactical-knowledge phase adds the contact to `WorldState.TacticalKnowledge`. The "Unknown threat" shape (`docs/05` section 16). |
-| `lost-comms` | **The first entry exercising communication failure** (TASK-027, backlog B-016). One friendly agent 0 at (1,4) with `CommunicationAvailable = false` (an authored comms blackout) ordered east to (6,4). Command intake accepts the order (`CommandAccepted`), the Communication phase (12.2) cannot reach the recipient and emits `OrderUndelivered` (`UnableToCommunicate`), and the order is dropped: no `Destination` is written and the agent never moves. The "Lost communication" scenario (`docs/05` section 16). `CommunicationAvailable` is static authored data excluded from `Canonical.encode` (the `Terrain` precedent), so `Canonical.FormatVersion` stays 3 and the eight entries above are byte-identical. |
+| `lost-comms` | **The first entry exercising communication failure** (TASK-027, backlog B-016). One friendly agent 0 at (1,4) with `CommunicationAvailable = false` (an authored comms blackout) ordered east to (6,4). Command intake accepts the order (`CommandAccepted`), the Communication phase (12.2) cannot reach the recipient and emits `OrderUndelivered` (`UnableToCommunicate`), and the order is dropped: no `Destination` is written and the agent never moves. The "Lost communication" scenario (`docs/05` section 16). Because the order is dropped, no `AgentState.Order` is written and the Appraisal phase never runs on it — this is the one entry with no `OrderAppraised` event. |
+| `exposed-approach` | **The G3 evidence scenario** (TASK-028, backlog B-017; `docs/07` section 9 criterion 2). Two friendlies on open ground ordered along the same exposed approach past a stationary hostile the squad sees from the start: agent 0 (`Discipline 1`) at (1,3) → (11,3), agent 1 (`Discipline 6`) at (1,5) → (11,5). Both routes run the same distance past the known threat at (10,4), so the exposure is near-identical — the divergence is discipline alone: on tick 1 the Appraisal phase `Refuses` agent 0's order (`RouteTooExposed`, no `Destination`) and `Accepts` agent 1's. Two agents appraise the same intent differently for inspectable reasons. |
 
 ## Production replay-command format (TASK-025, backlog B-045)
 
@@ -55,13 +56,16 @@ serialised `WorldState`.
 |---|---|
 | `envelope-full` | A three-recipient `MoveTo` (agents 3, 4, 5), `Urgency = Immediate`, `RiskTolerance = Aggressive`, issued on tick 1 and delivered on tick 2, over the spike-fixture initial state (24 ticks). The envelope `.cwlog` cannot express. |
 
-**Re-pinned by TASK-026** (`Canonical.FormatVersion` 2 -> 3, tactical-knowledge
-section added to `Canonical.encode`): `envelope-full.cwreplay`'s `canonical`
-line, `initial-hash`, and 24 `checkpoint` hashes, and `envelope-full.md`, all
-moved. The spike-fixture initial state is enemy-free, so this is a byte-layout
-re-pin: the command, the 24 ticks, and the 72 domain events are unchanged.
+**Re-pinned by TASK-028** (`Canonical.FormatVersion` 3 -> 4, `AgentState.Order`
+/ `AgentState.Disposition` sections added to `Canonical.encode`):
+`envelope-full.cwreplay`'s `canonical` line, `initial-hash`, and 24
+`checkpoint` hashes, and `envelope-full.md`, all moved. The spike-fixture
+initial state is enemy-free, so all three recipients `Accept` at appraisal: the
+command and the 24 ticks are unchanged, and the only behaviour change is one
+`OrderAppraised` event per recipient (72 -> 75 domain events).
 `ReplaySerialisation.parse` rejects a `canonical` value that does not match the
 build, so the data file had to move even though no serialisation code changed.
+(Previously re-pinned by TASK-026 for the 2 -> 3 tactical-knowledge bump.)
 
 `envelope-full.cwreplay` carries its own per-tick `checkpoint` hashes;
 `envelope-full.md` is the same table in the shape above.

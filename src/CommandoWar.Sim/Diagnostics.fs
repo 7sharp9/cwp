@@ -105,17 +105,20 @@ type EventMarker =
 ///   * B-047 cell occupancy  -> `Obstructed` (realised by TASK-022);
 ///   * B-015 perception      -> `KnownContact` (realised by TASK-026);
 ///   * B-016 communication    -> `UndeliveredOrder` (realised by TASK-027);
+///   * B-017 appraisal       -> `OrderAppraisal` (realised by TASK-028);
 ///   * B-019 combat          -> a fire-line case (shooter, target).
 ///
 /// B-019 does not exist yet: no such case is defined.
 /// `Diagnostics.frame` produces one `KnownContact` per contact in
-/// `WorldState.TacticalKnowledge` (bare authoritative state carries the squad
-/// picture, so `frame` can draw it — unlike `Reserved` / `Obstructed`, which
-/// need a completed step). `Diagnostics.frameOf` produces the same
-/// `KnownContact` set plus one `PlannedPath` per agent following a route
-/// (TASK-015), one `Reserved` per cell contested this tick (TASK-017), one
-/// `Obstructed` per cell an agent was held out of this tick (TASK-022), and
-/// one `UndeliveredOrder` per recipient an order failed to reach this tick
+/// `WorldState.TacticalKnowledge` and one `OrderAppraisal` per agent that
+/// holds an appraised order (bare authoritative state carries the squad
+/// picture and the per-agent order / disposition, so `frame` can draw both —
+/// unlike `Reserved` / `Obstructed`, which need a completed step).
+/// `Diagnostics.frameOf` produces the same `KnownContact` and `OrderAppraisal`
+/// sets plus one `PlannedPath` per agent following a route (TASK-015), one
+/// `Reserved` per cell contested this tick (TASK-017), one `Obstructed` per
+/// cell an agent was held out of this tick (TASK-022), and one
+/// `UndeliveredOrder` per recipient an order failed to reach this tick
 /// (TASK-027); every other overlay is populated by a caller (a test, or
 /// `cwheadless render --los` / `--path`). `Cells` is the generic
 /// non-speculative shape: a labelled set of cells a renderer can always fall
@@ -170,6 +173,17 @@ type Overlay =
     /// emits one (an undelivered order is a this-tick event, not standing
     /// state — the `Reserved` / `Obstructed` precedent).
     | UndeliveredOrder of recipient: AgentId * at: Cell * command: CommandId
+    /// The Appraisal phase's outcome for one agent's current order (TASK-028,
+    /// `docs/04` section 12.5): `agent` at `at` holds `disposition` for its
+    /// order, and `exposedCells` are the candidate-route cells that carry
+    /// non-zero pressure from a known threat (empty for `Unable` or an order
+    /// with no known threat on its route — recomputed from the agent's current
+    /// `Position` via `Appraisal.appraise`, so for an `Accepted` agent that
+    /// has moved it is the *remaining* exposed stretch). Both
+    /// `Diagnostics.frame` and `Diagnostics.frameOf` derive one per agent
+    /// whose `Order` and `Disposition` are both `Some` — the appraisal outcome
+    /// is standing canonical state, like `KnownContact`.
+    | OrderAppraisal of agent: AgentId * at: Cell * disposition: OrderDisposition * exposedCells: Cell[]
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -249,6 +263,7 @@ module Diagnostics =
         | CommandRejected(_, IssueTickOutOfRange _) -> { Kind = "command-rejected"; Cells = [||] }
         | CommandRejected(_, TargetOutOfBounds target) -> { Kind = "command-rejected"; Cells = [| target |] }
         | OrderUndelivered _ -> { Kind = "order-undelivered"; Cells = [||] }
+        | OrderAppraised _ -> { Kind = "order-appraised"; Cells = [||] }
         | MovementStepped(_, from, into) -> { Kind = "movement-stepped"; Cells = [| from; into |] }
         | MovementCompleted(_, at) -> { Kind = "movement-completed"; Cells = [| at |] }
         | MovementBlocked(_, at, target) -> { Kind = "movement-blocked"; Cells = [| at; target |] }
@@ -267,6 +282,29 @@ module Diagnostics =
         |> Array.sortBy (fun c -> c.Contact)
         |> Array.map (fun c -> KnownContact(c.LastKnownCell, c.Contact, c.Confidence, c.LastSeenTick))
 
+    /// An `OrderAppraisal` overlay per agent whose `Order` and `Disposition`
+    /// are both `Some` (TASK-028), ascending by agent id. The appraisal
+    /// outcome is standing canonical `AgentState` state, so both `frame` and
+    /// `frameOf` derive this — the `KnownContact` precedent. `exposedCells` is
+    /// recomputed from the agent's current `Position` via `Appraisal.appraise`
+    /// (a pure leaf call, no mutation); the overlay reports the **stored**
+    /// disposition, which for an `Accepted` agent that has moved may no longer
+    /// match a fresh appraisal (the reappraisal triggers that would update it
+    /// are B-021).
+    let private orderAppraisalOverlays (world: WorldState) : Overlay[] =
+        let budget = world.Bounds.Width * world.Bounds.Height
+
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.choose (fun a ->
+            match a.Order, a.Disposition with
+            | Some o, Some d ->
+                let _, exposed =
+                    Appraisal.appraise world.Terrain world.TacticalKnowledge a.Discipline o a.Position budget
+
+                Some(OrderAppraisal(a.Id, a.Position, d, exposed))
+            | _ -> None)
+
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
     /// (a bare `WorldState` carries no per-tick event history); use
@@ -279,7 +317,7 @@ module Diagnostics =
           Edges = coverEdges world
           Agents = agentMarkers world
           Events = [||]
-          Overlays = knownContactOverlays world
+          Overlays = Array.append (knownContactOverlays world) (orderAppraisalOverlays world)
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
 
@@ -310,6 +348,7 @@ module Diagnostics =
             | CommandAccepted _
             | CommandRejected _
             | OrderUndelivered _
+            | OrderAppraised _
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
@@ -332,6 +371,7 @@ module Diagnostics =
             | CommandAccepted _
             | CommandRejected _
             | OrderUndelivered _
+            | OrderAppraised _
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
@@ -355,6 +395,7 @@ module Diagnostics =
             | OrderUndelivered(command, recipient, _) -> Some(recipient, command)
             | CommandAccepted _
             | CommandRejected _
+            | OrderAppraised _
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
@@ -385,5 +426,6 @@ module Diagnostics =
                       reservationOverlays result
                       obstructionOverlays result
                       undeliveredOrderOverlays result
-                      knownContactOverlays result.State ]
+                      knownContactOverlays result.State
+                      orderAppraisalOverlays result.State ]
             Hash = result.StateHash }

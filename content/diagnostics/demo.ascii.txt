@@ -36,4 +36,4 @@ agents:
 
 events: none
 
-tick 0 | hash 0x57CDAA89331C5662 (format 3) | draws 0 | agents 3 | cover-edges 3 | events 0
+tick 0 | hash 0xF788BBA1FA246E7D (format 4) | draws 0 | agents 3 | cover-edges 3 | events 0

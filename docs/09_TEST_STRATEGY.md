@@ -60,6 +60,19 @@ deterministic across two runs. `CanonicalHashTests.fs` pins that
 changes neither the encoding nor the hash) while the order it suppresses
 changes the hash within one tick via `Position`.
 
+**Appraisal stage outcomes — realised (TASK-028, backlog B-017):**
+`SimulationTests.fs` covers the `docs/04` section 12.5 / `docs/05` section 5
+staged appraisal — a clear-route enemy-free order is `Accepted` and
+`Destination` is written the same tick; an order with no path is
+`Unable(NoKnownRoute)` and writes no `Destination` (no `MovementBlocked`); an
+order along a route exposed to a known threat is `Refused(RouteTooExposed)` for
+a low-`Discipline` agent and `Accepted` for a high-`Discipline` one (the G3
+divergence); directional cover on the exposed cells drops the exposure below
+the threshold and the low-`Discipline` agent then `Accepts`; an `Accepted`
+order is not re-appraised on a later idle tick; appraisal is deterministic and
+draws no randomness. `CanonicalHashTests.fs` pins `Canonical.FormatVersion = 4`
+and that `Discipline` is outside the canonical image.
+
 ### 2.2 Property tests
 
 Use FsCheck or an equivalent F# property-testing library for invariants such as:
@@ -100,9 +113,17 @@ never decreases while the contact survives. TASK-027 added a seventh (over
 `CommunicationAvailable = false` agent never holds a `Destination` and never
 leaves its start cell, every `OrderUndelivered` names a blacked-out recipient
 and pairs with a same-tick `CommandAccepted`, and no comms-available agent is
-ever reported undelivered. The remaining items name systems not yet
-implemented (vehicles, commitments, death, canonical serialization
-round-trip, appraisal, objectives) and stay proposed.
+ever reported undelivered. TASK-028 added an eighth (`MaxTest = 200`, over a
+generator that places 1–3 friendlies + 1–2 hostiles and a random `Discipline`
+per friendly): every `AgentState.Disposition` after a tick is consistent —
+`Refused` / `Unable` write no `Destination`; `Accepted` writes `Destination`
+(or the agent is on the target) and its route is still reachable; an
+`Unable(NoKnownRoute)` target is still unreachable; a `Disposition` is `Some`
+only when the agent holds an `Order`; every `OrderAppraised` event matches the
+emitting tick's stored disposition; and no appraisal draws from the
+deterministic stream. The remaining items name systems not yet implemented
+(vehicles, commitments, death, canonical serialization round-trip, objectives)
+and stay proposed.
 
 Randomly generated cases must print the reduced counterexample and seed.
 
@@ -126,6 +147,15 @@ Partially realised for the choke-point item by the replay corpus
 contend for one cell and one yields) and `follow-chain` / `swap-standoff`
 (TASK-022, a vacation chain that resolves each tick and a two-agent swap that
 deadlocks with both agents emitting `MovementObstructed`).
+
+Realised for **"exposed-road refusal"** by TASK-028: the `exposed-approach`
+corpus entry and the `SimulationTests` appraisal facts (section 2.1) — an order
+along a route past a known machine-gun position is `Refused(RouteTooExposed)`
+for a low-`Discipline` agent. **"covered route adapts accepted order"** is
+partial: TASK-028 realises the *cover mitigation* term (directional
+`Terrain.cover` drops the exposure so the order is `Accepted`), but there is no
+`Adapted` outcome or route recomputation — that is B-018. **"suppression
+reverses refusal"** needs B-020 / B-021.
 
 Partially realised for **"radio loss prevents immediate knowledge
 propagation"** by TASK-027: the `lost-comms` corpus entry

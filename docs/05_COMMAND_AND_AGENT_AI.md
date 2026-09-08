@@ -110,6 +110,18 @@ Break contact and move toward a safer destination. It may receive priority under
 
 Appraisal is staged, not one opaque weighted sum.
 
+Realised by TASK-028 (backlog B-017): `Simulation.appraisal` (`docs/04` section
+12.5) over the `Appraisal` leaf module. Stage 1 is guaranteed upstream (see
+below). Stage 2 is `Pathfinding.findWithin`. Stage 3 is route exposure to the
+*known* threats in `WorldState.TacticalKnowledge` — engagement range, line of
+sight from the threat's last-known cell, and directional `Terrain.cover` — the
+only stage-3 term realised; fire lanes, ally support, suppression, and wounds
+are B-019 / B-020 / B-021. Stage 4 compares that exposure to a threshold from
+`AgentState.Discipline` and the order's `RiskTolerance` / `Urgency` only (trust,
+stress, suppression are B-021). Stage 5 is deferred (B-018): no `Adapted`
+outcome. Every threshold is an integer literal in one `AppraisalConfig` module
+(section 15).
+
 ### Stage 1: comprehension and authority
 
 - Was the order received?
@@ -185,6 +197,15 @@ type OrderDisposition =
 
 Every non-trivial outcome includes one primary reason and optional supporting reasons.
 
+Realised by TASK-028 (backlog B-017) as the subset
+`Accepted | Refused of primary * supporting | Unable of primary * supporting`
+in `CommandoWar.Sim` — `Refused` and `Unable` carry their `DecisionReason`s **by
+construction**, so the "one primary reason" rule holds without a side check.
+`Adapted` (stage 5) is B-018 and `Delayed` (a `ResumeCondition` mechanism) is
+B-021 — neither has a case yet, and `TacticalAdaptation` / `ResumeCondition` do
+not exist. Every appraisal, including `Accepted`, emits one `OrderAppraised`
+event carrying the `OrderDisposition` (`docs/04` section 14).
+
 ### Accepted
 
 The agent commits to the order as issued.
@@ -229,11 +250,28 @@ type DecisionReason =
 
 Do not add prose-only reasons. UI text is derived from structured values.
 
+Realised by TASK-028 (backlog B-017) as the subset
+`NoKnownRoute | RouteTooExposed of threat: AgentId option` — the only two the
+staged checks in scope can produce. The doc's `ContactId` is `AgentId` in the
+code (there is no `ContactId` type). `UnableToCommunicate` stays a
+`DeliveryFailure` case (TASK-027) — an undelivered order never reaches
+appraisal. The rest (`RouteBlocked`, `HeavySuppression`, `CriticallyWounded`,
+`MissingCapability`, `InsufficientAmmunition`, `TargetNotKnown`,
+`IssuerNotRecognised`, `ImmediateThreat`, `UnsupportedAssault`) arrive with the
+systems that can trigger them — B-019 / B-020 / B-021 / B-030 — rather than as
+speculative type machinery now (`AGENTS.md`).
+
 ## 8. Minimal psychological model
 
 ### Discipline
 
 Stable trait influencing willingness to maintain a valid commitment under pressure.
+
+Realised by TASK-028 (backlog B-017): `AgentState.Discipline`, a non-negative
+integer set once from `Deployment.Discipline` (default
+`AppraisalConfig.DisciplineDefault`) and read only by the stage-4 resolve
+threshold. Static authored data at this stage — dynamic discipline (and stress
+/ trust) is B-021.
 
 ### Trust
 
@@ -357,6 +395,14 @@ A structured record containing:
 
 The player-facing explanation must be derivable from the actual decision data, not generated independently.
 
+Realised so far (TASK-028, backlog B-017): the `OrderAppraised` event carries
+the full `OrderDisposition` (outcome + structured reasons), and the
+`Diagnostics` `OrderAppraisal` overlay carries the outcome plus the exposed
+route cells the stage-3 exposure sum found — enough for the headless developer
+overlay to explain any appraisal (`docs/07` section 9 criterion 11). A separate
+persisted trace record (appraisal version, every pressure and threshold term)
+is a later refinement.
+
 ## 14. Reappraisal triggers
 
 Reappraise only when:
@@ -370,6 +416,15 @@ Reappraise only when:
 - the route becomes blocked;
 - communication or leadership materially changes.
 
+Realised by TASK-028 (backlog B-017): **"a new order is received"** only — the
+Communication phase resets `AgentState.Disposition` to `None` when it writes a
+fresh `AgentState.Order`, and the Appraisal phase judges exactly the agents
+whose `Disposition` is `None`. The knowledge-change, exposure-band,
+suppression-band, wounded, support, and leadership triggers are B-021; "the
+route becomes blocked" cannot fire for an appraisal-`Accepted` order under
+static terrain (its route was verified at stage 2), so it too waits for B-021's
+persistent-obstruction handling.
+
 This improves stability and makes decisions easier to trace.
 
 ## 15. Tuning rules
@@ -381,11 +436,28 @@ This improves stability and makes decisions easier to trace.
 - Use hysteresis when entering and leaving panic, suppression, or delay states.
 - Treat random variation as a last resort and bound it so identical tactical situations remain broadly predictable.
 
+Realised by TASK-028 (backlog B-017): `AppraisalConfig`
+(`src/CommandoWar.Sim/Appraisal.fs`) is the one configuration structure — a
+`[<RequireQualifiedAccess>]` module of `[<Literal>]` integers (engagement
+range, per-cell exposure weight, cover mitigation, base resolve, and the
+Discipline / RiskTolerance / Urgency modifiers), the `PerceptionConfig`
+precedent. All appraisal arithmetic is integer; appraisal draws no randomness
+(B-019 combat spread stays the deterministic stream's first gameplay consumer).
+Hysteresis has nothing to act on until B-021 adds an exposure-band reappraisal
+trigger, so its constant lands then.
+
 ## 16. Vertical-slice scenarios for tests
 
 ### Exposed road
 
 An assault route crosses a known machine-gun lane. A low-discipline, suppressed soldier delays. After suppression begins, the order becomes acceptable.
+
+Partially realised by TASK-028 (backlog B-017): the `exposed-approach` corpus
+entry and the `SimulationTests` "exposed route ... Refused for a low-discipline
+agent" fact deliver the refusal half — a low-`Discipline` agent `Refused
+RouteTooExposed`, a high-`Discipline` one `Accepted` on the same order (the G3
+divergence, `docs/07` section 9 criterion 2). `Delayed` and "suppression makes
+it acceptable" are B-020 / B-021.
 
 ### Covered alternative
 

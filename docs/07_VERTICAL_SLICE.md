@@ -149,6 +149,15 @@ The mission layout must reliably support this test sequence:
 
 This sequence must be testable headlessly before presentation polish begins.
 
+Partially realised by TASK-028 (backlog B-017): steps 1–3 land as the
+`exposed-approach` corpus entry — the player orders two soldiers across an
+approach past an observed machine-gun position, and the Appraisal phase
+`Refuses` the low-`Discipline` one with `DecisionReason.RouteTooExposed` (and
+`Accepts` the high-`Discipline` one — criterion 2). Steps 4–8 (the UI
+explanation, the suppress / reroute response, recalculation, and consistent
+re-acceptance) need commitments (B-018), suppression (B-020), reappraisal
+triggers (B-021), and enemy doctrine (B-022); the full sequence is B-023.
+
 ## 9. Functional acceptance criteria
 
 The slice is feature-complete only when:

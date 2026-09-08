@@ -105,12 +105,12 @@ let ``adding terrain to a world does not change its canonical encoding or hash``
     Assert.Equal<byte[]>(Canonical.encode world, Canonical.encode withTerrain)
     Assert.Equal(Hashing.hash world, Hashing.hash withTerrain)
     // The pinned shared-fixture initial hash is unmoved either way.
-    Assert.Equal(0x50BFA007EDFC42FEUL, (Hashing.hash withTerrain).Value)
+    Assert.Equal(0x55F43D66C7AECB7FUL, (Hashing.hash withTerrain).Value)
 
 [<Fact>]
 let ``a world built with an empty terrain still reaches the pinned fixture hashes`` () =
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x50BFA007EDFC42FEUL, (Hashing.hash (Fixture.initialState ())).Value)
-        Assert.Equal(0xD9D6EC3DDC1D602FUL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0x55F43D66C7AECB7FUL, (Hashing.hash (Fixture.initialState ())).Value)
+        Assert.Equal(0x7737282578E821C6UL, (Hashing.hash outcome.FinalState).Value)
