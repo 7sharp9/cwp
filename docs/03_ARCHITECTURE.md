@@ -141,6 +141,15 @@ Every tick uses a visible, fixed order:
 
 Changing phase order is an architectural decision because it changes outcomes. Record it in an ADR and update replay fixtures.
 
+Realised so far (`src/CommandoWar.Sim/Simulation.fs`, `Phases.order`): step 1
+(TASK-020 / TASK-024), step 2 — "apply communication and order delivery" —
+TASK-027: command intake records an accepted order as a pending order and the
+Communication phase delivers it (writes `AgentState.Destination`) to a
+recipient with `CommunicationAvailable = true`, or emits `OrderUndelivered` and
+drops it for one that cannot be reached; steps 3–4 (TASK-026), steps 7–8
+(TASK-015 / TASK-017 / TASK-018 / TASK-022), step 13 (ongoing), step 14
+(TASK-003). Steps 5–6 and 9–12 are still no-ops.
+
 ## 8. Module layout inside the simulation project
 
 F# compile order should make dependency direction explicit. A likely starting order is:

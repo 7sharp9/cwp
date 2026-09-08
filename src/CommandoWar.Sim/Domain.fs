@@ -100,7 +100,28 @@ type AgentState =
       /// `VisibleContacts`, so it cannot diverge and is **excluded** from
       /// `Canonical.encode` (`docs/04` section 17). Empty at rest and for an
       /// agent with no opposing agent in sight range and line of sight.
-      VisibleContacts: AgentId[] }
+      VisibleContacts: AgentId[]
+      /// Whether an order issued this tick reaches this agent (TASK-027,
+      /// backlog B-016; `docs/04` section 11 "communication availability",
+      /// section 12.2). The Communication phase writes `Destination` for a
+      /// recipient with `CommunicationAvailable = true` and emits
+      /// `OrderUndelivered` for one with `false`.
+      ///
+      /// **Static authoritative data at this stage**: set once from the
+      /// authored scenario (`Deployment.CommunicationAvailable`, default
+      /// `true`) and never mutated during a run — an authored "comms
+      /// blackout", not a dynamic radio model. Like `WorldState.Terrain` it is
+      /// therefore **excluded** from `Canonical.encode` (`docs/04` section 17;
+      /// the ADR-0002 amendment "Static authoritative data and the canonical
+      /// image"): both runs load the identical value at tick 0 and it cannot
+      /// diverge, so hashing it would move every pinned fixture hash for a
+      /// constant. A comms-derived behaviour bug still surfaces in the hash
+      /// within one tick through the recipient's `Position`. Radio range,
+      /// delivery delay, dynamic jamming, and radio-destroyed are B-016b; when
+      /// comms availability becomes per-tick mutable that task bumps
+      /// `Canonical.FormatVersion` and adds it to the image, exactly as the
+      /// amendment specifies for `Terrain`.
+      CommunicationAvailable: bool }
 
 /// Minimal authoritative world state: an integer tick, the logical grid
 /// bounds, the authoritative terrain grid, the agents ordered by ascending
@@ -141,7 +162,9 @@ type WorldState =
 module Agent =
 
     /// Creates an agent at rest (no destination, no route, no progress, no
-    /// visible contacts) at the given position.
+    /// visible contacts, communication available) at the given position.
+    /// `World.ofScenario` overrides `CommunicationAvailable` from the authored
+    /// deployment; every other construction path takes the default `true`.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -149,4 +172,5 @@ module Agent =
           Progress = 0
           Destination = None
           Route = None
-          VisibleContacts = [||] }
+          VisibleContacts = [||]
+          CommunicationAvailable = true }

@@ -113,7 +113,9 @@ module World =
         let agents =
             Array.append scenario.FriendlyDeployments scenario.EnemyDeployments
             |> Array.sortBy (fun d -> d.Agent)
-            |> Array.map (fun d -> Agent.create d.Agent d.Side d.Cell)
+            |> Array.map (fun d ->
+                { Agent.create d.Agent d.Side d.Cell with
+                    CommunicationAvailable = d.CommunicationAvailable })
             |> Array.toList
 
         build scenario.Map scenario.Terrain seed agents
@@ -138,8 +140,8 @@ module Setup =
 module Simulation =
 
     /// Mutable-but-contained accumulator for one step. It never escapes
-    /// `step`; the input `WorldState` is never mutated (both command intake
-    /// and movement copy the agent array before writing).
+    /// `step`; the input `WorldState` is never mutated (command intake,
+    /// communication, and movement copy the agent array before writing).
     type private StepState =
         { Tick: int64
           Bounds: GridBounds
@@ -147,6 +149,16 @@ module Simulation =
           /// the Navigation and movement phase reads it for pathfinding.
           Terrain: Terrain
           mutable Agents: AgentState[]
+          /// Orders accepted by Command intake this tick and not yet delivered
+          /// to their recipients, as `(command, recipient, target)` (TASK-027,
+          /// backlog B-016). Populated by `commandIntake`, drained by
+          /// `communication` in the same tick: a reachable recipient's
+          /// `Destination` is written, an unreachable one gets an
+          /// `OrderUndelivered` event. Zero delivery delay, so this list never
+          /// survives past the Communication phase and is not canonical state
+          /// (`docs/04` section 12.2; TASK-024 "`WorldState` holds no command
+          /// history"). Delayed delivery is backlog B-016b.
+          mutable PendingOrders: (CommandId * AgentId * Cell) list
           /// The friendly squad's shared tactical picture, carried in from the
           /// input `WorldState` and rewritten by the Tactical-knowledge phase
           /// (TASK-026). Genuine per-tick canonical state.
@@ -202,23 +214,30 @@ module Simulation =
     //   3. per-recipient checks in ascending AgentId order regardless of
     //      authoring order (stable entity ordering): unknown agent
     //      (UnknownAgent) -> hostile-side agent (UnauthorisedRecipient) ->
-    //      accept. CommandAccepted is emitted BEFORE the destination is
-    //      written, per 12.1.
+    //      accept. CommandAccepted is emitted here, at acceptance, BEFORE the
+    //      destination reaches the agent, per 12.1.
+    //
+    // TASK-027 (backlog B-016): command intake no longer writes
+    // AgentState.Destination. An accepted (command, recipient, target) is
+    // RECORDED as a pending order (s.PendingOrders); the Communication phase
+    // (12.2), which runs next, DELIVERS it — writes Destination for a recipient
+    // whose CommunicationAvailable is true, or emits OrderUndelivered for one
+    // that cannot be reached. An accepted order therefore takes effect one
+    // phase later, still the SAME tick when communication is available (zero
+    // delivery delay). Nothing in Phases.order runs between Command intake and
+    // Communication, so this split changes no observable end-of-tick state for
+    // a comms-available recipient.
     //
     // The delivery tick (RecordedCommand.Tick in Replay.fs) and the envelope's
     // IssuedAtTick are independent concepts: the caller / replay runner owns
     // when a command reaches this phase; IssuedAtTick only records when it was
     // issued. The legacy .cwlog format collapses the two to its single field.
     //
-    // The agent array is copied once per phase invocation, not once per
-    // accepted command (content/benchmarks/BASELINE.md recorded the old
-    // per-command Array.copy as an O(n^2) allocation hot spot). Agent identity
-    // and array order are stable within command intake — only Destination is
-    // written, no agent is added or removed — so one AgentId -> index map
-    // stays valid for the whole batch, and a later command still sees an
-    // earlier command's applied destination.
+    // No agent array copy: this phase reads s.Agents (for the AgentId -> index
+    // map and the hostile-side check) but never mutates it. Agent identity and
+    // order are stable, so one index map is valid for the whole batch.
     let private commandIntake (commands: PlayerCommand list) (s: StepState) =
-        let agents = Array.copy s.Agents
+        let agents = s.Agents
 
         let indexOf: Map<AgentId, int> =
             agents |> Array.mapi (fun i a -> a.Id, i) |> Map.ofArray
@@ -228,6 +247,8 @@ module Simulation =
             |> List.countBy (fun c -> c.Id)
             |> List.choose (fun (id, n) -> if n > 1 then Some id else None)
             |> Set.ofList
+
+        let pending = ResizeArray<CommandId * AgentId * Cell>()
 
         for cmd in commands do
             if Set.contains cmd.Id duplicatedIds then
@@ -250,11 +271,63 @@ module Simulation =
                                 | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
                                 | Some idx when agents.[idx].Side = Hostile ->
                                     emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
-                                | Some idx ->
+                                | Some _ ->
                                     emit (CommandAccepted(cmd.Id, recipient, target)) s
-                                    agents.[idx] <- { agents.[idx] with Destination = Some target }
+                                    pending.Add(cmd.Id, recipient, target)
 
-        s.Agents <- agents
+        s.PendingOrders <- List.ofSeq pending
+
+    // --- Phase: communication --------------------------------------------
+    // Realised by TASK-027 (backlog B-016). Turns the docs/04 section 12.2
+    // no-op into a real phase: "determine which recipients receive an order
+    // this tick ... communication failure must be explicit, not silently
+    // ignored". For every order Command intake accepted this tick
+    // (s.PendingOrders), in ascending (recipient, command) id order:
+    //
+    //   * recipient CommunicationAvailable = true  -> write Destination (the
+    //     copy-before-write idiom). Zero delivery delay: the order takes
+    //     effect this tick. No success event — CommandAccepted (at intake,
+    //     carrying the destination cell) already records it; an OrderDelivered
+    //     event arrives with delayed delivery (backlog B-016b).
+    //   * recipient CommunicationAvailable = false -> emit OrderUndelivered
+    //     (reason UnableToCommunicate) and DROP the order. A Destination the
+    //     recipient already held is left untouched: an undelivered new order
+    //     does not cancel an order in progress (docs/05 section 16 "Lost
+    //     communication" — the trace shows communication failure, not
+    //     disobedience).
+    //
+    // CommunicationAvailable is STATIC authored scenario data at this stage
+    // (Deployment.CommunicationAvailable), excluded from Canonical.encode like
+    // Terrain (ADR-0002 amendment). Radio range, non-zero delay, dynamic
+    // jamming, and radio-destroyed are backlog B-016b; that task makes comms
+    // availability per-tick mutable and bumps Canonical.FormatVersion then.
+    // This phase draws nothing from the deterministic stream.
+    let private communication (s: StepState) =
+        match s.PendingOrders with
+        | [] -> ()
+        | orders ->
+            let agents = Array.copy s.Agents
+
+            let indexOf: Map<AgentId, int> =
+                agents |> Array.mapi (fun i a -> a.Id, i) |> Map.ofArray
+
+            let ordered =
+                orders
+                |> List.sortBy (fun (cmd, recipient, _) -> AgentId.value recipient, CommandId.value cmd)
+
+            for cmd, recipient, target in ordered do
+                // Command intake already rejected an unknown recipient
+                // (UnknownAgent) against this same array, and no phase between
+                // adds or removes an agent, so the lookup always succeeds.
+                match Map.tryFind recipient indexOf with
+                | Some idx when agents.[idx].CommunicationAvailable ->
+                    agents.[idx] <- { agents.[idx] with Destination = Some target }
+                | Some _ -> emit (OrderUndelivered(cmd, recipient, UnableToCommunicate)) s
+                | None -> ()
+
+            s.Agents <- agents
+
+        s.PendingOrders <- []
 
     // --- Phase: perception -------------------------------------------------
     // Realised by TASK-026 (backlog B-015). The first phase consumer of the
@@ -688,11 +761,11 @@ module Simulation =
     let private runPhase (commands: PlayerCommand list) (s: StepState) (phase: Phase) : unit =
         match phase with
         | CommandIntake -> commandIntake commands s
+        | Communication -> communication s
         | Perception -> perception s
         | TacticalKnowledge -> tacticalKnowledge s
         | NavigationAndMovement -> navigationAndMovement s
         | Output -> output s
-        | Communication
         | Appraisal
         | CommitmentAndLocalAction
         | Combat
@@ -702,9 +775,10 @@ module Simulation =
         s.TraceRev <- phase :: s.TraceRev
 
     /// Advances the world by exactly one integer tick. Runs every phase in
-    /// `Phases.order`, processing commands at `CommandIntake` and resolving
-    /// movement at `NavigationAndMovement`. Emits ordered domain events and a
-    /// render snapshot from authoritative state.
+    /// `Phases.order`: accepting commands at `CommandIntake`, delivering the
+    /// accepted orders to reachable recipients at `Communication`, and
+    /// resolving movement at `NavigationAndMovement`. Emits ordered domain
+    /// events and a render snapshot from authoritative state.
     let step (config: SimConfig) (commands: PlayerCommand[]) (state: WorldState) : StepResult =
         if config.TicksPerSecond <= 0 then
             invalidArg (nameof config) "TicksPerSecond must be positive"
@@ -723,6 +797,7 @@ module Simulation =
               Bounds = state.Bounds
               Terrain = state.Terrain
               Agents = state.Agents
+              PendingOrders = []
               TacticalKnowledge = state.TacticalKnowledge
               Random = state.Random
               EventsRev = []

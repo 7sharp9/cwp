@@ -283,6 +283,42 @@ let ``a hand-built KnownContact overlay renders through the ASCII and SVG render
     // Byte-identical without the overlay (regression guard for the goldens).
     Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
 
+[<Fact>]
+let ``a hand-built UndeliveredOrder overlay renders through the ASCII and SVG renderers`` () =
+    let f = Diagnostics.frame (DemoScenario.initialState ())
+
+    let withUndelivered =
+        { f with
+            Overlays = [| UndeliveredOrder(AgentId.ofInt 1, { X = 4; Y = 2 }, CommandId.ofInt 7) |] }
+
+    let ascii = DiagnosticRender.Ascii withUndelivered
+    Assert.Contains("overlays:", ascii)
+    Assert.Contains("undelivered order (4,2): agent 1  command 7  (communication unavailable)", ascii)
+
+    let svg = DiagnosticRender.Svg withUndelivered
+    Assert.Contains("fill=\"#e53e3e\">!1</text>", svg)
+    // Byte-identical without the overlay (regression guard for the goldens).
+    Assert.Equal(DiagnosticRender.Svg f, DiagnosticRender.Svg(Diagnostics.frame (DemoScenario.initialState ())))
+
+[<Fact>]
+let ``AgentMarker.CommunicationAvailable is carried and rendered only when an agent cannot receive orders`` () =
+    // TASK-027: the marker is on every agent, but the renderers surface it
+    // only for a blacked-out agent (the Progress-omitted-at-0 precedent).
+    let w = DemoScenario.initialState ()
+    let plainAscii = DiagnosticRender.Ascii(Diagnostics.frame w)
+    Assert.DoesNotContain("no-comms", plainAscii)
+
+    let blackedOut =
+        { w with
+            Agents = w.Agents |> Array.map (fun a -> { a with CommunicationAvailable = false }) }
+
+    let frame = Diagnostics.frame blackedOut
+    Assert.All(frame.Agents, fun m -> Assert.False(m.CommunicationAvailable))
+
+    let ascii = DiagnosticRender.Ascii frame
+    Assert.Contains("no-comms", ascii)
+    Assert.Contains("stroke-dasharray=\"2,1\"", DiagnosticRender.Svg frame)
+
 // --- reservation: the converging-routes corpus entry (TASK-017) --------
 
 let private corpusDir = Path.Combine(AppContext.BaseDirectory, "replays")
@@ -309,6 +345,7 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | SightRay _
         | PlannedPath _
         | Obstructed _
+        | UndeliveredOrder _
         | KnownContact _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
@@ -370,6 +407,7 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | SightRay _
             | PlannedPath _
             | Reserved _
+            | UndeliveredOrder _
             | KnownContact _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
@@ -407,7 +445,8 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | SightRay _
             | PlannedPath _
             | Reserved _
-            | Obstructed _ -> None)
+            | Obstructed _
+            | UndeliveredOrder _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -429,6 +468,50 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
 
     Assert.Equal(golden "perception-contact-tick-005.ascii.txt", DiagnosticRender.Ascii tick5)
     Assert.Equal(golden "perception-contact-tick-005.svg", DiagnosticRender.Svg tick5)
+
+// --- communication: the lost-comms corpus entry (TASK-027) -------------
+
+let private lostCommsFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "lost-comms")
+
+    match Corpus.loadLog corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dropped order (byte-equal to the goldens)`` () =
+    // Tick 1: command intake accepts the order to comms-blacked-out agent 0,
+    // the Communication phase emits OrderUndelivered and drops it, so `frameOf`
+    // derives one UndeliveredOrder overlay at the agent's (unchanged) cell and
+    // the events line carries an order-undelivered marker.
+    let frames = lostCommsFrames ()
+    let tick1 = frames.[1]
+
+    match
+        tick1.Overlays
+        |> Array.tryPick (function
+            | UndeliveredOrder(recipient, at, command) -> Some(recipient, at, command)
+            | Cells _
+            | SightRay _
+            | PlannedPath _
+            | Reserved _
+            | Obstructed _
+            | KnownContact _ -> None)
+    with
+    | Some(recipient, at, command) ->
+        Assert.Equal(AgentId.ofInt 0, recipient)
+        Assert.Equal({ X = 1; Y = 4 }, at)
+        Assert.Equal(CommandId.ofInt 1, command)
+    | None -> Assert.Fail($"expected one UndeliveredOrder overlay, got {tick1.Overlays}")
+
+    Assert.Contains(tick1.Events, fun (e: EventMarker) -> e.Kind = "order-undelivered")
+    Assert.All(tick1.Agents, fun (m: AgentMarker) -> Assert.False(m.CommunicationAvailable))
+
+    // The agent never gets a destination and never moves.
+    Assert.All(frames, fun f -> Assert.All(f.Agents, fun m -> Assert.Equal<Cell option>(None, m.Destination)))
+
+    Assert.Equal(golden "lost-comms-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
+    Assert.Equal(golden "lost-comms-tick-001.svg", DiagnosticRender.Svg tick1)
 
 [<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =

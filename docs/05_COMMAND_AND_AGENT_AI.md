@@ -116,6 +116,16 @@ Appraisal is staged, not one opaque weighted sum.
 - Is the issuer authorised?
 - Is the target and intent understood?
 
+Realised so far: "Was the order received?" is now a real, inspectable fact
+(TASK-027, backlog B-016). The Communication phase (`docs/04` section 12.2)
+delivers an accepted order to a recipient with
+`AgentState.CommunicationAvailable = true` and emits `OrderUndelivered`
+(reason `UnableToCommunicate`) for one that cannot be reached — the
+`DecisionReason.UnableToCommunicate` an appraisal refusal / `Unable` outcome
+(backlog B-017) carries through unchanged. "Is the issuer authorised?" is the
+friendly/hostile-side check in command intake (TASK-020); a commander identity
+model is deferred.
+
 ### Stage 2: physical feasibility
 
 - Does a known traversable route exist?

@@ -1,0 +1,11 @@
+# Replay corpus entry: lost-comms (command-log format v1).
+# Initial state: Corpus lost-comms scenario (8 x 8, seed 20260904), one
+# friendly agent 0 at (1,4) with CommunicationAvailable = false (an authored
+# comms blackout). The agent is ordered east to (6,4); command intake accepts
+# the order but the Communication phase (12.2) cannot reach the recipient, so
+# it emits OrderUndelivered and drops the order. No Destination is ever
+# written and the agent never moves (TASK-027, backlog B-016; the "Lost
+# communication" scenario, docs/05 section 16).
+version 1
+
+1 0 move 6 4

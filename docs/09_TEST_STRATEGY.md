@@ -47,6 +47,19 @@ several ticks earlier and delivered now, are accepted (no staleness horizon).
 `CommandId` on two ticks is rejected `DuplicateCommandIdInLog` by
 `Replay.validate`.
 
+**Order delivery — realised (TASK-027, backlog B-016):** `SimulationTests.fs`
+covers the `docs/04` section 12.2 rules — an order to a recipient with
+`CommunicationAvailable = true` is delivered the same tick it is accepted
+(`Destination` set, no `OrderUndelivered`); an order to a recipient with
+`false` emits `OrderUndelivered` (`UnableToCommunicate`), writes no
+`Destination`, and the agent never moves; a multi-recipient order delivers to
+the reachable recipients and reports only the cut-off one; an undelivered
+order does not cancel a `Destination` the recipient already held; delivery is
+deterministic across two runs. `CanonicalHashTests.fs` pins that
+`CommunicationAvailable` is outside the canonical image (flipping it alone
+changes neither the encoding nor the hash) while the order it suppresses
+changes the hash within one tick via `Position`.
+
 ### 2.2 Property tests
 
 Use FsCheck or an equivalent F# property-testing library for invariants such as:
@@ -82,8 +95,13 @@ genuinely visible to some friendly on its own `LastSeenTick` (recomputed
 independently through `Perception.visibleContactsFor` over the pre-tick
 state), is within `PerceptionConfig.ExpireAfter` ticks of that sighting,
 carries one of the two valid confidence bands, and has a `LastSeenTick` that
-never decreases while the contact survives. The remaining items name systems
-not yet implemented (vehicles, commitments, death, canonical serialization
+never decreases while the contact survives. TASK-027 added a seventh (over
+`randomCaseGen` with a random subset of agents comms-blacked-out): a
+`CommunicationAvailable = false` agent never holds a `Destination` and never
+leaves its start cell, every `OrderUndelivered` names a blacked-out recipient
+and pairs with a same-tick `CommandAccepted`, and no comms-available agent is
+ever reported undelivered. The remaining items name systems not yet
+implemented (vehicles, commitments, death, canonical serialization
 round-trip, appraisal, objectives) and stay proposed.
 
 Randomly generated cases must print the reduced counterexample and seed.
@@ -108,6 +126,15 @@ Partially realised for the choke-point item by the replay corpus
 contend for one cell and one yields) and `follow-chain` / `swap-standoff`
 (TASK-022, a vacation chain that resolves each tick and a two-agent swap that
 deadlocks with both agents emitting `MovementObstructed`).
+
+Partially realised for **"radio loss prevents immediate knowledge
+propagation"** by TASK-027: the `lost-comms` corpus entry
+(`content/replays/lost-comms.{cwlog,md}`) orders a friendly with
+`CommunicationAvailable = false` to move — command intake accepts the order,
+the Communication phase emits `OrderUndelivered` and drops it, and the agent
+never moves. The tactical-knowledge half of "knowledge propagation" (a
+delivered report reaching the squad through a working radio) waits for the
+`OrderDelivered` / report-relay work in **B-016b**.
 
 Partially realised for **"enemy does not target an unobserved player
 position"** and the **"Unknown threat"** scenario shape (`docs/05` section 16)

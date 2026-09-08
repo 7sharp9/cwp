@@ -424,14 +424,17 @@ Fatigue, persistent personality dimensions, interpersonal relations, inventory g
 
 Realised so far (`src/CommandoWar.Sim/Domain.fs` `AgentState`): identity,
 side, logical position, movement state (`Progress`, `Destination`, the derived
-`Route` cache), and **`VisibleContacts: AgentId[]`** (TASK-026) — the
+`Route` cache), **`VisibleContacts: AgentId[]`** (TASK-026) — the
 opposing-side agents this agent can currently see, rewritten from scratch each
-tick by the Perception phase. Like `Route`, it is a **non-canonical derived
-cache** (a pure function of every agent's position, the immutable terrain, and
-`PerceptionConfig`) and is excluded from `Canonical.encode`. Life and wound
-state, weapon and ammunition, current order and commitment, discipline, trust,
-stress, suppression, communication availability, and execution state are not
-implemented yet.
+tick by the Perception phase; like `Route`, a **non-canonical derived cache**
+excluded from `Canonical.encode` — and **`CommunicationAvailable: bool`**
+(TASK-027) — whether an order issued this tick reaches the agent (default
+`true`; an authored `false` is a comms blackout). `CommunicationAvailable` is
+**static authored data** at this stage, excluded from `Canonical.encode` like
+`Terrain` (section 17; the ADR-0002 amendment). Life and wound state, weapon
+and ammunition, current order and commitment, discipline, trust, stress,
+suppression, and execution state are not implemented yet; dynamic communication
+availability (range, jamming, radio-destroyed) is backlog B-016b.
 
 ## 12. Tick phases
 
@@ -451,9 +454,16 @@ order-independent, none processed); each surviving command is checked whole
 failure short-circuits with one `CommandRejected` and no per-recipient
 events); then each recipient is checked in ascending `AgentId` order
 (`UnknownAgent` -> `UnauthorisedRecipient` for a `Hostile`-side agent ->
-accept), emitting `CommandAccepted` **before** the destination is written.
-One accept/reject event per (command, recipient) pair. The agent array is
-copied once per phase invocation. Issue-tick eligibility is now enforced
+accept), emitting `CommandAccepted` at acceptance.
+One accept/reject event per (command, recipient) pair.
+
+Realised by TASK-027 (backlog B-016): command intake **no longer writes**
+`AgentState.Destination`. An accepted `(command, recipient, target)` is
+recorded as a **pending order**; the Communication phase (section 12.2), which
+runs next, delivers it. An accepted order therefore takes effect one phase
+later — still the same tick when communication is available, since no phase
+runs between Command intake and Communication. Issue-tick eligibility is now
+enforced
 (TASK-024): `IssuedAtTick` — renamed from `IssueTick`, distinct from the
 delivery tick (section 2) — must be `>= 0` and not after the tick being
 processed; a stale (long-delayed) command is still accepted, since following
@@ -466,6 +476,28 @@ identity or commander model.
 - determine which recipients receive an order this tick;
 - voice and radio delay may initially be zero when in range;
 - communication failure must be explicit, not silently ignored.
+
+Realised by TASK-027 (backlog B-016): `Simulation.communication`. For every
+order Command intake accepted this tick, in ascending `(recipient, command)`
+id order:
+
+- recipient `AgentState.CommunicationAvailable = true`: write `Destination`
+  (zero delivery delay — the order takes effect this tick). No success event:
+  `CommandAccepted` (at intake, carrying the destination cell) already records
+  it; an `OrderDelivered` event arrives with delayed delivery (backlog B-016b).
+- recipient `CommunicationAvailable = false`: emit `OrderUndelivered` (reason
+  `UnableToCommunicate`) and **drop** the order. A `Destination` the recipient
+  already held is left untouched — an undelivered new order does not cancel an
+  order in progress (`docs/05` section 16 "Lost communication").
+
+`CommunicationAvailable` is **static authored scenario data** at this stage
+(`Deployment.CommunicationAvailable`, default `true`; an authored `false` is a
+"comms blackout"), excluded from `Canonical.encode` exactly as `Terrain` is
+(section 17; the ADR-0002 amendment). This phase draws nothing from the
+deterministic stream. Radio range from a command origin, non-zero delivery
+delay, dynamic jamming, radio-destroyed, and report aging beyond the section
+12.4 bands are backlog **B-016b**; that task makes comms availability per-tick
+mutable and bumps `Canonical.FormatVersion` then.
 
 ### 12.3 Perception
 
@@ -629,9 +661,17 @@ Minimum categories:
 
 Do not emit a flood of low-value events solely because every field changed.
 
-Realised so far: command accepted / rejected (TASK-020, TASK-024); movement
-started / blocked / completed / yielded / obstructed (TASK-015 / TASK-017 /
-TASK-022); and, for "contact observed or reported", **`ContactObserved of
+Realised so far: command accepted / rejected (TASK-020, TASK-024); for "order
+delivered or communication failed", **`OrderUndelivered of command * recipient
+* reason`** (TASK-027, backlog B-016) — emitted by the Communication phase
+when a recipient's `CommunicationAvailable` is `false`; the order is dropped.
+There is no success event yet: a zero-delay delivery is fully recorded by the
+`CommandAccepted` at intake (an `OrderDelivered` arrives with delayed
+delivery, B-016b). Communication events are ordered after command outcomes and
+before this tick's `ContactObserved`, ascending `(recipient, command)` id.
+Movement started / blocked / completed / yielded / obstructed (TASK-015 /
+TASK-017 / TASK-022); and, for "contact observed or reported",
+**`ContactObserved of
 observer * contact * at`** and **`ContactExpired of contact * lastKnownCell`**
 (TASK-026). `ContactObserved` fires on a new sighting only — the tick a
 contact enters an observer's `VisibleContacts` — never per tick while it stays
@@ -742,6 +782,15 @@ and tick counts / event counts are unchanged (TASK-026 ledger).
 `AgentState.VisibleContacts` is **not** written (the `Route` precedent).
 `firstDifferingSection` gains a `"TacticalKnowledge"` label.
 
+TASK-027 note: `AgentState.CommunicationAvailable` (whether an order reaches an
+agent) is **not** written. At this stage it is static authored scenario data
+(`Deployment.CommunicationAvailable`), set once at tick 0 and never mutated
+during a run, so — like `Terrain` under the ADR-0002 amendment — it cannot
+diverge and stays out of the canonical image. `Canonical.FormatVersion` stays
+`3`. A comms-derived behaviour bug still surfaces in the hash within one tick
+via the recipient's `Position`. It enters the image and the format version
+bumps when B-016b makes comms availability per-tick mutable.
+
 ## 18. Save state
 
 Save-state support is not required for the first command-loop proof. Replay from the start is sufficient for short scenarios. If load times become material, add periodic snapshots through a versioned format and ADR.
@@ -795,7 +844,11 @@ At minimum:
 - every contact in `WorldState.TacticalKnowledge` was observed by a friendly
   on its own `LastSeenTick` and is within `PerceptionConfig.ExpireAfter` ticks
   of that sighting; a surviving contact's `LastSeenTick` never decreases
-  (TASK-026; `DeterminismPropertyTests` property 6).
+  (TASK-026; `DeterminismPropertyTests` property 6);
+- an accepted order writes `AgentState.Destination` only for a recipient with
+  `CommunicationAvailable = true`; an order to a recipient with `false` writes
+  no `Destination`, leaves any existing one untouched, and emits exactly one
+  `OrderUndelivered` (TASK-027; `DeterminismPropertyTests` property 7).
 
 ## 21. Authored scenario and content version
 

@@ -18,10 +18,10 @@ let private goodRaw () : RawScenario =
       Width = 16
       Height = 16
       FriendlyDeployments =
-        [| { AgentId = 0; Cell = { X = 0; Y = 0 } }
-           { AgentId = 1; Cell = { X = 0; Y = 1 } }
-           { AgentId = 2; Cell = { X = 0; Y = 2 } } |]
-      EnemyDeployments = [| { AgentId = 10; Cell = { X = 15; Y = 15 } } |]
+        [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true }
+           { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true }
+           { AgentId = 2; Cell = { X = 0; Y = 2 }; CommunicationAvailable = true } |]
+      EnemyDeployments = [| { AgentId = 10; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true } |]
       ObjectiveAreas = [| { AreaId = "observation"; Cell = { X = 8; Y = 8 } } |]
       ExtractionAreas = [| { AreaId = "exfil"; Cell = { X = 1; Y = 15 } } |]
       StaticTargets = [| { TargetId = "bridge"; Cell = { X = 8; Y = 0 } } |]
@@ -120,6 +120,32 @@ let ``a well-formed raw scenario validates to a Scenario`` () =
     Assert.True(s.Rules.FailOnFriendlyForceEliminated)
 
 [<Fact>]
+let ``communication availability round-trips through validation`` () =
+    // TASK-027: Deployment.CommunicationAvailable defaults true and an
+    // authored false (a comms blackout) survives onto the validated
+    // deployment. A bool cannot be malformed, so there is no new error.
+    let s = validated (goodRaw ())
+    Assert.All(s.FriendlyDeployments, fun d -> Assert.True(d.CommunicationAvailable))
+
+    let raw =
+        { goodRaw () with
+            FriendlyDeployments =
+                (goodRaw ()).FriendlyDeployments
+                |> Array.map (fun d ->
+                    if d.AgentId = 1 then
+                        { d with CommunicationAvailable = false }
+                    else
+                        d) }
+
+    let blacked = validated raw
+    let d1 = blacked.FriendlyDeployments |> Array.find (fun d -> AgentId.value d.Agent = 1)
+    Assert.False(d1.CommunicationAvailable)
+    Assert.All(
+        blacked.FriendlyDeployments |> Array.filter (fun d -> AgentId.value d.Agent <> 1),
+        fun d -> Assert.True(d.CommunicationAvailable)
+    )
+
+[<Fact>]
 let ``an optional objective keeps its Optional wrapper`` () =
     let s = validated (goodRaw ())
 
@@ -170,7 +196,7 @@ let ``non-positive map dimensions are reported`` () =
 [<Fact>]
 let ``a duplicate deployment agent id is reported once`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = 1; Cell = { X = 15; Y = 15 } } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = 1; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true } |] }
 
     let es = errorsOf raw
     Assert.Contains(DuplicateDeploymentId 1, es)
@@ -179,14 +205,14 @@ let ``a duplicate deployment agent id is reported once`` () =
 [<Fact>]
 let ``a negative deployment agent id is reported`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = -3; Cell = { X = 15; Y = 15 } } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = -3; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true } |] }
 
     Assert.Contains(NegativeDeploymentId -3, errorsOf raw)
 
 [<Fact>]
 let ``a deployment outside the map is reported with its cell and the bounds`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 99; Y = 0 } } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 99; Y = 0 }; CommunicationAvailable = true } |] }
 
     Assert.Contains(
         DeploymentOutOfMap(10, { X = 99; Y = 0 }, { Width = 16; Height = 16 }),
@@ -196,7 +222,7 @@ let ``a deployment outside the map is reported with its cell and the bounds`` ()
 [<Fact>]
 let ``two deployments sharing a cell are reported with both agent ids`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 0; Y = 0 } } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true } |] }
 
     Assert.Contains(DeploymentCellShared({ X = 0; Y = 0 }, [ 0; 10 ]), errorsOf raw)
 
@@ -295,7 +321,7 @@ let ``validation reports every fault in one pass`` () =
     let raw =
         { goodRaw () with
             ContentVersion = 3
-            EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 } } |]
+            EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 }; CommunicationAvailable = true } |]
             Objectives = [| objective 2 "orbit" |]
             TerrainLayer =
                 Some
@@ -617,7 +643,7 @@ let private fixtureScenario () : Scenario =
       Id = "spike-fixture"
       Width = Fixture.bounds.Width
       Height = Fixture.bounds.Height
-      FriendlyDeployments = [| for i in 0..5 -> { AgentId = i; Cell = { X = 0; Y = i } } |]
+      FriendlyDeployments = [| for i in 0..5 -> { AgentId = i; Cell = { X = 0; Y = i }; CommunicationAvailable = true } |]
       EnemyDeployments = [||]
       ObjectiveAreas = [| { AreaId = "observation"; Cell = { X = 20; Y = 14 } } |]
       ExtractionAreas = [| { AreaId = "exfil"; Cell = { X = 0; Y = 0 } } |]

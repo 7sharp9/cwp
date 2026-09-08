@@ -5,19 +5,80 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-07 (TASK-026 accepted and merged to main; nothing selected)
+  updated: 2026-09-08 (TASK-027 accepted and merged to main; TASK-028 drafting + implementation)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-028
+  task_file: tasks/TASK-028-ORDER-APPRAISAL-AND-TYPED-REASONS.md
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-07
+  updated: 2026-09-08
   note: >-
-    2026-09-07: nothing selected. TASK-026 (backlog B-015, observations and
-    shared squad tactical knowledge — first phase consumer of the Sight
-    module) implemented, accepted by Dave, and merged to main (branch
+    2026-09-08: TASK-027 (backlog B-016, communication constraints and order
+    delivery) accepted by Dave and merged to main (--no-ff, branch deleted;
+    not pushed). TASK-028 (backlog B-017, staged order appraisal and typed
+    reasons) selected as a draft-then-implement task on branch
+    task-028-order-appraisal off the TASK-027 merge. Central decisions
+    confirmed with Dave before the phase bodies: (A) Communication writes a
+    new canonical AgentState.Order (ReceivedOrder option) and resets
+    Disposition to None; the new Appraisal phase (slot 5) reads Order +
+    TacticalKnowledge + terrain + Discipline, produces an OrderDisposition,
+    and writes Destination on Accepted. Order + Disposition are canonical
+    per-tick memory, so Canonical.FormatVersion bumps 3 -> 4 with a full
+    re-pin. (B) Discipline is a static per-deployment integer EXCLUDED from
+    Canonical.encode (the CommunicationAvailable precedent); the 3 -> 4 bump
+    is justified by Order + Disposition alone. Trust / stress / suppression
+    deferred to B-020 / B-021. (C) stages 1-4 partial (stage 1 trivially
+    passed upstream; stage 2 Pathfinding feasibility; stage 3 known-threat
+    route exposure; stage 4 exposure vs resolve threshold). Outcomes:
+    Accepted, Refused RouteTooExposed, Unable NoKnownRoute. Adapted / Delayed
+    deferred (no DU cases). (D) AppraisalConfig module of integer literals,
+    integer exposure metric, hysteresis, no PRNG. (E) reappraisal trigger in
+    scope: new order received only. (F) OrderDisposition DU carries the
+    reasons (Refused / Unable of primary * supporting); event is
+    OrderAppraised of agent * command * disposition. (G) no ADR (ADR-0002
+    amendment governs the bump). (H) G3 evidence: a corpus entry where two
+    friendlies with different Discipline appraise the same order along a
+    known-threat approach differently (one Refused, one Accepted).
+    blocked-goal repurposed as the appraisal-Unable(NoKnownRoute) case
+    (its target is unreachable, so stage 2 refuses it up front — docs/09
+    section 2.2).
+
+    Five central decisions confirmed with Dave before the phase bodies: (A)
+    static per-agent CommunicationAvailable reachability check, no PRNG, flag
+    excluded from Canonical.encode like Terrain; (B) the pending order is
+    transient (a StepState-local list, not canonical) so Canonical.FormatVersion
+    stays 3 and no hash re-pins; (C) radio range / delay / jamming /
+    radio-destroyed / report aging split to a new B-016b; (D) OrderUndelivered
+    only, no OrderDelivered success event (with zero delay it duplicates
+    CommandAccepted); (E) no ADR.
+
+    commandIntake now records an accepted order as a pending order rather than
+    writing AgentState.Destination; the new Communication phase (slot 2)
+    delivers it (writes Destination) to a recipient with
+    CommunicationAvailable = true, or emits OrderUndelivered
+    (UnableToCommunicate) and drops it. New AgentState.CommunicationAvailable
+    (static, default true, excluded from Canonical.encode), RawDeployment /
+    Deployment.CommunicationAvailable, EventBody.OrderUndelivered +
+    DeliveryFailure DU, Overlay.UndeliveredOrder +
+    AgentMarker.CommunicationAvailable, new lost-comms corpus entry + golden.
+
+    ZERO re-pin: -- corpus (9/9 PASS) and -- fixture (format 3,
+    0x50BFA007EDFC42FE / 0xD9D6EC3DDC1D602F, 33 events) byte-identical before
+    and after, with and without --regenerate; no content/diagnostics golden
+    moved; -- replay-file envelope-full checkpoints OK at canonical 3.
+    216 -> 228 green; dotnet build 0/0; src/CommandoWar.Sim packages
+    FSharp.Core only. No ADR.
+    (docs/ledger/2026-09-07-TASK-027-communication-and-order-delivery.md)
+
+    B-016 -> done (communication half); new B-016b (range/delay/jamming/
+    radio-destroyed/report aging) proposed; B-017 (staged order appraisal)
+    now has "Was the order received?" as a real fact.
+
+    Prior context: TASK-026 (backlog B-015, observations and shared squad
+    tactical knowledge — first phase consumer of the Sight module) implemented,
+    accepted by Dave, and merged to main (branch
     task-026-perception-and-tactical-knowledge, --no-ff; branch deleted; not
     pushed).
 

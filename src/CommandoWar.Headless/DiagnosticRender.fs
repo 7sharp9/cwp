@@ -95,7 +95,8 @@ module DiagnosticRender =
                 | PlannedPath _
                 | Reserved _
                 | Obstructed _
-                | KnownContact _ -> None)
+                | KnownContact _
+                | UndeliveredOrder _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -119,7 +120,8 @@ module DiagnosticRender =
                 | SightRay _
                 | Reserved _
                 | Obstructed _
-                | KnownContact _ -> None)
+                | KnownContact _
+                | UndeliveredOrder _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -259,7 +261,11 @@ module DiagnosticRender =
                 // at 0 (at rest, or an edge just started) to keep the common
                 // case quiet.
                 let progress = if a.Progress > 0 then sprintf "  progress %d" a.Progress else ""
-                line (sprintf "  agent %d  %s  %s  %s%s" (AgentId.value a.Id) side (cellText a.Cell) dest progress)
+                // Communication availability (TASK-027): shown only when the
+                // agent cannot receive orders, the `progress`-omitted-at-0
+                // precedent.
+                let comms = if a.CommunicationAvailable then "" else "  no-comms"
+                line (sprintf "  agent %d  %s  %s  %s%s%s" (AgentId.value a.Id) side (cellText a.Cell) dest progress comms)
 
         // Overlays (empty unless a caller supplies one: a test, or
         // `cwheadless render --los`). `Diagnostics.frame` never emits one.
@@ -302,6 +308,14 @@ module DiagnosticRender =
                             (AgentId.value contact)
                             confidence
                             lastSeenTick
+                    )
+                | UndeliveredOrder(recipient, at, command) ->
+                    line (
+                        sprintf
+                            "  undelivered order %s: agent %d  command %d  (communication unavailable)"
+                            (cellText at)
+                            (AgentId.value recipient)
+                            (CommandId.value command)
                     )
 
         line ""
@@ -442,6 +456,15 @@ module DiagnosticRender =
                     cx cy colour
             )
 
+            // Communication unavailable (TASK-027): a dashed red ring around
+            // the agent, drawn only when the agent cannot receive orders.
+            if not a.CommunicationAvailable then
+                line (
+                    sprintf
+                        "  <circle cx=\"%d\" cy=\"%d\" r=\"7\" fill=\"none\" stroke=\"#e53e3e\" stroke-width=\"1\" stroke-dasharray=\"2,1\"/>"
+                        cx cy
+                )
+
             // Sub-cell progress toward the next cell (TASK-018), omitted at 0.
             if a.Progress > 0 then
                 line (
@@ -568,6 +591,30 @@ module DiagnosticRender =
                         (cell.X * s + 1)
                         (cell.Y * s + s - 2)
                         (AgentId.value contact)
+                )
+            | UndeliveredOrder(recipient, at, _) ->
+                // An order that failed to reach `recipient` this tick: a red
+                // dashed box over the recipient's cell with a struck-through
+                // radio glyph, deliberately unlike an agent circle or a
+                // `KnownContact` ring.
+                line (
+                    sprintf
+                        "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#e53e3e\" stroke-width=\"2\" stroke-dasharray=\"2,2\"/>"
+                        (at.X * s) (at.Y * s) s s
+                )
+
+                line (
+                    sprintf
+                        "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#e53e3e\" stroke-width=\"2\"/>"
+                        (at.X * s) (at.Y * s + s) (at.X * s + s) (at.Y * s)
+                )
+
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"9\" fill=\"#e53e3e\">!%d</text>"
+                        (at.X * s + 1)
+                        (at.Y * s + s - 2)
+                        (AgentId.value recipient)
                 )
 
         // Footer.

@@ -117,7 +117,13 @@ module ScenarioContent =
 type Deployment =
     { Agent: AgentId
       Side: Side
-      Cell: Cell }
+      Cell: Cell
+      /// Whether an order issued to this agent reaches it (TASK-027, backlog
+      /// B-016). Default `true`; an authored `false` is a "comms blackout"
+      /// that makes the Communication phase emit `OrderUndelivered` for this
+      /// recipient. Static — carried onto `AgentState.CommunicationAvailable`
+      /// by `World.ofScenario` and never mutated during a run.
+      CommunicationAvailable: bool }
 
 /// A named point of interest: an objective area or an extraction area. The
 /// slice needs a single cell per area; a rectangular region is a later
@@ -181,8 +187,13 @@ type Scenario =
 
 // --- raw (unvalidated) input -----------------------------------------
 
-/// Unvalidated authored deployment: an agent id and a cell.
-type RawDeployment = { AgentId: int; Cell: Cell }
+/// Unvalidated authored deployment: an agent id, a cell, and whether the
+/// agent can receive orders (`CommunicationAvailable`, TASK-027 — `true` for
+/// an ordinary deployment, `false` for an authored comms blackout).
+type RawDeployment =
+    { AgentId: int
+      Cell: Cell
+      CommunicationAvailable: bool }
 
 /// Unvalidated authored area marker.
 type RawArea = { AreaId: string; Cell: Cell }
@@ -600,7 +611,8 @@ module Scenario =
                 |> Array.map (fun d ->
                     { Agent = AgentId.ofInt d.AgentId
                       Side = side
-                      Cell = d.Cell })
+                      Cell = d.Cell
+                      CommunicationAvailable = d.CommunicationAvailable })
 
             Ok
                 { Id = ScenarioId.ofString raw.Id

@@ -74,13 +74,18 @@ type EdgeMarker =
 
 /// One agent as the frame sees it: identity, side, logical cell, integer
 /// progress toward entering its next cell (TASK-018, `AgentState.Progress`;
-/// 0 at rest), and the movement destination if it has one.
+/// 0 at rest), the movement destination if it has one, and whether the agent
+/// can receive orders (TASK-027, `AgentState.CommunicationAvailable`; `true`
+/// for an ordinary agent, `false` under an authored comms blackout — the
+/// renderers surface it only when `false`, the `Progress`-omitted-at-0
+/// precedent).
 type AgentMarker =
     { Id: AgentId
       Side: Side
       Cell: Cell
       Progress: int
-      Destination: Cell option }
+      Destination: Cell option
+      CommunicationAvailable: bool }
 
 /// A small framework-neutral summary of one `DomainEvent` emitted this tick:
 /// a kind label and the cells the event concerns. This lets a frame show
@@ -99,6 +104,7 @@ type EventMarker =
 ///   * B-011b reservation    -> `Reserved` (realised by TASK-017);
 ///   * B-047 cell occupancy  -> `Obstructed` (realised by TASK-022);
 ///   * B-015 perception      -> `KnownContact` (realised by TASK-026);
+///   * B-016 communication    -> `UndeliveredOrder` (realised by TASK-027);
 ///   * B-019 combat          -> a fire-line case (shooter, target).
 ///
 /// B-019 does not exist yet: no such case is defined.
@@ -107,11 +113,13 @@ type EventMarker =
 /// picture, so `frame` can draw it — unlike `Reserved` / `Obstructed`, which
 /// need a completed step). `Diagnostics.frameOf` produces the same
 /// `KnownContact` set plus one `PlannedPath` per agent following a route
-/// (TASK-015), one `Reserved` per cell contested this tick (TASK-017), and one
-/// `Obstructed` per cell an agent was held out of this tick (TASK-022); every
-/// other overlay is populated by a caller (a test, or `cwheadless render
-/// --los` / `--path`). `Cells` is the generic non-speculative shape: a
-/// labelled set of cells a renderer can always fall back to.
+/// (TASK-015), one `Reserved` per cell contested this tick (TASK-017), one
+/// `Obstructed` per cell an agent was held out of this tick (TASK-022), and
+/// one `UndeliveredOrder` per recipient an order failed to reach this tick
+/// (TASK-027); every other overlay is populated by a caller (a test, or
+/// `cwheadless render --los` / `--path`). `Cells` is the generic
+/// non-speculative shape: a labelled set of cells a renderer can always fall
+/// back to.
 type Overlay =
     /// A labelled set of cells.
     | Cells of label: string * cells: Cell[]
@@ -153,6 +161,15 @@ type Overlay =
     /// "known-versus-authoritative" surface risk R-023 asks for: the contact's
     /// last-known cell can lag the hostile's real `AgentMarker` position.
     | KnownContact of cell: Cell * contact: AgentId * confidence: int * lastSeenTick: int64
+    /// An order the Communication phase could not deliver this tick (TASK-027,
+    /// `docs/04` section 12.2): `command` was accepted for `recipient` but the
+    /// recipient's `AgentState.CommunicationAvailable` is `false`, so the order
+    /// was dropped and no `Destination` written. `at` is the recipient's
+    /// current cell. `Diagnostics.frameOf` derives one per distinct recipient
+    /// from this tick's `OrderUndelivered` events; `Diagnostics.frame` never
+    /// emits one (an undelivered order is a this-tick event, not standing
+    /// state — the `Reserved` / `Obstructed` precedent).
+    | UndeliveredOrder of recipient: AgentId * at: Cell * command: CommandId
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -218,7 +235,8 @@ module Diagnostics =
               Side = a.Side
               Cell = a.Position
               Progress = a.Progress
-              Destination = a.Destination })
+              Destination = a.Destination
+              CommunicationAvailable = a.CommunicationAvailable })
 
     let private eventMarker (e: DomainEvent) : EventMarker =
         match e.Body with
@@ -230,6 +248,7 @@ module Diagnostics =
         | CommandRejected(_, DuplicateCommandId _) -> { Kind = "command-rejected"; Cells = [||] }
         | CommandRejected(_, IssueTickOutOfRange _) -> { Kind = "command-rejected"; Cells = [||] }
         | CommandRejected(_, TargetOutOfBounds target) -> { Kind = "command-rejected"; Cells = [| target |] }
+        | OrderUndelivered _ -> { Kind = "order-undelivered"; Cells = [||] }
         | MovementStepped(_, from, into) -> { Kind = "movement-stepped"; Cells = [| from; into |] }
         | MovementCompleted(_, at) -> { Kind = "movement-completed"; Cells = [| at |] }
         | MovementBlocked(_, at, target) -> { Kind = "movement-blocked"; Cells = [| at; target |] }
@@ -290,6 +309,7 @@ module Diagnostics =
             | MovementYielded(_, _, contested, winner) -> Some(contested, winner)
             | CommandAccepted _
             | CommandRejected _
+            | OrderUndelivered _
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
@@ -311,6 +331,7 @@ module Diagnostics =
             | MovementObstructed(_, _, blocked, occupant) -> Some(blocked, occupant)
             | CommandAccepted _
             | CommandRejected _
+            | OrderUndelivered _
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
@@ -320,13 +341,41 @@ module Diagnostics =
         |> Array.distinctBy fst
         |> Array.map (fun (cell, occupant) -> Obstructed(cell, occupant))
 
+    /// An `UndeliveredOrder` overlay per recipient that could not be reached
+    /// this tick (TASK-027), derived from this tick's `OrderUndelivered`
+    /// events — one entry per distinct recipient, in the order its first
+    /// `OrderUndelivered` event appears (ascending `(recipient, command)` id,
+    /// the Communication-phase emission order). The recipient's cell is read
+    /// from the post-step world (a blacked-out recipient did not move this
+    /// tick). The `obstructionOverlays` precedent.
+    let private undeliveredOrderOverlays (result: StepResult) : Overlay[] =
+        result.Events
+        |> Array.choose (fun e ->
+            match e.Body with
+            | OrderUndelivered(command, recipient, _) -> Some(recipient, command)
+            | CommandAccepted _
+            | CommandRejected _
+            | MovementStepped _
+            | MovementCompleted _
+            | MovementBlocked _
+            | MovementYielded _
+            | MovementObstructed _
+            | ContactObserved _
+            | ContactExpired _ -> None)
+        |> Array.distinctBy fst
+        |> Array.choose (fun (recipient, command) ->
+            result.State.Agents
+            |> Array.tryFind (fun a -> a.Id = recipient)
+            |> Option.map (fun a -> UndeliveredOrder(recipient, a.Position, command)))
+
     /// The diagnostic frame for a completed step: the frame of the resulting
     /// world, plus this tick's event markers, a `PlannedPath` overlay for every
     /// agent still following a route, a `Reserved` overlay for every cell
     /// contested this tick, an `Obstructed` overlay for every cell an agent was
-    /// held out of this tick, a `KnownContact` overlay per squad contact, and
-    /// the post-step canonical hash recorded on the `StepResult`. Total, pure,
-    /// deterministic.
+    /// held out of this tick, an `UndeliveredOrder` overlay per recipient an
+    /// order failed to reach this tick, a `KnownContact` overlay per squad
+    /// contact, and the post-step canonical hash recorded on the `StepResult`.
+    /// Total, pure, deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
         { frame result.State with
             Events = result.Events |> Array.map eventMarker
@@ -335,5 +384,6 @@ module Diagnostics =
                     [ routeOverlays result.State
                       reservationOverlays result
                       obstructionOverlays result
+                      undeliveredOrderOverlays result
                       knownContactOverlays result.State ]
             Hash = result.StateHash }

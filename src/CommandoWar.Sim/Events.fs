@@ -1,11 +1,38 @@
 namespace CommandoWar.Sim
 
+/// Why the Communication phase could not deliver an accepted order to a
+/// recipient (TASK-027, backlog B-016; `docs/04_SIMULATION_SPEC.md` section
+/// 12.2 "communication failure must be explicit, not silently ignored").
+///
+/// One case for this task's scope: the recipient's
+/// `AgentState.CommunicationAvailable` is `false` (an authored comms
+/// blackout). `UnableToCommunicate` matches the
+/// `docs/05_COMMAND_AND_AGENT_AI.md` section 7 `DecisionReason` name so order
+/// appraisal (backlog B-017) can carry it through unchanged. Radio range
+/// (`OutOfRange`), dynamic jamming (`Jammed`), and a destroyed radio
+/// (`RadioDestroyed`) are backlog B-016b.
+type DeliveryFailure =
+    | UnableToCommunicate
+
 /// What happened during a tick. Events state facts, not renderer actions
 /// (docs/03_ARCHITECTURE.md section 12). Audio and visual effects are client
 /// interpretations of these events.
 type EventBody =
     | CommandAccepted of command: CommandId * agent: AgentId * destination: Cell
     | CommandRejected of command: CommandId * reason: CommandRejection
+    /// The Communication phase could not deliver order `command` to
+    /// `recipient` this tick — the recipient's
+    /// `AgentState.CommunicationAvailable` is `false` (TASK-027, backlog
+    /// B-016; `docs/04` section 12.2, section 14 "order delivered or
+    /// communication failed"). The order is dropped: no `Destination` is
+    /// written, and a `Destination` the recipient already held is left
+    /// untouched (an undelivered new order does not cancel an order in
+    /// progress). `docs/05` section 16 "Lost communication": the trace shows
+    /// communication failure, not disobedience. A successful zero-delay
+    /// delivery emits no event — `CommandAccepted` (at intake, carrying the
+    /// destination) already records it; an `OrderDelivered` success event
+    /// arrives with delayed delivery (B-016b).
+    | OrderUndelivered of command: CommandId * recipient: AgentId * reason: DeliveryFailure
     | MovementStepped of agent: AgentId * from: Cell * into: Cell
     | MovementCompleted of agent: AgentId * at: Cell
     /// The agent holds a destination but no traversable path connects its
@@ -52,12 +79,19 @@ type EventBody =
     | ContactExpired of contact: AgentId * lastKnownCell: Cell
 
 /// An immutable domain event tagged with the tick it occurred on. Within a
-/// single step, events are emitted in a stable order: command outcomes first,
-/// in ascending command id; then this tick's perception events — every
-/// `ContactObserved` in ascending `(observer, contact)` id order, then every
-/// `ContactExpired` in ascending contact id order; then movement outcomes in
-/// ascending agent id. Perception runs before Navigation and movement
-/// (`Phases.order`), so a contact is observed at its start-of-tick position.
+/// single step, events are emitted in a stable order:
+///   1. command outcomes, ascending command id (`CommandAccepted` /
+///      `CommandRejected`, from the Command-intake phase);
+///   2. order-delivery failures, ascending `(recipient, command)` id
+///      (`OrderUndelivered`, from the Communication phase — TASK-027);
+///   3. this tick's perception events — every `ContactObserved` ascending
+///      `(observer, contact)`, then every `ContactExpired` ascending contact
+///      id (from the Perception / Tactical-knowledge phases);
+///   4. movement outcomes, ascending agent id.
+/// The order follows `Phases.order` (Command intake, Communication,
+/// Perception, Tactical knowledge, Navigation and movement), so a contact is
+/// observed at its start-of-tick position and a delivered order takes effect
+/// the same tick.
 type DomainEvent =
     { Tick: int64
       Body: EventBody }
