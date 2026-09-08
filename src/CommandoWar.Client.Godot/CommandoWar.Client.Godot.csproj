@@ -15,6 +15,11 @@
     <!-- The client references the simulation. The simulation never references
          a client (ADR-0002). This is the only edge that crosses the boundary. -->
     <ProjectReference Include="..\CommandoWar.Sim\CommandoWar.Sim.fsproj" />
+    <!-- TASK-029 appraisal demo: the framework-neutral headless reference
+         supplies Corpus + DiagnosticRender + AppraisalDemo (the read-only
+         view-model prep the AppraisalDemoScene renders). Still a client -> Sim
+         edge; the simulation references neither project. -->
+    <ProjectReference Include="..\CommandoWar.Headless\CommandoWar.Headless.fsproj" />
   </ItemGroup>
 
 </Project>

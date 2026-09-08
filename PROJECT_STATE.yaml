@@ -5,17 +5,46 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-08 (TASK-028 accepted and merged to main; no task selected)
+  updated: 2026-09-08 (TASK-029 implemented on branch; awaiting Dave's acceptance)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-029
+  task_file: tasks/TASK-029-GODOT-APPRAISAL-DEMO.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-08
   note: >-
-    2026-09-08: TASK-028 (backlog B-017, staged order appraisal and typed
+    2026-09-08: TASK-029 (Godot appraisal-divergence demo — a read-only,
+    corpus-scoped slice of backlog B-029 pulled forward as P3 decision-support;
+    B-029 proper stays P4) implemented on branch task-029-godot-appraisal-demo
+    off main at 1f79f78; committed locally, not pushed; Status review, awaiting
+    Dave's acceptance. Central decisions A-F confirmed with Dave 2026-09-08
+    before the phase bodies: (A) build on the existing
+    src/CommandoWar.Client.Godot spike skeleton, all non-trivial logic in a new
+    framework-neutral F# helper src/CommandoWar.Headless/AppraisalDemo.fs; (B)
+    corpus reuse (Corpus.all -> exposed-approach, Corpus.loadLog against a
+    res://-relative content/replays, fail loud if absent,
+    DiagnosticRender.runFrames); (C) 13-frame HSlider + Left/Right, default
+    index 1; (D) mirror the DiagnosticRender.Svg overlay vocabulary / colours /
+    glyphs; (E) pure-helper xUnit + headless-Godot-smoke test boundary; (F) no
+    ADR. New scene scenes/AppraisalDemo.tscn + src/AppraisalDemoScene.cs (a thin
+    Node2D renderer); project.godot run/main_scene repointed; greybox spike
+    files untouched; csproj + .slnx gain one CommandoWar.Headless reference
+    (still Client -> Sim; the simulation references neither); no new NuGet /
+    Godot dependency. Scoped deviation from ADR-0004's "F# client-core / no
+    logic in C#" rule for this disposable demo — recorded, not a precedent for
+    the P4 client tasks. No CommandoWar.Sim change, no new event / Overlay case
+    / Canonical.FormatVersion bump / golden re-pin. 242 -> 244 green (+2
+    DiagnosticsTests). dotnet build CommandoWar.slnx 0/0; the client .slnx 0/0;
+    -- corpus 10/10 and -- fixture (format 4, 34 events) byte-identical; git
+    diff content/ empty; headless Godot --selfcheck MATCH (agent 0 refused
+    route-too-exposed threat-agent-2 / agent 1 accepted / hash
+    0xB03F8419E55F3592); committed screenshot
+    docs/evidence/task-029-appraisal-demo.png. No ADR.
+    (docs/ledger/2026-09-08-TASK-029-godot-appraisal-demo.md)
+
+    Prior: TASK-028 (backlog B-017, staged order appraisal and typed
     reasons) accepted by Dave and merged to main (--no-ff, branch
     task-028-order-appraisal deleted; not pushed). main build 0/0, 242 green,
     -- corpus 10/10, -- fixture format 4 / 34 events, -- replay-file

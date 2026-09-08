@@ -294,6 +294,24 @@ them; golden outputs and their regeneration command are in
 third renderer of the same frame. Player-facing overlays (threat markers,
 cover/exposure preview, reason panel) remain out of scope here.
 
+### Realised by TASK-029 (Godot frame renderer, first read-only slice)
+
+The Godot `DiagnosticFrame` renderer named above (backlog B-029) has a first
+realisation: `src/CommandoWar.Client.Godot/scenes/AppraisalDemo.tscn` +
+`src/AppraisalDemoScene.cs`. It is **read-only and corpus-scoped** — it loads
+the committed `exposed-approach` corpus entry, builds its `DiagnosticFrame`
+sequence through `DiagnosticRender.runFrames`, and renders the authoritative
+state plus the `KnownContact` / `PlannedPath` / `OrderAppraisal` overlays with a
+tick slider and a tick / state-hash / format / random-draw HUD, mirroring the
+`DiagnosticRender.Svg` colours and glyphs. All non-trivial logic (corpus load,
+the frame sequence, the disposition → readable-text mapping, the flat view
+model) is in the framework-neutral F# helper
+`src/CommandoWar.Headless/AppraisalDemo.fs`; the C# scene is a thin renderer (a
+scoped deviation from ADR-0004's "F# client-core" rule for this disposable P3
+decision-support demo, not a precedent for the P4 client tasks). B-029 proper
+(P4) builds the full developer-overlay set over **live** input as part of the
+real F# client-core.
+
 ## 12. Content iteration metric
 
 Each framework spike must measure a trivial map change:

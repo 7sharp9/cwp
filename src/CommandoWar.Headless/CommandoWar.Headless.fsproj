@@ -20,6 +20,7 @@
     <Compile Include="PathDemo.fs" />
     <Compile Include="Corpus.fs" />
     <Compile Include="DiagnosticRender.fs" />
+    <Compile Include="AppraisalDemo.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

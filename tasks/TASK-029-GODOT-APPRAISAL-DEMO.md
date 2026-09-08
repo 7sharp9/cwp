@@ -1,12 +1,63 @@
 # TASK-029: Godot appraisal-divergence demo
 
-Status: draft (central decisions A–F confirmed with Dave 2026-09-08 before the
-phase bodies; draft-then-implement in the TASK-028 shape)
+Status: review (implemented 2026-09-08 on branch `task-029-godot-appraisal-demo`
+off the TASK-028 merge on `main`; central decisions A–F confirmed with Dave
+2026-09-08 before the phase bodies; awaiting Dave's acceptance)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop) — decision-support for the refuse-near-threats feel
 before B-019; pulls a read-only slice of backlog B-029 (P4/G4) forward
 Size: S–M
+
+## Outcome (2026-09-08)
+
+Implemented on branch `task-029-godot-appraisal-demo` off `main` at
+`1f79f78 Merge TASK-028` (committed locally, not pushed). All six central
+decisions confirmed with Dave and implemented as written.
+
+New framework-neutral F# helper `src/CommandoWar.Headless/AppraisalDemo.fs`
+(after `DiagnosticRender.fs`): `loadExposedApproachFrames` (over `Corpus.all` +
+`Corpus.loadLog` + `DiagnosticRender.runFrames`, failing loud on a missing
+entry / log), `dispositionText` / `dispositionTone` (matching the committed
+golden vocabulary, re-implemented so the test asserts against the goldens not
+`DiagnosticRender`'s `let private` formatters), and `frameView` /
+`loadFrameViews` — a flat `[<CLIMutable>]` per-tick view model (`FrameView`,
+`AgentDot`, `ContactRing`, `RouteLine`, `AppraisalRow`, `CellXY`) with no F#
+`option` / DU / tuple crossing to C#. Pure, total, no Godot reference, no
+mutation of the simulation.
+
+New Godot scene `src/CommandoWar.Client.Godot/scenes/AppraisalDemo.tscn` +
+`src/AppraisalDemoScene.cs` (a `Node2D` renderer, ~330 lines): resolves the
+repo-relative `content/replays` dir from `res://`, calls `AppraisalDemo`, holds
+the tick index, draws the selected `FrameView` with the `DiagnosticRender.Svg`
+colours / glyphs (grid, agents by side with dashed destination lines, the `?2`
+`KnownContact` ring, the accepted agent's `PlannedPath` polyline + green start
+disc + goal rect, the `OrderAppraisal` exposed-cell tint + `A`/`R`/`U` glyph),
+an `HSlider` + `Left`/`Right` scrub (13 frames, default index 1), a per-agent
+`DecisionReason` panel, and a tick/hash/format/draws HUD. `--selfcheck` /
+`--screenshot` modes mirror the greybox spike's `MainNode`. `project.godot`
+`run/main_scene` repointed to the new scene; the greybox spike files are
+untouched.
+
+`src/CommandoWar.Client.Godot.csproj` gains one `ProjectReference` to
+`CommandoWar.Headless` (still a `Client -> Sim` edge; the simulation references
+neither); `.slnx` gains the `CommandoWar.Headless` row. No new NuGet / Godot
+dependency.
+
+`242 -> 244` green (+2 `DiagnosticsTests`: `AppraisalDemo.dispositionText`
+matches the committed golden vocabulary, and `loadExposedApproachFrames`
+reproduces the `exposed-approach` tick-1 hash `0xB03F8419E55F3592` + the two
+tick-1 dispositions and the flat view model). `dotnet build CommandoWar.slnx`
+0/0; `dotnet build src/CommandoWar.Client.Godot/...slnx` 0/0; `-- corpus` 10/10
+and `-- fixture` (format 4, 34 events) byte-identical; `git diff content/`
+empty. Headless Godot smoke (`--selfcheck`) prints `agent 0: refused
+route-too-exposed threat-agent-2` / `agent 1: accepted` / `hash
+0xB03F8419E55F3592`, `MATCH`, exit 0. Committed screenshot
+`docs/evidence/task-029-appraisal-demo.png` (windowed capture — headless has no
+viewport texture). No `CommandoWar.Sim` change; no ADR.
+
+Full detail:
+`docs/ledger/2026-09-08-TASK-029-godot-appraisal-demo.md`.
 
 ## Objective
 
@@ -228,7 +279,7 @@ already cover this. Recorded in this task file + the ledger, **not** as an ADR:
 
 ## Acceptance criteria
 
-- [ ] `src/CommandoWar.Headless/AppraisalDemo.fs` is a pure, total helper:
+- [x] `src/CommandoWar.Headless/AppraisalDemo.fs` is a pure, total helper:
       `loadExposedApproachFrames : string -> DiagnosticFrame[]` (over
       `Corpus.all` + `Corpus.loadLog` + `DiagnosticRender.runFrames`,
       failing loud on a missing entry / log), a disposition → readable-text
@@ -236,41 +287,41 @@ already cover this. Recorded in this task file + the ledger, **not** as an ADR:
       mapping, and a flat `[<CLIMutable>]` per-tick view-model for the C#
       renderer (no F# `option` / DU / tuple crosses the boundary). No Godot
       reference; no mutation of the simulation.
-- [ ] `CommandoWar.Headless.fsproj` compiles `AppraisalDemo.fs` after
+- [x] `CommandoWar.Headless.fsproj` compiles `AppraisalDemo.fs` after
       `DiagnosticRender.fs`; `dotnet build CommandoWar.slnx -c Release` = 0/0.
-- [ ] `scenes/AppraisalDemo.tscn` + `src/AppraisalDemoScene.cs`;
+- [x] `scenes/AppraisalDemo.tscn` + `src/AppraisalDemoScene.cs`;
       `project.godot` `run/main_scene = "res://scenes/AppraisalDemo.tscn"`;
       `dotnet build src/CommandoWar.Client.Godot/CommandoWar.Client.Godot.slnx
       -c Debug` = 0/0.
-- [ ] The C# script only resolves the content dir, calls `AppraisalDemo`, holds
+- [x] The C# script only resolves the content dir, calls `AppraisalDemo`, holds
       the tick index, draws from the view-model, handles the slider / arrow
       keys, draws the HUD, and runs the `--selfcheck` / `--screenshot` modes —
       no scheduling, no command construction, no appraisal branching.
-- [ ] The scene renders, for the selected tick: the grid, agents by side with
+- [x] The scene renders, for the selected tick: the grid, agents by side with
       destination lines, the `?2` `KnownContact` ring, the accepted agent's
       `PlannedPath` polyline, the `OrderAppraisal` exposed-cell tint + `A`/`R`/`U`
       glyph, a per-agent `DecisionReason` panel, and a tick/hash/format/draws
       HUD, with the `DiagnosticRender.Svg` colours / glyphs. A one-line fallback
       lists any unhandled `Overlay` case.
-- [ ] `HSlider` + `Left`/`Right` scrub ticks 0..12; default index 1.
-- [ ] `DiagnosticsTests.fs`: the disposition-text-matches-golden fact and the
+- [x] `HSlider` + `Left`/`Right` scrub ticks 0..12; default index 1.
+- [x] `DiagnosticsTests.fs`: the disposition-text-matches-golden fact and the
       `loadExposedApproachFrames` tick-1 hash + dispositions fact.
       `dotnet test CommandoWar.slnx -c Release` green — state before (242) and
       after count.
-- [ ] Headless Godot smoke: dispositions + tick-1 hash `0xB03F8419E55F3592`
+- [x] Headless Godot smoke: dispositions + tick-1 hash `0xB03F8419E55F3592`
       match the golden; screenshot captured at
       `docs/evidence/task-029-appraisal-demo.png`.
-- [ ] `cwheadless corpus` 10/10 and `cwheadless fixture` byte-identical; `git
+- [x] `cwheadless corpus` 10/10 and `cwheadless fixture` byte-identical; `git
       diff` on `content/replays` and `content/diagnostics/*.{ascii.txt,svg}`
       empty for the existing entries.
-- [ ] `dotnet list
+- [x] `dotnet list
       src/CommandoWar.Client.Godot/CommandoWar.Client.Godot.csproj package
       --include-transitive` — only the intended pinned refs (`Godot.NET.Sdk`
       4.7.2 stack + the two project refs).
-- [ ] Source scan of `src/CommandoWar.Sim` for `godot|node2d|vector2` — clean.
-- [ ] `git status --porcelain` matches the Allowed scope (nothing under
+- [x] Source scan of `src/CommandoWar.Sim` for `godot|node2d|vector2` — clean.
+- [x] `git status --porcelain` matches the Allowed scope (nothing under
       `src/_scratch`, `bench/`, `content/benchmarks/`).
-- [ ] Docs updated (see below).
+- [x] Docs updated (see below).
 
 ## Required verification
 

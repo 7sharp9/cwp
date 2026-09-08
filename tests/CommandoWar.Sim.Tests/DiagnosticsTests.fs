@@ -636,6 +636,58 @@ let ``the HTML output parses as XML and has one frame element per tick`` () =
     Assert.Equal(frames.Length, frameEls)
     Assert.Equal(int DemoScenario.TickCount + 1, frameEls)
 
+// --- TASK-029 appraisal demo helper (a read-only, corpus-scoped B-029 slice) --
+
+[<Fact>]
+let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` () =
+    // The readable text the Godot appraisal demo's panel shows, asserted
+    // against the committed golden renders — not against DiagnosticRender's
+    // `let private` formatters.
+    let exposed = golden "exposed-approach-tick-001.ascii.txt"
+    let blocked = golden "blocked-goal-tick-001.ascii.txt"
+
+    Assert.Equal("accepted", AppraisalDemo.dispositionText Accepted)
+    Assert.Contains(AppraisalDemo.dispositionText Accepted, exposed)
+
+    let refused =
+        AppraisalDemo.dispositionText (Refused(RouteTooExposed(Some(AgentId.ofInt 2)), [||]))
+
+    Assert.Equal("refused route-too-exposed threat-agent-2", refused)
+    Assert.Contains(refused, exposed)
+
+    let unable = AppraisalDemo.dispositionText (Unable(NoKnownRoute, [||]))
+    Assert.Equal("unable no-known-route", unable)
+    Assert.Contains(unable, blocked)
+
+[<Fact>]
+let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
+    let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
+    Assert.Equal(13, frames.Length)
+    Assert.Equal(0xB03F8419E55F3592UL, frames.[1].Hash.Value)
+
+    let appraisals =
+        frames.[1].Overlays
+        |> Array.choose (function
+            | OrderAppraisal(a, _, d, _) -> Some(AgentId.value a, d)
+            | _ -> None)
+        |> Array.sortBy fst
+
+    match appraisals with
+    | [| (0, Refused(RouteTooExposed(Some t), _)); (1, Accepted) |] -> Assert.Equal(AgentId.ofInt 2, t)
+    | other -> Assert.Fail($"expected agent 0 Refused / agent 1 Accepted, got {other}")
+
+    // The flat C#-facing view model carries the same divergence.
+    let view = (AppraisalDemo.loadFrameViews corpusDir).[1]
+    let rows = view.Appraisals |> Array.sortBy (fun r -> r.AgentId)
+    Assert.Equal(2, rows.Length)
+    Assert.Equal("refused", rows.[0].Tone)
+    Assert.Equal("refused route-too-exposed threat-agent-2", rows.[0].Text)
+    Assert.Equal(10, rows.[0].ExposedCells.Length)
+    Assert.Equal("accepted", rows.[1].Tone)
+    Assert.Equal(1, view.Contacts.Length)
+    Assert.Equal(2, view.Contacts.[0].Contact)
+    Assert.Empty(view.UnhandledOverlays)
+
 // --- the pin: diagnostics do not perturb the shared fixture -----------
 
 [<Fact>]
