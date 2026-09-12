@@ -1,8 +1,9 @@
 # TASK-029: Godot appraisal-divergence demo
 
-Status: review (implemented 2026-09-08 on branch `task-029-godot-appraisal-demo`
+Status: done (implemented 2026-09-08 on branch `task-029-godot-appraisal-demo`
 off the TASK-028 merge on `main`; central decisions A–F confirmed with Dave
-2026-09-08 before the phase bodies; awaiting Dave's acceptance)
+2026-09-08 before the phase bodies; accepted by Dave and merged to `main`
+2026-09-12)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop) — decision-support for the refuse-near-threats feel

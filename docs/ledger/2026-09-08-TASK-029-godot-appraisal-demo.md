@@ -284,5 +284,12 @@ adds the Godot view and pins its helper against those goldens.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: (to be completed on acceptance)
+- Accepted: yes (2026-09-12)
+- Notes: launched the scene interactively and confirmed the divergence reads
+  right — agent 0's refusal and agent 1's acceptance of the same order are
+  visually distinct and the reason panel explains why. Re-verified on the
+  branch before accepting: `dotnet build CommandoWar.slnx -c Release` 0/0,
+  `dotnet test` `Passed: 244`, `-- corpus` 10/10, `-- fixture` format 4 / 34
+  events, headless Godot `--selfcheck` MATCH `0xB03F8419E55F3592`, `git status`
+  clean. No `CommandoWar.Sim` change; no ADR. Merged to `main` (`--no-ff`,
+  branch `task-029-godot-appraisal-demo` deleted; not pushed).
