@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="../CommandoWar.Sim/CommandoWar.Sim.fsproj" />
+  <Project Path="../CommandoWar.Headless/CommandoWar.Headless.fsproj" />
   <Project Path="CommandoWar.Client.Godot.csproj" />
 </Solution>

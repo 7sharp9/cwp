@@ -5,6 +5,44 @@ production code and must be removable without touching `CommandoWar.Sim`,
 `CommandoWar.Sim.Tests`, `CommandoWar.Headless`, `content/`, or the shared
 fixture. It is deliberately **not** in `CommandoWar.slnx`.
 
+## Appraisal-divergence demo (TASK-029)
+
+`scenes/AppraisalDemo.tscn` + `src/AppraisalDemoScene.cs` is the current
+`run/main_scene` (the TASK-004 greybox spike below still builds and runs from
+`Main.tscn`). It is a **read-only, corpus-scoped** first realisation of the
+Godot `DiagnosticFrame` renderer (backlog B-029, pulled forward as P3
+decision-support): it loads the committed `content/replays/exposed-approach`
+corpus entry, builds its per-tick `DiagnosticFrame` sequence via
+`DiagnosticRender.runFrames`, and renders the state plus the `KnownContact` /
+`PlannedPath` / `OrderAppraisal` overlays with a 13-frame tick slider and a
+tick / hash / format / draws HUD, mirroring the `DiagnosticRender.Svg` colours
+and glyphs. The divergence lands on tick 1: agent 0 (`Discipline 1`) `Refused
+RouteTooExposed threat-agent-2`, agent 1 (`Discipline 6`) `Accepted`.
+
+All non-trivial logic is in the framework-neutral F# helper
+`src/CommandoWar.Headless/AppraisalDemo.fs`; this C# scene is a thin renderer (a
+scoped deviation from ADR-0004's "F# client-core / no logic in C#" rule for this
+disposable demo — see the TASK-029 task file and ledger). No `CommandoWar.Sim`
+change; adds one `ProjectReference` to `CommandoWar.Headless`.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+"$GODOT" --editor --headless --quit --path .          # one-time import
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+# windowed: drag the slider or press Left / Right to scrub ticks 0..12
+"$GODOT" --path .
+
+# headless smoke: prints the tick-1 dispositions + hash, asserts vs the golden
+"$GODOT" --headless --path . -- --selfcheck            # MATCH 0xB03F8419E55F3592, exit 0
+
+# committed evidence screenshot (windowed; headless has no viewport texture)
+"$GODOT" --path . --resolution 1000x620 -- --screenshot <abs-path>.png
+```
+
+Committed screenshot: `docs/evidence/task-029-appraisal-demo.png`.
+
 ## Pinned versions
 
 | Component | Version |
