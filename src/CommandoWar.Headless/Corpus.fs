@@ -328,6 +328,13 @@ module Corpus =
     let private reissuedOrderWorld () : WorldState =
         worldOf (rawScenario "corpus-reissued-order" 16 9 [ 0, { X = 1; Y = 4 } ] [] [] [] { X = 14; Y = 0 } { X = 0; Y = 8 })
 
+    /// A friendly and a hostile within `CombatConfig.WeaponRange` and clear
+    /// line of sight from tick 1, both stationary (no orders) — the Combat
+    /// phase alone drives the trace, proving the phase wiring end-to-end
+    /// (TASK-031, backlog B-019).
+    let private openEngagementWorld () : WorldState =
+        worldOf (rawScenario "corpus-open-engagement" 10 10 [ 0, { X = 2; Y = 2 } ] [ 1, { X = 7; Y = 2 } ] [] [] { X = 9; Y = 0 } { X = 0; Y = 9 })
+
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
         [| { Name = "spike-fixture"
@@ -435,7 +442,17 @@ module Corpus =
                + "commitment's end (TASK-030, backlog B-018)."
              InitialStateNote = "Corpus reissued-order scenario (16 x 9, seed 20260904, 1 friendly)"
              InitialState = reissuedOrderWorld
-             TickCount = 6L } |]
+             TickCount = 6L }
+           { Name = "open-engagement"
+             Description =
+               "A friendly at (2,2) and a hostile at (7,2), open ground, no orders on either side: the Combat "
+               + "phase alone drives the trace. Both are within CombatConfig.WeaponRange and clear line of sight "
+               + "from tick 1, so the deterministic hitscan mechanic (range + directional-cover-mitigated hit "
+               + "chance, the stream's first real gameplay draw) fires every tick, symmetric both ways "
+               + "(TASK-031, backlog B-019)."
+             InitialStateNote = "Corpus open-engagement scenario (10 x 10, seed 20260904, 1 friendly + 1 hostile)"
+             InitialState = openEngagementWorld
+             TickCount = 3L } |]
 
     // --- entry paths and loading ----------------------------------------
 

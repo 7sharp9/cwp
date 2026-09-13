@@ -72,7 +72,10 @@ Direct leader movement may use a separate immediate input command, but it must p
 - basic enemy perception;
 - pathfinding and local cell reservation;
 - movement and formation slots;
-- hitscan small-arms combat;
+- hitscan small-arms combat (realised by TASK-031, backlog B-019: automatic
+  symmetric engagement, a deterministic range- and cover-mitigated hit
+  chance, the simulation's first real gameplay PRNG draw — no ammunition,
+  weapon readiness, or wound/death consequence yet, deliberately deferred);
 - suppression;
 - stress, discipline, and leader trust;
 - explicit order appraisal;

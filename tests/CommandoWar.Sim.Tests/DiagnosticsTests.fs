@@ -412,7 +412,8 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | UndeliveredOrder _
         | KnownContact _
         | OrderAppraisal _
-        | AgentCommitment _ -> None) with
+        | AgentCommitment _
+        | FireLine _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -476,7 +477,8 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | UndeliveredOrder _
             | KnownContact _
             | OrderAppraisal _
-            | AgentCommitment _ -> None)
+            | AgentCommitment _
+            | FireLine _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -516,7 +518,8 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | Obstructed _
             | UndeliveredOrder _
             | OrderAppraisal _
-            | AgentCommitment _ -> None)
+            | AgentCommitment _
+            | FireLine _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -568,7 +571,8 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | Obstructed _
             | KnownContact _
             | OrderAppraisal _
-            | AgentCommitment _ -> None)
+            | AgentCommitment _
+            | FireLine _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)
@@ -670,6 +674,43 @@ let ``frameOf derives an AgentCommitment overlay for the reissued-order entry's 
 
     Assert.Equal(golden "reissued-order-tick-003.ascii.txt", DiagnosticRender.Ascii tick3)
     Assert.Equal(golden "reissued-order-tick-003.svg", DiagnosticRender.Svg tick3)
+
+// --- hitscan combat and directional cover effects: the open-engagement entry (TASK-031) --
+
+let private openEngagementFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "open-engagement")
+
+    match Corpus.loadLog corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives FireLine overlays for the open-engagement entry's first tick (byte-equal to the goldens)`` () =
+    // Tick 1: a friendly at (2,2) and a hostile at (7,2), both within
+    // CombatConfig.WeaponRange and clear line of sight, so the Combat phase
+    // fires symmetrically both ways with no order on either side.
+    let tick1 = (openEngagementFrames ()).[1]
+
+    let fireLines =
+        tick1.Overlays
+        |> Array.choose (function
+            | FireLine(shooter, from, target, at, hit) -> Some(AgentId.value shooter, from, AgentId.value target, at, hit)
+            | _ -> None)
+        |> Array.sortBy (fun (s, _, _, _, _) -> s)
+
+    Assert.Equal(2, fireLines.Length)
+
+    match fireLines.[0], fireLines.[1] with
+    | (0, from0, 1, at0, _), (1, from1, 0, at1, _) ->
+        Assert.Equal({ X = 2; Y = 2 }, from0)
+        Assert.Equal({ X = 7; Y = 2 }, at0)
+        Assert.Equal({ X = 7; Y = 2 }, from1)
+        Assert.Equal({ X = 2; Y = 2 }, at1)
+    | other -> Assert.Fail($"expected agent 0 -> agent 1 and agent 1 -> agent 0, got {other}")
+
+    Assert.Equal(2, tick1.Events |> Array.filter (fun e -> e.Kind.StartsWith "shot-fired-") |> Array.length)
+    Assert.Equal(golden "open-engagement-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
+    Assert.Equal(golden "open-engagement-tick-001.svg", DiagnosticRender.Svg tick1)
 
 [<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =

@@ -83,7 +83,7 @@ Requirements:
 
 Prefer independent named streams only when they prevent unrelated features from perturbing one another. Do not create a stream per entity without evidence that it improves replay stability or testability.
 
-Realised by TASK-003: `SplitMix64` version 1 in `src/CommandoWar.Sim/Random.fs`, exposed through `IDeterministicRandom`. Single 64-bit additive counter, wrapping arithmetic, seed initialises the counter directly. State (`RandomState`) is a value record carrying the algorithm, its version, the counter word, and a draw counter. One stream, held on `WorldState.Random`; no gameplay draws yet.
+Realised by TASK-003: `SplitMix64` version 1 in `src/CommandoWar.Sim/Random.fs`, exposed through `IDeterministicRandom`. Single 64-bit additive counter, wrapping arithmetic, seed initialises the counter directly. State (`RandomState`) is a value record carrying the algorithm, its version, the counter word, and a draw counter. One stream, held on `WorldState.Random`. The Combat phase (TASK-031, section 12.8) is its first real gameplay consumer — one draw per engaging agent, ascending shooter id — stable draw order within the one system that draws so far.
 
 ## 6. Identity and ordering
 
@@ -667,6 +667,27 @@ not stored; `Progress` is genuine per-tick canonical state
 - apply cover and impact;
 - create suppression independent of a hit where intended;
 - emit shot, impact, wound, and suppression events.
+
+Realised by TASK-031 (backlog B-019) as `Simulation.combat`, its own phase
+in `Phases.order` between Navigation and the still no-op State consequences.
+Each agent (both sides, symmetric) with a candidate in
+`AgentState.VisibleContacts` within `CombatConfig.WeaponRange` and current
+`Sight.visible` line of fire engages the nearest such candidate (ties by
+ascending `AgentId`); a `0..1000`-scale hit chance
+(`CombatConfig.BaseHitChance` reduced by range and by directional
+`Terrain.cover` on the edge the shot arrives from — the `Appraisal` stage-3
+geometry, `Appraisal.attackDirection` made public and reused) is compared to
+one `RandomStream.next` draw, and `ShotFired(shooter, target, hit)` is
+emitted. This is the simulation's **first real gameplay consumer** of
+`WorldState.Random` (section 17); the stream was already canonical (TASK-003),
+so no `Canonical.FormatVersion` bump. "Validate ... ammunition", "resolve
+weapon readiness", "apply cover and impact" (beyond the hit-chance
+mitigation), and "create suppression" / wound events remain unrealised —
+named, not built (no `AgentState` weapon/ammo/wound field exists; a future
+task will add ammunition as either a cooldown-between-magazines or
+reload-from-stock model, and death as a critical/bleed-out timer rather than
+a binary kill — backlog numbers not yet assigned). Suppression proper is
+B-020; casualties are B-031.
 
 ### 12.9 State consequences
 

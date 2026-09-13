@@ -107,22 +107,22 @@ type EventMarker =
 ///   * B-016 communication    -> `UndeliveredOrder` (realised by TASK-027);
 ///   * B-017 appraisal       -> `OrderAppraisal` (realised by TASK-028);
 ///   * B-018 commitment      -> `Commitment` (realised by TASK-030);
-///   * B-019 combat          -> a fire-line case (shooter, target).
+///   * B-019 combat          -> `FireLine` (realised by TASK-031).
 ///
-/// B-019 does not exist yet: no such case is defined.
 /// `Diagnostics.frame` produces one `KnownContact` per contact in
 /// `WorldState.TacticalKnowledge`, one `OrderAppraisal` per agent that holds
-/// an appraised order, and one `Commitment` per agent (bare authoritative
-/// state carries the squad picture and the per-agent order / disposition /
-/// destination, so `frame` can draw all three — unlike `Reserved` /
-/// `Obstructed`, which need a completed step).
+/// an appraised order, and one `AgentCommitment` per agent (bare
+/// authoritative state carries the squad picture and the per-agent order /
+/// disposition / destination, so `frame` can draw all three — unlike
+/// `Reserved` / `Obstructed`, which need a completed step).
 /// `Diagnostics.frameOf` produces the same `KnownContact`, `OrderAppraisal`,
-/// and `Commitment` sets plus one `PlannedPath` per agent following a route
-/// (TASK-015), one
+/// and `AgentCommitment` sets plus one `PlannedPath` per agent following a
+/// route (TASK-015), one
 /// `Reserved` per cell contested this tick (TASK-017), one `Obstructed` per
-/// cell an agent was held out of this tick (TASK-022), and one
+/// cell an agent was held out of this tick (TASK-022), one
 /// `UndeliveredOrder` per recipient an order failed to reach this tick
-/// (TASK-027); every other overlay is populated by a caller (a test, or
+/// (TASK-027), and one `FireLine` per shot fired this tick (TASK-031); every
+/// other overlay is populated by a caller (a test, or
 /// `cwheadless render --los` / `--path`). `Cells` is the generic
 /// non-speculative shape: a labelled set of cells a renderer can always fall
 /// back to.
@@ -198,6 +198,16 @@ type Overlay =
     /// `Diagnostics.frameOf` derive one per agent — the `OrderAppraisal`
     /// precedent.
     | AgentCommitment of agent: AgentId * at: Cell * commitment: Commitment
+    /// A deterministic hitscan shot fired this tick (TASK-031, backlog
+    /// B-019; `docs/04` section 12.8): `shooter` at `from` fired at `target`
+    /// at `at`, resolving `hit`. Cells are carried explicitly (the `Reserved`
+    /// / `Obstructed` precedent) rather than requiring the renderer to cross-
+    /// reference `AgentMarker`s. `Diagnostics.frameOf` derives one per this
+    /// tick's `ShotFired` event, looking up each side's cell from the
+    /// post-step world; `Diagnostics.frame` never emits one (a shot is a
+    /// this-tick event, not standing state — the `UndeliveredOrder`
+    /// precedent).
+    | FireLine of shooter: AgentId * from: Cell * target: AgentId * at: Cell * hit: bool
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -280,6 +290,9 @@ module Diagnostics =
         | OrderAppraised _ -> { Kind = "order-appraised"; Cells = [||] }
         | CommitmentEstablished(_, _, target) -> { Kind = "commitment-established"; Cells = [| target |] }
         | CommitmentCompleted(_, _, at) -> { Kind = "commitment-completed"; Cells = [| at |] }
+        | ShotFired(_, _, hit) ->
+            { Kind = (if hit then "shot-fired-hit" else "shot-fired-miss")
+              Cells = [||] }
         | MovementStepped(_, from, into) -> { Kind = "movement-stepped"; Cells = [| from; into |] }
         | MovementCompleted(_, at) -> { Kind = "movement-completed"; Cells = [| at |] }
         | MovementBlocked(_, at, target) -> { Kind = "movement-blocked"; Cells = [| at; target |] }
@@ -378,6 +391,7 @@ module Diagnostics =
             | OrderAppraised _
             | CommitmentEstablished _
             | CommitmentCompleted _
+            | ShotFired _
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
@@ -403,6 +417,7 @@ module Diagnostics =
             | OrderAppraised _
             | CommitmentEstablished _
             | CommitmentCompleted _
+            | ShotFired _
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
@@ -429,6 +444,7 @@ module Diagnostics =
             | OrderAppraised _
             | CommitmentEstablished _
             | CommitmentCompleted _
+            | ShotFired _
             | MovementStepped _
             | MovementCompleted _
             | MovementBlocked _
@@ -442,13 +458,44 @@ module Diagnostics =
             |> Array.tryFind (fun a -> a.Id = recipient)
             |> Option.map (fun a -> UndeliveredOrder(recipient, a.Position, command)))
 
+    /// A `FireLine` overlay per shot fired this tick (TASK-031), derived from
+    /// this tick's `ShotFired` events, in emission order (ascending shooter
+    /// agent id). Both cells are read from the post-step world. The
+    /// `undeliveredOrderOverlays` precedent.
+    let private fireLineOverlays (result: StepResult) : Overlay[] =
+        result.Events
+        |> Array.choose (fun e ->
+            match e.Body with
+            | ShotFired(shooter, target, hit) -> Some(shooter, target, hit)
+            | CommandAccepted _
+            | CommandRejected _
+            | OrderUndelivered _
+            | OrderAppraised _
+            | CommitmentEstablished _
+            | CommitmentCompleted _
+            | MovementStepped _
+            | MovementCompleted _
+            | MovementBlocked _
+            | MovementYielded _
+            | MovementObstructed _
+            | ContactObserved _
+            | ContactExpired _ -> None)
+        |> Array.choose (fun (shooter, target, hit) ->
+            match
+                result.State.Agents |> Array.tryFind (fun a -> a.Id = shooter),
+                result.State.Agents |> Array.tryFind (fun a -> a.Id = target)
+            with
+            | Some s, Some t -> Some(FireLine(shooter, s.Position, target, t.Position, hit))
+            | _ -> None)
+
     /// The diagnostic frame for a completed step: the frame of the resulting
     /// world, plus this tick's event markers, a `PlannedPath` overlay for every
     /// agent still following a route, a `Reserved` overlay for every cell
     /// contested this tick, an `Obstructed` overlay for every cell an agent was
     /// held out of this tick, an `UndeliveredOrder` overlay per recipient an
     /// order failed to reach this tick, a `KnownContact` overlay per squad
-    /// contact, an `AgentCommitment` overlay per agent (TASK-030), and the
+    /// contact, an `AgentCommitment` overlay per agent (TASK-030), a
+    /// `FireLine` overlay per shot fired this tick (TASK-031), and the
     /// post-step canonical hash recorded on the `StepResult`. Total, pure,
     /// deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
@@ -462,5 +509,6 @@ module Diagnostics =
                       undeliveredOrderOverlays result
                       knownContactOverlays result.State
                       orderAppraisalOverlays result.State
-                      commitmentOverlays result.State ]
+                      commitmentOverlays result.State
+                      fireLineOverlays result ]
             Hash = result.StateHash }

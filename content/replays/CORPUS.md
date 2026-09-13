@@ -41,6 +41,22 @@ content and none needs an on-disk format (backlog B-024).
 | `lost-comms` | **The first entry exercising communication failure** (TASK-027, backlog B-016). One friendly agent 0 at (1,4) with `CommunicationAvailable = false` (an authored comms blackout) ordered east to (6,4). Command intake accepts the order (`CommandAccepted`), the Communication phase (12.2) cannot reach the recipient and emits `OrderUndelivered` (`UnableToCommunicate`), and the order is dropped: no `Destination` is written and the agent never moves. The "Lost communication" scenario (`docs/05` section 16). Because the order is dropped, no `AgentState.Order` is written and the Appraisal phase never runs on it — this is the one entry with no `OrderAppraised` event. |
 | `exposed-approach` | **The G3 evidence scenario** (TASK-028, backlog B-017; `docs/07` section 9 criterion 2). Two friendlies on open ground ordered along the same exposed approach past a stationary hostile the squad sees from the start: agent 0 (`Discipline 1`) at (1,3) → (11,3), agent 1 (`Discipline 6`) at (1,5) → (11,5). Both routes run the same distance past the known threat at (10,4), so the exposure is near-identical — the divergence is discipline alone: on tick 1 the Appraisal phase `Refuses` agent 0's order (`RouteTooExposed`, no `Destination`) and `Accepts` agent 1's. Two agents appraise the same intent differently for inspectable reasons. |
 | `reissued-order` | **The first entry exercising commitment supersession** (TASK-030, backlog B-018). One friendly at (1,4), open ground, no threats: ordered east to (14,4) on tick 1 (`Accepted`, `CommitmentEstablished`), then re-ordered south to (14,8) on tick 3 while still mid-route toward the first target. The second order supersedes the first — Appraisal re-accepts against the new target and `commitmentAndLocalAction` emits a fresh `CommitmentEstablished` for the second command, with no event reporting the first commitment's end. `docs/07` section 8 step 7, "the player reissues the original intent". |
+| `open-engagement` | **The first entry exercising real combat** (TASK-031, backlog B-019). A friendly at (2,2) and a hostile at (7,2), open ground, no orders on either side: both are within `CombatConfig.WeaponRange` and clear line of sight from tick 1, so the Combat phase alone drives the trace — a deterministic hitscan shot (range + directional-cover-mitigated hit chance) every tick, symmetric both ways, the deterministic stream's first real gameplay draw. |
+
+**Re-pinned by TASK-031** (Combat phase realised, backlog B-019): `perception-contact`
+and `exposed-approach` each legitimately bring an agent within
+`CombatConfig.WeaponRange` and line of sight of the opposing side partway
+through their run (once the friendly clears the wall in `perception-contact`;
+once agent 1 walks past the known hostile in `exposed-approach`), so real
+`ShotFired` events and new per-tick hashes appear from that tick onward —
+**tick counts are unchanged on both**, and every tick before the first
+engagement is byte-identical to its pre-TASK-031 hash (`exposed-approach`
+tick 1 in particular, `0xB03F8419E55F3592`, is unaffected — the TASK-029
+Godot demo's pinned value still holds). No other existing entry has an
+engageable pair; the `demo.html` diagnostic golden (not a corpus entry)
+similarly gains combat from tick 8 onward. `Canonical.FormatVersion` does not
+move — `WorldState.Random` was already canonical (TASK-003); only the values
+a draw produces are new, not what is hashed.
 
 ## Production replay-command format (TASK-025, backlog B-045)
 

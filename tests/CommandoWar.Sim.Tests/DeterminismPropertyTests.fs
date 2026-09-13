@@ -530,7 +530,7 @@ let ``a comms-blacked-out agent never receives a command destination and never m
             inert && deliveryEventsOk)
 
 
-// --- property 8: order appraisal outcomes are consistent and PRNG-free ----
+// --- property 8: order appraisal outcomes are consistent -----------------
 // TASK-028. `appraisalCaseGen` is `perceptionCaseGen` (1-3 friendlies, 1-2
 // hostiles on an open-ish grid) with a random non-negative `Discipline` per
 // friendly. For every post-tick state and every appraised order:
@@ -543,8 +543,15 @@ let ``a comms-blacked-out agent never receives a command destination and never m
 //       unreachable — both threat-independent, so robust across contact decay;
 //   (d) a `Disposition` is only ever `Some` when the agent holds an `Order`;
 //   (e) every `OrderAppraised(a, _, disp)` event matches agent `a`'s stored
-//       `Disposition` at the end of the tick that emitted it;
-//   (f) no appraisal draws from the deterministic stream.
+//       `Disposition` at the end of the tick that emitted it.
+//
+// TASK-031 note: this property no longer asserts zero `Random.Draws` — a
+// generated friendly/hostile pair can now legitimately end up within
+// `CombatConfig.WeaponRange` and line of sight, and the Combat phase draws
+// deterministically when that happens (property 10 covers Combat's own
+// correctness). `Appraisal.appraise` itself still draws nothing; this
+// property was never actually exercising that narrower claim (it observes
+// the whole tick, not the leaf function), so nothing is lost by dropping it.
 
 let private appraisalCaseGen: Gen<RandomCase> =
     gen {
@@ -560,7 +567,7 @@ let private appraisalCaseGen: Gen<RandomCase> =
     }
 
 [<Property(MaxTest = 200)>]
-let ``every appraisal outcome is consistent with a fresh recompute and draws no randomness`` () =
+let ``every appraisal outcome is consistent with a fresh recompute`` () =
     Prop.forAll (Arb.fromGen appraisalCaseGen) (fun case ->
         match replayOf case with
         | Error e -> failwith $"replay of a generated case failed: {e}"
@@ -621,20 +628,22 @@ let ``every appraisal outcome is consistent with a fresh recompute and draws no 
 
                 prev <- r.State
 
-            let noDraws =
-                outcome.TickStates |> Array.forall (fun st -> st.Random.Draws = 0UL)
+            dispositionsOk && eventsOk)
 
-            dispositionsOk && eventsOk && noDraws)
-
-// --- property 9: commitment derivation is consistent and PRNG-free -------
+// --- property 9: commitment derivation is consistent ----------------------
 // TASK-030. Reuses `appraisalCaseGen` (property 8's generator: 1-3
 // friendlies with a random Discipline, 1-2 hostiles). For every post-tick
 // state and every agent: `Commitment.ofAgent` applied to that agent's
 // (Order, Disposition, Destination) is `Moving` iff `Order = Some _ &&
 // Disposition = Some Accepted && Destination = Some _` — the derivation
 // `commitmentAndLocalAction` relies on can never disagree with the fields it
-// reads, because it is a pure function of them, not independent state. No
-// PRNG draw (Commitment is derived, so it cannot introduce one).
+// reads, because it is a pure function of them, not independent state.
+//
+// TASK-031 note: `Commitment.ofAgent` itself still draws nothing (it is
+// still a pure function of three already-canonical fields), but the
+// generated world as a whole can now legitimately draw when a friendly and
+// hostile end up within `CombatConfig.WeaponRange` and line of sight — see
+// property 8's identical note.
 
 [<Property(MaxTest = 200)>]
 let ``every agent's derived Commitment matches its Order, Disposition, and Destination`` () =
@@ -656,7 +665,58 @@ let ``every agent's derived Commitment matches its Order, Disposition, and Desti
                         | Moving _ -> expectedMoving
                         | Holding -> not expectedMoving))
 
-            let noDraws =
-                outcome.TickStates |> Array.forall (fun st -> st.Random.Draws = 0UL)
+            commitmentsOk)
 
-            commitmentsOk && noDraws)
+// --- property 10: hitscan combat outcomes are deterministic --------------
+// TASK-031. Reuses `appraisalCaseGen` (properties 8/9's generator — a
+// friendly/hostile pair can now legitimately end up within
+// `CombatConfig.WeaponRange` and line of sight). For every tick and every
+// `ShotFired` event, in emission order (ascending shooter agent id):
+// recomputing `Combat.hitChance` from the shooter's and target's post-tick
+// `Position` (unchanged between the Combat phase and `Output` — nothing
+// after Combat moves an agent) and redrawing from the pre-tick `Random`
+// state reproduces the same `hit` outcome, and the reconstructed draw count
+// matches `Random.Draws` exactly — no extra or missing draws.
+
+[<Property(MaxTest = 200)>]
+let ``every ShotFired outcome is consistent with a fresh recompute and the exact draw count`` () =
+    Prop.forAll (Arb.fromGen appraisalCaseGen) (fun case ->
+        let mutable prev = case.World
+        let mutable ok = true
+
+        for tick in 1L .. case.TickCount do
+            let cmds =
+                case.Commands
+                |> Array.filter (fun c -> c.Tick = tick)
+                |> Array.map (fun c -> c.Command)
+
+            let r = Simulation.step SimConfig.standard cmds prev
+
+            let shots =
+                r.Events
+                |> Array.choose (fun e ->
+                    match e.Body with
+                    | ShotFired(shooter, target, hit) -> Some(shooter, target, hit)
+                    | _ -> None)
+
+            let mutable random = prev.Random
+
+            for (shooter, target, hit) in shots do
+                match
+                    r.State.Agents |> Array.tryFind (fun a -> a.Id = shooter),
+                    r.State.Agents |> Array.tryFind (fun a -> a.Id = target)
+                with
+                | Some s, Some t ->
+                    let chance = Combat.hitChance r.State.Terrain s.Position t.Position
+                    let struct (draw, next) = RandomStream.next random
+                    random <- next
+                    if ((draw % 1000UL) < uint64 chance) <> hit then
+                        ok <- false
+                | _ -> ok <- false
+
+            if r.State.Random.Draws <> random.Draws then
+                ok <- false
+
+            prev <- r.State
+
+        ok)

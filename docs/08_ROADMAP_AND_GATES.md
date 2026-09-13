@@ -115,6 +115,8 @@ G2 blocker; G2 was declared passed on the evidence bullets alone.
 - implement communication and shared tactical knowledge;
 - implement explicit order appraisal and typed reasons;
 - implement commitment and finite execution states;
+- implement basic hitscan combat and directional cover effects (a
+  precondition for suppression below);
 - implement suppression, stress, discipline, trust, and reappraisal triggers;
 - implement simple enemy hold-and-defend doctrine;
 - implement the canonical refusal sequence as a deterministic scenario test.

@@ -108,6 +108,16 @@ type EventBody =
     /// "decay or expire stale contacts"). `lastKnownCell` is where it was last
     /// observed. Emitted by the Tactical-knowledge phase on removal only.
     | ContactExpired of contact: AgentId * lastKnownCell: Cell
+    /// `shooter` fired a deterministic hitscan shot at `target` this tick
+    /// (TASK-031, backlog B-019; `docs/04` section 12.8), resolving `hit`
+    /// (`Combat.hitChance`, mitigated by directional `Terrain.cover`,
+    /// compared to a `RandomStream` draw — the stream's first real gameplay
+    /// consumer). Emitted by the Combat phase for every qualifying shot only
+    /// — no event when no candidate in `AgentState.VisibleContacts` is
+    /// within `CombatConfig.WeaponRange` and current line of fire. `hit`
+    /// carries no consequence yet: no wound, death, or suppression follows
+    /// (B-020 / B-031).
+    | ShotFired of shooter: AgentId * target: AgentId * hit: bool
 
 /// An immutable domain event tagged with the tick it occurred on. Within a
 /// single step, events are emitted in a stable order:
@@ -126,13 +136,17 @@ type EventBody =
 ///      since completion requires `Order = None` this tick and establishment
 ///      requires `Order = Some`; from `commitmentAndLocalAction` — TASK-030;
 ///      runs after Appraisal, before movement);
-///   6. movement outcomes, ascending agent id.
+///   6. movement outcomes, ascending agent id;
+///   7. combat outcomes, ascending shooter agent id (`ShotFired`, from the
+///      Combat phase — TASK-031; runs after movement, resolving against
+///      post-movement positions).
 /// The order follows `Phases.order` (Command intake, Communication,
 /// Perception, Tactical knowledge, Appraisal, Commitment and local action,
-/// Navigation and movement), so a contact is observed at its start-of-tick
-/// position, an order is appraised against this tick's tactical picture, a
-/// commitment begins or ends the same tick its order is appraised, and a
-/// delivered-and-accepted order takes effect the same tick.
+/// Navigation and movement, Combat), so a contact is observed at its
+/// start-of-tick position, an order is appraised against this tick's
+/// tactical picture, a commitment begins or ends the same tick its order is
+/// appraised, a delivered-and-accepted order takes effect the same tick, and
+/// a shot is resolved against this tick's post-movement positions.
 type DomainEvent =
     { Tick: int64
       Body: EventBody }

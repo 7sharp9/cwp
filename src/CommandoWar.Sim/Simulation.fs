@@ -909,6 +909,59 @@ module Simulation =
 
         s.Agents <- agents
 
+    // --- Phase: combat -------------------------------------------------------
+    // Realised by TASK-031 (backlog B-019). Turns the docs/04 section 12.8
+    // no-op into a real phase: deterministic hitscan combat with directional
+    // cover mitigation. Runs after Navigation (so a shot resolves against this
+    // tick's post-movement positions) and before the still no-op
+    // StateConsequences / Mission.
+    //
+    // For every agent, in ascending id order (both sides — combat is
+    // symmetric, docs/05 section 12 "enemy agents use the same perception and
+    // combat rules where practical"):
+    //
+    //   1. Candidates are the agent's own AgentState.VisibleContacts (TASK-026)
+    //      resolved to full AgentState — never a scan of every agent, per risk
+    //      R-023 "same observation contract". Because Combat runs three phases
+    //      after Perception, a candidate's position may have moved since it
+    //      was observed; Combat.chooseTarget re-verifies line of fire fresh
+    //      against each candidate's CURRENT cell.
+    //   2. Combat.chooseTarget picks the nearest candidate within
+    //      CombatConfig.WeaponRange and current Sight.visible line of fire,
+    //      ties broken by ascending AgentId. No candidate qualifies -> no
+    //      shot, no event (the sparse-event precedent every other phase
+    //      observes).
+    //   3. On a qualifying target, Combat.hitChance (range + directional
+    //      Terrain.cover on the edge the shot arrives from) gives a 0..1000
+    //      chance; one RandomStream.next draw decides hit or miss. This is the
+    //      deterministic stream's first real gameplay consumer —
+    //      WorldState.Random is already part of Canonical.encode (TASK-003),
+    //      so no Canonical.FormatVersion bump: only the values a draw produces
+    //      are new, not what is hashed.
+    //   4. Emit ShotFired(shooter, target, hit). No AgentState is written: a
+    //      hit has no consequence yet (no wound, death, or suppression — B-020
+    //      / B-031, deliberately out of scope).
+    let private combat (s: StepState) =
+        let terrain = s.Terrain
+        let agents = s.Agents // already ascending by id; this phase writes none
+        let mutable random = s.Random
+
+        for shooter in agents do
+            let candidates =
+                shooter.VisibleContacts
+                |> Array.choose (fun id -> agents |> Array.tryFind (fun a -> a.Id = id))
+
+            match Combat.chooseTarget terrain shooter candidates with
+            | None -> ()
+            | Some target ->
+                let chance = Combat.hitChance terrain shooter.Position target.Position
+                let struct (draw, next) = RandomStream.next random
+                random <- next
+                let hit = (draw % 1000UL) < uint64 chance
+                emit (ShotFired(shooter.Id, target.Id, hit)) s
+
+        s.Random <- random
+
     // --- Phase: output -----------------------------------------------------
     // Build the render snapshot from authoritative state. Agents are already
     // held in ascending id order; the sort is a cheap defensive guarantee for
@@ -938,8 +991,8 @@ module Simulation =
         | Appraisal -> appraisal s
         | CommitmentAndLocalAction -> commitmentAndLocalAction s
         | NavigationAndMovement -> navigationAndMovement s
+        | Combat -> combat s
         | Output -> output s
-        | Combat
         | StateConsequences
         | Mission -> ()
 

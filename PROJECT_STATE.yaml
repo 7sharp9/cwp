@@ -5,36 +5,46 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-13 (TASK-030 accepted and merged to main; no task selected)
+  updated: 2026-09-13 (TASK-031 implemented, on branch, awaiting review)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-031
+  task_file: tasks/TASK-031-HITSCAN-COMBAT.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-13
   note: >-
-    2026-09-13: TASK-030 (Commitment and finite move/hold executor, backlog
-    B-018) accepted by Dave and merged to main (--no-ff, branch
-    task-030-commitment-and-finite-executor deleted; not pushed). A real
-    commitmentAndLocalAction phase (docs/04 section 12.6) realising a
-    Commitment DU (Holding | Moving) as a pure derived value over the
-    already-canonical Order/Disposition/Destination -- no Canonical.FormatVersion
-    bump, no hash re-pin anywhere. New CommitmentEstablished /
-    CommitmentCompleted events, new Overlay.AgentCommitment, new
-    reissued-order corpus entry proving order-supersedes-commitment
-    end-to-end. 244 -> 254 green; dotnet build 0/0; -- corpus 11/11; --
-    fixture format 4, hashes unchanged, 34 -> 36 events; -- replay-file
-    envelope-full OK at canonical 4, hashes unchanged, 75 -> 78 events. No
-    ADR. No task selected.
-    (docs/ledger/2026-09-13-TASK-030-commitment-and-finite-executor.md)
+    2026-09-13: TASK-031 (Basic hitscan combat and directional cover
+    effects, backlog B-019) implemented on branch task-031-hitscan-combat
+    off the TASK-030 merge on main. Not yet accepted or merged. A real
+    Combat phase (docs/04 section 12.8): automatic symmetric engagement from
+    a shooter's own VisibleContacts, a deterministic 0..1000-scale hit
+    chance (range + directional Terrain.cover), the simulation's first real
+    gameplay PRNG draw -- no Canonical.FormatVersion bump, since
+    WorldState.Random was already canonical. No ammunition/weapon-readiness
+    and no wound/death/suppression consequence, both deliberately deferred.
+    New Combat.fs leaf, new ShotFired event, new Overlay.FireLine, new
+    open-engagement corpus entry. Correction found during implementation:
+    perception-contact and exposed-approach (TASK-026/028's enemy-bearing
+    entries) legitimately re-pin once an agent comes into weapon range and
+    line of sight of the opposing side (tick counts unchanged on both);
+    demo.html similarly gains combat from tick 8. 254 -> 265 green; dotnet
+    build 0/0; -- corpus 12/12; -- fixture byte-identical; -- replay-file
+    envelope-full unchanged. No ADR.
+    (docs/ledger/2026-09-13-TASK-031-hitscan-combat.md)
 
-    Newly unblocked (from TASK-030, still open): B-023 (canonical refusal
-    sequence -- step 7 landed in isolation as reissued-order; steps 4-6 and 8
-    still need B-020 / B-021 / B-022). B-019 (hitscan combat) and B-016b
-    (comms range/delay/jamming) remain the two other items with every
-    dependency already done.
+    Prior: TASK-030 (Commitment and finite move/hold executor, backlog
+    B-018) accepted by Dave and merged to main (--no-ff, branch
+    task-030-commitment-and-finite-executor deleted; not pushed) 2026-09-13.
+    A real commitmentAndLocalAction phase (docs/04 section 12.6) realising a
+    Commitment DU (Holding | Moving) as a pure derived value over the
+    already-canonical Order/Disposition/Destination -- no
+    Canonical.FormatVersion bump, no hash re-pin anywhere. New
+    CommitmentEstablished / CommitmentCompleted events, new
+    Overlay.AgentCommitment, new reissued-order corpus entry. 244 -> 254
+    green before TASK-031 branched.
+    (docs/ledger/2026-09-13-TASK-030-commitment-and-finite-executor.md)
 
     Prior: TASK-029 (Godot appraisal-divergence demo -- a read-only,
     corpus-scoped slice of backlog B-029 pulled forward as P3 decision-support;

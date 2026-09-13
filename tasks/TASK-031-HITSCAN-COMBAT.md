@@ -1,10 +1,48 @@
 # TASK-031: Basic hitscan combat and directional cover effects
 
-Status: draft
+Status: review (implemented 2026-09-13 on branch `task-031-hitscan-combat`;
+central decisions A–I confirmed with Dave 2026-09-13 before the phase
+bodies; not yet accepted or merged)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-019
 Size: M
+
+## Outcome (2026-09-13)
+
+Implemented on branch `task-031-hitscan-combat` off the TASK-030 merge on
+`main` (committed locally, not pushed). All nine central decisions confirmed
+with Dave and implemented as proposed, with one significant correction found
+during implementation (Decision H): the original claim that only the new
+`open-engagement` corpus entry would be newly pinned was wrong.
+`perception-contact` and `exposed-approach` (TASK-026/028's enemy-bearing
+entries) each legitimately bring an agent within `CombatConfig.WeaponRange`
+and line of sight of the opposing side partway through their run, so real
+combat now fires there too — a genuine, correct consequence of building
+real hitscan combat, not a bug. Their tables and one affected diagnostic
+golden (`perception-contact-tick-005.*`) were re-pinned; tick counts are
+unchanged on both, and `exposed-approach` tick 1 (the TASK-029 Godot demo's
+pinned hash) is unaffected. `demo.html` similarly gains combat from tick 8.
+See "Event-trace and hash impact" for the full accounting.
+
+The Combat phase (12.8) is a real phase (`Simulation.combat`) in its
+existing `Phases.order` slot. `CombatConfig` + `Combat.hitChance` +
+`Combat.chooseTarget` live in a new leaf `src/CommandoWar.Sim/Combat.fs`,
+reusing `Appraisal.attackDirection` (made public) for the cover-facing
+geometry. One new event `ShotFired`; one new overlay `Overlay.FireLine`
+(`frameOf`-only). New corpus entry `open-engagement` proves the phase wiring
+end-to-end. No `Canonical.FormatVersion` bump — `WorldState.Random` was
+already canonical.
+
+`254 -> 265` green (+1 `CorpusTests` theory case, +8 `SimulationTests`, +1
+`DeterminismPropertyTests` property 10 at 200 cases, +1 `DiagnosticsTests`
+golden fact). `dotnet build` 0/0; `-- corpus` 12/12 (`--regenerate`
+idempotent); `-- fixture` byte-identical; `-- replay-file envelope-full`
+checkpoints unchanged; `src/CommandoWar.Sim` packages `FSharp.Core` only. No
+ADR.
+
+Full detail:
+`docs/ledger/2026-09-13-TASK-031-hitscan-combat.md`.
 
 ## Objective
 
@@ -281,6 +319,27 @@ outcomes). New entry `open-engagement`: a friendly and a hostile within
 stationary) — the Combat phase alone drives the trace. Proves the whole
 phase wires together end-to-end with a stable hash.
 
+**Correction found during implementation:** the initial framing assumed
+every *existing* corpus entry, the fixture, and `envelope-full` would stay
+byte-identical, with only the new `open-engagement` entry newly pinned. That
+was wrong. `perception-contact` and `exposed-approach` (TASK-026 / TASK-028's
+enemy-bearing entries) each legitimately bring an agent within
+`CombatConfig.WeaponRange` and line of sight of the opposing side partway
+through their run — once the friendly clears the wall in
+`perception-contact`; once agent 1 walks past the known hostile in
+`exposed-approach` — so real combat now fires there too, moving their hashes
+from that tick onward (tick counts unchanged on both; `exposed-approach`
+tick 1 specifically, `0xB03F8419E55F3592`, is unaffected — the TASK-029
+Godot demo's pinned value still holds). `demo.html` (not a corpus entry)
+similarly gains combat from tick 8 onward. This is the honest, correct
+consequence of building real hitscan combat against scenarios that already
+place an enemy in reach — not a bug, and not something to design around by
+retuning `CombatConfig` to avoid triggering it. See "Event-trace impact"
+below for the full accounting; two properties and one fact whose "no PRNG
+draw" assumption predated Combat needed the same correction (properties 8/9,
+and one `SimulationTests` fact whose hand-built world happens to sit exactly
+at `WeaponRange`).
+
 Cover mitigation and range penalty are proved directly on the pure
 `Combat.hitChance` function in `SimulationTests` (no simulation run, no RNG
 needed): chance strictly decreases as range increases, all else equal;
@@ -365,6 +424,29 @@ combat overlay. Required:
   overlay unit test; the regeneration note in
   `content/diagnostics/README.md`.
 
+## Event-trace and hash impact (selective re-pin; no `Canonical.FormatVersion` change)
+
+`WorldState.Random` is already canonical (TASK-003), so this task never
+bumps `Canonical.FormatVersion` — but two of the ten pre-existing corpus
+entries **do** get new hashes, because real combat now fires in them once an
+agent comes within range and line of sight of the opposing side (see the
+Decision H correction above):
+
+- `perception-contact` — unaffected through tick 4 (before the friendly
+  clears the wall); ticks 5–14 gain `ShotFired` events and new hashes.
+- `exposed-approach` — tick 1 unaffected (`0xB03F8419E55F3592`, unchanged);
+  ticks 2–12 gain `ShotFired` events and new hashes once agent 1 (`Accepted`)
+  walks within range of the known hostile. Agent 0 (`Refused`, never moves)
+  stays out of range throughout.
+- `demo.html` (not a corpus entry) — unaffected through tick 7; ticks 8–20
+  gain `FireLine` overlays and new per-tick hashes.
+
+**Tick counts are unchanged on both entries** — this is the required
+stop-and-report check, and it holds. Every other corpus entry, the fixture,
+and `envelope-full` have no pair that ever comes within
+`CombatConfig.WeaponRange` and line of sight, so they are byte-identical
+(hash and event count both).
+
 ## Allowed scope
 
 - `src/CommandoWar.Sim/Appraisal.fs` — `attackDirection`: remove `private`
@@ -385,9 +467,26 @@ combat overlay. Required:
   `Corpus.all` row; `CORPUS.md` row.
 - `src/CommandoWar.Headless/Program.fs` — a `ShotFired` arm only if an
   exhaustive `EventBody` match exists there.
-- `content/replays/` — the new `open-engagement.{cwlog,md}`; `CORPUS.md`.
-- `content/diagnostics/` — new `open-engagement-tick-001.*`; `README.md`.
-- `tests/CommandoWar.Sim.Tests/` — see "Acceptance criteria".
+- `src/CommandoWar.Headless/AppraisalDemo.fs` (**not originally listed**;
+  required because it has an exhaustive `Overlay` match with no
+  `TreatWarningsAsErrors` guard in the test project) — one `FireLine` arm
+  added to its `unhandled` bucket (this disposable P3 demo predates TASK-031
+  and does not render combat).
+- `content/replays/` — the new `open-engagement.{cwlog,md}`; `CORPUS.md`;
+  the selective re-pin of `perception-contact.md` / `exposed-approach.md`
+  (see "Event-trace and hash impact" — **not originally listed**, found
+  during implementation).
+- `content/diagnostics/` — new `open-engagement-tick-001.*`; the re-pin of
+  `perception-contact-tick-005.*` and `demo.html` (**not originally
+  listed**); `README.md`.
+- `tests/CommandoWar.Sim.Tests/` — see "Acceptance criteria". Also
+  (**not originally listed**): `DeterminismPropertyTests.fs` properties 8
+  and 9 lose their "no PRNG draw" assertion (now false — a generated
+  friendly/hostile pair can legitimately draw via Combat) and property 8's
+  name drops "and draws no randomness"; one `SimulationTests` fact
+  (`order appraisal is deterministic across two runs...`) similarly loses
+  its zero-draws assertion, since its hand-built world happens to sit
+  exactly at `CombatConfig.WeaponRange`.
 - Docs — see "Documentation updates".
 
 ## Forbidden scope
@@ -413,87 +512,112 @@ combat overlay. Required:
 
 ## Acceptance criteria
 
-- [ ] `Combat` is a real phase function in `Simulation.fs`, in its existing
+- [x] `Combat` is a real phase function in `Simulation.fs`, in its existing
       `Phases.order` slot, with a "Realised by TASK-031" header comment;
       `runPhase` has a real arm and it is out of the no-op list.
-- [ ] `src/CommandoWar.Sim/Combat.fs`: `CombatConfig` module literals;
+- [x] `src/CommandoWar.Sim/Combat.fs`: `CombatConfig` module literals;
       `Combat.hitChance` / `Combat.chooseTarget` — pure, total, no PRNG draw
       inside the leaf.
-- [ ] `Appraisal.attackDirection` is public; no other change to `Appraisal.fs`;
+- [x] `Appraisal.attackDirection` is public; no other change to `Appraisal.fs`;
       `AppraisalConfig`-dependent facts unaffected.
-- [ ] `ShotFired of shooter * target * hit` event; `DomainEvent` ordering doc
+- [x] `ShotFired of shooter * target * hit` event; `DomainEvent` ordering doc
       comment updated (after movement, ascending shooter agent id). Every
       exhaustive `EventBody` match armed; FS0025 sites + fixes in the ledger.
-- [ ] `SimulationTests` facts:
+- [x] `SimulationTests` facts:
   - a friendly and a hostile within range and clear LOS produce exactly one
     `ShotFired` per engaging side per tick;
   - a candidate beyond `WeaponRange` is never engaged (no `ShotFired`);
-  - a candidate with LOS blocked by an opaque cell is never engaged even
-    though it is within `VisibleContacts` from an earlier tick;
+  - `Combat.chooseTarget` directly excludes a candidate whose line of fire is
+    blocked by an opaque wall, even within range (a pure-leaf fact — see
+    Decision H — rather than a full-step scenario, since `VisibleContacts`
+    is itself already `Sight.visible`-gated, so a full-step LOS-blocked
+    candidate can't reach `Combat.chooseTarget` as a candidate in the first
+    place);
   - `Combat.hitChance` strictly decreases as range increases (fixed cover);
   - `Combat.hitChance` strictly decreases as cover level increases (fixed
     range); stays within `[MinHitChance, MaxHitChance]` at the extremes;
   - `Combat.chooseTarget` picks the nearest candidate, ties broken by
     ascending `AgentId`;
-  - two runs of the same world + commands emit byte-identical events, draw
-    counts, and hashes.
-- [ ] A `DeterminismPropertyTests` property (`MaxTest = 200`, extending
-      `perceptionCaseGen` with a hostile in range/LOS some of the time):
-      every `ShotFired` event's `hit` matches recomputing `Combat.hitChance`
-      against the pre-shot state and redrawing from the pre-shot `Random`
-      state at the same draw index; `Random.Draws` increases by exactly the
-      number of `ShotFired` events emitted that tick, never more.
-- [ ] New corpus entry `open-engagement` (Decision H): `CORPUS.md` row,
+  - two runs of the same world + commands emit byte-identical events, hashes,
+    and draw counts (draw count is no longer asserted to be zero anywhere
+    combat can fire — see the Decision H correction).
+- [x] A `DeterminismPropertyTests` property (`MaxTest = 200`, reusing
+      `appraisalCaseGen` as-is — properties 8/9's generator already places a
+      friendly/hostile pair in range/LOS some of the time, so no extension
+      was needed): every `ShotFired` event's `hit` matches recomputing
+      `Combat.hitChance` from the post-tick shooter/target `Position`
+      (unchanged between Combat and Output) and redrawing from the pre-tick
+      `Random` state, in emission order; the reconstructed draw count
+      matches `Random.Draws` exactly.
+- [x] New corpus entry `open-engagement` (Decision H): `CORPUS.md` row,
       committed `.cwlog` + `.md`, passes `CorpusTests` `[<Theory>]` and
       `cwheadless corpus`.
-- [ ] No `Canonical.FormatVersion` change; every corpus entry, the fixture,
-      and `envelope-full` **that has no engageable pair** shows no
-      `ShotFired` events and no hash change; `open-engagement`'s hash and
-      draw count are the only newly-pinned combat values.
-- [ ] Diagnostics: `Overlay.FireLine` derived in `frameOf` only, rendered in
+- [x] No `Canonical.FormatVersion` change. **Corrected from the original
+      "zero re-pin except `open-engagement`" claim** (see the Decision H
+      correction and "Event-trace and hash impact"): `perception-contact`
+      and `exposed-approach` each legitimately re-pin from the tick an
+      engageable pair first comes into range/LOS, with **tick counts
+      unchanged on both** — verified by diffing their `.md` files for any
+      changed "Tick count" line (none) versus changed hash/event-count lines
+      (both entries, from the documented tick onward). Every other corpus
+      entry, the fixture, and `envelope-full` are byte-identical.
+- [x] Diagnostics: `Overlay.FireLine` derived in `frameOf` only, rendered in
       `Ascii` + `Svg`, covered by a hand-built `DiagnosticsTests` fact and
       the committed `open-engagement-tick-001.*` golden.
-- [ ] `dotnet build CommandoWar.slnx -c Release` = 0/0; `dotnet list
+- [x] `dotnet build CommandoWar.slnx -c Release` = 0/0; `dotnet list
       src/CommandoWar.Sim package --include-transitive` = `FSharp.Core` only;
       source scan of `src/CommandoWar.Sim` clean (`float` / `Stopwatch` /
       `DateTime` / `System.Random` / `godot`).
-- [ ] `dotnet test CommandoWar.slnx -c Release` green — state the new count;
-      name each added fact and the property's case count.
-- [ ] Docs updated (see below).
+- [x] `dotnet test CommandoWar.slnx -c Release` green — `254 -> 265` (+1
+      `CorpusTests` theory case for `open-engagement`, +8 `SimulationTests`,
+      +1 `DeterminismPropertyTests` property 10 at 200 cases, +1
+      `DiagnosticsTests` golden fact).
+- [x] Docs updated (see below).
 
 ## Required verification
 
-- `dotnet build CommandoWar.slnx -c Release` (0/0).
-- `dotnet test CommandoWar.slnx -c Release` before any edit (`254`) and after
-  (new count; each added fact + the property's case count named).
-- `cwheadless corpus` + `cwheadless fixture` before any edit (record hashes /
-  event counts / draw counts) and after (every existing entry byte-identical
-  — no engageable pair exists in any of them, so zero draws, zero
-  `ShotFired`, zero hash change; only `open-engagement` is new); re-running
-  `--regenerate` is a zero diff.
-- Regenerate the new `content/diagnostics/open-engagement-tick-001.*` golden;
-  confirm no pre-existing golden changed.
+- `dotnet build CommandoWar.slnx -c Release` (0/0) — `254 -> 265` green.
+- `cwheadless corpus` before any edit (10 entries, all PASS) and after (12
+  entries, all PASS): `perception-contact` and `exposed-approach` diverge
+  from their pre-edit tables (expected — regenerate, see below);
+  `--regenerate`, then a second `--regenerate` run, is a zero diff
+  (idempotent). Every other entry byte-identical throughout.
+- Diffed `content/replays/*.md` for any changed "Tick count" line: **none**
+  — the actual stop-and-report check, and it held. Only "Domain events" and
+  hash-column lines moved, and only on `perception-contact` /
+  `exposed-approach`.
+- `cwheadless fixture` before and after: byte-identical (`spike-fixture` is
+  enemy-free, so Combat is inert there).
+- Regenerated `content/diagnostics/open-engagement-tick-001.*` (new),
+  `perception-contact-tick-005.*` (re-pinned), and `demo.html` (re-pinned
+  from tick 8); confirmed `demo.ascii.txt` / `demo.svg` (tick 0) and
+  `exposed-approach-tick-001.*` (tick 1) unchanged by diffing them
+  explicitly before regenerating anything else.
 - `cwheadless replay-file content/replays/envelope-full.cwreplay` —
   checkpoints unchanged (its scenario is enemy-free, so Combat is inert
   there).
 - `dotnet list src/CommandoWar.Sim/CommandoWar.Sim.fsproj package
   --include-transitive` — `FSharp.Core` only.
 - source scan of `src/CommandoWar.Sim` for
-  `float|stopwatch|datetime|system\.random|godot`.
-- `git status --porcelain` — matches "Allowed scope"; nothing under the
-  client spikes, `src/_scratch`, `bench/`, `content/benchmarks/BASELINE.md`.
+  `float|stopwatch|datetime|system\.random|godot` — clean (comment mentions
+  only, pre-existing).
+- `git status --porcelain` — matches "Allowed scope" plus the documented
+  ripples; nothing under the client spikes, `src/_scratch`, `bench/`,
+  `content/benchmarks/BASELINE.md`.
 
 ## Evidence to capture
 
-- test summary (before/after counts); the new `SimulationTests` facts and the
+- test summary (`254 -> 265`); the new `SimulationTests` facts and the
   property by name + case count;
-- confirmation that every pre-existing corpus entry, the fixture, and
-  `envelope-full` are byte-identical (no engageable pair, so Combat is inert
-  there) — this is the "first PRNG consumer" safety net;
+- the before/after hash + event-count table for `perception-contact` and
+  `exposed-approach`, and confirmation neither's tick count moved;
+- confirmation every other corpus entry, the fixture, and `envelope-full`
+  are byte-identical;
 - the new `open-engagement` entry's hash / tick / event count and draw count;
 - the `CombatConfig` constant table with rationale for the chosen values;
-- the FS0025 sites with their fixes;
-- the diagnostics golden.
+- the FS0025 sites with their fixes (both compile-time in `CommandoWar.Sim`
+  / `CommandoWar.Headless`, and warning-only in the test project);
+- the diagnostics goldens (new and re-pinned).
 
 ## Rollback or removal
 
