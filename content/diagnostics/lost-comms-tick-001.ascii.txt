@@ -34,6 +34,7 @@ agents:
 
 overlays:
   undelivered order (1,4): agent 0  command 1  (communication unavailable)
+  commitment (1,4): agent 0  holding
 
 events: command-accepted@(6,4); order-undelivered
 

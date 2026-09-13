@@ -168,7 +168,8 @@ let ``producing LOS diagnostics for the shared fixture leaves its hashes and eve
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
         Assert.Equal(0x7737282578E821C6UL, (Hashing.hash outcome.FinalState).Value)
-        Assert.Equal(34, outcome.Events.Length)
+        // TASK-030: 34 -> 36 (+1 CommitmentEstablished, +1 CommitmentCompleted).
+        Assert.Equal(36, outcome.Events.Length)
 
 // --- the SightRay overlay renderer branch (golden-pinned) ----------
 
@@ -185,7 +186,10 @@ let private losFrameWithRays () : DiagnosticFrame =
             let r = Sight.trace w.Terrain a b
             SightRay(a, b, r.Path, r.Blocker))
 
-    { f with Overlays = overlays }
+    // Appended, not replaced (the `cwheadless render --los` precedent,
+    // Program.fs): TASK-030's AgentCommitment overlays are part of the real
+    // frame and must not be silently dropped.
+    { f with Overlays = Array.append f.Overlays overlays }
 
 [<Fact>]
 let ``the LOS demo ASCII render with sight rays is byte-equal to the committed golden`` () =
@@ -209,8 +213,10 @@ let ``a SightRay overlay appears distinctly and the overlay-absent render is unc
     Assert.Contains("  4 .****x*****.", asciiRays)
     Assert.Contains("sight (1,1) -> (10,1): clear", asciiRays)
     Assert.Contains("sight (6,5) -> (11,10): blocked at (9,7)", asciiRays)
-    // Overlay-absent render carries neither the ray glyphs nor the section.
-    Assert.DoesNotContain("overlays:", asciiPlain)
+    // No caller-supplied SightRay overlay: the plain render's "overlays:"
+    // section (TASK-030: every agent still carries an AgentCommitment
+    // overlay) carries neither the ray glyphs nor a "sight (" line.
+    Assert.DoesNotContain("sight (", asciiPlain)
     Assert.Equal("  1 ............", (asciiPlain.Split('\n') |> Array.find (fun l -> l.StartsWith "  1 ")))
 
     // The SVG branch emits a dashed ray line and a red blocker marker.

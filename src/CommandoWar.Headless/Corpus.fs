@@ -314,6 +314,20 @@ module Corpus =
               TerrainLayer = None
               FailOnFriendlyForceEliminated = true }
 
+    /// One friendly agent at (1,4), open ground, no threats: ordered east to
+    /// (14,4) on tick 1 (Accepted, `CommitmentEstablished`), then re-ordered
+    /// south to (14,8) on tick 3 while still mid-route toward the first
+    /// target. The second order supersedes the first: Communication resets
+    /// `Disposition`, Appraisal re-accepts against the new target, and
+    /// `commitmentAndLocalAction` emits a fresh `CommitmentEstablished` for
+    /// the second command with no event reporting the first commitment's end
+    /// (TASK-030, backlog B-018, Decision D/H — the one interrupt priority
+    /// current systems can source, `docs/05` section 11 priority 6 "new
+    /// higher-priority command"; `docs/07` section 8 step 7, "the player
+    /// reissues the original intent").
+    let private reissuedOrderWorld () : WorldState =
+        worldOf (rawScenario "corpus-reissued-order" 16 9 [ 0, { X = 1; Y = 4 } ] [] [] [] { X = 14; Y = 0 } { X = 0; Y = 8 })
+
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
         [| { Name = "spike-fixture"
@@ -411,7 +425,17 @@ module Corpus =
              InitialStateNote =
                "Corpus exposed-approach scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / 6 + 1 hostile)"
              InitialState = exposedApproachWorld
-             TickCount = 12L } |]
+             TickCount = 12L }
+           { Name = "reissued-order"
+             Description =
+               "One friendly agent at (1,4) ordered east to (14,4) on tick 1 (Accepted, CommitmentEstablished), "
+               + "then re-ordered south to (14,8) on tick 3 while still mid-route. The second order supersedes "
+               + "the first: Appraisal re-accepts against the new target and commitmentAndLocalAction emits a "
+               + "fresh CommitmentEstablished for the second command, with no event reporting the first "
+               + "commitment's end (TASK-030, backlog B-018)."
+             InitialStateNote = "Corpus reissued-order scenario (16 x 9, seed 20260904, 1 friendly)"
+             InitialState = reissuedOrderWorld
+             TickCount = 6L } |]
 
     // --- entry paths and loading ----------------------------------------
 

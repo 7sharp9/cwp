@@ -119,7 +119,8 @@ module DiagnosticRender =
                 | Obstructed _
                 | KnownContact _
                 | UndeliveredOrder _
-                | OrderAppraisal _ -> None)
+                | OrderAppraisal _
+                | AgentCommitment _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -145,7 +146,8 @@ module DiagnosticRender =
                 | Obstructed _
                 | KnownContact _
                 | UndeliveredOrder _
-                | OrderAppraisal _ -> None)
+                | OrderAppraisal _
+                | AgentCommitment _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -356,6 +358,13 @@ module DiagnosticRender =
                             (dispositionText disposition)
                             exposed
                     )
+                | AgentCommitment(agent, at, commitment) ->
+                    let status =
+                        match commitment with
+                        | Holding -> "holding"
+                        | Moving mc -> sprintf "moving to %s" (cellText mc.Target)
+
+                    line (sprintf "  commitment %s: agent %d  %s" (cellText at) (AgentId.value agent) status)
 
         line ""
 
@@ -678,6 +687,24 @@ module DiagnosticRender =
                         (at.Y * s + 9)
                         colour
                         glyph
+                )
+            | AgentCommitment(_, at, commitment) ->
+                // The agent's current commitment (TASK-030): a small teal
+                // marker at the top-left corner of the agent's cell, filled
+                // for Holding, hollow for Moving — deliberately distinct from
+                // the OrderAppraisal disposition glyph (bottom-right corner)
+                // and the PlannedPath polyline.
+                let fill =
+                    match commitment with
+                    | Holding -> "#2c7a7b"
+                    | Moving _ -> "none"
+
+                line (
+                    sprintf
+                        "  <circle cx=\"%d\" cy=\"%d\" r=\"3\" fill=\"%s\" stroke=\"#2c7a7b\" stroke-width=\"1\"/>"
+                        (at.X * s + 4)
+                        (at.Y * s + 4)
+                        fill
                 )
 
         // Footer.

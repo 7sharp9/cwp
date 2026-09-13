@@ -77,7 +77,17 @@ let ``the frame carries every terrain layer, the cover edges, and the determinis
     Assert.Equal(0L, f.Tick)
     Assert.Equal(Hashing.hash w, f.Hash)
     Assert.Equal(0UL, f.RandomDraws)
-    Assert.Empty(f.Overlays)
+
+    // No order has been appraised yet, so the only overlay is one Holding
+    // AgentCommitment per agent (TASK-030 — derived, not stored, so it is
+    // never actually empty).
+    Assert.Equal(w.Agents.Length, f.Overlays.Length)
+    Assert.All(
+        f.Overlays,
+        (function
+        | AgentCommitment(_, _, Holding) -> ()
+        | other -> Assert.Fail($"expected only Holding AgentCommitment overlays, got {other}"))
+    )
 
 [<Fact>]
 let ``frameOf carries agent destinations and this-tick event markers`` () =
@@ -153,19 +163,34 @@ let ``the mid-route fixture frame renders agent 3's followed path (byte-equal to
     Assert.Equal(golden "fixture-mid-route.svg", DiagnosticRender.Svg mid)
 
 [<Fact>]
-let ``frameOf emits no overlay once every agent is at rest and its order is cleared`` () =
+let ``frameOf emits no OrderAppraisal overlay once every agent is at rest and its order is cleared`` () =
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
     // Agent 3 arrives at tick 31 (route cleared); its Accepted order lingers
-    // one more tick as an OrderAppraisal overlay until the Appraisal phase's
-    // fulfilment housekeeping clears Order / Disposition at tick 32 (Appraisal
-    // runs before Navigation, so it sees the arrival only next tick). From
-    // tick 32 on, nothing.
-    Assert.NotEmpty(frames.[30].Overlays)
-    Assert.NotEmpty(frames.[31].Overlays)
-    Assert.Empty(frames.[32].Overlays)
-    Assert.Empty(frames.[40].Overlays)
+    // one more tick as an OrderAppraisal overlay until commitmentAndLocalAction's
+    // fulfilment housekeeping clears Order / Disposition at tick 32 (TASK-030 —
+    // relocated from the Appraisal phase, which runs before Navigation, so
+    // fulfilment is only noticed next tick). From tick 32 on, no OrderAppraisal
+    // overlay remains — but every agent still carries an AgentCommitment
+    // overlay every tick (TASK-030), Holding once at rest, so Overlays itself
+    // is never empty.
+    let isOrderAppraisal =
+        function
+        | OrderAppraisal _ -> true
+        | _ -> false
+
+    Assert.Contains(frames.[30].Overlays, isOrderAppraisal)
+    Assert.Contains(frames.[31].Overlays, isOrderAppraisal)
+    Assert.DoesNotContain(frames.[32].Overlays, isOrderAppraisal)
+    Assert.DoesNotContain(frames.[40].Overlays, isOrderAppraisal)
+
+    Assert.All(
+        frames.[40].Overlays,
+        (function
+        | AgentCommitment(_, _, Holding) -> ()
+        | other -> Assert.Fail($"expected only Holding AgentCommitment overlays at rest, got {other}"))
+    )
 
 // --- renderers: distinct features and determinism ----------------------
 
@@ -386,7 +411,8 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | Obstructed _
         | UndeliveredOrder _
         | KnownContact _
-        | OrderAppraisal _ -> None) with
+        | OrderAppraisal _
+        | AgentCommitment _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -449,7 +475,8 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | Reserved _
             | UndeliveredOrder _
             | KnownContact _
-            | OrderAppraisal _ -> None)
+            | OrderAppraisal _
+            | AgentCommitment _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -488,7 +515,8 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | Reserved _
             | Obstructed _
             | UndeliveredOrder _
-            | OrderAppraisal _ -> None)
+            | OrderAppraisal _
+            | AgentCommitment _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -539,7 +567,8 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | Reserved _
             | Obstructed _
             | KnownContact _
-            | OrderAppraisal _ -> None)
+            | OrderAppraisal _
+            | AgentCommitment _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)
@@ -606,6 +635,41 @@ let ``frameOf shows blocked-goal's order as Unable at appraisal (byte-equal to t
     Assert.DoesNotContain(tick1.Events, (fun (e: EventMarker) -> e.Kind = "movement-blocked"))
     Assert.Equal(golden "blocked-goal-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
     Assert.Equal(golden "blocked-goal-tick-001.svg", DiagnosticRender.Svg tick1)
+
+// --- commitment and finite move/hold executor: the reissued-order entry (TASK-030) --
+
+let private reissuedOrderFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "reissued-order")
+
+    match Corpus.loadLog corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives an AgentCommitment overlay for the reissued-order entry's supersession tick (byte-equal to the goldens)`` () =
+    let frames = reissuedOrderFrames ()
+
+    // Tick 1: the first order is Accepted -> CommitmentEstablished, Moving
+    // toward (14,4).
+    let tick1 = frames.[1]
+    Assert.Contains(tick1.Events, (fun (e: EventMarker) -> e.Kind = "commitment-established"))
+
+    Assert.Contains(tick1.Overlays, (function
+        | AgentCommitment(_, _, Moving mc) -> mc.Target = { X = 14; Y = 4 }
+        | _ -> false))
+
+    // Tick 3: the second order supersedes the first. A fresh
+    // CommitmentEstablished for the new target, no CommitmentCompleted at all.
+    let tick3 = frames.[3]
+    Assert.Contains(tick3.Events, (fun (e: EventMarker) -> e.Kind = "commitment-established"))
+    Assert.DoesNotContain(tick3.Events, (fun (e: EventMarker) -> e.Kind = "commitment-completed"))
+
+    Assert.Contains(tick3.Overlays, (function
+        | AgentCommitment(_, _, Moving mc) -> mc.Target = { X = 14; Y = 8 }
+        | _ -> false))
+
+    Assert.Equal(golden "reissued-order-tick-003.ascii.txt", DiagnosticRender.Ascii tick3)
+    Assert.Equal(golden "reissued-order-tick-003.svg", DiagnosticRender.Svg tick3)
 
 [<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =
@@ -686,7 +750,12 @@ let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the
     Assert.Equal("accepted", rows.[1].Tone)
     Assert.Equal(1, view.Contacts.Length)
     Assert.Equal(2, view.Contacts.[0].Contact)
-    Assert.Empty(view.UnhandledOverlays)
+    // TASK-030: every agent (both friendlies and the hostile) now carries an
+    // AgentCommitment overlay, which this disposable P3 demo (predating
+    // TASK-030) does not render — the OrderAppraisal panel already shows each
+    // friendly's decision. Three agents, three unhandled entries.
+    Assert.Equal(3, view.UnhandledOverlays.Length)
+    Assert.All(view.UnhandledOverlays, (fun (o: string) -> Assert.StartsWith("commitment agent ", o)))
 
 // --- the pin: diagnostics do not perturb the shared fixture -----------
 
@@ -697,10 +766,13 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
 
     Assert.Equal(0x55F43D66C7AECB7FUL, frames.[0].Hash.Value)
     Assert.Equal(0x7737282578E821C6UL, frames.[40].Hash.Value)
-    Assert.Equal(34, frames |> Array.sumBy (fun f -> f.Events.Length))
+    // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
+    // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
+    // since Commitment is derived, not canonical (Decision B).
+    Assert.Equal(36, frames |> Array.sumBy (fun f -> f.Events.Length))
 
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
         Assert.Equal(0x7737282578E821C6UL, (Hashing.hash outcome.FinalState).Value)
-        Assert.Equal(34, outcome.Events.Length)
+        Assert.Equal(36, outcome.Events.Length)

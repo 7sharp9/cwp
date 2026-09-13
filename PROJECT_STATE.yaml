@@ -5,7 +5,7 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-12 (TASK-029 accepted and merged to main; no task selected)
+  updated: 2026-09-13 (TASK-030 accepted and merged to main; no task selected)
 
 active_work:
   selected_task: none
@@ -13,14 +13,36 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-12
+  updated: 2026-09-13
   note: >-
-    2026-09-12: TASK-029 (Godot appraisal-divergence demo -- a read-only,
+    2026-09-13: TASK-030 (Commitment and finite move/hold executor, backlog
+    B-018) accepted by Dave and merged to main (--no-ff, branch
+    task-030-commitment-and-finite-executor deleted; not pushed). A real
+    commitmentAndLocalAction phase (docs/04 section 12.6) realising a
+    Commitment DU (Holding | Moving) as a pure derived value over the
+    already-canonical Order/Disposition/Destination -- no Canonical.FormatVersion
+    bump, no hash re-pin anywhere. New CommitmentEstablished /
+    CommitmentCompleted events, new Overlay.AgentCommitment, new
+    reissued-order corpus entry proving order-supersedes-commitment
+    end-to-end. 244 -> 254 green; dotnet build 0/0; -- corpus 11/11; --
+    fixture format 4, hashes unchanged, 34 -> 36 events; -- replay-file
+    envelope-full OK at canonical 4, hashes unchanged, 75 -> 78 events. No
+    ADR. No task selected.
+    (docs/ledger/2026-09-13-TASK-030-commitment-and-finite-executor.md)
+
+    Newly unblocked (from TASK-030, still open): B-023 (canonical refusal
+    sequence -- step 7 landed in isolation as reissued-order; steps 4-6 and 8
+    still need B-020 / B-021 / B-022). B-019 (hitscan combat) and B-016b
+    (comms range/delay/jamming) remain the two other items with every
+    dependency already done.
+
+    Prior: TASK-029 (Godot appraisal-divergence demo -- a read-only,
     corpus-scoped slice of backlog B-029 pulled forward as P3 decision-support;
     B-029 proper stays P4) accepted by Dave and merged to main (--no-ff, branch
-    task-029-godot-appraisal-demo deleted; not pushed). Dave launched the scene
-    interactively and confirmed the divergence reads right. main build 0/0, 244
-    green, -- corpus 10/10, -- fixture format 4 / 34 events. No task selected.
+    task-029-godot-appraisal-demo deleted; not pushed) 2026-09-12. Dave
+    launched the scene interactively and confirmed the divergence reads
+    right. main build 0/0, 244 green, -- corpus 10/10, -- fixture format 4 /
+    34 events before TASK-030 branched.
 
     TASK-029 summary: a runnable Godot scene
     (src/CommandoWar.Client.Godot/scenes/AppraisalDemo.tscn +

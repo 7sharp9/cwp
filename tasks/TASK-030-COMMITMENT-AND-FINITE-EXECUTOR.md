@@ -1,10 +1,46 @@
 # TASK-030: Commitment and finite move/hold executor
 
-Status: draft
+Status: done (implemented 2026-09-13 on branch
+`task-030-commitment-and-finite-executor`; central decisions A–H confirmed
+with Dave 2026-09-13 before the phase bodies; accepted by Dave and merged to
+`main` 2026-09-13)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-018
 Size: M
+
+## Outcome (2026-09-13)
+
+Implemented on branch `task-030-commitment-and-finite-executor` off the
+TASK-029 merge on `main` (committed locally, not pushed). All five central
+decisions confirmed with Dave and implemented as proposed, with one
+significant revision found during implementation: Decision B originally
+assumed `Commitment` would need new canonical state and another
+`Canonical.FormatVersion` bump; building the derivation showed it is fully
+recoverable from the already-canonical `Order` / `Disposition` / `Destination`
+(the `AgentState.Route` precedent), so it ships as a pure derived value with
+**no format bump and no hash re-pin anywhere** — a materially smaller, safer
+task than the original framing.
+
+The Commitment and local action phase (12.6) is a real phase
+(`Simulation.commitmentAndLocalAction`) in its existing `Phases.order` slot.
+`Commitment` (`Holding | Moving of MoveCommitment`) lives in a new leaf
+`src/CommandoWar.Sim/Commitment.fs`. The Appraisal phase's fulfilled-order
+housekeeping branch relocated there unchanged. New events
+`CommitmentEstablished` / `CommitmentCompleted`; new `Overlay.AgentCommitment`
+(renamed from this file's original `Overlay.Commitment` during implementation
+to avoid a case/type name collision) derived in both `frame` and `frameOf`.
+New corpus entry `reissued-order` proves supersession end-to-end.
+
+`244 -> 254` green (+8 `SimulationTests`, +1 `DeterminismPropertyTests`
+property 9 at 200 cases, +1 `DiagnosticsTests` golden fact). `dotnet build`
+0/0; `-- corpus` 11/11 (`--regenerate` idempotent); `-- fixture` format 4,
+hashes unchanged, 34 -> 36 events; `-- replay-file envelope-full` OK at
+canonical 4, hashes unchanged, 75 -> 78 events; `src/CommandoWar.Sim`
+packages `FSharp.Core` only. No ADR.
+
+Full detail:
+`docs/ledger/2026-09-13-TASK-030-commitment-and-finite-executor.md`.
 
 ## Objective
 
@@ -367,16 +403,19 @@ let private commitmentAndLocalAction (s: StepState) =
 `AgentState` field is added: two new event kinds and a named `Commitment`
 concept are new inspectable tactical state. Required:
 
-- **`Overlay.Commitment of agent: AgentId * at: Cell * commitment: Commitment`**
-  — one per agent, derived by **both** `Diagnostics.frame` and `frameOf` via
-  `Commitment.ofAgent a.Order a.Disposition a.Destination` (the `OrderAppraisal`
-  precedent: bare state carries everything the derivation needs). Doc-comment
-  reservation line: "B-018 commitment -> `Commitment` (realised by TASK-030)".
+- **`Overlay.AgentCommitment of agent: AgentId * at: Cell * commitment:
+  Commitment`** (named `AgentCommitment`, not `Commitment`, to avoid a
+  case/type name collision with the `Commitment` type it wraps — found during
+  implementation) — one per agent, derived by **both** `Diagnostics.frame` and
+  `frameOf` via `Commitment.ofAgent a.Order a.Disposition a.Destination` (the
+  `OrderAppraisal` precedent: bare state carries everything the derivation
+  needs). Doc-comment reservation line: "B-018 commitment -> `Commitment`
+  (realised by TASK-030)".
 - `eventMarker` gains `CommitmentEstablished _ -> { Kind = "commitment-established"; Cells = [||] }`
   and `CommitmentCompleted(_, _, at) -> { Kind = "commitment-completed"; Cells = [| at |] }`.
 - `DiagnosticRender.Ascii`: a `commitment (x,y): agent N <holding | moving to (x,y)>`
   overlay text line; the existing `sightRays` / `plannedPaths` /
-  `orderAppraisals`-style exclusion filters gain `| Commitment _ -> None`.
+  `orderAppraisals`-style exclusion filters gain `| AgentCommitment _ -> None`.
 - `DiagnosticRender.Svg`: a small marker distinct from `OrderAppraisal`'s
   disposition glyph — a filled circle (`Holding`) or a hollow circle
   (`Moving`) at the agent's cell, deliberately not duplicating the
@@ -429,9 +468,18 @@ surface of realising the phase, not a regression. Required verification:
   comments.
 - `src/CommandoWar.Sim/Events.fs` — `CommitmentEstablished`,
   `CommitmentCompleted`; `DomainEvent` ordering doc comment update.
-- `src/CommandoWar.Sim/Diagnostics.fs` — `Overlay.Commitment`; `frame` +
-  `frameOf` derivation; `eventMarker` arms; the `Overlay` doc comment; FS0025
-  filter arms.
+- `src/CommandoWar.Sim/Diagnostics.fs` — `Overlay.AgentCommitment` (renamed
+  from `Overlay.Commitment` during implementation to avoid a case/type name
+  collision); `frame` + `frameOf` derivation; `eventMarker` arms; the
+  `Overlay` doc comment; FS0025 filter arms.
+- `src/CommandoWar.Headless/AppraisalDemo.fs` (**not originally listed**;
+  required because it has an exhaustive `Overlay` match with no
+  `TreatWarningsAsErrors` guard in the test project — silently incomplete
+  without this arm) — one `AgentCommitment` arm added to its `unhandled`
+  bucket (this disposable P3 demo predates TASK-030 and does not render
+  commitments); `tests/.../DiagnosticsTests.fs`'s corresponding
+  `UnhandledOverlays` assertion updated from empty to 3 entries (2 friendlies
+  + 1 hostile in `exposed-approach`).
 - `src/CommandoWar.Headless/DiagnosticRender.fs` — new `Ascii` / `Svg`
   branches + filter arms.
 - `src/CommandoWar.Headless/Corpus.fs` — the new `reissued-order` `Entry`;
@@ -472,24 +520,24 @@ surface of realising the phase, not a regression. Required verification:
 
 ## Acceptance criteria
 
-- [ ] `CommitmentAndLocalAction` is a real phase function in `Simulation.fs`,
+- [x] `CommitmentAndLocalAction` is a real phase function in `Simulation.fs`,
       in its existing `Phases.order` slot, with a "Realised by TASK-030"
       header comment; `runPhase` has a real arm and it is out of the no-op
       list.
-- [ ] `Simulation.appraisal`'s fulfilled-order housekeeping branch is removed;
+- [x] `Simulation.appraisal`'s fulfilled-order housekeeping branch is removed;
       the identical condition and field-clear now live in
       `commitmentAndLocalAction`, which additionally emits `CommitmentCompleted`.
-- [ ] `src/CommandoWar.Sim/Commitment.fs`: `MoveCommitment`, `Commitment`
+- [x] `src/CommandoWar.Sim/Commitment.fs`: `MoveCommitment`, `Commitment`
       (`Holding | Moving of MoveCommitment`), `Commitment.ofAgent` — pure,
       total; no `AgentState` field added; no `Canonical.encode` change; a
       focused test proves `Commitment.ofAgent` matches every
       `(Order, Disposition, Destination)` combination the phase can produce.
-- [ ] `CommitmentEstablished of agent * command * target` and
+- [x] `CommitmentEstablished of agent * command * target` and
       `CommitmentCompleted of agent * command * at` events; `DomainEvent`
       ordering doc comment updated (after `OrderAppraised`, before movement,
       ascending agent id). Every exhaustive `EventBody` match armed; FS0025
       sites + fixes in the ledger.
-- [ ] `SimulationTests` facts:
+- [x] `SimulationTests` facts:
   - a fresh clear-route `Accepted` order emits `OrderAppraised(Accepted)` then
     `CommitmentEstablished` for the same `(agent, command, target)` the same
     tick;
@@ -504,30 +552,35 @@ surface of realising the phase, not a regression. Required verification:
   - an unchanged, already-appraised order (the Appraisal fast path) emits
     neither new event;
   - two runs of the same world + commands emit byte-identical events + hashes.
-- [ ] A `DeterminismPropertyTests` property (`MaxTest >= 200`, reusing the
-      `Appraisal` property 8 generator plus a second/reissued order some of
-      the time): `Commitment.ofAgent` applied to the post-tick state always
-      equals `Moving` iff `Order = Some _ && Disposition = Some Accepted &&
-      Destination = Some _`; `Random.Draws` unchanged (no PRNG draw).
-      Properties 1–8 unmodified.
-- [ ] New corpus entry `reissued-order` (Decision H): `CORPUS.md` row,
+- [x] A `DeterminismPropertyTests` property (`MaxTest = 200`, reusing the
+      `Appraisal` property 8 generator as-is — a reissued-order variant was
+      judged unnecessary: the supersession path is already covered by a
+      focused `SimulationTests` fact, and the property's job is the
+      derivation invariant): `Commitment.ofAgent` applied to every post-tick
+      agent state always equals `Moving` iff `Order = Some _ && Disposition =
+      Some Accepted && Destination = Some _`; `Random.Draws` unchanged (no
+      PRNG draw). Properties 1–8 unmodified.
+- [x] New corpus entry `reissued-order` (Decision H): `CORPUS.md` row,
       committed `.cwlog` + `.md`, passes `CorpusTests` `[<Theory>]` and
       `cwheadless corpus`.
-- [ ] No `Canonical.FormatVersion` change; **no state hash differs** from the
+- [x] No `Canonical.FormatVersion` change; **no state hash differs** from the
       pre-task committed value on any of the ten existing entries, the
       fixture, or `envelope-full` — verified by diffing hash columns only
       (event-count/listing columns are expected to change; documented per
       entry in the ledger).
-- [ ] Diagnostics: `Overlay.Commitment` derived in `frame` and `frameOf`,
-      rendered in `Ascii` + `Svg`, covered by a hand-built `DiagnosticsTests`
-      fact and the committed `reissued-order-tick-0N.*` golden.
-- [ ] `dotnet build CommandoWar.slnx -c Release` = 0/0; `dotnet list
+- [x] Diagnostics: `Overlay.AgentCommitment` (renamed from `Overlay.Commitment`
+      during implementation, see Allowed scope) derived in `frame` and
+      `frameOf`, rendered in `Ascii` + `Svg`, covered by a hand-built
+      `DiagnosticsTests` fact and the committed `reissued-order-tick-003.*`
+      golden.
+- [x] `dotnet build CommandoWar.slnx -c Release` = 0/0; `dotnet list
       src/CommandoWar.Sim package --include-transitive` = `FSharp.Core` only;
       source scan of `src/CommandoWar.Sim` clean (`float` / `Stopwatch` /
       `DateTime` / `System.Random` / `godot`).
-- [ ] `dotnet test CommandoWar.slnx -c Release` green — state the new count;
-      name each added fact and the property's case count.
-- [ ] Docs updated (see below).
+- [x] `dotnet test CommandoWar.slnx -c Release` green — `244 -> 254` (+8
+      `SimulationTests`, +1 `DeterminismPropertyTests` property 9 at 200
+      cases, +1 `DiagnosticsTests` golden fact).
+- [x] Docs updated (see below).
 
 ## Required verification
 
@@ -574,10 +627,12 @@ tests. No canonical or format-version rollback needed (none was made).
 
 ## Documentation updates
 
-- this task file (Status, acceptance boxes);
-- `docs/11_BACKLOG.md`: TASK-030 row; B-018 `proposed -> done`;
-- `docs/12_PROGRESS_LEDGER.md`: index row + `docs/ledger/` detail file; "Green
-  tests" count (no `Canonical.FormatVersion` line to change — stays 4);
+- this task file (Status `draft -> review`, acceptance boxes);
+- `docs/11_BACKLOG.md`: TASK-030 row (`review`); B-018 `proposed -> review`
+  (flips to `done` only when Dave accepts and merges);
+- `docs/12_PROGRESS_LEDGER.md`: index row + `docs/ledger/` detail file; the
+  "Pinned facts" block (including "Green tests") is left at its `main` values
+  until acceptance, per the same rule;
 - `docs/04_SIMULATION_SPEC.md` sections 11 (`AgentState`'s "current
   commitment" realised as a derived value, not a stored field — note why),
   12.6 (Commitment and local action realisation block), 14

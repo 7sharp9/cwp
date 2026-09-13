@@ -85,6 +85,14 @@ agents:
   agent 4  friendly  (0,4)  at rest
   agent 5  friendly  (0,5)  at rest
 
+overlays:
+  commitment (0,0): agent 0  holding
+  commitment (0,1): agent 1  holding
+  commitment (0,2): agent 2  holding
+  commitment (0,3): agent 3  holding
+  commitment (0,4): agent 4  holding
+  commitment (0,5): agent 5  holding
+
 events: none
 
 tick 0 | hash 0x55F43D66C7AECB7F (format 4) | draws 0 | agents 6 | cover-edges 0 | events 0

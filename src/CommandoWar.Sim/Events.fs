@@ -84,6 +84,24 @@ type EventBody =
     /// `docs/04` section 12.5). On `Accepted` the phase also writes
     /// `AgentState.Destination`; on `Refused` / `Unable` it writes none.
     | OrderAppraised of agent: AgentId * command: CommandId * disposition: OrderDisposition
+    /// A fresh commitment began for `agent` this tick (TASK-030, backlog
+    /// B-018; `docs/04` section 12.6, `docs/05` section 9). Emitted by
+    /// `commitmentAndLocalAction` exactly when this tick's `OrderAppraised`
+    /// for `(agent, command)` was `Accepted` — covers both "from `Holding`"
+    /// and "supersedes an in-progress `Moving` commitment" with the same
+    /// event: the prior commitment, if any, simply stops being derived (it is
+    /// not stored state), so no separate event reports its end.
+    | CommitmentEstablished of agent: AgentId * command: CommandId * target: Cell
+    /// `agent`'s `Moving` commitment for `command` ended this tick because it
+    /// reached `at` (TASK-030, backlog B-018; `docs/04` section 12.6).
+    /// Relocated from the Appraisal phase's fulfilled-order housekeeping
+    /// (TASK-028) — same condition, same fields cleared, now named and
+    /// inspectable. Never emitted for a superseded or refused commitment —
+    /// nothing is reported when a commitment ends any other way (docs/05
+    /// section 11 priority 6 "new higher-priority command": the new
+    /// `CommitmentEstablished` for the superseding order is the complete
+    /// trace).
+    | CommitmentCompleted of agent: AgentId * command: CommandId * at: Cell
     /// `contact` was removed from the friendly squad's shared
     /// `TacticalKnowledge` this tick, having gone unseen for
     /// `PerceptionConfig.ExpireAfter` ticks (TASK-026, `docs/04` section 12.4
@@ -103,12 +121,18 @@ type EventBody =
 ///   4. order appraisal outcomes, ascending agent id (`OrderAppraised`, from
 ///      the Appraisal phase — TASK-028; runs after Perception / Tactical
 ///      knowledge, before movement);
-///   5. movement outcomes, ascending agent id.
+///   5. commitment outcomes, ascending agent id (`CommitmentCompleted` before
+///      `CommitmentEstablished` for the same agent — impossible in practice,
+///      since completion requires `Order = None` this tick and establishment
+///      requires `Order = Some`; from `commitmentAndLocalAction` — TASK-030;
+///      runs after Appraisal, before movement);
+///   6. movement outcomes, ascending agent id.
 /// The order follows `Phases.order` (Command intake, Communication,
-/// Perception, Tactical knowledge, Appraisal, Navigation and movement), so a
-/// contact is observed at its start-of-tick position, an order is appraised
-/// against this tick's tactical picture, and a delivered-and-accepted order
-/// takes effect the same tick.
+/// Perception, Tactical knowledge, Appraisal, Commitment and local action,
+/// Navigation and movement), so a contact is observed at its start-of-tick
+/// position, an order is appraised against this tick's tactical picture, a
+/// commitment begins or ends the same tick its order is appraised, and a
+/// delivered-and-accepted order takes effect the same tick.
 type DomainEvent =
     { Tick: int64
       Body: EventBody }

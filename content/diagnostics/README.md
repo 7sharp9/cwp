@@ -44,6 +44,8 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `exposed-approach-tick-001.svg` | SVG of the same frame: each agent's exposed route cells as translucent red squares, a red `R` glyph at the refused agent's cell and a green `A` at the accepted agent's, alongside agent 1's route polyline and the `?2` known-contact ring. |
 | `blocked-goal-tick-001.ascii.txt` | The `content/replays/blocked-goal` corpus entry (TASK-028) at tick 1: the target `(5,4)` is ringed by impassable cells, so stage 2 (`Pathfinding`) fails and the Appraisal phase refuses the order — the overlays section carries `order appraisal (1,4): agent 0  unable no-known-route` and the events line `order-appraised` (no `movement-blocked`). |
 | `blocked-goal-tick-001.svg` | SVG of the same frame: a grey `U` glyph at the agent's cell (no exposed cells, no route). |
+| `reissued-order-tick-003.ascii.txt` | The `content/replays/reissued-order` corpus entry (TASK-030) at tick 3: a friendly agent 0, mid-route toward `(14,4)` (ordered tick 1), receives a second order to `(14,8)`. The Communication phase resets `Disposition`, Appraisal re-accepts against the new target, and the new `commitmentAndLocalAction` phase (12.6) emits a fresh `CommitmentEstablished` — the overlays section carries `commitment (4,4): agent 0  moving to (14,8)` and the events line `commitment-established` (no `commitment-completed`: the first commitment's end is not separately reported, since `Commitment` is derived, not stored). |
+| `reissued-order-tick-003.svg` | SVG of the same frame: agent 0's `PlannedPath` polyline toward the new target `(14,8)`, plus the small teal `AgentCommitment` marker (hollow, since it is `Moving`) at the top-left corner of the agent's cell. |
 
 ## Regeneration
 
@@ -73,17 +75,18 @@ $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 
 `converging-routes-tick-003.*`, `slow-terrain-tick-002.*`,
 `swap-standoff-tick-001.*`, `perception-contact-tick-005.*`,
-`lost-comms-tick-001.*`, `exposed-approach-tick-001.*`, and
-`blocked-goal-tick-001.*` are not produced by the `render` verb: each entry's
-initial state is corpus-owned (`Corpus.all`), not the shared fixture or demo
-scenario `render` knows about. All are regenerated the same way —
-`DiagnosticRender.runFrames` over the named `Corpus.all` entry and its
-committed `.cwlog`, at the tick named in the file — using the exact helper
-(`convergingRoutesFrames ()` / `slowTerrainFrames ()` / `swapStandoffFrames ()`
-/ `perceptionContactFrames ()` / `lostCommsFrames ()` / `exposedApproachFrames ()`,
-and an inline `runFrames` for `blocked-goal`) the corresponding
-`DiagnosticsTests.fs` fact uses to compare against these files, so a
-regeneration and its test cannot silently disagree.
+`lost-comms-tick-001.*`, `exposed-approach-tick-001.*`,
+`blocked-goal-tick-001.*`, and `reissued-order-tick-003.*` are not produced by
+the `render` verb: each entry's initial state is corpus-owned (`Corpus.all`),
+not the shared fixture or demo scenario `render` knows about. All are
+regenerated the same way — `DiagnosticRender.runFrames` over the named
+`Corpus.all` entry and its committed `.cwlog`, at the tick named in the file —
+using the exact helper (`convergingRoutesFrames ()` / `slowTerrainFrames ()` /
+`swapStandoffFrames ()` / `perceptionContactFrames ()` / `lostCommsFrames ()`
+/ `exposedApproachFrames ()` / `reissuedOrderFrames ()`, and an inline
+`runFrames` for `blocked-goal`) the corresponding `DiagnosticsTests.fs` fact
+uses to compare against these files, so a regeneration and its test cannot
+silently disagree.
 
 The `demo.html` scrubber's moving ticks (8-20) also carry the `KnownContact`
 overlay: `DemoScenario` deploys one hostile agent, so once Perception runs

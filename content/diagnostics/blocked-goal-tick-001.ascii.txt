@@ -34,6 +34,7 @@ agents:
 
 overlays:
   order appraisal (1,4): agent 0  unable no-known-route
+  commitment (1,4): agent 0  holding
 
 events: command-accepted@(5,4); order-appraised
 

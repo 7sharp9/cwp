@@ -39,6 +39,8 @@ overlays:
   reserved (3,3): agent 0 (until tick 3)
   order appraisal (3,3): agent 0  accepted
   order appraisal (2,3): agent 1  accepted
+  commitment (3,3): agent 0  moving to (3,7)
+  commitment (2,3): agent 1  moving to (7,3)
 
 events: movement-stepped@(3,2),(3,3); movement-yielded@(2,3),(3,3)
 

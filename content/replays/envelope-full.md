@@ -28,13 +28,20 @@ See `content/replays/CORPUS.md`.
 | Tick count | 24 |
 | Initial hash (tick 0) | `0x55F43D66C7AECB7F` |
 | Final hash (tick 24) | `0xDC87FE7A73395380` |
-| Domain events | 75 |
+| Domain events | 78 |
 
 _Re-pinned by TASK-028 (`Canonical.FormatVersion` 3 -> 4, `AgentState.Order` /
 `AgentState.Disposition` sections). The spike fixture is enemy-free, so all
 three recipients Accept at appraisal: the tick count (24) is unchanged and the
 only behaviour change is one `OrderAppraised` event per recipient
 (72 -> 75 domain events)._
+
+_Domain event count only, updated by TASK-030 (backlog B-018): the new
+`commitmentAndLocalAction` phase emits one `CommitmentEstablished` per
+recipient when its order is Accepted (75 -> 78); all three recipients are
+still mid-route at tick 24, so no `CommitmentCompleted` fires. No hash on this
+table moved — `Commitment` is a derived value, not canonical state (Decision
+B), and `Canonical.FormatVersion` stays 4._
 
 ## Per-tick authoritative state hash
 

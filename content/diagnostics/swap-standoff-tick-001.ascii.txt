@@ -40,7 +40,9 @@ overlays:
   obstructed (3,3): held by agent 0
   order appraisal (3,3): agent 0  accepted
   order appraisal (4,3): agent 1  accepted
+  commitment (3,3): agent 0  moving to (4,3)
+  commitment (4,3): agent 1  moving to (3,3)
 
-events: command-accepted@(4,3); command-accepted@(3,3); order-appraised; order-appraised; movement-obstructed@(3,3),(4,3); movement-obstructed@(4,3),(3,3)
+events: command-accepted@(4,3); command-accepted@(3,3); order-appraised; order-appraised; commitment-established@(4,3); commitment-established@(3,3); movement-obstructed@(3,3),(4,3); movement-obstructed@(4,3),(3,3)
 
-tick 1 | hash 0xC35F8FD177938F39 (format 4) | draws 0 | agents 2 | cover-edges 0 | events 6
+tick 1 | hash 0xC35F8FD177938F39 (format 4) | draws 0 | agents 2 | cover-edges 0 | events 8

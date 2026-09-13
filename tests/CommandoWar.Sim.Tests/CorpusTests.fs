@@ -53,7 +53,8 @@ let ``the corpus includes the spike fixture and is not an independent re-pin of 
     | Ok table, Ok outcome ->
         Assert.Equal(0x55F43D66C7AECB7FUL, table.InitialHash)
         Assert.Equal(0x7737282578E821C6UL, table.FinalHash)
-        Assert.Equal(34, table.EventCount)
+        // TASK-030: 34 -> 36 (+1 CommitmentEstablished, +1 CommitmentCompleted).
+        Assert.Equal(36, table.EventCount)
 
         let fromRun = outcome.TickHashes |> Array.map (fun cp -> cp.Tick, cp.Hash.Value)
         Assert.Equal<(int64 * uint64)[]>(fromRun, table.TickHashes)

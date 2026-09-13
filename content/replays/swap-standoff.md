@@ -18,7 +18,7 @@ See `content/replays/CORPUS.md`.
 | Tick count | 4 |
 | Initial hash (tick 0) | `0xBDA81D3710BEDB3B` |
 | Final hash (tick 4) | `0xEC251E4F0B81AA62` |
-| Domain events | 12 |
+| Domain events | 14 |
 
 ## Per-tick authoritative state hash
 

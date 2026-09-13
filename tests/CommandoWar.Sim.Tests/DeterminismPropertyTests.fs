@@ -10,8 +10,9 @@ open CommandoWar.Sim
 // CorpusTests / Corpus.checkEntry already does for 5 fixed hand-built
 // scenarios to an open-ended, FsCheck-generated space of small worlds and
 // command sequences. Only properties the currently implemented systems can
-// support are covered here: commitments, appraisal, death, and objectives
-// (also on the docs/09 section 2.2 list) do not exist yet.
+// support are covered here: appraisal (TASK-028) and commitments (TASK-030)
+// do; combat, death, and objectives (also on the docs/09 section 2.2 list)
+// still do not exist.
 //
 // Every generator is bounded well inside the TASK-014 per-tick budget and the
 // largest scale this repository has actually run (content/benchmarks/BASELINE.md,
@@ -624,3 +625,38 @@ let ``every appraisal outcome is consistent with a fresh recompute and draws no 
                 outcome.TickStates |> Array.forall (fun st -> st.Random.Draws = 0UL)
 
             dispositionsOk && eventsOk && noDraws)
+
+// --- property 9: commitment derivation is consistent and PRNG-free -------
+// TASK-030. Reuses `appraisalCaseGen` (property 8's generator: 1-3
+// friendlies with a random Discipline, 1-2 hostiles). For every post-tick
+// state and every agent: `Commitment.ofAgent` applied to that agent's
+// (Order, Disposition, Destination) is `Moving` iff `Order = Some _ &&
+// Disposition = Some Accepted && Destination = Some _` — the derivation
+// `commitmentAndLocalAction` relies on can never disagree with the fields it
+// reads, because it is a pure function of them, not independent state. No
+// PRNG draw (Commitment is derived, so it cannot introduce one).
+
+[<Property(MaxTest = 200)>]
+let ``every agent's derived Commitment matches its Order, Disposition, and Destination`` () =
+    Prop.forAll (Arb.fromGen appraisalCaseGen) (fun case ->
+        match replayOf case with
+        | Error e -> failwith $"replay of a generated case failed: {e}"
+        | Ok outcome ->
+            let commitmentsOk =
+                outcome.TickStates
+                |> Array.forall (fun st ->
+                    st.Agents
+                    |> Array.forall (fun a ->
+                        let expectedMoving =
+                            match a.Order, a.Disposition, a.Destination with
+                            | Some _, Some Accepted, Some _ -> true
+                            | _ -> false
+
+                        match Commitment.ofAgent a.Order a.Disposition a.Destination with
+                        | Moving _ -> expectedMoving
+                        | Holding -> not expectedMoving))
+
+            let noDraws =
+                outcome.TickStates |> Array.forall (fun st -> st.Random.Draws = 0UL)
+
+            commitmentsOk && noDraws)

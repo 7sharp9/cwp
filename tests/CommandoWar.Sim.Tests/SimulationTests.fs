@@ -1127,3 +1127,146 @@ let ``order appraisal is deterministic across two runs and draws no randomness``
     Assert.True(bodies r1 = bodies r2)
     Assert.Equal(r1.StateHash, r2.StateHash)
     Assert.Equal(0UL, r1.State.Random.Draws)
+
+// --- Commitment and finite move/hold executor (TASK-030) --------------
+
+let private commitmentsEstablishedIn (r: StepResult) =
+    bodies r
+    |> Array.choose (function
+        | CommitmentEstablished(a, c, t) -> Some(a, c, t)
+        | _ -> None)
+
+let private commitmentsCompletedIn (r: StepResult) =
+    bodies r
+    |> Array.choose (function
+        | CommitmentCompleted(a, c, at) -> Some(a, c, at)
+        | _ -> None)
+
+[<Fact>]
+let ``a fresh Accepted order emits CommitmentEstablished the same tick as OrderAppraised`` () =
+    let w = appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] []
+    let r = stepWith [| cmd 1 (agent 0) { X = 10; Y = 5 } |] w
+
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) r)
+    Assert.Equal<(AgentId * CommandId * Cell)[]>(
+        [| (agent 0, CommandId.ofInt 1, { X = 10; Y = 5 }) |],
+        commitmentsEstablishedIn r
+    )
+    Assert.Empty(commitmentsCompletedIn r)
+
+[<Fact>]
+let ``an agent that arrives emits CommitmentCompleted and Order/Disposition clear, exactly as before TASK-030`` () =
+    // One cell away: Accepted and arrived within the same tick's movement.
+    let mutable st = appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] []
+    let tick1 = stepWith [| cmd 1 (agent 0) { X = 2; Y = 5 } |] st
+    st <- tick1.State
+
+    Assert.Equal({ X = 2; Y = 5 }, (agentOf (agent 0) st).Position)
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) tick1)
+    Assert.Empty(commitmentsCompletedIn tick1)
+
+    // commitmentAndLocalAction runs before Navigation, so it only notices the
+    // arrival (Destination cleared by Navigation) one tick later.
+    let tick2 = stepWith [||] st
+
+    Assert.Equal<(AgentId * CommandId * Cell)[]>(
+        [| (agent 0, CommandId.ofInt 1, { X = 2; Y = 5 }) |],
+        commitmentsCompletedIn tick2
+    )
+    Assert.Equal(None, (agentOf (agent 0) tick2.State).Order)
+    Assert.Equal(None, (agentOf (agent 0) tick2.State).Disposition)
+
+[<Fact>]
+let ``a second order delivered mid-route emits a fresh CommitmentEstablished with no event for the first`` () =
+    let mutable st = appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] []
+    st <- (stepWith [| cmd 1 (agent 0) { X = 14; Y = 5 } |] st).State
+    st <- (stepWith [||] st).State
+
+    // Still mid-route toward (14,5).
+    Assert.NotEqual({ X = 14; Y = 5 }, (agentOf (agent 0) st).Position)
+
+    let tick3 = stepWith [| cmd 2 (agent 0) { X = 14; Y = 10 } |] st
+
+    Assert.Equal<(AgentId * CommandId * Cell)[]>(
+        [| (agent 0, CommandId.ofInt 2, { X = 14; Y = 10 }) |],
+        commitmentsEstablishedIn tick3
+    )
+    Assert.Empty(commitmentsCompletedIn tick3)
+
+[<Fact>]
+let ``a Refused or Unable order never emits CommitmentEstablished`` () =
+    let refused =
+        stepWith
+            [| cmd 1 (agent 0) { X = 14; Y = 10 } |]
+            (appraisalWorld [ 0, { X = 5; Y = 10 }, 1 ] [ 5, { X = 9; Y = 3 } ])
+
+    match dispositionOf (agent 0) refused with
+    | Some(Refused _) -> ()
+    | other -> Assert.Fail($"expected Refused, got {other}")
+
+    Assert.Empty(commitmentsEstablishedIn refused)
+
+    let unable =
+        stepWith
+            [| cmd 1 (agent 0) { X = 5; Y = 4 } |]
+            (worldWith (impassable [ (4, 4); (6, 4); (5, 3); (5, 5) ]))
+
+    match dispositionOf (agent 0) unable with
+    | Some(Unable _) -> ()
+    | other -> Assert.Fail($"expected Unable, got {other}")
+
+    Assert.Empty(commitmentsEstablishedIn unable)
+
+[<Fact>]
+let ``an unchanged, already-appraised order emits no commitment event on a later idle tick`` () =
+    let mutable st = appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] []
+    let mutable established = 0
+    let mutable completed = 0
+
+    for t in 1..3 do
+        let cmds = if t = 1 then [| cmd 1 (agent 0) { X = 14; Y = 5 } |] else [||]
+        let r = stepWith cmds st
+        established <- established + (commitmentsEstablishedIn r).Length
+        completed <- completed + (commitmentsCompletedIn r).Length
+        st <- r.State
+
+    Assert.Equal(1, established)
+    Assert.Equal(0, completed)
+
+[<Fact>]
+let ``commitment establish and complete events are deterministic across two runs and draw no randomness`` () =
+    let run () =
+        stepWith
+            [| cmd 1 (agent 0) { X = 2; Y = 5 } |]
+            (appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] [])
+
+    let r1 = run ()
+    let r2 = run ()
+    Assert.True(bodies r1 = bodies r2)
+    Assert.Equal(r1.StateHash, r2.StateHash)
+    Assert.Equal(0UL, r1.State.Random.Draws)
+
+[<Fact>]
+let ``Commitment.ofAgent matches every reachable (Order, Disposition, Destination) combination`` () =
+    let order =
+        Some
+            { Command = CommandId.ofInt 1
+              Intent = MoveTo { X = 5; Y = 5 }
+              IssuedAtTick = 0L
+              Urgency = Routine
+              RiskTolerance = Standard }
+
+    // Accepted, still mid-route -> Moving.
+    Assert.Equal(
+        Moving { Command = CommandId.ofInt 1; Target = { X = 5; Y = 5 } },
+        Commitment.ofAgent order (Some Accepted) (Some { X = 5; Y = 5 })
+    )
+    // Accepted but already arrived (Destination cleared) -> Holding.
+    Assert.Equal(Holding, Commitment.ofAgent order (Some Accepted) None)
+    // Refused / Unable -> Holding regardless of any stale Destination.
+    Assert.Equal(Holding, Commitment.ofAgent order (Some(Refused(NoKnownRoute, [||]))) None)
+    Assert.Equal(Holding, Commitment.ofAgent order (Some(Unable(NoKnownRoute, [||]))) None)
+    // Not yet appraised -> Holding.
+    Assert.Equal(Holding, Commitment.ofAgent order None None)
+    // No order at all -> Holding.
+    Assert.Equal(Holding, Commitment.ofAgent None None None)

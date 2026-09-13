@@ -283,7 +283,8 @@ let ``producing pathfinding diagnostics for the shared fixture leaves its hashes
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
         Assert.Equal(0x7737282578E821C6UL, (Hashing.hash outcome.FinalState).Value)
-        Assert.Equal(34, outcome.Events.Length)
+        // TASK-030: 34 -> 36 (+1 CommitmentEstablished, +1 CommitmentCompleted).
+        Assert.Equal(36, outcome.Events.Length)
 
 // --- the PlannedPath overlay renderer branch (golden-pinned) ------
 
@@ -303,7 +304,10 @@ let private pathFrameWithRoutes () : DiagnosticFrame =
             | BudgetExhausted _
             | InvalidEndpoint _ -> PlannedPath(a, b, [||], 0, false))
 
-    { f with Overlays = overlays }
+    // Appended, not replaced (the `cwheadless render --path` precedent,
+    // Program.fs): TASK-030's AgentCommitment overlays are part of the real
+    // frame and must not be silently dropped.
+    { f with Overlays = Array.append f.Overlays overlays }
 
 [<Fact>]
 let ``the pathfinding demo ASCII render with planned paths is byte-equal to the committed golden`` () =
@@ -326,8 +330,9 @@ let ``a PlannedPath overlay appears distinctly and the overlay-absent render is 
     Assert.Contains("path (1,1) -> (4,1): reached, cost 3", asciiPaths)
     Assert.Contains("path (2,6) -> (9,6): reached, cost 11", asciiPaths)
     Assert.Contains("path (1,10) -> (14,9): no path", asciiPaths)
-    // Overlay-absent render carries neither the path glyphs nor the section.
-    Assert.DoesNotContain("overlays:", asciiPlain)
+    // No caller-supplied PlannedPath overlay: the plain render's "overlays:"
+    // section (TASK-030: every agent still carries an AgentCommitment
+    // overlay) carries neither the path glyphs nor a "path (" line.
     Assert.DoesNotContain("path (", asciiPlain)
 
     // The SVG branch emits a solid path polyline and start / goal markers.
