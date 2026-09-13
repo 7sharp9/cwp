@@ -17,8 +17,8 @@ See `content/replays/CORPUS.md`.
 | Initial state | Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile) |
 | Tick count | 14 |
 | Initial hash (tick 0) | `0x66E6821517F73AF5` |
-| Final hash (tick 14) | `0xCF052F4E1331FFB2` |
-| Domain events | 15 |
+| Final hash (tick 14) | `0xFFA3433CE5932F42` |
+| Domain events | 35 |
 
 ## Per-tick authoritative state hash
 
@@ -28,13 +28,13 @@ See `content/replays/CORPUS.md`.
 |    2 | `0x57B5AF8272ACFF29` |
 |    3 | `0xE25C02B68384FDCB` |
 |    4 | `0xFA52F62A0F041E15` |
-|    5 | `0xF72BE90D2ACE0BBF` |
-|    6 | `0xD566A75AEEE36A6C` |
-|    7 | `0xB291993BEC378659` |
-|    8 | `0x7A8B99A37939D523` |
-|    9 | `0x64A1C885A7EEA15A` |
-|   10 | `0x4831BA88E392C47A` |
-|   11 | `0xB94E94F6DA7411BE` |
-|   12 | `0x13AF84D5192C3C26` |
-|   13 | `0x4BC0C141CB5CEDE2` |
-|   14 | `0xCF052F4E1331FFB2` |
+|    5 | `0xCE177ECEB4D1F71F` |
+|    6 | `0x8AA135678DAD07F7` |
+|    7 | `0xD3508C28ED5FC8A8` |
+|    8 | `0x24072F488C31F1D5` |
+|    9 | `0xC1A67224F26C713F` |
+|   10 | `0x65F26D184E51C89D` |
+|   11 | `0x1274BD5FD265CA00` |
+|   12 | `0xC94536CBE93C2EC4` |
+|   13 | `0x45D10A039D3EB2F6` |
+|   14 | `0xFFA3433CE5932F42` |

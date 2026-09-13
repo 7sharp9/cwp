@@ -394,6 +394,15 @@ Initial enemy doctrine:
 
 Do not build a symmetric enemy commander planner before the player command loop works.
 
+"Use the same ... combat rules" is realised by TASK-031 (backlog B-019):
+`Simulation.combat` is symmetric by construction — a hostile agent engages a
+visible friendly exactly as a friendly engages a visible hostile, same
+`Combat.hitChance` formula, same weapon range. "Engage visible targets" is
+therefore already true in the narrow mechanical sense; a hostile squad
+tactical picture and doctrine choosing *when* or *whether* to engage (the
+rest of this list) is B-022 — this task's automatic auto-engage is the
+mechanic that doctrine will eventually gate, not the doctrine itself.
+
 ## 13. Explanation surface
 
 Three layers serve different users.

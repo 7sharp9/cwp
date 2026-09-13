@@ -227,6 +227,18 @@ module AppraisalDemo =
                 // predates the phase); the OrderAppraisal panel already shows
                 // the agent's decision.
                 unhandled.Add(sprintf "commitment agent %d (%d,%d)" (AgentId.value agent) at.X at.Y)
+            | FireLine(shooter, _, target, at, hit) ->
+                // TASK-031: not yet surfaced in this disposable P3 demo (it
+                // predates the phase).
+                unhandled.Add(
+                    sprintf
+                        "fire agent %d -> agent %d (%d,%d) %s"
+                        (AgentId.value shooter)
+                        (AgentId.value target)
+                        at.X
+                        at.Y
+                        (if hit then "hit" else "miss")
+                )
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

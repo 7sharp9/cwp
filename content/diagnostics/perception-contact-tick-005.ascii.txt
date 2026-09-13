@@ -39,7 +39,9 @@ overlays:
   order appraisal (6,5): agent 0  accepted  exposed (6,5) (7,5) (8,5) (9,5)
   commitment (6,5): agent 0  moving to (9,5)
   commitment (9,1): agent 1  holding
+  fire (6,5) -> (9,1): agent 0 -> agent 1  miss
+  fire (9,1) -> (6,5): agent 1 -> agent 0  hit
 
-events: contact-observed@(9,1); contact-observed@(5,5); movement-stepped@(5,5),(6,5)
+events: contact-observed@(9,1); contact-observed@(5,5); movement-stepped@(5,5),(6,5); shot-fired-miss; shot-fired-hit
 
-tick 5 | hash 0xF72BE90D2ACE0BBF (format 4) | draws 0 | agents 2 | cover-edges 0 | events 3
+tick 5 | hash 0xCE177ECEB4D1F71F (format 4) | draws 2 | agents 2 | cover-edges 0 | events 5

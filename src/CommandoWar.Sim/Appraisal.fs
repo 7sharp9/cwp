@@ -38,7 +38,9 @@ namespace CommandoWar.Sim
 ///     B-021 adds the exposure-band trigger;
 ///   * commitments and the finite action executor — B-018 (Appraisal writes
 ///     `Destination`, it does not build a commitment store);
-///   * line of fire / combat / a real threat model — B-019.
+///   * line of fire / combat / a real threat model — B-019 (which reuses
+///     `attackDirection` below, made public by TASK-031, for its own
+///     cover-facing geometry).
 
 /// Every appraisal threshold, in one place (`docs/05` section 15 "record every
 /// threshold in one configuration structure"). Module literals rather than a
@@ -99,7 +101,11 @@ module Appraisal =
     /// The cardinal an attack from `threatCell` travels to reach `cell` — the
     /// direction `Terrain.cover` treats fire as arriving from. The dominant
     /// axis of `(threatCell - cell)` wins; the X axis breaks a tie.
-    let private attackDirection (threatCell: Cell) (cell: Cell) : Direction =
+    ///
+    /// Public since TASK-031 (backlog B-019): `Combat.hitChance` reuses this
+    /// identical geometry for the cover-facing edge of a hitscan shot, rather
+    /// than duplicating it.
+    let attackDirection (threatCell: Cell) (cell: Cell) : Direction =
         let dx = threatCell.X - cell.X
         let dy = threatCell.Y - cell.Y
 

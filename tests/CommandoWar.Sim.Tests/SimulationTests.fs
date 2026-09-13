@@ -1116,7 +1116,11 @@ let ``an Accepted order is not re-appraised on a later idle tick`` () =
     Assert.Equal(1, appraisals)
 
 [<Fact>]
-let ``order appraisal is deterministic across two runs and draws no randomness`` () =
+let ``order appraisal is deterministic across two runs`` () =
+    // TASK-031: this world's friendly (5,10) and hostile (9,3) are within
+    // CombatConfig.WeaponRange and line of sight of each other, so the
+    // Combat phase now legitimately draws from the stream too — this fact
+    // no longer asserts zero draws, only that both runs draw identically.
     let run () =
         stepWith
             [| cmd 1 (agent 0) { X = 14; Y = 10 } |]
@@ -1126,7 +1130,7 @@ let ``order appraisal is deterministic across two runs and draws no randomness``
     let r2 = run ()
     Assert.True(bodies r1 = bodies r2)
     Assert.Equal(r1.StateHash, r2.StateHash)
-    Assert.Equal(0UL, r1.State.Random.Draws)
+    Assert.Equal(r1.State.Random.Draws, r2.State.Random.Draws)
 
 // --- Commitment and finite move/hold executor (TASK-030) --------------
 
@@ -1270,3 +1274,102 @@ let ``Commitment.ofAgent matches every reachable (Order, Disposition, Destinatio
     Assert.Equal(Holding, Commitment.ofAgent order None None)
     // No order at all -> Holding.
     Assert.Equal(Holding, Commitment.ofAgent None None None)
+
+// --- Hitscan combat and directional cover effects (TASK-031) ----------
+
+let private shotsFiredIn (r: StepResult) =
+    bodies r
+    |> Array.choose (function
+        | ShotFired(shooter, target, hit) -> Some(shooter, target, hit)
+        | _ -> None)
+
+[<Fact>]
+let ``a friendly and a hostile within range and clear line of sight each fire exactly one shot`` () =
+    let b: GridBounds = { Width = 10; Height = 10 }
+    let w = perceptionWorld b [ 0, { X = 2; Y = 2 } ] [ 1, { X = 7; Y = 2 } ] (Terrain.empty b)
+    let r = stepIdle w
+
+    let pairs = shotsFiredIn r |> Array.map (fun (s, t, _) -> s, t) |> Array.sortBy fst
+    Assert.Equal<(AgentId * AgentId)[]>([| (agent 0, agent 1); (agent 1, agent 0) |], pairs)
+
+[<Fact>]
+let ``a candidate beyond WeaponRange is never engaged`` () =
+    let b: GridBounds = { Width = 20; Height = 20 }
+    // Chebyshev distance 8, one past CombatConfig.WeaponRange (7).
+    let w = perceptionWorld b [ 0, { X = 0; Y = 0 } ] [ 1, { X = 8; Y = 8 } ] (Terrain.empty b)
+    let r = stepIdle w
+
+    Assert.Empty(shotsFiredIn r)
+    Assert.Equal(0UL, r.State.Random.Draws)
+
+[<Fact>]
+let ``Combat.chooseTarget excludes a candidate blocked by an opaque wall even within range`` () =
+    let b: GridBounds = { Width = 10; Height = 10 }
+    let terrain = opaqueCells b [ (4, 2) ]
+    let shooter = Agent.create (agent 0) Friendly { X = 2; Y = 2 }
+    let target = Agent.create (agent 1) Hostile { X = 7; Y = 2 }
+
+    Assert.Equal(None, Combat.chooseTarget terrain shooter [| target |])
+
+[<Fact>]
+let ``Combat.chooseTarget picks the nearest candidate, ties broken by ascending id`` () =
+    let terrain = Terrain.empty { Width = 20; Height = 20 }
+    let shooter = Agent.create (agent 0) Friendly { X = 0; Y = 0 }
+    let near = Agent.create (agent 2) Hostile { X = 3; Y = 0 }
+    let far = Agent.create (agent 1) Hostile { X = 5; Y = 0 }
+
+    match Combat.chooseTarget terrain shooter [| far; near |] with
+    | Some t -> Assert.Equal(agent 2, t.Id)
+    | None -> Assert.Fail "expected a target"
+
+    let tiedLow = Agent.create (agent 1) Hostile { X = 3; Y = 0 }
+    let tiedHigh = Agent.create (agent 3) Hostile { X = 0; Y = 3 }
+
+    match Combat.chooseTarget terrain shooter [| tiedHigh; tiedLow |] with
+    | Some t -> Assert.Equal(agent 1, t.Id)
+    | None -> Assert.Fail "expected a target"
+
+[<Fact>]
+let ``Combat.hitChance strictly decreases as range increases, all else equal`` () =
+    let terrain = Terrain.empty { Width = 20; Height = 20 }
+    let shooter = { X = 0; Y = 0 }
+    let near = Combat.hitChance terrain shooter { X = 1; Y = 0 }
+    let far = Combat.hitChance terrain shooter { X = 5; Y = 0 }
+    Assert.True(far < near, $"expected far ({far}) < near ({near})")
+
+[<Fact>]
+let ``Combat.hitChance strictly decreases as cover level increases, all else equal`` () =
+    let bounds: GridBounds = { Width = 10; Height = 10 }
+    let shooter = { X = 0; Y = 0 }
+    let target = { X = 5; Y = 0 }
+    let noCover = Terrain.empty bounds
+    // Fire travels west-to-east, so it arrives at the target's West edge
+    // (Appraisal.attackDirection shooter target).
+    let covered = Terrain.build bounds [||] [| { Cell = target; Direction = West; Level = 2 } |]
+
+    let chanceNoCover = Combat.hitChance noCover shooter target
+    let chanceCovered = Combat.hitChance covered shooter target
+    Assert.True(chanceCovered < chanceNoCover, $"expected covered ({chanceCovered}) < uncovered ({chanceNoCover})")
+
+[<Fact>]
+let ``Combat.hitChance stays within MinHitChance and MaxHitChance at the extremes`` () =
+    let bounds: GridBounds = { Width = 20; Height = 20 }
+    let terrain = Terrain.empty bounds
+
+    let farChance = Combat.hitChance terrain { X = 0; Y = 0 } { X = 19; Y = 19 }
+    Assert.Equal(CombatConfig.MinHitChance, farChance)
+
+    let zeroRangeChance = Combat.hitChance terrain { X = 5; Y = 5 } { X = 5; Y = 5 }
+    Assert.True(zeroRangeChance >= CombatConfig.MinHitChance && zeroRangeChance <= CombatConfig.MaxHitChance)
+
+[<Fact>]
+let ``combat is deterministic across two runs and draws exactly once per shot fired`` () =
+    let run () =
+        let b: GridBounds = { Width = 10; Height = 10 }
+        stepIdle (perceptionWorld b [ 0, { X = 2; Y = 2 } ] [ 1, { X = 7; Y = 2 } ] (Terrain.empty b))
+
+    let r1 = run ()
+    let r2 = run ()
+    Assert.True(bodies r1 = bodies r2)
+    Assert.Equal(r1.StateHash, r2.StateHash)
+    Assert.Equal(uint64 (shotsFiredIn r1).Length, r1.State.Random.Draws)

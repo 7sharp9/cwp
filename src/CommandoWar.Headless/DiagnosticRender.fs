@@ -120,7 +120,8 @@ module DiagnosticRender =
                 | KnownContact _
                 | UndeliveredOrder _
                 | OrderAppraisal _
-                | AgentCommitment _ -> None)
+                | AgentCommitment _
+                | FireLine _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -147,7 +148,8 @@ module DiagnosticRender =
                 | KnownContact _
                 | UndeliveredOrder _
                 | OrderAppraisal _
-                | AgentCommitment _ -> None)
+                | AgentCommitment _
+                | FireLine _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -365,6 +367,16 @@ module DiagnosticRender =
                         | Moving mc -> sprintf "moving to %s" (cellText mc.Target)
 
                     line (sprintf "  commitment %s: agent %d  %s" (cellText at) (AgentId.value agent) status)
+                | FireLine(shooter, from, target, at, hit) ->
+                    line (
+                        sprintf
+                            "  fire %s -> %s: agent %d -> agent %d  %s"
+                            (cellText from)
+                            (cellText at)
+                            (AgentId.value shooter)
+                            (AgentId.value target)
+                            (if hit then "hit" else "miss")
+                    )
 
         line ""
 
@@ -705,6 +717,23 @@ module DiagnosticRender =
                         (at.X * s + 4)
                         (at.Y * s + 4)
                         fill
+                )
+            | FireLine(_, from, _, at, hit) ->
+                // A deterministic hitscan shot (TASK-031): a line between the
+                // shooter's and target's cell centres, orange and solid for a
+                // hit, grey and dashed for a miss — deliberately distinct from
+                // the PlannedPath polyline and the OrderAppraisal glyph.
+                let colour, dash = if hit then "#dd6b20", "" else "#a0aec0", " stroke-dasharray=\"3,2\""
+
+                line (
+                    sprintf
+                        "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"%s\" stroke-width=\"1.5\"%s/>"
+                        (from.X * s + mid)
+                        (from.Y * s + mid)
+                        (at.X * s + mid)
+                        (at.Y * s + mid)
+                        colour
+                        dash
                 )
 
         // Footer.
