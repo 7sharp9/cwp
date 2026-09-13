@@ -88,6 +88,12 @@ agents:
 overlays:
   path (0,3) -> (20,14): reached, cost 31
   order appraisal (20,8): agent 3  accepted
+  commitment (0,0): agent 0  holding
+  commitment (0,1): agent 1  holding
+  commitment (0,2): agent 2  holding
+  commitment (20,8): agent 3  moving to (20,14)
+  commitment (0,4): agent 4  holding
+  commitment (0,5): agent 5  holding
 
 events: movement-stepped@(20,7),(20,8)
 

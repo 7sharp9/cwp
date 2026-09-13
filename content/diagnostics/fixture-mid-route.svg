@@ -1042,6 +1042,12 @@
   <circle cx="8" cy="56" r="4" fill="#2f855a" stroke="#ffffff" stroke-width="1"/>
   <rect x="320" y="224" width="16" height="16" fill="none" stroke="#dd6b20" stroke-width="3"/>
   <text x="329" y="137" font-family="monospace" font-size="9" font-weight="bold" fill="#2f855a">A</text>
+  <circle cx="4" cy="4" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
+  <circle cx="4" cy="20" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
+  <circle cx="4" cy="36" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
+  <circle cx="324" cy="132" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
+  <circle cx="4" cy="68" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
+  <circle cx="4" cy="84" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
   <text x="4" y="528" font-family="monospace" font-size="11" fill="#111111">tick 25  hash 0x8DB6A62B58BB64D3  draws 0</text>
   <text x="4" y="542" font-family="monospace" font-size="11" fill="#111111">agents 6  cover-edges 0  events 1</text>
   <text x="4" y="556" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>

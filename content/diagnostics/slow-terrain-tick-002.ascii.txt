@@ -35,6 +35,7 @@ agents:
 overlays:
   path (0,0) -> (4,0): reached, cost 6
   order appraisal (0,0): agent 0  accepted
+  commitment (0,0): agent 0  moving to (4,0)
 
 events: none
 

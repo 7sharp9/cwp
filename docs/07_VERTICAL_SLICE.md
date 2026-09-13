@@ -153,10 +153,14 @@ Partially realised by TASK-028 (backlog B-017): steps 1–3 land as the
 `exposed-approach` corpus entry — the player orders two soldiers across an
 approach past an observed machine-gun position, and the Appraisal phase
 `Refuses` the low-`Discipline` one with `DecisionReason.RouteTooExposed` (and
-`Accepts` the high-`Discipline` one — criterion 2). Steps 4–8 (the UI
+`Accepts` the high-`Discipline` one — criterion 2). Step 7 ("the player
+reissues the original intent") is realised in isolation by TASK-030 (backlog
+B-018): the `reissued-order` corpus entry shows a superseding order taking
+over an in-progress commitment, though without the preceding suppress/reroute
+correction step 7 presupposes in the full sequence. Steps 4–6 and 8 (the UI
 explanation, the suppress / reroute response, recalculation, and consistent
-re-acceptance) need commitments (B-018), suppression (B-020), reappraisal
-triggers (B-021), and enemy doctrine (B-022); the full sequence is B-023.
+re-acceptance) still need suppression (B-020), reappraisal triggers (B-021),
+and enemy doctrine (B-022); the full sequence is B-023.
 
 ## 9. Functional acceptance criteria
 

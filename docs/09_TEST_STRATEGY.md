@@ -73,6 +73,19 @@ order is not re-appraised on a later idle tick; appraisal is deterministic and
 draws no randomness. `CanonicalHashTests.fs` pins `Canonical.FormatVersion = 4`
 and that `Discipline` is outside the canonical image.
 
+**Commitment establish/complete/supersede — realised (TASK-030, backlog
+B-018):** `SimulationTests.fs` covers `docs/04` section 12.6 / `docs/05`
+section 9 — a fresh `Accepted` order emits `CommitmentEstablished` the same
+tick as `OrderAppraised`; an agent that arrives emits `CommitmentCompleted`
+and clears `Order`/`Disposition`, exactly as before TASK-030 (a regression
+fact); a second order delivered mid-route emits a fresh
+`CommitmentEstablished` for the new command with no event for the first
+(supersession); a `Refused`/`Unable` order never emits
+`CommitmentEstablished`; an unchanged, already-appraised order emits neither
+event on an idle tick; determinism and zero draws. A `Commitment.ofAgent`
+unit fact covers every reachable `(Order, Disposition, Destination)`
+combination directly.
+
 ### 2.2 Property tests
 
 Use FsCheck or an equivalent F# property-testing library for invariants such as:

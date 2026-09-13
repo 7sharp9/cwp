@@ -222,6 +222,11 @@ module AppraisalDemo =
                 unhandled.Add(sprintf "obstructed (%d,%d) agent %d" cell.X cell.Y (AgentId.value occupant))
             | UndeliveredOrder(recipient, at, _) ->
                 unhandled.Add(sprintf "undelivered order agent %d (%d,%d)" (AgentId.value recipient) at.X at.Y)
+            | AgentCommitment(agent, at, _) ->
+                // TASK-030: not yet surfaced in this disposable P3 demo (it
+                // predates the phase); the OrderAppraisal panel already shows
+                // the agent's decision.
+                unhandled.Add(sprintf "commitment agent %d (%d,%d)" (AgentId.value agent) at.X at.Y)
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

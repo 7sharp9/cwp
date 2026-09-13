@@ -151,6 +151,8 @@
   <rect x="176" y="176" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
   <circle cx="8" cy="8" r="5" fill="#2b6cb0" stroke="#ffffff" stroke-width="1"/>
   <circle cx="8" cy="184" r="5" fill="#2b6cb0" stroke="#ffffff" stroke-width="1"/>
+  <circle cx="4" cy="4" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
+  <circle cx="4" cy="180" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
   <line x1="24" y1="24" x2="168" y2="24" stroke="#6b46c1" stroke-width="2" stroke-dasharray="4,3"/>
   <circle cx="24" cy="24" r="2" fill="#6b46c1"/>
   <circle cx="40" cy="24" r="2" fill="#6b46c1"/>

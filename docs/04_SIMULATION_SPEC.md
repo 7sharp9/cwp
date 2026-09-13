@@ -422,6 +422,17 @@ The vertical-slice agent needs:
 
 Fatigue, persistent personality dimensions, interpersonal relations, inventory grids, and skill trees are deferred.
 
+Realised by TASK-030 (backlog B-018): "current order and commitment" is
+`AgentState.Order` / `.Disposition` (TASK-028, genuine canonical memory) plus
+a derived `Commitment` (`Holding | Moving of MoveCommitment`,
+`Commitment.ofAgent`) — not a stored field. `Commitment` is fully recoverable
+from `Order` / `Disposition` / `Destination` at every tick (the `Route`
+precedent, section 17), so it needs no memory of its own and stays out of
+`Canonical.encode`. "Current execution state" is realised only as far as
+"moving" vs "holding" goes; the finite action executor's richer states
+(`docs/05` section 10) do not exist beyond that binary, since only `MoveTo`
+is an intent.
+
 Realised so far (`src/CommandoWar.Sim/Domain.fs` `AgentState`): identity,
 side, logical position, movement state (`Progress`, `Destination`, the derived
 `Route` cache), **`VisibleContacts: AgentId[]`** (TASK-026) — the
@@ -583,8 +594,10 @@ order reset. Stages (`docs/05` section 5):
   from `AgentState.Discipline` and the order's `RiskTolerance` / `Urgency`
   (`AppraisalConfig`); `<=` -> `Accepted`, over -> `Refused` with
   `DecisionReason.RouteTooExposed`;
-- **stage 5** (safer adaptation) is deferred (B-018): there is no `Adapted`
-  outcome and no route recomputation.
+- **stage 5** (safer adaptation) remains deferred (a TASK-030 follow-up, no
+  B-item number assigned yet): there is no `Adapted` outcome and no route
+  recomputation. It needs a second, separate exposure-aware route-search
+  algorithm distinct from `Pathfinding.findWithin`'s shortest-path search.
 
 On `Accepted` the phase writes `AgentState.Destination` (which the Navigation
 phase then follows, the same tick); on `Refused` / `Unable` it writes none.
@@ -593,10 +606,10 @@ mundane `Accepted`. The only reappraisal trigger in scope is "a new order is
 received" (`docs/05` section 14); an already-appraised, unchanged order is a
 no-op that emits nothing ("reappraise only on material triggers"). Suppression,
 stress, trust, hysteresis, and the exposure-band / knowledge-change triggers
-are B-021; commitments and the finite executor are B-018. No PRNG draw.
-`AgentState.Order` and `AgentState.Disposition` are genuine per-tick canonical
-state — `Canonical.FormatVersion` bumped **3 -> 4** (section 17);
-`AgentState.Discipline` is static authored data and stays out of the image.
+are B-021. No PRNG draw. `AgentState.Order` and `AgentState.Disposition` are
+genuine per-tick canonical state — `Canonical.FormatVersion` bumped **3 -> 4**
+(section 17); `AgentState.Discipline` is static authored data and stays out of
+the image.
 
 ### 12.6 Commitment and local action
 
@@ -604,10 +617,25 @@ state — `Canonical.FormatVersion` bumped **3 -> 4** (section 17);
 - the executor chooses the next finite action within that commitment;
 - a small ordered interrupt table may supersede the normal action.
 
-Not realised (B-018). Until then the Appraisal phase writes
-`AgentState.Destination` on an `Accepted` order and the Navigation phase
-follows it directly — there is no commitment store, finite action executor, or
-interrupt table.
+Realised by TASK-030 (backlog B-018) as `Simulation.commitmentAndLocalAction`,
+its own phase in `Phases.order` between Appraisal and Navigation. `Commitment`
+(`Holding | Moving of MoveCommitment`) is a pure derived value over `Order` /
+`Disposition` / `Destination` (`Commitment.fs`) — not a stored commitment
+store, since those three fields already carry every bit of memory a
+commitment needs. The finite executor for `Move` is correspondingly thin:
+establish (`Order` freshly `Accepted` this tick -> emit
+`CommitmentEstablished`), continue (unchanged, no event), or complete
+(`Order` cleared on fulfilment, relocated from the Appraisal phase's prior
+housekeeping -> emit `CommitmentCompleted`). Of the `docs/05` section 11
+seven-priority interrupt table, only priority 6 ("new higher-priority
+command") has a live signal: a superseding order's fresh
+`CommitmentEstablished` is the complete trace, with no separate event
+reporting the superseded commitment's end (nothing is lost — `Commitment` is
+derived, not stored). Priorities 1–4 need combat/suppression state that does
+not exist (B-019/B-020); priority 5 ("route invalidated") was already
+assigned to B-021 by TASK-028 (it needs a stall counter). `Suppressing` /
+`Assaulting` / `Withdrawing` commitments and their `PlayerIntent` cases are
+B-030.
 
 ### 12.7 Navigation and movement
 
@@ -738,11 +766,22 @@ squad picture after `PerceptionConfig.ExpireAfter` unseen ticks. For "order
 appraisal outcome", **`OrderAppraised of agent * command * disposition`**
 (TASK-028) — emitted by the Appraisal phase for every appraisal, including a
 mundane `Accepted`, and never on a tick where an already-appraised order is
-unchanged. Within a tick, events are ordered: command outcomes (ascending
-command id), then `OrderUndelivered` (ascending `(recipient, command)`), then
-`ContactObserved` (ascending `(observer, contact)`) then `ContactExpired`
-(ascending contact id), then `OrderAppraised` (ascending agent id), then
-movement outcomes (ascending agent id) — the `Phases.order` sequence.
+unchanged. For "current execution state" changing (not itself a listed
+category, but the nearest fit): **`CommitmentEstablished of agent * command *
+target`** and **`CommitmentCompleted of agent * command * at`** (TASK-030,
+backlog B-018) — emitted by the new `commitmentAndLocalAction` phase; the
+former exactly when an order is freshly `Accepted` this tick (from `Holding`
+or superseding a prior `Moving` commitment), the latter when a `Moving`
+commitment reaches its target (relocated from the Appraisal phase's prior
+fulfilled-order housekeeping). A superseded commitment emits no event of its
+own — `Commitment` is a derived value (section 17), so there is nothing
+separate to report ending. Within a tick, events are ordered: command outcomes
+(ascending command id), then `OrderUndelivered` (ascending `(recipient,
+command)`), then `ContactObserved` (ascending `(observer, contact)`) then
+`ContactExpired` (ascending contact id), then `OrderAppraised` (ascending
+agent id), then `CommitmentCompleted` / `CommitmentEstablished` (ascending
+agent id), then movement outcomes (ascending agent id) — the `Phases.order`
+sequence.
 
 ## 15. Render snapshot
 
@@ -820,6 +859,15 @@ produce identical caches (`Pathfinding.findWithin` is total, pure, integer-only,
 deterministic), so it cannot diverge. `Canonical.FormatVersion` stays `1`. A
 route-following bug still surfaces in the hash within one tick because the
 agent's `Position` is canonical.
+
+TASK-030 note: `Commitment` (`Holding | Moving of MoveCommitment`, section
+12.6) is likewise a **derived cache** on the identical argument — a pure,
+total function of `(Order, Disposition, Destination)`, all three already
+canonical — so it too is **excluded** from `Canonical.encode` and needs no
+`Canonical.FormatVersion` bump. Unlike `Route`, it is not even computed and
+stored per tick by the simulation step; `Commitment.ofAgent` is called only by
+`Diagnostics` (for the `AgentCommitment` overlay) and by
+`commitmentAndLocalAction` (transiently, to decide which event to emit).
 
 TASK-010 note: `WorldState.Terrain` is authoritative but is **excluded** from
 `Canonical.encode` while it carries no per-tick mutable state. Static

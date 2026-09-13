@@ -42,6 +42,8 @@ agents:
   agent 1  friendly  (0,11)  at rest
 
 overlays:
+  commitment (0,0): agent 0  holding
+  commitment (0,11): agent 1  holding
   sight (1,1) -> (10,1): clear
   sight (1,4) -> (10,4): blocked at (5,4)
   sight (7,2) -> (10,5): clear

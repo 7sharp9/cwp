@@ -310,6 +310,21 @@ The agent does not reselect its high-level goal every tick. It continues until:
 
 This prevents oscillation.
 
+Realised by TASK-030 (backlog B-018) as the subset `Holding | Moving of
+MoveCommitment` in `CommandoWar.Sim` — `Suppressing` / `Assaulting` /
+`Withdrawing` need `PlayerIntent` cases that do not exist yet (`Hold` /
+`Suppress` / `Assault` / `Withdraw` — B-030) and get no case, per `AGENTS.md`
+"do not build speculative type machinery". `Commitment` is **not** a stored
+`AgentState` field: it is a pure derived value
+(`Commitment.ofAgent : ReceivedOrder option -> OrderDisposition option -> Cell
+option -> Commitment`) recoverable from the already-canonical `Order` /
+`Disposition` / `Destination` at every tick — the `AgentState.Route` precedent
+(`docs/04` section 17). "Continues until completed" and "superseded by a
+newer order" are realised (`CommitmentCompleted` / `CommitmentEstablished`
+events, section 13); "invalidated by a material world change", "interrupted
+by a higher-priority survival event", and "delayed or refused after explicit
+reappraisal" are not — see section 11.
+
 ## 10. Finite action executor
 
 Each commitment expands into a small finite state machine.
@@ -328,6 +343,15 @@ Acquire approach route
 
 Do not encode the whole game in one behaviour tree. Typed states and transitions are easier to test and explain.
 
+Realised by TASK-030 (backlog B-018) for `Move`, correspondingly thin since
+`Simulation.navigationAndMovement` (`docs/04` section 12.7) already owns the
+physical stepping: establish (a fresh `Accepted` order -> `Moving`, emit
+`CommitmentEstablished`), continue (unchanged, no event), complete (the
+target is reached -> `Holding`, emit `CommitmentCompleted`). No intermediate
+states like the assault example above — there is no "wait for support" or
+"cross danger area" concept without suppression (B-020) or a richer order
+vocabulary (B-030).
+
 ## 11. Interrupts
 
 Initial priority order:
@@ -341,6 +365,19 @@ Initial priority order:
 7. Normal commitment execution.
 
 An interrupt emits an event and records whether the original commitment can resume.
+
+Realised by TASK-030 (backlog B-018): only priority 6 has a live signal
+today. A superseding order's `CommitmentEstablished` event is the complete
+trace — since `Commitment` is derived, not stored (section 9), there is
+nothing separate to report about the superseded commitment "ending", and no
+resume question arises (a superseded commitment cannot resume; a new order
+always takes precedence). Priorities 1–4 need combat/suppression state that
+does not exist (B-019/B-020). Priority 5 ("route invalidated") was already
+assigned to B-021 by TASK-028 (`docs/04` section 12.5): under static terrain
+an Appraisal-`Accepted` route cannot later become unreachable, so there is no
+live signal yet; a persistent stall from a live-but-unmoving obstruction
+needs a stall counter (new state), which is B-021's job. Priority 7 (normal
+commitment execution) is unchanged Navigation behaviour.
 
 ## 12. Enemy AI
 

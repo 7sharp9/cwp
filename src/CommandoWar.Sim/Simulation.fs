@@ -433,16 +433,16 @@ module Simulation =
     //
     // For every agent, in ascending id order:
     //
-    //   1. Housekeeping. An agent that holds an Accepted order, has no
-    //      Destination, and stands on the order's target has FULFILLED it
-    //      (movement completed last tick) -> clear Order and Disposition, no
-    //      event.
-    //   2. Fast path. Order present and Disposition already Some -> nothing.
+    //   1. Fast path. Order present and Disposition already Some -> nothing.
     //      This is "reappraise only on material triggers": an unchanged,
     //      already-appraised order is not re-judged and emits no event. The
     //      only in-scope trigger is "a new order is received", which the
-    //      Communication phase encodes by resetting Disposition to None.
-    //   3. Appraise. Order present and Disposition None (fresh, or reset by a
+    //      Communication phase encodes by resetting Disposition to None. This
+    //      also covers a FULFILLED order (Accepted, no Destination, standing
+    //      on the target) — its housekeeping clear is relocated to
+    //      commitmentAndLocalAction (TASK-030, backlog B-018): a commitment
+    //      ending is a 12.6 concern, not a 12.5 one.
+    //   2. Appraise. Order present and Disposition None (fresh, or reset by a
     //      superseding order): run Appraisal.appraise over the terrain, the
     //      shared TacticalKnowledge, and the agent's static Discipline. Clear
     //      any Destination a superseded order left, then on Accepted write
@@ -455,9 +455,11 @@ module Simulation =
     // Navigation phase recomputes the route from Destination exactly as it
     // does today (a small pure duplication of the stage-2 Pathfinding call,
     // preferred over coupling the phases). No PRNG draw (B-019 owns the
-    // stream's first gameplay consumer). Commitments, the finite executor, and
-    // stage-5 safer adaptation are B-018; suppression / stress / trust and the
-    // other reappraisal triggers are B-021.
+    // stream's first gameplay consumer). Commitments and the finite move/hold
+    // executor are realised by TASK-030 (backlog B-018, the
+    // commitmentAndLocalAction phase immediately below); stage-5 safer
+    // adaptation stays deferred (a TASK-030 follow-up); suppression / stress /
+    // trust and the other reappraisal triggers are B-021.
     let private appraisal (s: StepState) =
         let terrain = s.Terrain
         let threats = s.TacticalKnowledge
@@ -473,11 +475,12 @@ module Simulation =
                 let (MoveTo target) = o.Intent
 
                 match a.Disposition with
-                | Some Accepted when a.Destination = None && a.Position = target ->
-                    // Order fulfilled: movement completed last tick.
-                    agents.[i] <- { a with Order = None; Disposition = None }
                 | Some _ ->
                     // Already appraised, order unchanged: no re-appraisal.
+                    // This also covers a fulfilled order (Accepted, Destination
+                    // = None, Position = target) — its housekeeping clear moved
+                    // to commitmentAndLocalAction (TASK-030, backlog B-018): a
+                    // commitment ending is a 12.6 concern, not a 12.5 one.
                     ()
                 | None ->
                     let disposition, _ =
@@ -498,6 +501,83 @@ module Simulation =
 
                     agents.[i] <- { a with Disposition = Some disposition; Destination = destination }
                     emit (OrderAppraised(a.Id, o.Command, disposition)) s
+
+        s.Agents <- agents
+
+    // --- Phase: commitment and local action ---------------------------------
+    // Realised by TASK-030 (backlog B-018). Turns the docs/04 section 12.6
+    // no-op into a real phase: "accepted orders create or update a
+    // commitment; the executor chooses the next finite action within that
+    // commitment; a small ordered interrupt table may supersede the normal
+    // action." Runs immediately after Appraisal (so a commitment begins or
+    // ends the same tick its order is judged) and before Navigation (which is
+    // unchanged: it still drives movement from AgentState.Destination).
+    //
+    // Commitment (docs/05 section 9) is NOT new AgentState — it is a pure
+    // derived value over Order / Disposition / Destination (Commitment.fs,
+    // the AgentState.Route precedent), so this phase writes no new field. Its
+    // job is entirely to notice the two transitions those fields can now
+    // produce and name them with an event:
+    //
+    //   1. Fulfilled. Order = Some o, Disposition = Some Accepted, Destination
+    //      = None, Position = o's target -> the order was completed last
+    //      tick (Navigation cleared Destination on arrival). Clear Order and
+    //      Disposition (relocated, unchanged, from the Appraisal phase's
+    //      prior housekeeping branch — TASK-028) and emit
+    //      CommitmentCompleted(agent, command, at).
+    //   2. Established. Order = Some o, Disposition = Some Accepted, and this
+    //      tick's Appraisal just emitted OrderAppraised(agent, o.Command,
+    //      Accepted) (checked via this tick's already-emitted events, not
+    //      persisted state) -> a fresh commitment begins. Emit
+    //      CommitmentEstablished(agent, command, target). This single check
+    //      covers both "from Holding" and "supersedes an in-progress Moving
+    //      commitment" (docs/05 section 11 priority 6, "new higher-priority
+    //      command" — the only interrupt priority with a live signal today;
+    //      priorities 1-4 need combat/suppression state that does not exist,
+    //      B-019/B-020, and priority 5 "route invalidated" needs a stall
+    //      counter TASK-028 already assigned to B-021): because Commitment is
+    //      derived, not stored, the prior commitment simply stops being
+    //      produced the instant Order/Disposition/Destination change: there
+    //      is nothing to interrupt as a side effect, and no event reports the
+    //      old commitment's end.
+    //   3. Otherwise (an unchanged Moving commitment continuing, a Refused /
+    //      Unable order, or no order at all) -> no change, no event, exactly
+    //      the "reappraise only on material triggers" sparseness Appraisal
+    //      already observes.
+    //
+    // Stage-5 safer adaptation (OrderDisposition.Adapted, an exposure-aware
+    // reroute) is deliberately deferred — it needs a second, separate
+    // route-search algorithm and a Navigation change to follow a pinned
+    // route, which does not belong in this task. No PRNG draw.
+    let private commitmentAndLocalAction (s: StepState) =
+        let acceptedThisTick =
+            s.EventsRev
+            |> List.choose (function
+                | { Body = OrderAppraised(agent, _, Accepted) } -> Some agent
+                | _ -> None)
+            |> Set.ofList
+
+        let agents = Array.copy s.Agents
+
+        for i in 0 .. agents.Length - 1 do
+            let a = agents.[i]
+
+            match a.Order, a.Disposition with
+            | Some o, Some Accepted ->
+                let (MoveTo target) = o.Intent
+
+                if a.Destination = None && a.Position = target then
+                    // Fulfilled: relocated from the Appraisal phase's prior
+                    // housekeeping (TASK-028).
+                    agents.[i] <- { a with Order = None; Disposition = None }
+                    emit (CommitmentCompleted(a.Id, o.Command, a.Position)) s
+                elif Set.contains a.Id acceptedThisTick then
+                    // Freshly accepted this tick: a commitment begins.
+                    emit (CommitmentEstablished(a.Id, o.Command, target)) s
+                // else: a Moving commitment continues unchanged; no event.
+            | _ -> ()
+            // Order = None, or Disposition = Some (Refused | Unable): Holding.
+            // Nothing to establish or complete; no event.
 
         s.Agents <- agents
 
@@ -856,9 +936,9 @@ module Simulation =
         | Perception -> perception s
         | TacticalKnowledge -> tacticalKnowledge s
         | Appraisal -> appraisal s
+        | CommitmentAndLocalAction -> commitmentAndLocalAction s
         | NavigationAndMovement -> navigationAndMovement s
         | Output -> output s
-        | CommitmentAndLocalAction
         | Combat
         | StateConsequences
         | Mission -> ()
