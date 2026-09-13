@@ -5,34 +5,38 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-13 (TASK-031 implemented, on branch, awaiting review)
+  updated: 2026-09-13 (TASK-031 accepted and merged to main; no task selected)
 
 active_work:
-  selected_task: TASK-031
-  task_file: tasks/TASK-031-HITSCAN-COMBAT.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-13
   note: >-
     2026-09-13: TASK-031 (Basic hitscan combat and directional cover
-    effects, backlog B-019) implemented on branch task-031-hitscan-combat
-    off the TASK-030 merge on main. Not yet accepted or merged. A real
-    Combat phase (docs/04 section 12.8): automatic symmetric engagement from
-    a shooter's own VisibleContacts, a deterministic 0..1000-scale hit
-    chance (range + directional Terrain.cover), the simulation's first real
-    gameplay PRNG draw -- no Canonical.FormatVersion bump, since
-    WorldState.Random was already canonical. No ammunition/weapon-readiness
-    and no wound/death/suppression consequence, both deliberately deferred.
-    New Combat.fs leaf, new ShotFired event, new Overlay.FireLine, new
+    effects, backlog B-019) accepted by Dave and merged to main (--no-ff,
+    branch task-031-hitscan-combat deleted; not pushed). A real Combat phase
+    (docs/04 section 12.8): automatic symmetric engagement from a shooter's
+    own VisibleContacts, a deterministic 0..1000-scale hit chance (range +
+    directional Terrain.cover), the simulation's first real gameplay PRNG
+    draw -- no Canonical.FormatVersion bump, since WorldState.Random was
+    already canonical. No ammunition/weapon-readiness and no
+    wound/death/suppression consequence, both deliberately deferred. New
+    Combat.fs leaf, new ShotFired event, new Overlay.FireLine, new
     open-engagement corpus entry. Correction found during implementation:
     perception-contact and exposed-approach (TASK-026/028's enemy-bearing
     entries) legitimately re-pin once an agent comes into weapon range and
     line of sight of the opposing side (tick counts unchanged on both);
     demo.html similarly gains combat from tick 8. 254 -> 265 green; dotnet
     build 0/0; -- corpus 12/12; -- fixture byte-identical; -- replay-file
-    envelope-full unchanged. No ADR.
+    envelope-full unchanged. No ADR. No task selected.
     (docs/ledger/2026-09-13-TASK-031-hitscan-combat.md)
+
+    Newly unblocked (from TASK-031, still open): B-020 (suppression and
+    exposure model) and B-022 (simple enemy hold-and-defend doctrine) both
+    now have every dependency done (B-019 was the last one for each).
 
     Prior: TASK-030 (Commitment and finite move/hold executor, backlog
     B-018) accepted by Dave and merged to main (--no-ff, branch

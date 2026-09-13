@@ -1,8 +1,8 @@
 # TASK-031: Basic hitscan combat and directional cover effects
 
-Status: review (implemented 2026-09-13 on branch `task-031-hitscan-combat`;
+Status: done (implemented 2026-09-13 on branch `task-031-hitscan-combat`;
 central decisions A–I confirmed with Dave 2026-09-13 before the phase
-bodies; not yet accepted or merged)
+bodies; accepted by Dave and merged to `main` 2026-09-13)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-019

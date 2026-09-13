@@ -171,5 +171,23 @@ predated Combat:
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: (to be filled in on review)
+- Accepted: yes (2026-09-13)
+- Notes: `combat` is a real phase in `Phases.order` slot 8 (`docs/04` section
+  12.8), reading `AgentState.VisibleContacts` only (R-023 "same observation
+  contract") and re-verifying line of fire fresh at combat time via
+  `Sight.visible` against each candidate's current cell. `Combat.hitChance`
+  / `Combat.chooseTarget` are pure and total in the new `Combat.fs` leaf,
+  reusing `Appraisal.attackDirection` (made public) for cover-facing
+  geometry — no duplication. One `RandomStream.next` draw per engaging
+  agent, ascending shooter id; `WorldState.Random` was already canonical, so
+  no `Canonical.FormatVersion` bump anywhere. The Decision H correction
+  (`perception-contact` / `exposed-approach` legitimately re-pinning once an
+  agent comes into weapon range and line of sight) is the honest,
+  correct consequence of building real combat against scenarios that
+  already place an enemy in reach, confirmed by tick counts unchanged on
+  both and `exposed-approach` tick 1's pinned hash unaffected. `254 -> 265`
+  green; build 0/0; `-- corpus` 12/12 (`--regenerate` idempotent); `--
+  fixture` byte-identical; `-- replay-file envelope-full` checkpoints
+  unchanged; `git status` clean; `src/CommandoWar.Sim` packages
+  `FSharp.Core` only; source scan clean. No ADR. Merged to `main` (`--no-ff`,
+  branch `task-031-hitscan-combat` deleted; not pushed).
