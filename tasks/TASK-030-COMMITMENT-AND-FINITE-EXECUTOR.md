@@ -1,8 +1,9 @@
 # TASK-030: Commitment and finite move/hold executor
 
-Status: review (implemented 2026-09-13 on branch
+Status: done (implemented 2026-09-13 on branch
 `task-030-commitment-and-finite-executor`; central decisions A–H confirmed
-with Dave 2026-09-13 before the phase bodies; not yet accepted or merged)
+with Dave 2026-09-13 before the phase bodies; accepted by Dave and merged to
+`main` 2026-09-13)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-018

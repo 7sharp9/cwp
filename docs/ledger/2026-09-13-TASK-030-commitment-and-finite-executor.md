@@ -222,5 +222,22 @@ count, none a hash.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: (to be filled in on review)
+- Accepted: yes (2026-09-13)
+- Notes: `commitmentAndLocalAction` is a real phase in `Phases.order` slot 6
+  (`docs/04` section 12.6). `Commitment` (`Holding | Moving of
+  MoveCommitment`) is a pure derived value over the already-canonical
+  `Order` / `Disposition` / `Destination` — no `AgentState` field, no
+  `Canonical.FormatVersion` bump, no hash re-pin anywhere (confirmed: every
+  corpus `.md`, `envelope-full.md`, and diagnostics golden diffed for
+  hash-line changes, none found). `Simulation.appraisal`'s fulfilled-order
+  housekeeping relocated unchanged into the new phase, which additionally
+  emits `CommitmentCompleted`; a fresh `Accepted` order emits
+  `CommitmentEstablished`, covering both "from `Holding`" and "supersedes a
+  prior `Moving` commitment" with one signal. New `reissued-order` corpus
+  entry proves supersession end-to-end. `244 -> 254` green; build 0/0;
+  `-- corpus` 11/11 (`--regenerate` idempotent); `-- fixture` format 4,
+  hashes unchanged, 34 -> 36 events; `-- replay-file envelope-full` OK at
+  canonical 4, hashes unchanged, 75 -> 78 events; `git status` clean;
+  `src/CommandoWar.Sim` packages `FSharp.Core` only; source scan clean. No
+  ADR. Merged to `main` (`--no-ff`, branch
+  `task-030-commitment-and-finite-executor` deleted; not pushed).
