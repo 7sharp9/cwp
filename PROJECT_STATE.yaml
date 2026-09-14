@@ -5,19 +5,19 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-14 (TASK-032 implemented, on branch, awaiting review)
+  updated: 2026-09-14 (TASK-032 accepted and merged to main; no task selected)
 
 active_work:
-  selected_task: TASK-032
-  task_file: tasks/TASK-032-SUPPRESSION-AND-EXPOSURE.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-14
   note: >-
     2026-09-14: TASK-032 (Suppression and exposure model, backlog B-020)
-    implemented on branch task-032-suppression-and-exposure off the
-    TASK-031 merge on main. Not yet accepted or merged. Combat now also
+    accepted by Dave and merged to main (--no-ff, branch
+    task-032-suppression-and-exposure deleted; not pushed). Combat now also
     raises the target's AgentState.Suppression on every qualifying shot
     (independent of a hit, mitigated by directional Terrain.cover); the
     previously no-op State consequences phase decays it every tick,
@@ -30,7 +30,12 @@ active_work:
     both deliberately deferred to B-021. 265 -> 274 green; dotnet build
     0/0; -- corpus 12/12; -- fixture format 5, 36 events unchanged; --
     replay-file envelope-full OK at canonical 5, 78 events unchanged. No
-    ADR. (docs/ledger/2026-09-14-TASK-032-suppression-and-exposure.md)
+    ADR. No task selected.
+    (docs/ledger/2026-09-14-TASK-032-suppression-and-exposure.md)
+
+    Newly unblocked (from TASK-032, still open): B-021 (stress, discipline,
+    trust, and bounded reappraisal) now has every dependency done (B-020
+    was the last one).
 
     Prior: TASK-031 (Basic hitscan combat and directional cover
     effects, backlog B-019) accepted by Dave and merged to main (--no-ff,

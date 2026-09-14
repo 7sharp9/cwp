@@ -1,8 +1,9 @@
 # TASK-032: Suppression and exposure model
 
-Status: review (implemented 2026-09-14 on branch
+Status: done (implemented 2026-09-14 on branch
 `task-032-suppression-and-exposure`; central decisions A–H confirmed with
-Dave 2026-09-14 before the phase bodies; not yet accepted or merged)
+Dave 2026-09-14 before the phase bodies; accepted by Dave and merged to
+`main` 2026-09-14)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-020

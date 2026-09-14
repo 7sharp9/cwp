@@ -162,5 +162,16 @@ supersedes its "unaffected" claim for current readers without rewriting it).
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: (to be filled in on review)
+- Accepted: yes (2026-09-14)
+- Notes: Re-verified independently before accepting rather than trusting the
+  implementation-time claims: `dotnet build CommandoWar.slnx -c Release` 0/0;
+  `dotnet test` `Passed: 274`; `cwheadless corpus` 12/12 PASS; `cwheadless
+  fixture` format 5, `36` events unchanged; `cwheadless replay-file
+  content/replays/envelope-full.cwreplay` checkpoints OK at canonical 5, `78`
+  events unchanged; `git status --porcelain` clean; `dotnet list
+  src/CommandoWar.Sim package --include-transitive` `FSharp.Core` only. All
+  match the ledger detail above exactly. Mechanic-only scope (Decision A) is
+  the right cut — `AgentState.Suppression` exists and is genuinely canonical
+  but nothing reads it yet, which is honest given B-021 is where it starts
+  mattering. Merged to `main` (`--no-ff`, branch
+  `task-032-suppression-and-exposure` deleted; not pushed).
