@@ -720,3 +720,58 @@ let ``every ShotFired outcome is consistent with a fresh recompute and the exact
             prev <- r.State
 
         ok)
+
+// --- property 11: suppression is a pure function of this tick's shots -----
+// TASK-032. Reuses `appraisalCaseGen` unchanged (property 10's generator
+// already produces `ShotFired` events some of the time). For every tick and
+// every agent: starting from that agent's pre-tick `Suppression`, folding
+// `Suppression.raise` with `Suppression.gain` (recomputed from each targeting
+// `ShotFired` event's post-tick shooter/target `Position` — the property 10
+// precedent that positions are unchanged between Combat and Output) for
+// every shot that targeted it this tick, then applying one `Suppression.decay`
+// (State consequences, unconditional every tick), reproduces the actual
+// post-tick `Suppression` exactly.
+
+[<Property(MaxTest = 200)>]
+let ``every agent's post-tick Suppression is reproducible from a fresh recompute`` () =
+    Prop.forAll (Arb.fromGen appraisalCaseGen) (fun case ->
+        let mutable prev = case.World
+        let mutable ok = true
+
+        for tick in 1L .. case.TickCount do
+            let cmds =
+                case.Commands
+                |> Array.filter (fun c -> c.Tick = tick)
+                |> Array.map (fun c -> c.Command)
+
+            let r = Simulation.step SimConfig.standard cmds prev
+
+            let shots =
+                r.Events
+                |> Array.choose (fun e ->
+                    match e.Body with
+                    | ShotFired(shooter, target, hit) -> Some(shooter, target, hit)
+                    | _ -> None)
+
+            for a in prev.Agents do
+                let gains =
+                    shots
+                    |> Array.filter (fun (_, target, _) -> target = a.Id)
+                    |> Array.choose (fun (shooter, target, hit) ->
+                        match
+                            r.State.Agents |> Array.tryFind (fun x -> x.Id = shooter),
+                            r.State.Agents |> Array.tryFind (fun x -> x.Id = target)
+                        with
+                        | Some s, Some t -> Some(Suppression.gain r.State.Terrain s.Position t.Position hit)
+                        | _ -> None)
+
+                let expected =
+                    gains |> Array.fold Suppression.raise a.Suppression |> Suppression.decay
+
+                match r.State.Agents |> Array.tryFind (fun x -> x.Id = a.Id) with
+                | Some post when post.Suppression = expected -> ()
+                | _ -> ok <- false
+
+            prev <- r.State
+
+        ok)

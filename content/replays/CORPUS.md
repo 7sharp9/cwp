@@ -58,6 +58,19 @@ similarly gains combat from tick 8 onward. `Canonical.FormatVersion` does not
 move — `WorldState.Random` was already canonical (TASK-003); only the values
 a draw produces are new, not what is hashed.
 
+**Re-pinned by TASK-032** (suppression realised, backlog B-020;
+`Canonical.FormatVersion` **4 -> 5**, `AgentState.Suppression` added): every
+entry re-pins — the format bump moves every hash regardless of behaviour, so
+the TASK-031 note above that `exposed-approach` tick 1 (`0xB03F8419E55F3592`)
+was unaffected **no longer holds**; its new value is `0x2FA6E43B32599EE5`
+(the TASK-029 Godot demo's `--selfcheck` constant updated to match). **Tick
+counts and event counts are unchanged everywhere** — suppression emits no new
+event, only a standing `AgentState` field — so every entry's byte-layout-only
+re-pin is confirmed by the "Tick count" / "Domain events" columns holding;
+`open-engagement`, `perception-contact`, and `exposed-approach` additionally
+carry genuine new non-zero `Suppression` values baked into their hashes from
+the tick combat first fires.
+
 ## Production replay-command format (TASK-025, backlog B-045)
 
 `envelope-full.cwreplay` is the first committed replay in the **production

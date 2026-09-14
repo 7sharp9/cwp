@@ -16,35 +16,35 @@ See `content/replays/CORPUS.md`.
 | Command log | `wall-detour.cwlog` |
 | Initial state | Corpus wall-detour scenario (12 x 9, seed 20260904) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0x89815823A8A4D2BF` |
-| Final hash (tick 24) | `0x746AE3F9173619DC` |
+| Initial hash (tick 0) | `0xEDD658A35EF0D372` |
+| Final hash (tick 24) | `0xB3F47BCA296B37B1` |
 | Domain events | 22 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x72665F149FE6265B` |
-|    2 | `0x3834BB11E2666D3D` |
-|    3 | `0x4A942F7438980EBB` |
-|    4 | `0x6166D6477441CADB` |
-|    5 | `0x7AFDB9CB720B7A7F` |
-|    6 | `0x6A6B07D22BB128EF` |
-|    7 | `0xF37A65F7640A9843` |
-|    8 | `0x8FB0B2470F847B91` |
-|    9 | `0x7A8BE3F7850E54C3` |
-|   10 | `0xB9E5C3BA62435BD5` |
-|   11 | `0x70AC936917D37FF7` |
-|   12 | `0x7F2F515C8DDD0895` |
-|   13 | `0x110D5407FBFE2ED3` |
-|   14 | `0xA9743E1DC246BA85` |
-|   15 | `0xAC90067DBB214E73` |
-|   16 | `0x6B1C512649900B71` |
-|   17 | `0x24F3C1624DBDEE3B` |
-|   18 | `0xC14C81717AD9F07A` |
-|   19 | `0x20B381508B73BBCF` |
-|   20 | `0xDF5331171E621858` |
-|   21 | `0xE20CFF9744E4991D` |
-|   22 | `0x6777B404ADE1CCFE` |
-|   23 | `0xD16A5710457EB643` |
-|   24 | `0x746AE3F9173619DC` |
+|    1 | `0x22658F7318DC25C2` |
+|    2 | `0xBA50645A6E1D01EC` |
+|    3 | `0xCD621CB41F311B0A` |
+|    4 | `0x9010EB9A41B06F9A` |
+|    5 | `0xC79226AE91E897B6` |
+|    6 | `0x28C89BEBB5715B3E` |
+|    7 | `0x35B8399557BD418A` |
+|    8 | `0x208751844C147D90` |
+|    9 | `0xB80E0DE883D0AEEA` |
+|   10 | `0x5678C48157AD7364` |
+|   11 | `0xE416B1A5DAA18E5E` |
+|   12 | `0x0F8AC58FDE330074` |
+|   13 | `0xE4399ACD17072092` |
+|   14 | `0xBFEE7DF99CFAC85C` |
+|   15 | `0x9B4413D5CAEDD8AA` |
+|   16 | `0x3F3AD6F19FFC1A00` |
+|   17 | `0xADB4AF67DF542372` |
+|   18 | `0xE0A90B436F369B5F` |
+|   19 | `0xEEE15D62E93517BA` |
+|   20 | `0x0E0FC31DD8D5500D` |
+|   21 | `0x4122B4EB45281BF8` |
+|   22 | `0x91EE81FB2A65BA93` |
+|   23 | `0x0DC4449B1CE7DAFE` |
+|   24 | `0xB3F47BCA296B37B1` |

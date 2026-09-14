@@ -122,7 +122,9 @@
   <circle cx="148" cy="20" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
   <line x1="104" y1="88" x2="152" y2="24" stroke="#a0aec0" stroke-width="1.5" stroke-dasharray="3,2"/>
   <line x1="152" y1="24" x2="104" y2="88" stroke="#dd6b20" stroke-width="1.5"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 5  hash 0xCE177ECEB4D1F71F  draws 2</text>
+  <circle cx="108" cy="84" r="3" fill="#c53030" fill-opacity="0.35"/>
+  <circle cx="156" cy="20" r="3" fill="#c53030" fill-opacity="0.10"/>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 5  hash 0xFB2123BDFA1E4BF1  draws 2</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 2  cover-edges 0  events 5</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

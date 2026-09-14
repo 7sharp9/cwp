@@ -287,6 +287,17 @@ Immediate effect of hostile fire and impacts. It reduces action effectiveness, r
 
 Wounds are represented separately as physical state.
 
+Realised by TASK-032 (backlog B-020): `AgentState.Suppression`, an integer
+on the `0..1000` scale (the `Contact.Confidence` precedent). The Combat
+phase (`docs/04` section 12.8) raises it on every qualifying shot —
+independent of a hit, mitigated by the same directional `Terrain.cover`
+geometry Combat uses for hit chance; the State consequences phase (section
+12.9) decays it every tick, unconditionally, floored at `0`. This is the
+"immediate effect of hostile fire" value only — "reduces action
+effectiveness", "raises assault pressure", and "may trigger taking cover"
+are not realised by any system yet, and nothing reads `Suppression` in
+Appraisal or reappraisal (both B-021).
+
 ## 9. Commitment
 
 Once an order is accepted, the agent enters a commitment state:

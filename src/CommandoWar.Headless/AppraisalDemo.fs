@@ -239,6 +239,11 @@ module AppraisalDemo =
                         at.Y
                         (if hit then "hit" else "miss")
                 )
+            | AgentSuppression(agent, at, suppression) ->
+                // TASK-032: not yet surfaced in this disposable P3 demo (it
+                // predates the phase); exposed-approach tick 1 has no combat
+                // yet, so this never fires for the committed frame.
+                unhandled.Add(sprintf "suppression agent %d (%d,%d) %d" (AgentId.value agent) at.X at.Y suppression)
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

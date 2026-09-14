@@ -9,40 +9,39 @@
 # Initial state: the shared spike fixture (Setup.sixAgentWorld, 32 x 32,
 # seed 20260902) — resolved by name from Corpus.all, not serialised.
 #
-# canonical 4 and every hash below were re-pinned by TASK-028
-# (Canonical.FormatVersion 3 -> 4, AgentState.Order / .Disposition sections
-# added). The spike fixture is enemy-free, so all three recipients Accept at
-# appraisal: the 24 ticks are unchanged and the only behaviour change is one
-# OrderAppraised event per recipient (72 -> 75 domain events).
+# canonical 5 and every hash below were re-pinned by TASK-032
+# (Canonical.FormatVersion 4 -> 5, AgentState.Suppression added). The spike
+# fixture is enemy-free, so Suppression stays 0 at every checkpoint: the 24
+# ticks and 75 domain events are unchanged, a byte-layout-only re-pin.
 version 1
 seed 20260902
 ticks 24
-canonical 4
+canonical 5
 build cwheadless
 scenario spike-fixture
-initial-hash 0x55F43D66C7AECB7F
-checkpoint 1 0xA9374E4F0EA2E448
-checkpoint 2 0xB7FA12180E9F3DEC
-checkpoint 3 0xCC477258D4A33766
-checkpoint 4 0xB982733B127A2424
-checkpoint 5 0x3E676CBC567678DA
-checkpoint 6 0x9F4DF5F7F021DED4
-checkpoint 7 0xBC62DD4E1B6DFD0E
-checkpoint 8 0x8B228541DF2D4ADC
-checkpoint 9 0x671C7D9FEA09DECA
-checkpoint 10 0xB2D8D135C2B7083C
-checkpoint 11 0xF4D945ECA6049E16
-checkpoint 12 0x09C4DB25916C5044
-checkpoint 13 0xF4C82C0D8581FE2A
-checkpoint 14 0x18E4B9B9A66EE034
-checkpoint 15 0x72E74D047DA5856E
-checkpoint 16 0xC64C854B7895BDCC
-checkpoint 17 0xF06200294309CE9A
-checkpoint 18 0x8C205832A675C28C
-checkpoint 19 0x6C30FAFD9CDAA926
-checkpoint 20 0x10ADDDCB7664EAC4
-checkpoint 21 0xBF5DC6ABE857C6DA
-checkpoint 22 0x796A76415012C5EC
-checkpoint 23 0xBAB47363532D9032
-checkpoint 24 0xDC87FE7A73395380
+initial-hash 0xBDB4025E40BBFA28
+checkpoint 1 0x813B59B6058BB6FF
+checkpoint 2 0xD6CBDABD53ACF18F
+checkpoint 3 0x1B0A6ACCED8C6F11
+checkpoint 4 0xFC22F9419F2DFE1F
+checkpoint 5 0x6CE48B0F0A1BB7F5
+checkpoint 6 0x62109E2642191C1F
+checkpoint 7 0xFC9A3A83E2F249E9
+checkpoint 8 0x6DB6139CEEB2240F
+checkpoint 9 0xD6E88CDDEC90DDC5
+checkpoint 10 0xE5FAABD535439BFF
+checkpoint 11 0xCEB8D6B2EEDA0AD1
+checkpoint 12 0xA65E0F60831B02BF
+checkpoint 13 0x1F69AA84AA7BA665
+checkpoint 14 0xFDE8DF79CE19E58F
+checkpoint 15 0xAEE39DDDA2181999
+checkpoint 16 0x1EC504A05D219D0F
+checkpoint 17 0x94D5BB3795F55375
+checkpoint 18 0x4C829F0B48785A2F
+checkpoint 19 0x5E374FBEA2473611
+checkpoint 20 0x71AC2898C155529F
+checkpoint 21 0x613573A6F11B4DF5
+checkpoint 22 0xD6E26896B334BE5F
+checkpoint 23 0xCD84ECAFE5CDF82D
+checkpoint 24 0x1403E503D36A5813
 command 2 0 1 1 immediate aggressive fixture:spike 3,4,5 move 20 14
