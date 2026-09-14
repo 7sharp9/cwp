@@ -913,8 +913,14 @@ module Simulation =
     // Realised by TASK-031 (backlog B-019). Turns the docs/04 section 12.8
     // no-op into a real phase: deterministic hitscan combat with directional
     // cover mitigation. Runs after Navigation (so a shot resolves against this
-    // tick's post-movement positions) and before the still no-op
-    // StateConsequences / Mission.
+    // tick's post-movement positions) and before StateConsequences (TASK-032)
+    // / the still no-op Mission.
+    //
+    // Suppression realised by TASK-032 (backlog B-020): a qualifying shot
+    // also raises the target's AgentState.Suppression (Suppression.gain,
+    // independent of a hit, mitigated by the same directional Terrain.cover
+    // geometry as hit chance). This phase therefore now writes AgentState and
+    // copies s.Agents like every other writing phase, instead of aliasing it.
     //
     // For every agent, in ascending id order (both sides — combat is
     // symmetric, docs/05 section 12 "enemy agents use the same perception and
@@ -938,18 +944,20 @@ module Simulation =
     //      WorldState.Random is already part of Canonical.encode (TASK-003),
     //      so no Canonical.FormatVersion bump: only the values a draw produces
     //      are new, not what is hashed.
-    //   4. Emit ShotFired(shooter, target, hit). No AgentState is written: a
-    //      hit has no consequence yet (no wound, death, or suppression — B-020
-    //      / B-031, deliberately out of scope).
+    //   4. Emit ShotFired(shooter, target, hit), then raise the target's
+    //      Suppression (TASK-032, backlog B-020) via Suppression.gain — no
+    //      wound, death, or other consequence yet (B-031, deliberately out of
+    //      scope).
     let private combat (s: StepState) =
         let terrain = s.Terrain
-        let agents = s.Agents // already ascending by id; this phase writes none
+        let candidateSource = s.Agents // ascending by id; candidate lookup only, never mutated
+        let agents = Array.copy s.Agents
         let mutable random = s.Random
 
-        for shooter in agents do
+        for shooter in candidateSource do
             let candidates =
                 shooter.VisibleContacts
-                |> Array.choose (fun id -> agents |> Array.tryFind (fun a -> a.Id = id))
+                |> Array.choose (fun id -> candidateSource |> Array.tryFind (fun a -> a.Id = id))
 
             match Combat.chooseTarget terrain shooter candidates with
             | None -> ()
@@ -960,7 +968,32 @@ module Simulation =
                 let hit = (draw % 1000UL) < uint64 chance
                 emit (ShotFired(shooter.Id, target.Id, hit)) s
 
+                let gain = Suppression.gain terrain shooter.Position target.Position hit
+                let idx = agents |> Array.findIndex (fun a -> a.Id = target.Id)
+                let t = agents.[idx]
+                agents.[idx] <- { t with Suppression = Suppression.raise t.Suppression gain }
+
+        s.Agents <- agents
         s.Random <- random
+
+    // --- Phase: state consequences ------------------------------------------
+    // Realised by TASK-032 (backlog B-020). Turns the docs/04 section 12.9
+    // no-op into a real phase for its first bullet, "update suppression
+    // decay": every agent's Suppression drops by SuppressionConfig.DecayPerTick,
+    // floored at 0, unconditionally (whether or not it was shot at this
+    // tick — a same-tick hit's gain and this decay both apply, in that
+    // order). "Update stress", "apply deaths and incapacitation", and "update
+    // command succession" remain unrealised (B-021, B-031).
+    let private stateConsequences (s: StepState) =
+        let agents = Array.copy s.Agents
+
+        for i in 0 .. agents.Length - 1 do
+            let a = agents.[i]
+
+            if a.Suppression > 0 then
+                agents.[i] <- { a with Suppression = Suppression.decay a.Suppression }
+
+        s.Agents <- agents
 
     // --- Phase: output -----------------------------------------------------
     // Build the render snapshot from authoritative state. Agents are already
@@ -993,7 +1026,7 @@ module Simulation =
         | NavigationAndMovement -> navigationAndMovement s
         | Combat -> combat s
         | Output -> output s
-        | StateConsequences
+        | StateConsequences -> stateConsequences s
         | Mission -> ()
 
         s.TraceRev <- phase :: s.TraceRev

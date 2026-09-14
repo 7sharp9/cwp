@@ -1,11 +1,55 @@
 # TASK-032: Suppression and exposure model
 
-Status: draft (central decisions A–H confirmed with Dave 2026-09-14 before
-the phase bodies)
+Status: review (implemented 2026-09-14 on branch
+`task-032-suppression-and-exposure`; central decisions A–H confirmed with
+Dave 2026-09-14 before the phase bodies; not yet accepted or merged)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-020
 Size: M
+
+## Outcome (2026-09-14)
+
+Implemented on branch `task-032-suppression-and-exposure` off the TASK-031
+merge on `main` (committed locally, not pushed). All eight central decisions
+confirmed with Dave and implemented as proposed, with one wording correction
+found during implementation (Decisions E/G): the original acceptance
+criteria said a hit raises the target's `Suppression` by exactly
+`Suppression.gain` — that omitted that the same tick's unconditional decay
+(Decision C) also applies, so the actually observable post-tick value is
+`Suppression.gain(...) |> Suppression.raise 0 |> Suppression.decay`. Every
+test was written against the corrected, actually-observable behaviour from
+the start; only the task file's prose needed the correction.
+
+The Combat phase (12.8) now also raises the target's `AgentState.Suppression`
+on every qualifying shot (`Suppression.gain`, independent of a hit,
+mitigated by directional `Terrain.cover`); the previously fully no-op State
+consequences phase (12.9) is now real for its "update suppression decay"
+bullet, decaying every agent's `Suppression` unconditionally each tick. New
+leaf `src/CommandoWar.Sim/Suppression.fs`; `Combat.fs` itself unchanged. No
+new event — a rise is a deterministic function of the already-emitted
+`ShotFired`, decay is silent; new sparse `Overlay.AgentSuppression` (one per
+agent with `Suppression > 0`). `AgentState.Suppression` is genuine canonical
+state (`Canonical.FormatVersion` 4 -> 5, full re-pin) — every corpus entry,
+the fixture, and `envelope-full` re-pin, but **tick counts and event counts
+are unchanged everywhere**; `open-engagement`, `perception-contact`, and
+`exposed-approach` additionally carry genuine new non-zero `Suppression`
+values from the tick combat first fires (TASK-031's pinned ticks). No new
+corpus entry — decay and clamping proved on the pure `Suppression.decay` /
+`.raise` functions. No behavioural wiring into Appraisal, reappraisal,
+movement, or executor behaviour (deliberately deferred to B-021).
+
+`265 -> 274` green (+8 `SimulationTests`, +1 `DeterminismPropertyTests`
+property 11 at 200 cases; the `open-engagement` `DiagnosticsTests` fact
+extended in place, not new). `dotnet build` 0/0; `-- corpus` 12/12
+(`--regenerate` idempotent); `-- fixture` format 5, 36 events unchanged; `--
+replay-file envelope-full` OK at canonical 5, 78 events unchanged;
+`src/CommandoWar.Sim` packages `FSharp.Core` only. No ADR. The Godot client's
+`--selfcheck` pinned hash also moved with the format bump and was updated
+(not originally listed in scope).
+
+Full detail:
+`docs/ledger/2026-09-14-TASK-032-suppression-and-exposure.md`.
 
 ## Objective
 
@@ -406,10 +450,26 @@ state needs a diagnostic surface. Required:
 - `src/CommandoWar.Headless/AppraisalDemo.fs` — one `AgentSuppression` arm
   added to its `unhandled` bucket (predates this task, does not render
   suppression).
-- `content/replays/` — the full-corpus re-pin (Decision E/G); no new entry.
-- `content/diagnostics/` — the re-pin of `open-engagement-tick-001.*`,
-  `perception-contact-tick-005.*`, and `demo.html`; `README.md`.
-- `tests/CommandoWar.Sim.Tests/` — see "Acceptance criteria".
+- `content/replays/` — the full-corpus re-pin (Decision E/G); no new entry;
+  `CORPUS.md` gains a new "Re-pinned by TASK-032" paragraph (the existing
+  TASK-031 paragraph is left untouched, the `Canonical.fs` version-history
+  precedent).
+- `content/diagnostics/` — the re-pin of every golden (the format bump moves
+  every hash regardless of behaviour); `open-engagement-tick-001.*` and
+  `perception-contact-tick-005.*` additionally gain real `AgentSuppression`
+  overlay text.
+- `src/CommandoWar.Client.Godot/{README.md,src/AppraisalDemoScene.cs}`
+  (**not originally listed**; required because the format bump moves the
+  TASK-029 Godot demo's `--selfcheck` pinned `exposed-approach` tick-1 hash
+  too, even though tick 1 itself has no combat) — the pinned hash constant
+  and the README's documented expected output updated to match.
+- `tests/CommandoWar.Sim.Tests/` — see "Acceptance criteria". Also (**not
+  originally listed**): every hardcoded `Canonical.FormatVersion` /
+  fixture-hash / `envelope-full` checkpoint literal across
+  `CanonicalHashTests.fs`, `CorpusTests.fs`, `DiagnosticsTests.fs`,
+  `FixtureTests.fs`, `PathfindingTests.fs`, `ReplayTests.fs`,
+  `ScenarioTests.fs`, `SightTests.fs`, `TerrainTests.fs` — the format bump's
+  mechanical re-pin churn, not a behaviour change.
 - Docs — see "Documentation updates".
 
 ## Forbidden scope
@@ -438,53 +498,62 @@ state needs a diagnostic surface. Required:
 
 ## Acceptance criteria
 
-- [ ] `AgentState.Suppression: int`, defaulted to `0` in `Agent.create`, no
+- [x] `AgentState.Suppression: int`, defaulted to `0` in `Agent.create`, no
       scenario-authored override.
-- [ ] `src/CommandoWar.Sim/Suppression.fs`: `SuppressionConfig` module
+- [x] `src/CommandoWar.Sim/Suppression.fs`: `SuppressionConfig` module
       literals; `Suppression.gain` / `.raise` / `.decay` — pure, total.
-- [ ] `Combat.fs` unchanged; `Simulation.combat` copies `s.Agents` and writes
+- [x] `Combat.fs` unchanged; `Simulation.combat` copies `s.Agents` and writes
       the target's `Suppression` on every qualifying shot, composing
       correctly when two shooters hit the same target the same tick.
-- [ ] `Simulation.stateConsequences` is a real phase, out of the no-op list;
+- [x] `Simulation.stateConsequences` is a real phase, out of the no-op list;
       decays every agent's `Suppression` by `SuppressionConfig.DecayPerTick`,
       floored at `0`, every tick unconditionally.
-- [ ] `SimulationTests` facts:
-  - a hit raises the target's `Suppression` by exactly `Suppression.gain`
-    recomputed from the post-tick cells and cover;
-  - a miss also raises `Suppression`, by less than a hit does, all else
-    equal (docs/04 section 12.8 "independent of a hit");
+- [x] `SimulationTests` facts (**corrected from the original "exactly
+      `Suppression.gain`" wording** — see the ledger's "Correction found
+      during implementation": the same tick's unconditional decay also
+      applies, so the actually observable post-tick value is
+      `Suppression.gain(...) |> Suppression.raise 0 |> Suppression.decay`):
+  - `Suppression.gain` gives a hit strictly more than a miss, all else equal
+    (docs/04 section 12.8 "independent of a hit");
   - `Suppression.gain` strictly decreases as cover level increases (fixed
-    hit/miss), floored at `0`;
-  - two shooters hitting the same target the same tick compose (both gains
-    applied, clamped at `MaxSuppression`);
-  - a quiet tick after a hit shows the exact rise-then-decay arithmetic
-    (hit tick's post-value, then one decay step);
+    hit), floored at `0`;
+  - `Suppression.raise` accumulates two shots and clamps at `MaxSuppression`;
+  - `Suppression.decay` drops by `DecayPerTick`, floored at `0`;
+  - a qualifying shot raises the target's `Suppression`, net of the
+    same-tick decay, matching the corrected formula above (data-driven off
+    the actual `ShotFired.hit` value, not assumed);
+  - two shooters engaging the same target the same tick compose their gains;
+  - an already-suppressed agent decays by exactly `DecayPerTick` on a tick
+    with no qualifying target;
   - an agent never shot at stays at `Suppression = 0` indefinitely;
   - two runs of the same world + commands emit byte-identical events,
-    hashes, `Suppression` values, and draw counts.
-- [ ] A `DeterminismPropertyTests` property (`MaxTest = 200`, reusing
+    hashes, `Suppression` arrays, and draw counts (the existing combat-
+    determinism fact extended in place).
+- [x] A `DeterminismPropertyTests` property (`MaxTest = 200`, reusing
       `appraisalCaseGen`): every agent's post-tick `Suppression` is
-      reproducible from a fresh recompute — this tick's `ShotFired` events'
-      `Suppression.gain` applied via `Suppression.raise`, then
-      `Suppression.decay` — matching the actual post-tick value exactly.
-- [ ] No new corpus entry (Decision G); `open-engagement`,
+      reproducible from a fresh recompute — the pre-tick value folded with
+      `Suppression.gain` / `.raise` over this tick's targeting `ShotFired`
+      events, then one `Suppression.decay` — matching the actual post-tick
+      value exactly.
+- [x] No new corpus entry (Decision G); `open-engagement`,
       `perception-contact`, and `exposed-approach` re-pin with genuine new
       `Suppression` values; every other entry, the fixture, and
       `envelope-full` re-pin as a byte-layout-only change (**tick counts and
       event counts unchanged everywhere** — verified by diffing every `.md`
-      for a changed "Tick count" or "Domain events" line: none expected).
-- [ ] `Canonical.FormatVersion` `4 -> 5`; `writeAgent` writes `Suppression`
+      for a changed "Tick count" or "Domain events" line: none found).
+- [x] `Canonical.FormatVersion` `4 -> 5`; `writeAgent` writes `Suppression`
       after `Disposition`; version-history doc comment added.
-- [ ] Diagnostics: `Overlay.AgentSuppression` derived in both `frame` and
+- [x] Diagnostics: `Overlay.AgentSuppression` derived in both `frame` and
       `frameOf`, one per agent with `Suppression > 0`, rendered in `Ascii` +
-      `Svg`, covered by a hand-built `DiagnosticsTests` fact and the
-      re-pinned `open-engagement-tick-001.*` golden.
-- [ ] `dotnet build CommandoWar.slnx -c Release` = 0/0; `dotnet list
+      `Svg`, covered by a hand-built assertion in the existing `open-
+      engagement` `DiagnosticsTests` fact and the re-pinned
+      `open-engagement-tick-001.*` golden.
+- [x] `dotnet build CommandoWar.slnx -c Release` = 0/0; `dotnet list
       src/CommandoWar.Sim package --include-transitive` = `FSharp.Core` only;
       source scan of `src/CommandoWar.Sim` clean (`float` / `Stopwatch` /
       `DateTime` / `System.Random` / `godot`).
-- [ ] `dotnet test CommandoWar.slnx -c Release` green.
-- [ ] Docs updated (see below).
+- [x] `dotnet test CommandoWar.slnx -c Release` green — `265 -> 274`.
+- [x] Docs updated (see below).
 
 ## Required verification
 

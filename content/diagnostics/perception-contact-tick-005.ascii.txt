@@ -41,7 +41,9 @@ overlays:
   commitment (9,1): agent 1  holding
   fire (6,5) -> (9,1): agent 0 -> agent 1  miss
   fire (9,1) -> (6,5): agent 1 -> agent 0  hit
+  suppression (6,5): agent 0  350/1000
+  suppression (9,1): agent 1  100/1000
 
 events: contact-observed@(9,1); contact-observed@(5,5); movement-stepped@(5,5),(6,5); shot-fired-miss; shot-fired-hit
 
-tick 5 | hash 0xCE177ECEB4D1F71F (format 4) | draws 2 | agents 2 | cover-edges 0 | events 5
+tick 5 | hash 0xFB2123BDFA1E4BF1 (format 5) | draws 2 | agents 2 | cover-edges 0 | events 5

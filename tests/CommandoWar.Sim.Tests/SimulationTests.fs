@@ -1373,3 +1373,110 @@ let ``combat is deterministic across two runs and draws exactly once per shot fi
     Assert.True(bodies r1 = bodies r2)
     Assert.Equal(r1.StateHash, r2.StateHash)
     Assert.Equal(uint64 (shotsFiredIn r1).Length, r1.State.Random.Draws)
+
+    let suppressionOf (r: StepResult) = r.State.Agents |> Array.map (fun a -> a.Suppression)
+    Assert.Equal<int[]>(suppressionOf r1, suppressionOf r2)
+
+// --- Suppression and exposure model (TASK-032) --------------------------
+
+[<Fact>]
+let ``Suppression.gain gives a hit strictly more than a miss, all else equal`` () =
+    let terrain = Terrain.empty { Width = 10; Height = 10 }
+    let shooter = { X = 0; Y = 0 }
+    let target = { X = 3; Y = 0 }
+    let hit = Suppression.gain terrain shooter target true
+    let miss = Suppression.gain terrain shooter target false
+    Assert.True(hit > miss, $"expected hit ({hit}) > miss ({miss})")
+
+[<Fact>]
+let ``Suppression.gain strictly decreases as cover level increases, floored at 0`` () =
+    let bounds: GridBounds = { Width = 10; Height = 10 }
+    let shooter = { X = 0; Y = 0 }
+    let target = { X = 5; Y = 0 }
+    let noCover = Terrain.empty bounds
+    // Fire travels west-to-east, so it arrives at the target's West edge
+    // (Appraisal.attackDirection shooter target) — the Combat.hitChance precedent.
+    let lightCover = Terrain.build bounds [||] [| { Cell = target; Direction = West; Level = 1 } |]
+    let heavyCover = Terrain.build bounds [||] [| { Cell = target; Direction = West; Level = 10 } |]
+
+    let gainNoCover = Suppression.gain noCover shooter target true
+    let gainLightCover = Suppression.gain lightCover shooter target true
+    let gainHeavyCover = Suppression.gain heavyCover shooter target true
+
+    Assert.True(gainLightCover < gainNoCover, $"expected light cover ({gainLightCover}) < no cover ({gainNoCover})")
+    Assert.Equal(0, gainHeavyCover)
+
+[<Fact>]
+let ``Suppression.raise accumulates two shots and clamps at MaxSuppression`` () =
+    Assert.Equal(300, Suppression.raise 100 200)
+    Assert.Equal(SuppressionConfig.MaxSuppression, Suppression.raise 900 900)
+
+[<Fact>]
+let ``Suppression.decay drops by DecayPerTick, floored at 0`` () =
+    Assert.Equal(450, Suppression.decay 500)
+    Assert.Equal(0, Suppression.decay 10)
+    Assert.Equal(0, Suppression.decay 0)
+
+[<Fact>]
+let ``a qualifying shot raises the target's Suppression, net of the same-tick decay`` () =
+    let b: GridBounds = { Width = 10; Height = 10 }
+    let terrain = Terrain.empty b
+    let w = perceptionWorld b [ 0, { X = 2; Y = 2 } ] [ 1, { X = 7; Y = 2 } ] terrain
+    let r = stepIdle w
+
+    let positionOf id = (w.Agents |> Array.find (fun a -> a.Id = id)).Position
+    let suppressionOf id = (r.State.Agents |> Array.find (fun a -> a.Id = id)).Suppression
+
+    Assert.NotEmpty(shotsFiredIn r)
+
+    for shooter, target, hit in shotsFiredIn r do
+        let expected =
+            Suppression.gain terrain (positionOf shooter) (positionOf target) hit
+            |> Suppression.raise 0
+            |> Suppression.decay
+
+        Assert.Equal(expected, suppressionOf target)
+
+[<Fact>]
+let ``two shooters engaging the same target the same tick compose their Suppression gains`` () =
+    let b: GridBounds = { Width = 10; Height = 10 }
+    let terrain = Terrain.empty b
+    // Two friendlies flank a lone hostile, all mutually within WeaponRange
+    // and clear line of sight, so both friendlies fire on the hostile (its
+    // own chooseTarget picks one of them, irrelevant here) while the hostile
+    // is the only qualifying target for each.
+    let w = perceptionWorld b [ 0, { X = 1; Y = 2 }; 1, { X = 3; Y = 2 } ] [ 2, { X = 7; Y = 2 } ] terrain
+    let r = stepIdle w
+
+    let shotsOnHostile = shotsFiredIn r |> Array.filter (fun (_, target, _) -> target = agent 2)
+    Assert.Equal(2, shotsOnHostile.Length)
+
+    let positionOf id = (w.Agents |> Array.find (fun a -> a.Id = id)).Position
+    let hostileSuppression = (r.State.Agents |> Array.find (fun a -> a.Id = agent 2)).Suppression
+
+    let expected =
+        shotsOnHostile
+        |> Array.fold (fun acc (shooter, target, hit) -> Suppression.raise acc (Suppression.gain terrain (positionOf shooter) (positionOf target) hit)) 0
+        |> Suppression.decay
+
+    Assert.Equal(expected, hostileSuppression)
+
+[<Fact>]
+let ``an already-suppressed agent decays by exactly DecayPerTick on a tick with no qualifying target`` () =
+    let b: GridBounds = { Width = 10; Height = 10 }
+    let w = perceptionWorld b [ 0, { X = 0; Y = 0 } ] [] (Terrain.empty b)
+    let suppressed = { w with Agents = w.Agents |> Array.map (fun a -> { a with Suppression = 500 }) }
+    let r = stepIdle suppressed
+
+    Assert.Empty(shotsFiredIn r)
+    Assert.Equal(450, (r.State.Agents |> Array.find (fun a -> a.Id = agent 0)).Suppression)
+
+[<Fact>]
+let ``an agent never shot at stays at Suppression 0 indefinitely`` () =
+    let b: GridBounds = { Width = 10; Height = 10 }
+    let mutable st = perceptionWorld b [ 0, { X = 0; Y = 0 } ] [] (Terrain.empty b)
+
+    for _ in 1..5 do
+        let r = stepIdle st
+        Assert.Equal(0, (r.State.Agents |> Array.find (fun a -> a.Id = agent 0)).Suppression)
+        st <- r.State

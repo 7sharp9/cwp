@@ -104,7 +104,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0x55F43D66C7AECB7FUL, f.Hash.Value)
+    Assert.Equal(0xBDB4025E40BBFA28UL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -413,7 +413,8 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | KnownContact _
         | OrderAppraisal _
         | AgentCommitment _
-        | FireLine _ -> None) with
+        | FireLine _
+        | AgentSuppression _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -478,7 +479,8 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | KnownContact _
             | OrderAppraisal _
             | AgentCommitment _
-            | FireLine _ -> None)
+            | FireLine _
+            | AgentSuppression _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -519,7 +521,8 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | UndeliveredOrder _
             | OrderAppraisal _
             | AgentCommitment _
-            | FireLine _ -> None)
+            | FireLine _
+            | AgentSuppression _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -572,7 +575,8 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | KnownContact _
             | OrderAppraisal _
             | AgentCommitment _
-            | FireLine _ -> None)
+            | FireLine _
+            | AgentSuppression _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)
@@ -709,6 +713,19 @@ let ``frameOf derives FireLine overlays for the open-engagement entry's first ti
     | other -> Assert.Fail($"expected agent 0 -> agent 1 and agent 1 -> agent 0, got {other}")
 
     Assert.Equal(2, tick1.Events |> Array.filter (fun e -> e.Kind.StartsWith "shot-fired-") |> Array.length)
+
+    // Suppression (TASK-032): both agents were fired on this tick, so both
+    // carry a non-zero AgentSuppression overlay, net of the same-tick decay.
+    let suppressions =
+        tick1.Overlays
+        |> Array.choose (function
+            | AgentSuppression(agent, _, suppression) -> Some(AgentId.value agent, suppression)
+            | _ -> None)
+        |> Array.sortBy fst
+
+    Assert.Equal(2, suppressions.Length)
+    Assert.All(suppressions, fun (_, s) -> Assert.True(s > 0 && s <= SuppressionConfig.MaxSuppression))
+
     Assert.Equal(golden "open-engagement-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
     Assert.Equal(golden "open-engagement-tick-001.svg", DiagnosticRender.Svg tick1)
 
@@ -768,7 +785,7 @@ let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` ()
 let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
     let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
     Assert.Equal(13, frames.Length)
-    Assert.Equal(0xB03F8419E55F3592UL, frames.[1].Hash.Value)
+    Assert.Equal(0x2FA6E43B32599EE5UL, frames.[1].Hash.Value)
 
     let appraisals =
         frames.[1].Overlays
@@ -805,8 +822,8 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0x55F43D66C7AECB7FUL, frames.[0].Hash.Value)
-    Assert.Equal(0x7737282578E821C6UL, frames.[40].Hash.Value)
+    Assert.Equal(0xBDB4025E40BBFA28UL, frames.[0].Hash.Value)
+    Assert.Equal(0xA5AE4AE969862EA1UL, frames.[40].Hash.Value)
     // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
     // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
     // since Commitment is derived, not canonical (Decision B).
@@ -815,5 +832,5 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x7737282578E821C6UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0xA5AE4AE969862EA1UL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(36, outcome.Events.Length)

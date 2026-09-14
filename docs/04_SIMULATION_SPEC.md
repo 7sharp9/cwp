@@ -458,6 +458,16 @@ dynamic discipline / trust / stress is B-021. Life and wound state, weapon and
 ammunition, commitment and execution state are still not implemented; dynamic
 communication availability is B-016b.
 
+Realised by TASK-032 (backlog B-020): **`Suppression: int`** on the `0..1000`
+scale ("suppression" — `docs/05` section 8's "immediate effect of hostile
+fire and impacts"). The Combat phase (12.8) raises it on a qualifying shot;
+State consequences (12.9) decays it every tick. **Genuine per-tick canonical
+state** (the `Order`/`Disposition` precedent, not `Discipline`'s — it changes
+every tick from gameplay events and cannot be recomputed from `Position`
+alone), so `Canonical.FormatVersion` bumped **4 -> 5**. Defaults to `0`, no
+scenario-authored override (the `Progress` precedent). Nothing reads it yet —
+it has no effect on appraisal, reappraisal, or movement (B-021).
+
 ## 12. Tick phases
 
 ### 12.1 Command intake
@@ -681,13 +691,20 @@ one `RandomStream.next` draw, and `ShotFired(shooter, target, hit)` is
 emitted. This is the simulation's **first real gameplay consumer** of
 `WorldState.Random` (section 17); the stream was already canonical (TASK-003),
 so no `Canonical.FormatVersion` bump. "Validate ... ammunition", "resolve
-weapon readiness", "apply cover and impact" (beyond the hit-chance
-mitigation), and "create suppression" / wound events remain unrealised —
-named, not built (no `AgentState` weapon/ammo/wound field exists; a future
-task will add ammunition as either a cooldown-between-magazines or
-reload-from-stock model, and death as a critical/bleed-out timer rather than
-a binary kill — backlog numbers not yet assigned). Suppression proper is
-B-020; casualties are B-031.
+weapon readiness", and "apply cover and impact" (beyond the hit-chance
+mitigation) remain unrealised — named, not built (no `AgentState`
+weapon/ammo/wound field exists; a future task will add ammunition as either a
+cooldown-between-magazines or reload-from-stock model, and death as a
+critical/bleed-out timer rather than a binary kill — backlog numbers not yet
+assigned); casualties are B-031.
+
+**"Create suppression independent of a hit" realised by TASK-032 (backlog
+B-020):** every qualifying shot also raises the target's `AgentState.Suppression`
+(`Suppression.gain`, `src/CommandoWar.Sim/Suppression.fs`) — a miss
+suppresses less than a hit, mitigated by the identical directional-cover
+geometry `Combat.hitChance` uses. No new event: the rise is a deterministic
+function of the already-emitted `ShotFired`. No `AgentState` weapon/ammo/wound
+field is added; a hit still has no wound/death consequence (B-031).
 
 ### 12.9 State consequences
 
@@ -695,6 +712,16 @@ B-020; casualties are B-031.
 - update stress from recent events;
 - apply deaths and incapacitation;
 - update command succession only if included in the current milestone.
+
+**"Update suppression decay" realised by TASK-032 (backlog B-020)** as
+`Simulation.stateConsequences`, its own phase in `Phases.order` after Combat.
+Every agent's `AgentState.Suppression` drops by
+`SuppressionConfig.DecayPerTick`, floored at `0`, unconditionally every tick
+(`Suppression.decay`) — including the same tick a hit raised it, so a
+same-tick hit's gain and this decay both apply, in that order. Silent: no
+event, the `Progress` precedent. "Update stress from recent events", "apply
+deaths and incapacitation", and "update command succession" remain
+unrealised — B-021 and B-031.
 
 ### 12.10 Mission
 

@@ -230,7 +230,24 @@ type AgentState =
       /// comms availability becomes per-tick mutable that task bumps
       /// `Canonical.FormatVersion` and adds it to the image, exactly as the
       /// amendment specifies for `Terrain`.
-      CommunicationAvailable: bool }
+      CommunicationAvailable: bool
+      /// This agent's current suppression on the `0..1000` scale (TASK-032,
+      /// backlog B-020; `docs/05` section 8 "immediate effect of hostile fire
+      /// and impacts"). The Combat phase raises it on a qualifying shot
+      /// (`Suppression.gain`, independent of a hit, mitigated by directional
+      /// `Terrain.cover`); the State consequences phase decays it every tick
+      /// (`Suppression.decay`, floored at 0).
+      ///
+      /// **Genuine canonical per-tick state**, the `Order` / `Disposition`
+      /// precedent, not the `Discipline` one: it changes every tick from
+      /// gameplay events and cannot be recomputed from `Position` alone, so
+      /// under the ADR-0002 amendment it is in `Canonical.encode`
+      /// (`Canonical.FormatVersion` 5). Defaults to `0` with **no
+      /// scenario-authored override** (the `Progress` precedent) — every
+      /// agent starts unsuppressed. "Reduces action effectiveness, raises
+      /// assault pressure, and may trigger taking cover" (docs/05 section 8)
+      /// are not realised by any system yet; this is the raw value only.
+      Suppression: int }
 
 /// Minimal authoritative world state: an integer tick, the logical grid
 /// bounds, the authoritative terrain grid, the agents ordered by ascending
@@ -279,10 +296,12 @@ module Agent =
     let DisciplineDefault = 3
 
     /// Creates an agent at rest (no destination, no route, no progress, no
-    /// visible contacts, no order, communication available, default discipline)
-    /// at the given position. `World.ofScenario` overrides
-    /// `CommunicationAvailable` and `Discipline` from the authored deployment;
-    /// every other construction path takes the defaults.
+    /// visible contacts, no order, communication available, default
+    /// discipline, unsuppressed) at the given position. `World.ofScenario`
+    /// overrides `CommunicationAvailable` and `Discipline` from the authored
+    /// deployment; every other construction path takes the defaults.
+    /// `Suppression` has no authored override anywhere (the `Progress`
+    /// precedent) — every agent always starts at `0`.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -294,4 +313,5 @@ module Agent =
           Order = None
           Disposition = None
           Discipline = DisciplineDefault
-          CommunicationAvailable = true }
+          CommunicationAvailable = true
+          Suppression = 0 }

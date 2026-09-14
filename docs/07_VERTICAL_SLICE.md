@@ -76,7 +76,10 @@ Direct leader movement may use a separate immediate input command, but it must p
   symmetric engagement, a deterministic range- and cover-mitigated hit
   chance, the simulation's first real gameplay PRNG draw — no ammunition,
   weapon readiness, or wound/death consequence yet, deliberately deferred);
-- suppression;
+- suppression (realised by TASK-032, backlog B-020: `Combat` raises the
+  target's `AgentState.Suppression`, cover-mitigated and independent of a
+  hit; `State consequences` decays it every tick — the raw value only, no
+  effect yet on appraisal, movement, or executor behaviour, B-021);
 - stress, discipline, and leader trust;
 - explicit order appraisal;
 - accepted, delayed, adapted, refused, and broken outcomes;
@@ -162,8 +165,12 @@ B-018): the `reissued-order` corpus entry shows a superseding order taking
 over an in-progress commitment, though without the preceding suppress/reroute
 correction step 7 presupposes in the full sequence. Steps 4–6 and 8 (the UI
 explanation, the suppress / reroute response, recalculation, and consistent
-re-acceptance) still need suppression (B-020), reappraisal triggers (B-021),
-and enemy doctrine (B-022); the full sequence is B-023.
+re-acceptance) still need reappraisal triggers (B-021) and enemy doctrine
+(B-022); the full sequence is B-023. TASK-032 (backlog B-020) landed the raw
+`AgentState.Suppression` value real fire now creates and decays, but not the
+`Suppress` order itself (B-030, "order another fireteam to suppress the
+machine-gun position") or any reappraisal reacting to it (B-021) — step 5
+still needs both.
 
 ## 9. Functional acceptance criteria
 

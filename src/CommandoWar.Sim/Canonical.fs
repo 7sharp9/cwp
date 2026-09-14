@@ -56,8 +56,19 @@ module Canonical =
     /// count), so the moved hashes are a byte-layout change plus one
     /// `OrderAppraised` event per order; tick counts are unchanged (TASK-028
     /// ledger).
+    ///
+    /// 5 (TASK-032): `writeAgent` gained `AgentState.Suppression` (docs/04
+    /// sections 12.8/12.9, backlog B-020). Genuine per-tick memory — it
+    /// changes every tick from gameplay events (the Combat phase's
+    /// `Suppression.gain`, the State-consequences phase's `Suppression.decay`)
+    /// and cannot be recomputed from `Position` alone, the `Order` /
+    /// `Disposition` precedent, not the `Discipline` one. Every scenario
+    /// pinned before this version has no agent that is ever shot at, so
+    /// `Suppression` is 0 at every checkpoint and the moved hashes are a
+    /// byte-layout change, not a behaviour change; tick counts and event
+    /// counts are unchanged everywhere (TASK-032 ledger).
     [<Literal>]
-    let FormatVersion = 4
+    let FormatVersion = 5
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -120,6 +131,11 @@ module Canonical =
     // they carry per-tick memory no other field reproduces (an order's
     // `IssuedAtTick`; a persisting `Refused` outcome and its reasons), so
     // under the ADR-0002 amendment they are in the canonical image.
+    //
+    // `AgentState.Suppression` (TASK-032) IS written, on the identical
+    // argument: it changes every tick from gameplay events (Combat's gain,
+    // State consequences' decay) and cannot be recomputed from `Position`
+    // alone.
 
     let private reasonCode (r: DecisionReason) : int =
         match r with
@@ -203,6 +219,8 @@ module Canonical =
         | Some d ->
             w.U8 1uy
             writeDisposition w d
+
+        w.I32 a.Suppression
 
     // The friendly squad's shared tactical picture (TASK-026,
     // `WorldState.TacticalKnowledge`, docs/04 section 12.4). Genuine per-tick

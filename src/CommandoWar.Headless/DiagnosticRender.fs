@@ -121,7 +121,8 @@ module DiagnosticRender =
                 | UndeliveredOrder _
                 | OrderAppraisal _
                 | AgentCommitment _
-                | FireLine _ -> None)
+                | FireLine _
+                | AgentSuppression _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -149,7 +150,8 @@ module DiagnosticRender =
                 | UndeliveredOrder _
                 | OrderAppraisal _
                 | AgentCommitment _
-                | FireLine _ -> None)
+                | FireLine _
+                | AgentSuppression _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -376,6 +378,15 @@ module DiagnosticRender =
                             (AgentId.value shooter)
                             (AgentId.value target)
                             (if hit then "hit" else "miss")
+                    )
+                | AgentSuppression(agent, at, suppression) ->
+                    line (
+                        sprintf
+                            "  suppression %s: agent %d  %d/%d"
+                            (cellText at)
+                            (AgentId.value agent)
+                            suppression
+                            SuppressionConfig.MaxSuppression
                     )
 
         line ""
@@ -734,6 +745,21 @@ module DiagnosticRender =
                         (at.Y * s + mid)
                         colour
                         dash
+                )
+            | AgentSuppression(_, at, suppression) ->
+                // Current suppression (TASK-032): a small red marker at the
+                // top-right corner of the agent's cell, opacity scaled by
+                // suppression / MaxSuppression so accumulation and decay are
+                // visible across ticks — deliberately the one unused corner
+                // (AgentCommitment top-left, OrderAppraisal bottom-right).
+                let opacity = float suppression / float SuppressionConfig.MaxSuppression
+
+                line (
+                    sprintf
+                        "  <circle cx=\"%d\" cy=\"%d\" r=\"3\" fill=\"#c53030\" fill-opacity=\"%.2f\"/>"
+                        (at.X * s + s - 4)
+                        (at.Y * s + 4)
+                        opacity
                 )
 
         // Footer.
