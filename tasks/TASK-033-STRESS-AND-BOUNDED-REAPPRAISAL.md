@@ -1,8 +1,9 @@
 # TASK-033: Stress and bounded reappraisal
 
-Status: review (implemented 2026-09-14 on branch `main` directly; central
-decisions A–I confirmed with Dave 2026-09-14 before the phase bodies; not
-yet accepted)
+Status: done (implemented 2026-09-14 on branch
+`task-033-stress-and-bounded-reappraisal`; central decisions A–I confirmed
+with Dave 2026-09-14 before the phase bodies; accepted by Dave and merged to
+`main` 2026-09-15)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-021 (partial — see Decision A)
@@ -10,12 +11,16 @@ Size: M
 
 ## Outcome (2026-09-14)
 
-Implemented directly on `main` (single session, decisions confirmed
-interactively before any code). All nine central decisions confirmed with
-Dave and implemented as proposed; Decision G (excluding a fulfilled order
-from both triggers) was found necessary only once the phase body was
-written, not anticipated beforehand — see that section for the mechanism it
-would otherwise have broken.
+Implemented on branch `task-033-stress-and-bounded-reappraisal` (single
+session, decisions confirmed interactively before any code) — originally
+committed directly to `main`, then rebased onto this branch before
+acceptance to match the established per-task branch workflow (draft +
+implement on a branch, accept commit on the branch, `--no-ff` merge to
+`main`); the two commits were not pushed, so the move cost nothing. All nine
+central decisions confirmed with Dave and implemented as proposed; Decision
+G (excluding a fulfilled order from both triggers) was found necessary only
+once the phase body was written, not anticipated beforehand — see that
+section for the mechanism it would otherwise have broken.
 
 New leaf `src/CommandoWar.Sim/Stress.fs` (`StressConfig`, `Stress.gain` /
 `.raise` / `.decay`, pure). `AgentState` gains two genuine canonical fields:
@@ -316,5 +321,21 @@ value -> this task's), updated in `AppraisalDemoScene.cs` / `README.md`.
 ## Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: (to be filled in on review)
+- Accepted: yes (2026-09-15)
+- Notes: Re-verified independently before accepting rather than trusting the
+  implementation-time claims: `dotnet build CommandoWar.slnx -c Release` 0/0;
+  `dotnet test` `Passed: 285`; `cwheadless corpus` 12/12 PASS; `cwheadless
+  fixture` format 6, `36` events unchanged; `cwheadless replay-file
+  content/replays/envelope-full.cwreplay` checkpoints OK at canonical 6, `78`
+  events unchanged; `git status --porcelain` clean; `dotnet list
+  src/CommandoWar.Sim/CommandoWar.Sim.fsproj package --include-transitive`
+  `FSharp.Core` only; source scan clean. All match the ledger detail above
+  exactly. The two commits were on `main` directly (not yet pushed) at
+  implementation time; moved onto branch
+  `task-033-stress-and-bounded-reappraisal` before this acceptance, for
+  consistency with every prior task's branch/accept/merge workflow. The
+  Decision A scope cut (Stress + suppression-band + knowledge-change only)
+  is the right cut for this task's `M` size — exposure-band, wounded,
+  support, leadership, and dynamic trust each need a system this task
+  correctly did not try to build. Merged to `main` (`--no-ff`, branch
+  `task-033-stress-and-bounded-reappraisal` deleted; not pushed).

@@ -1,11 +1,15 @@
 ## 2026-09-14 - TASK-033 - Stress and bounded reappraisal
 
 **Owner:** Dave with coding-agent assistance
-**Branch:** `main` (implemented directly, single session; not pushed).
+**Branch:** `task-033-stress-and-bounded-reappraisal` (originally
+implemented directly on `main`, single session; rebased onto this branch
+2026-09-15 before acceptance, for consistency with the established
+per-task branch workflow — the two commits were not pushed, so the move
+was free; not pushed).
 **Environment:** Windows 11 Pro 26200; .NET SDK 10.0.303; FSharp.Core
 10.1.303; xUnit 2.9.3; FsCheck 3.3.4
-**Status change:** TASK-033 drafted `-> ready -> review`; backlog B-021
-`proposed -> review`
+**Status change:** TASK-033 drafted `-> ready -> review -> done`; backlog
+B-021 `proposed -> review -> done`
 
 Realises `docs/04` section 12.9's "update stress from recent events" bullet
 and two of `docs/05` section 14's six reappraisal triggers (knowledge-change,
@@ -141,5 +145,17 @@ doesn't render) — genuine new behaviour, not a bug.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: (to be filled in on review)
+- Accepted: yes (2026-09-15)
+- Notes: Re-verified independently before accepting rather than trusting the
+  implementation-time claims: `dotnet build CommandoWar.slnx -c Release` 0/0;
+  `dotnet test` `Passed: 285`; `cwheadless corpus` 12/12 PASS; `cwheadless
+  fixture` format 6, `36` events unchanged; `cwheadless replay-file
+  content/replays/envelope-full.cwreplay` checkpoints OK at canonical 6, `78`
+  events unchanged; `git status --porcelain` clean; `dotnet list
+  src/CommandoWar.Sim/CommandoWar.Sim.fsproj package --include-transitive`
+  `FSharp.Core` only; source scan clean. All match the ledger detail above
+  exactly. The two commits were rebased from `main` directly onto branch
+  `task-033-stress-and-bounded-reappraisal` before this acceptance, for
+  consistency with every prior task's branch/accept/merge workflow (both
+  commits were unpushed, so this cost nothing). Merged to `main` (`--no-ff`,
+  branch `task-033-stress-and-bounded-reappraisal` deleted; not pushed).

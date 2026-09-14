@@ -5,22 +5,25 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-14 (TASK-033 implemented on main, awaiting review)
+  updated: 2026-09-15 (TASK-033 accepted and merged to main; no task selected)
 
 active_work:
-  selected_task: TASK-033
-  task_file: tasks/TASK-033-STRESS-AND-BOUNDED-REAPPRAISAL.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-14
+  updated: 2026-09-15
   note: >-
-    2026-09-14: TASK-033 (Stress and bounded reappraisal, backlog B-021,
-    partial) implemented directly on main (single session; not yet
-    accepted). New Stress.fs leaf; AgentState.Stress (raised while
-    VisibleContacts is non-empty, decayed every tick, both in State
-    consequences) and AgentState.SuppressionBand (a hysteresis latch over
-    Suppression, computed in Appraisal) are new canonical fields.
+    2026-09-15: TASK-033 (Stress and bounded reappraisal, backlog B-021,
+    partial) accepted by Dave and merged to main (--no-ff; the two commits
+    were originally directly on main, unpushed -- moved onto branch
+    task-033-stress-and-bounded-reappraisal before acceptance for
+    consistency with the established per-task branch workflow; branch
+    deleted after merge, not pushed). New Stress.fs leaf; AgentState.Stress
+    (raised while VisibleContacts is non-empty, decayed every tick, both in
+    State consequences) and AgentState.SuppressionBand (a hysteresis latch
+    over Suppression, computed in Appraisal) are new canonical fields.
     resolveThreshold gains a continuous Stress drag and a discrete
     SuppressionBand penalty, the whole threshold floored at 0 so a fully
     safe route is never refused for stress/suppression alone. Two new
@@ -32,13 +35,19 @@ active_work:
     stays static and non-canonical -- corrects B-021's literal backlog
     wording. Deliberately narrower than B-021's full text: exposure-band,
     wounded, support, and leadership triggers, and dynamic trust, stay
-    deferred (need systems that don't exist, or a materially larger cut).
-    No new event type; new sparse Overlay.AgentStress.
+    deferred (need systems that don't exist, or a materially larger cut) --
+    B-021 stays "review", not "done", until those land or are explicitly
+    descoped. No new event type; new sparse Overlay.AgentStress.
     Canonical.FormatVersion 5 -> 6, full re-pin (tick counts and event
     counts unchanged everywhere). 274 -> 285 green; dotnet build 0/0; --
     corpus 12/12; -- fixture format 6, 36 events unchanged; -- replay-file
-    envelope-full OK at canonical 6, 78 events unchanged. No ADR.
-    (docs/ledger/2026-09-14-TASK-033-stress-and-bounded-reappraisal.md)
+    envelope-full OK at canonical 6, 78 events unchanged. No ADR. No task
+    selected. (docs/ledger/2026-09-14-TASK-033-stress-and-bounded-reappraisal.md)
+
+    Newly unblocked (from TASK-033, B-021 still open): none new -- B-022
+    (enemy doctrine) and B-023 (canonical refusal sequence) were already
+    unblocked-or-nearly-unblocked before this task; B-023 still additionally
+    needs B-021's remaining triggers and B-022.
 
     Prior: TASK-032 (Suppression and exposure model, backlog B-020)
     accepted by Dave and merged to main (--no-ff, branch
