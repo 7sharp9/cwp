@@ -458,33 +458,86 @@ module Simulation =
     // stream's first gameplay consumer). Commitments and the finite move/hold
     // executor are realised by TASK-030 (backlog B-018, the
     // commitmentAndLocalAction phase immediately below); stage-5 safer
-    // adaptation stays deferred (a TASK-030 follow-up); suppression / stress /
-    // trust and the other reappraisal triggers are B-021.
+    // adaptation stays deferred (a TASK-030 follow-up).
+    //
+    // Stress and the suppression-band / knowledge-change reappraisal
+    // triggers realised by TASK-033 (backlog B-021). Two material triggers
+    // are added on top of "a new order is received", both resetting an
+    // already-appraised order's Disposition back to None so the fast path
+    // below is skipped and it is re-judged this tick:
+    //
+    //   * knowledge-change: any ContactObserved / ContactExpired event
+    //     emitted earlier this tick (Perception / TacticalKnowledge both run
+    //     before Appraisal) — global across every agent with a live order,
+    //     not filtered to "was this agent's route affected" (the
+    //     exposure-band trigger that WOULD do that is deferred; this is the
+    //     R-023 "same observation contract" precedent of a broad, simple
+    //     trigger over a precise, expensive one);
+    //   * suppression-band: AgentState.SuppressionBand (a hysteresis latch
+    //     over AgentState.Suppression, docs/05 sections 14/15) flips this
+    //     tick, read and updated here against last tick's finalised
+    //     Suppression (Combat / State consequences for THIS tick have not
+    //     run yet).
+    //
+    // Both Appraisal.resolveThreshold terms (a continuous Stress drag, a
+    // discrete SuppressionBand penalty) are read only when an appraisal
+    // actually runs, exactly like Discipline — the fast path still emits
+    // nothing and reads neither.
     let private appraisal (s: StepState) =
         let terrain = s.Terrain
         let threats = s.TacticalKnowledge
         let budget = terrain.Bounds.Width * terrain.Bounds.Height
         let agents = Array.copy s.Agents
 
+        let knowledgeChanged =
+            s.EventsRev
+            |> List.exists (fun e ->
+                match e.Body with
+                | ContactObserved _
+                | ContactExpired _ -> true
+                | _ -> false)
+
         for i in 0 .. agents.Length - 1 do
             let a = agents.[i]
 
+            let newBand =
+                if a.Suppression >= AppraisalConfig.SuppressionBandEnter then true
+                elif a.Suppression <= AppraisalConfig.SuppressionBandExit then false
+                else a.SuppressionBand
+
             match a.Order with
-            | None -> ()
+            | None -> agents.[i] <- { a with SuppressionBand = newBand }
             | Some o ->
                 let (MoveTo target) = o.Intent
 
-                match a.Disposition with
+                // A fulfilled order (Accepted, arrived, Destination already
+                // cleared to None) must NOT be reset here: commitmentAndLocalAction
+                // (immediately after this phase) relies on seeing Disposition =
+                // Some Accepted with Destination = None to recognise completion
+                // and clear both fields. Resetting it here would re-run
+                // Appraisal.appraise's fromCell = target short-circuit, which
+                // re-writes Destination = Some target and silently defeats that
+                // clear.
+                let fulfilled =
+                    a.Disposition = Some Accepted && a.Destination = None && a.Position = target
+
+                let triggered =
+                    a.Disposition.IsSome
+                    && not fulfilled
+                    && (knowledgeChanged || newBand <> a.SuppressionBand)
+
+                match (if triggered then None else a.Disposition) with
                 | Some _ ->
-                    // Already appraised, order unchanged: no re-appraisal.
-                    // This also covers a fulfilled order (Accepted, Destination
-                    // = None, Position = target) — its housekeeping clear moved
-                    // to commitmentAndLocalAction (TASK-030, backlog B-018): a
-                    // commitment ending is a 12.6 concern, not a 12.5 one.
-                    ()
+                    // Already appraised, order unchanged, no trigger fired: no
+                    // re-appraisal. This also covers a fulfilled order (Accepted,
+                    // Destination = None, Position = target) — its housekeeping
+                    // clear moved to commitmentAndLocalAction (TASK-030, backlog
+                    // B-018): a commitment ending is a 12.6 concern, not a 12.5
+                    // one.
+                    agents.[i] <- { a with SuppressionBand = newBand }
                 | None ->
                     let disposition, _ =
-                        Appraisal.appraise terrain threats a.Discipline o a.Position budget
+                        Appraisal.appraise terrain threats a.Discipline a.Stress newBand o a.Position budget
 
                     // On Accepted, hand the target to Navigation as the
                     // Destination (which clears any Destination a superseded
@@ -499,7 +552,12 @@ module Simulation =
                         | Refused _
                         | Unable _ -> None
 
-                    agents.[i] <- { a with Disposition = Some disposition; Destination = destination }
+                    agents.[i] <-
+                        { a with
+                            Disposition = Some disposition
+                            Destination = destination
+                            SuppressionBand = newBand }
+
                     emit (OrderAppraised(a.Id, o.Command, disposition)) s
 
         s.Agents <- agents
@@ -977,21 +1035,39 @@ module Simulation =
         s.Random <- random
 
     // --- Phase: state consequences ------------------------------------------
-    // Realised by TASK-032 (backlog B-020). Turns the docs/04 section 12.9
-    // no-op into a real phase for its first bullet, "update suppression
-    // decay": every agent's Suppression drops by SuppressionConfig.DecayPerTick,
+    // Realised by TASK-032 (backlog B-020) for "update suppression decay":
+    // every agent's Suppression drops by SuppressionConfig.DecayPerTick,
     // floored at 0, unconditionally (whether or not it was shot at this
     // tick — a same-tick hit's gain and this decay both apply, in that
-    // order). "Update stress", "apply deaths and incapacitation", and "update
-    // command succession" remain unrealised (B-021, B-031).
+    // order).
+    //
+    // "Update stress from recent events" realised by TASK-033 (backlog
+    // B-021): every agent's Stress rises by StressConfig.GainPerTick this
+    // tick when its (Perception-phase, this-tick) VisibleContacts is
+    // non-empty (Stress.gain), then always decays by
+    // StressConfig.DecayPerTick, floored at 0 (Stress.decay) — gain then
+    // decay, the Suppression precedent, both steps here since nothing else
+    // produces stress yet. "Apply deaths and incapacitation" and "update
+    // command succession" remain unrealised (B-031).
     let private stateConsequences (s: StepState) =
         let agents = Array.copy s.Agents
 
         for i in 0 .. agents.Length - 1 do
             let a = agents.[i]
 
-            if a.Suppression > 0 then
-                agents.[i] <- { a with Suppression = Suppression.decay a.Suppression }
+            let suppression =
+                if a.Suppression > 0 then
+                    Suppression.decay a.Suppression
+                else
+                    a.Suppression
+
+            let stress =
+                Stress.gain (a.VisibleContacts.Length > 0)
+                |> Stress.raise a.Stress
+                |> Stress.decay
+
+            if suppression <> a.Suppression || stress <> a.Stress then
+                agents.[i] <- { a with Suppression = suppression; Stress = stress }
 
         s.Agents <- agents
 

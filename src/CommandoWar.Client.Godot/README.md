@@ -35,7 +35,7 @@ dotnet build CommandoWar.Client.Godot.slnx -c Debug
 "$GODOT" --path .
 
 # headless smoke: prints the tick-1 dispositions + hash, asserts vs the golden
-"$GODOT" --headless --path . -- --selfcheck            # MATCH 0x2FA6E43B32599EE5, exit 0
+"$GODOT" --headless --path . -- --selfcheck            # MATCH 0x2066BC1FAF990E4A, exit 0
 
 # committed evidence screenshot (windowed; headless has no viewport texture)
 "$GODOT" --path . --resolution 1000x620 -- --screenshot <abs-path>.png

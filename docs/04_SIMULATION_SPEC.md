@@ -465,8 +465,21 @@ State consequences (12.9) decays it every tick. **Genuine per-tick canonical
 state** (the `Order`/`Disposition` precedent, not `Discipline`'s — it changes
 every tick from gameplay events and cannot be recomputed from `Position`
 alone), so `Canonical.FormatVersion` bumped **4 -> 5**. Defaults to `0`, no
-scenario-authored override (the `Progress` precedent). Nothing reads it yet —
-it has no effect on appraisal, reappraisal, or movement (B-021).
+scenario-authored override (the `Progress` precedent). Nothing read it yet —
+it had no effect on appraisal, reappraisal, or movement until TASK-033.
+
+Realised by TASK-033 (backlog B-021, partial): **`Stress: int`** on the
+`0..1000` scale, raised while `VisibleContacts` is non-empty ("threat", the
+one `docs/05` section 8 stress source with a system behind it) and decayed
+every tick, both in State consequences (12.9); and **`SuppressionBand:
+bool`**, a hysteresis latch over `Suppression`, computed by the Appraisal
+phase (12.5). Both are **genuine per-tick canonical state** (the
+`Suppression` precedent), so `Canonical.FormatVersion` bumped **5 -> 6**.
+Both default to `0` / `false`, no scenario-authored override. Now read by
+the stage-4 resolve threshold (a continuous drag and a discrete penalty
+respectively, both floored at 0 overall) and by two new reappraisal
+triggers (12.5). Trust, wound/casualty state, weapon and ammunition,
+execution state beyond moving/holding are still not implemented.
 
 ## 12. Tick phases
 
@@ -612,14 +625,29 @@ order reset. Stages (`docs/05` section 5):
 On `Accepted` the phase writes `AgentState.Destination` (which the Navigation
 phase then follows, the same tick); on `Refused` / `Unable` it writes none.
 Every appraisal emits one `OrderAppraised` event (section 14), including the
-mundane `Accepted`. The only reappraisal trigger in scope is "a new order is
-received" (`docs/05` section 14); an already-appraised, unchanged order is a
-no-op that emits nothing ("reappraise only on material triggers"). Suppression,
-stress, trust, hysteresis, and the exposure-band / knowledge-change triggers
-are B-021. No PRNG draw. `AgentState.Order` and `AgentState.Disposition` are
-genuine per-tick canonical state — `Canonical.FormatVersion` bumped **3 -> 4**
-(section 17); `AgentState.Discipline` is static authored data and stays out of
-the image.
+mundane `Accepted`. No PRNG draw. `AgentState.Order` and `AgentState.Disposition`
+are genuine per-tick canonical state — `Canonical.FormatVersion` bumped
+**3 -> 4** (section 17); `AgentState.Discipline` is static authored data and
+stays out of the image.
+
+Stress and two of the six reappraisal triggers realised by TASK-033 (backlog
+B-021): `resolveThreshold` now also takes `AgentState.Stress` (a continuous
+drag, `AppraisalConfig.StressDivisor`) and `AgentState.SuppressionBand` (a
+discrete `AppraisalConfig.SuppressionBandPenalty` while latched), both read
+at the top of the tick and floored at 0 overall so a fully unexposed route is
+always `Accepted` regardless of either. On top of "a new order is received",
+this phase also resets an already-appraised, non-fulfilled order's
+`Disposition` to `None` — triggering the same-tick re-judgement below — on
+two material triggers: any `ContactObserved` / `ContactExpired` event
+emitted earlier this tick (knowledge-change, global rather than per-route),
+and `AgentState.SuppressionBand` flipping this tick (suppression-band, a
+hysteresis latch over `AgentState.Suppression` computed here). Both triggers
+explicitly exclude a fulfilled order (`Disposition = Some Accepted,
+Destination = None, Position = target`) — resetting it would re-run the
+`fromCell = target` short-circuit and defeat `commitmentAndLocalAction`'s
+completion clear. Exposure-band, wounded, support, and leadership triggers,
+and dynamic trust, remain B-021 but out of this task's cut — see `docs/05`
+section 14.
 
 ### 12.6 Commitment and local action
 
@@ -719,9 +747,18 @@ Every agent's `AgentState.Suppression` drops by
 `SuppressionConfig.DecayPerTick`, floored at `0`, unconditionally every tick
 (`Suppression.decay`) — including the same tick a hit raised it, so a
 same-tick hit's gain and this decay both apply, in that order. Silent: no
-event, the `Progress` precedent. "Update stress from recent events", "apply
-deaths and incapacitation", and "update command succession" remain
-unrealised — B-021 and B-031.
+event, the `Progress` precedent.
+
+**"Update stress from recent events" realised by TASK-033 (backlog B-021),
+partially:** of `docs/05` section 8's five stress sources (casualties,
+wounds, isolation, explosions, threat), only "threat" has a system behind it
+— `AgentState.VisibleContacts` (TASK-026). Every agent's `AgentState.Stress`
+rises by `StressConfig.GainPerTick` this tick when `VisibleContacts` is
+non-empty (`Stress.gain`), then always decays by `StressConfig.DecayPerTick`,
+floored at `0` (`Stress.decay`) — gain then decay, the `Suppression`
+precedent, but both steps live here since nothing else produces stress yet.
+Silent: no event. "Apply deaths and incapacitation" and "update command
+succession" remain unrealised — B-031.
 
 ### 12.10 Mission
 

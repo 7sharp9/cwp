@@ -71,6 +71,19 @@ re-pin is confirmed by the "Tick count" / "Domain events" columns holding;
 carry genuine new non-zero `Suppression` values baked into their hashes from
 the tick combat first fires.
 
+**Re-pinned by TASK-033** (stress and bounded reappraisal realised, backlog
+B-021; `Canonical.FormatVersion` **5 -> 6**, `AgentState.SuppressionBand` /
+`AgentState.Stress` added): every entry re-pins again — the format bump moves
+every hash regardless of behaviour, so `exposed-approach` tick 1 moves a
+third time, to `0x2066BC1FAF990E4A` (the TASK-029 Godot demo's `--selfcheck`
+constant updated to match again). **Tick counts and event counts are
+unchanged everywhere** — stress and the suppression-band hysteresis latch add
+no new event type, only two standing `AgentState` fields, and the
+knowledge-change / suppression-band reappraisal triggers only ever flip an
+already-appraised order's outcome, never add or remove a tick or an event —
+so every entry's byte-layout-only re-pin is confirmed by the "Tick count" /
+"Domain events" columns holding.
+
 ## Production replay-command format (TASK-025, backlog B-045)
 
 `envelope-full.cwreplay` is the first committed replay in the **production

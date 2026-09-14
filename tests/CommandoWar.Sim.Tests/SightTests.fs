@@ -161,13 +161,13 @@ let ``producing LOS diagnostics for the shared fixture leaves its hashes and eve
     let w = Fixture.initialState ()
     // A pure query over the fixture's (empty) terrain: no mutation, no draw.
     let _ = Sight.trace w.Terrain { X = 0; Y = 0 } { X = 20; Y = 14 }
-    Assert.Equal(0xBDB4025E40BBFA28UL, (Hashing.hash w).Value)
-    Assert.Equal(5, Canonical.FormatVersion)
+    Assert.Equal(0xF1A703A752C0F6B9UL, (Hashing.hash w).Value)
+    Assert.Equal(6, Canonical.FormatVersion)
 
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0xA5AE4AE969862EA1UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0x507D041E109404B6UL, (Hashing.hash outcome.FinalState).Value)
         // TASK-030: 34 -> 36 (+1 CommitmentEstablished, +1 CommitmentCompleted).
         Assert.Equal(36, outcome.Events.Length)
 

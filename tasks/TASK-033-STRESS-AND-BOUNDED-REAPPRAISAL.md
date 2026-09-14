@@ -1,11 +1,61 @@
 # TASK-033: Stress and bounded reappraisal
 
-Status: draft (central decisions A–I confirmed with Dave 2026-09-14 before
-the phase bodies)
+Status: review (implemented 2026-09-14 on branch `main` directly; central
+decisions A–I confirmed with Dave 2026-09-14 before the phase bodies; not
+yet accepted)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-021 (partial — see Decision A)
 Size: M
+
+## Outcome (2026-09-14)
+
+Implemented directly on `main` (single session, decisions confirmed
+interactively before any code). All nine central decisions confirmed with
+Dave and implemented as proposed; Decision G (excluding a fulfilled order
+from both triggers) was found necessary only once the phase body was
+written, not anticipated beforehand — see that section for the mechanism it
+would otherwise have broken.
+
+New leaf `src/CommandoWar.Sim/Stress.fs` (`StressConfig`, `Stress.gain` /
+`.raise` / `.decay`, pure). `AgentState` gains two genuine canonical fields:
+`Stress: int` (raised + decayed together in State consequences, sourced
+from `VisibleContacts` only) and `SuppressionBand: bool` (a hysteresis latch
+over the existing `AgentState.Suppression`, computed and updated inside the
+Appraisal phase). `Appraisal.resolveThreshold` / `.appraise` gain `stress` /
+`suppressed` parameters, folded in as a continuous drag and a discrete
+penalty respectively, both floored at 0 overall so a fully unexposed route
+is never refused for stress or suppression alone. Two new reappraisal
+triggers live inside `Simulation.appraisal` itself (not a new `Phases.order`
+slot): knowledge-change (any `ContactObserved` / `ContactExpired` this tick,
+global) and suppression-band (the latch flipping, either direction) —
+both reset an already-appraised, non-fulfilled order's `Disposition` to
+`None` so it is re-judged the same tick. `Discipline` deliberately stays
+exactly where TASK-028 left it (Decision C).
+
+New sparse `Overlay.AgentStress` (the `AgentSuppression` precedent, bottom-left
+corner in the Svg renderer). No new event type — a trigger-driven
+reappraisal still emits the existing `OrderAppraised`. No new corpus entry —
+proof is via `SimulationTests` facts directly on the phase (a Refused order
+flips to Accepted once its only known threat's contact expires after
+`PerceptionConfig.ExpireAfter` ticks unseen; the suppression-band latch
+reappraises an already-`Accepted` order on either flip direction with no
+outcome change on a safe route) plus pure-function facts on `Stress.fs` and
+`Appraisal.resolveThreshold`, and one `DeterminismPropertyTests` property.
+
+`AgentState.Stress` and `.SuppressionBand` are genuine per-tick canonical
+state: `Canonical.FormatVersion` **5 -> 6**, full re-pin (tick counts and
+event counts unchanged everywhere — see "Event-trace and hash impact").
+`274 -> 285` green (+10 `SimulationTests` facts, +1 `DeterminismPropertyTests`
+property 12 at 200 cases reusing `appraisalCaseGen` unchanged; the existing
+combat-determinism `SimulationTests` fact extended in place with `Stress` /
+`SuppressionBand` array comparisons). `dotnet build` 0/0; `-- corpus` 12/12
+(`--regenerate` idempotent, confirmed via `md5sum`); `-- fixture` format 6,
+36 events unchanged; `-- replay-file envelope-full` OK at canonical 6, 78
+events unchanged; `src/CommandoWar.Sim` packages `FSharp.Core` only; source
+scan clean. No ADR.
+
+Full detail: `docs/ledger/2026-09-14-TASK-033-stress-and-bounded-reappraisal.md`.
 
 ## Objective
 
@@ -186,3 +236,85 @@ dependency, no phase-order change.
 
 Nothing under `src/_scratch`, `bench/`, `content/benchmarks/BASELINE.md`, or
 any Godot spike scene.
+
+## Event-trace and hash impact (`Canonical.FormatVersion` 5 -> 6, full re-pin)
+
+Every corpus entry, the fixture, and `envelope-full` re-pin — the format
+bump touches every `writeAgent` call regardless of behaviour. **Tick counts
+and event counts are unchanged everywhere** (no new event type, and both
+reappraisal triggers only ever flip an already-appraised order's outcome,
+never add or remove a tick or event) — confirmed by diffing every corpus
+`.md` / `envelope-full.md` for a changed "Tick count" or "Domain events"
+line (none found, only hash-line and, for the entries below, new overlay
+text).
+
+| Entry | Newly non-zero this task | Note |
+|---|---|---|
+| `exposed-approach` | `Stress` (all three agents, from tick 1) | The scenario's own premise — "past a stationary hostile the squad sees from the start" — puts all three agents in mutual `VisibleContacts` from tick 1, so State consequences raises `Stress` to 50 (net of the same-tick decay) for all three by the end of tick 1. The tick-1 `Refused`/`Accepted` divergence itself is unaffected — Appraisal reads `Stress` from *before* this tick's rise (0), the `Discipline` precedent. |
+| `open-engagement`, `perception-contact` | `Stress` from the tick each pair first sees each other (at or before the tick TASK-031 pinned first combat) | Same mechanism — mutual visibility precedes engagement range. |
+| every other entry, the fixture, `envelope-full` | nothing (no agent ever sees an opposing agent) | Byte-layout-only re-pin. |
+
+The TASK-029 Godot demo's `--selfcheck` pinned `exposed-approach` tick-1 hash
+moved a third time (`0x2FA6E43B32599EE5` -> `0x2066BC1FAF990E4A`, TASK-032's
+value -> this task's), updated in `AppraisalDemoScene.cs` / `README.md`.
+`content/replays/CORPUS.md` gained a new "Re-pinned by TASK-033" paragraph
+(prior re-pin paragraphs left untouched as historical record, the
+`Canonical.fs` version-history-comment precedent).
+
+## Verification
+
+- `dotnet build CommandoWar.slnx -c Release`: 0/0 before and after.
+- `dotnet test CommandoWar.slnx -c Release`: `274 -> 285` green. New: 3
+  `Stress.gain`/`.raise`/`.decay` pure-function facts (the `Suppression.fs`
+  precedent); 3 `Appraisal.resolveThreshold` facts (suppressed drops by
+  exactly `SuppressionBandPenalty`; full stress drops by exactly `MaxStress /
+  StressDivisor`; floored at 0 even at minimum discipline, cautious risk,
+  full stress, and suppressed); 2 phase-level Stress facts (an agent in
+  contact gains net `GainPerTick - DecayPerTick`, one with none stays at 0;
+  Stress accumulates over continuous contact and decays once contact is
+  lost); 1 knowledge-change-trigger fact (a `Refused` order becomes
+  `Accepted` once its only known threat's contact expires, 60 ticks, no real
+  hostile agent needed since `Appraisal.appraise` reads
+  `WorldState.TacticalKnowledge` directly); 1 suppression-band-trigger fact
+  (an `Accepted` order is reappraised — a fresh `OrderAppraised`, outcome
+  unchanged on a safe route — on either latch flip direction, and not on a
+  quiet tick with the band unchanged); 1 `DeterminismPropertyTests` property
+  12 at 200 cases (both `Stress` and `SuppressionBand` reproducible from a
+  fresh recompute, reusing `appraisalCaseGen` unchanged); the existing
+  combat-determinism `SimulationTests` fact extended in place with `Stress` /
+  `SuppressionBand` array comparisons (not a new fact).
+- `cwheadless corpus`: 12/12 PASS (no new entry); `--regenerate` twice in a
+  row is a byte-identical zero diff (idempotent, confirmed via `md5sum`).
+- `cwheadless fixture`: format 6, `36` events unchanged, `0` draws
+  (enemy-free).
+- `cwheadless replay-file content/replays/envelope-full.cwreplay`:
+  checkpoints OK at canonical 6, `24` ticks / `78` events unchanged
+  (enemy-free scenario).
+- `dotnet list src/CommandoWar.Sim/CommandoWar.Sim.fsproj package
+  --include-transitive`: `FSharp.Core` only.
+- Source scan of `src/CommandoWar.Sim` for
+  `float|stopwatch|datetime|system\.random|godot`: clean (comment mentions
+  only, pre-existing).
+- `git status --porcelain`: matches this task file's "Allowed scope".
+
+## Unresolved / follow-ups
+
+- Exposure-band reappraisal trigger, and its own hysteresis, stays deferred
+  — needs per-tick route-exposure tracking for every agent with a live
+  order, out of this task's cut (Decision A).
+- Wounded, support, and leadership reappraisal triggers stay named, not
+  built — each needs a system this task deliberately does not add (wound /
+  casualty state, a support-commitment concept, a leadership entity —
+  B-030 / B-031).
+- Dynamic trust stays unbuilt (`docs/05` section 8's "minimal" vertical-slice
+  allowance) — nothing produces "commander history" events to react to yet.
+- `docs/05` section 15's hysteresis constant note anticipated it landing
+  with the exposure-band trigger; this task substitutes the
+  suppression-band trigger instead (Decision A) — `docs/05` updated to
+  reflect this.
+
+## Review
+
+- Reviewer: Dave
+- Accepted: pending
+- Notes: (to be filled in on review)

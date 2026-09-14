@@ -122,7 +122,8 @@ module DiagnosticRender =
                 | OrderAppraisal _
                 | AgentCommitment _
                 | FireLine _
-                | AgentSuppression _ -> None)
+                | AgentSuppression _
+                | AgentStress _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -151,7 +152,8 @@ module DiagnosticRender =
                 | OrderAppraisal _
                 | AgentCommitment _
                 | FireLine _
-                | AgentSuppression _ -> None)
+                | AgentSuppression _
+                | AgentStress _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -387,6 +389,15 @@ module DiagnosticRender =
                             (AgentId.value agent)
                             suppression
                             SuppressionConfig.MaxSuppression
+                    )
+                | AgentStress(agent, at, stress) ->
+                    line (
+                        sprintf
+                            "  stress %s: agent %d  %d/%d"
+                            (cellText at)
+                            (AgentId.value agent)
+                            stress
+                            StressConfig.MaxStress
                     )
 
         line ""
@@ -759,6 +770,21 @@ module DiagnosticRender =
                         "  <circle cx=\"%d\" cy=\"%d\" r=\"3\" fill=\"#c53030\" fill-opacity=\"%.2f\"/>"
                         (at.X * s + s - 4)
                         (at.Y * s + 4)
+                        opacity
+                )
+            | AgentStress(_, at, stress) ->
+                // Current stress (TASK-033): a small purple marker at the
+                // bottom-left corner of the agent's cell, opacity scaled by
+                // stress / MaxStress — the AgentSuppression precedent, in the
+                // one remaining unused corner (AgentCommitment top-left,
+                // AgentSuppression top-right, OrderAppraisal bottom-right).
+                let opacity = float stress / float StressConfig.MaxStress
+
+                line (
+                    sprintf
+                        "  <circle cx=\"%d\" cy=\"%d\" r=\"3\" fill=\"#6b46c1\" fill-opacity=\"%.2f\"/>"
+                        (at.X * s + 4)
+                        (at.Y * s + s - 4)
                         opacity
                 )
 
