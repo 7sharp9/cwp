@@ -775,3 +775,52 @@ let ``every agent's post-tick Suppression is reproducible from a fresh recompute
             prev <- r.State
 
         ok)
+
+// --- property 12: stress and the suppression-band latch are pure functions
+// --- of this tick's inputs -------------------------------------------------
+// TASK-033. Reuses `appraisalCaseGen` unchanged. For every tick and every
+// agent:
+//
+//   * Stress: starting from the agent's pre-tick Stress, one Stress.gain
+//     (this tick's post-Perception VisibleContacts non-empty — Perception
+//     runs before State consequences and nothing after it touches
+//     VisibleContacts) folded via Stress.raise, then one Stress.decay (State
+//     consequences, unconditional every tick), reproduces the actual
+//     post-tick Stress exactly — the property 11 Suppression precedent.
+//   * SuppressionBand: the hysteresis latch computed from the agent's
+//     pre-tick Suppression and pre-tick SuppressionBand (both read by the
+//     Appraisal phase before Combat / State consequences can change them)
+//     reproduces the actual post-tick SuppressionBand exactly.
+
+[<Property(MaxTest = 200)>]
+let ``every agent's post-tick Stress and SuppressionBand are reproducible from a fresh recompute`` () =
+    Prop.forAll (Arb.fromGen appraisalCaseGen) (fun case ->
+        let mutable prev = case.World
+        let mutable ok = true
+
+        for tick in 1L .. case.TickCount do
+            let cmds =
+                case.Commands
+                |> Array.filter (fun c -> c.Tick = tick)
+                |> Array.map (fun c -> c.Command)
+
+            let r = Simulation.step SimConfig.standard cmds prev
+
+            for a in prev.Agents do
+                match r.State.Agents |> Array.tryFind (fun x -> x.Id = a.Id) with
+                | Some post ->
+                    let inContact = post.VisibleContacts.Length > 0
+                    let expectedStress = Stress.gain inContact |> Stress.raise a.Stress |> Stress.decay
+
+                    let expectedBand =
+                        if a.Suppression >= AppraisalConfig.SuppressionBandEnter then true
+                        elif a.Suppression <= AppraisalConfig.SuppressionBandExit then false
+                        else a.SuppressionBand
+
+                    if post.Stress <> expectedStress || post.SuppressionBand <> expectedBand then
+                        ok <- false
+                | None -> ok <- false
+
+            prev <- r.State
+
+        ok)

@@ -244,6 +244,12 @@ module AppraisalDemo =
                 // predates the phase); exposed-approach tick 1 has no combat
                 // yet, so this never fires for the committed frame.
                 unhandled.Add(sprintf "suppression agent %d (%d,%d) %d" (AgentId.value agent) at.X at.Y suppression)
+            | AgentStress(agent, at, stress) ->
+                // TASK-033: not yet surfaced in this disposable P3 demo (it
+                // predates the phase); exposed-approach tick 1 has no
+                // opposing-side contact yet, so this never fires for the
+                // committed frame.
+                unhandled.Add(sprintf "stress agent %d (%d,%d) %d" (AgentId.value agent) at.X at.Y stress)
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

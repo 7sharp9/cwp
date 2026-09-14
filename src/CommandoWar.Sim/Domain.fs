@@ -247,7 +247,51 @@ type AgentState =
       /// agent starts unsuppressed. "Reduces action effectiveness, raises
       /// assault pressure, and may trigger taking cover" (docs/05 section 8)
       /// are not realised by any system yet; this is the raw value only.
-      Suppression: int }
+      Suppression: int
+      /// Whether this agent's `Suppression` currently sits in the "suppressed"
+      /// hysteresis band (TASK-033, backlog B-021; `docs/05` sections 14/15
+      /// "use hysteresis when entering and leaving ... suppression ...
+      /// states"). Latches `true` once `Suppression >=
+      /// AppraisalConfig.SuppressionBandEnter` and stays `true` until it drops
+      /// to `AppraisalConfig.SuppressionBandExit` or below, so a value
+      /// oscillating right at one threshold does not flip every tick. Read
+      /// (and updated) by the Appraisal phase at the top of the tick, against
+      /// last tick's finalised `Suppression`; a flip is the suppression-band
+      /// reappraisal trigger (`docs/05` section 14) and also subtracts
+      /// `AppraisalConfig.SuppressionBandPenalty` from the stage-4 resolve
+      /// threshold while latched `true`.
+      ///
+      /// **Genuine canonical per-tick state** (the `Suppression` precedent):
+      /// it is a hysteresis latch, not recomputable from `Suppression` alone
+      /// without also knowing which side of the band it was already on.
+      /// Defaults to `false` with no scenario-authored override (the
+      /// `Suppression` precedent) — every agent starts unlatched. Tracked for
+      /// both sides symmetrically, exactly as `Suppression` itself is,
+      /// though only a `Friendly` agent's `Order` / `Disposition` ever read
+      /// it, since only friendlies receive player orders.
+      SuppressionBand: bool
+      /// This agent's current stress on the `0..1000` scale (TASK-033,
+      /// backlog B-021; `docs/05` section 8 "accumulates through nearby
+      /// casualties, wounds, isolation, explosions, and threat; decays when
+      /// safe"). Of those five sources, only "threat" has a system behind it
+      /// today: the State-consequences phase raises it by
+      /// `StressConfig.GainPerTick` every tick this agent's
+      /// `VisibleContacts` is non-empty (`Stress.gain`), then always decays
+      /// it by `StressConfig.DecayPerTick`, floored at 0 (`Stress.decay`) —
+      /// the `Suppression` gain-then-decay-same-tick precedent, but both
+      /// steps live in State consequences here since nothing else produces
+      /// stress yet. Read by the stage-4 resolve threshold as a continuous
+      /// drag (`AppraisalConfig.StressDivisor`), distinct from
+      /// `SuppressionBand`'s discrete banded penalty.
+      ///
+      /// **Genuine canonical per-tick state**, the `Suppression` precedent:
+      /// it changes every tick from gameplay events and cannot be recomputed
+      /// from `Position` alone. Defaults to `0` with no scenario-authored
+      /// override (the `Suppression` precedent) — every agent starts
+      /// unstressed. Casualty-, wound-, explosion-, and isolation-driven
+      /// stress are not realised by any system yet (B-031 and unassigned
+      /// future work); this is the contact-driven component only.
+      Stress: int }
 
 /// Minimal authoritative world state: an integer tick, the logical grid
 /// bounds, the authoritative terrain grid, the agents ordered by ascending
@@ -301,7 +345,8 @@ module Agent =
     /// overrides `CommunicationAvailable` and `Discipline` from the authored
     /// deployment; every other construction path takes the defaults.
     /// `Suppression` has no authored override anywhere (the `Progress`
-    /// precedent) — every agent always starts at `0`.
+    /// precedent) — every agent always starts at `0`. `SuppressionBand` and
+    /// `Stress` (TASK-033) follow the identical rule: `false` / `0` always.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -314,4 +359,6 @@ module Agent =
           Disposition = None
           Discipline = DisciplineDefault
           CommunicationAvailable = true
-          Suppression = 0 }
+          Suppression = 0
+          SuppressionBand = false
+          Stress = 0 }

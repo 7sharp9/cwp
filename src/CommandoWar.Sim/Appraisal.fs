@@ -32,15 +32,27 @@ namespace CommandoWar.Sim
 ///
 /// ## What is deliberately absent (later backlog items)
 ///
-///   * suppression / stress / trust and the exposure-band, knowledge-change,
-///     wounded, support, and leadership reappraisal triggers — B-021;
-///   * hysteresis on the `Accepted -> Refused` edge — nothing to act on until
-///     B-021 adds the exposure-band trigger;
+///   * the exposure-band, wounded, support, and leadership reappraisal
+///     triggers, and dynamic trust — B-021 realises stress and the
+///     suppression-band / knowledge-change triggers only (TASK-033); the
+///     rest need systems that do not exist (route-exposure tracking per idle
+///     agent, wound/casualty state, a support-commitment concept, a
+///     leadership entity — B-030/B-031);
 ///   * commitments and the finite action executor — B-018 (Appraisal writes
 ///     `Destination`, it does not build a commitment store);
 ///   * line of fire / combat / a real threat model — B-019 (which reuses
 ///     `attackDirection` below, made public by TASK-031, for its own
 ///     cover-facing geometry).
+///
+/// Stress and suppression-band hysteresis realised by TASK-033 (backlog
+/// B-021): `resolveThreshold` and `appraise` below take the agent's
+/// `AgentState.Stress` and `AgentState.SuppressionBand` (both read at the top
+/// of the tick, before this tick's State-consequences / Combat can change
+/// them) and fold them into the stage-4 threshold. The knowledge-change and
+/// suppression-band reappraisal triggers themselves — resetting
+/// `AgentState.Disposition` to `None` so this module's fast path is skipped —
+/// live in `Simulation.appraisal`, not here: this module stays a pure leaf
+/// with no event emission and no `StepState` access.
 
 /// Every appraisal threshold, in one place (`docs/05` section 15 "record every
 /// threshold in one configuration structure"). Module literals rather than a
@@ -94,6 +106,35 @@ module AppraisalConfig =
     /// `Urgency.Routine` is 0.
     [<Literal>]
     let UrgencyImmediate = 20
+
+    /// Divides `AgentState.Stress` (`0..1000`) into a continuous resolve
+    /// penalty (TASK-033, backlog B-021): `stress / StressDivisor`, up to
+    /// `MaxStress / StressDivisor = 40` at full stress — comparable in scale
+    /// to `RiskAggressive` / `UrgencyImmediate`, never dominant on its own.
+    [<Literal>]
+    let StressDivisor = 25
+
+    /// `AgentState.Suppression` value at or above which the hysteresis latch
+    /// `AgentState.SuppressionBand` turns `true` (`docs/05` sections 14/15).
+    /// Half of `SuppressionConfig.MaxSuppression`: "heavily suppressed", not
+    /// merely shot at once.
+    [<Literal>]
+    let SuppressionBandEnter = 500
+
+    /// `AgentState.Suppression` value at or below which the latch turns back
+    /// `false`. Below `SuppressionBandEnter` so a value oscillating near one
+    /// threshold does not flip the latch every tick — the gap
+    /// (`SuppressionBandEnter - SuppressionBandExit = 200`) exceeds one
+    /// `SuppressionConfig.DecayPerTick` (50), so decay alone cannot cross it
+    /// in a single tick right at the boundary.
+    [<Literal>]
+    let SuppressionBandExit = 300
+
+    /// Flat resolve-threshold penalty while `AgentState.SuppressionBand` is
+    /// `true` — a discrete drop, distinct from `Stress`'s continuous one,
+    /// comparable in scale to `RiskCautious`.
+    [<Literal>]
+    let SuppressionBandPenalty = 30
 
 [<RequireQualifiedAccess>]
 module Appraisal =
@@ -158,7 +199,14 @@ module Appraisal =
 
     /// The stage-4 resolve threshold for an agent and an order (`docs/05`
     /// section 5 stage 4). Integer, bounded, order-independent of the world.
-    let resolveThreshold (discipline: int) (order: ReceivedOrder) : int =
+    /// `stress` and `suppressed` (TASK-033, backlog B-021) are the agent's
+    /// `AgentState.Stress` and `AgentState.SuppressionBand` at the top of the
+    /// tick — a continuous drag and a discrete banded penalty respectively.
+    /// Floored at 0 so a completely unexposed route (`exposure = 0`) is
+    /// always `Accepted` regardless of how stressed or suppressed the agent
+    /// is: both terms only ever make an already-exposed route *more* likely
+    /// to be refused, never refuse a safe one outright.
+    let resolveThreshold (discipline: int) (stress: int) (suppressed: bool) (order: ReceivedOrder) : int =
         let riskMod =
             match order.RiskTolerance with
             | Cautious -> AppraisalConfig.RiskCautious
@@ -170,10 +218,19 @@ module Appraisal =
             | Routine -> 0
             | Immediate -> AppraisalConfig.UrgencyImmediate
 
+        let suppressionMod =
+            if suppressed then
+                AppraisalConfig.SuppressionBandPenalty
+            else
+                0
+
         AppraisalConfig.BaseResolve
         + AppraisalConfig.DisciplineResolveWeight * discipline
         + riskMod
         + urgencyMod
+        - stress / AppraisalConfig.StressDivisor
+        - suppressionMod
+        |> max 0
 
     /// The whole staged pipeline for one order. Returns the outcome and the
     /// exposed route cells (for the diagnostic overlay; `[||]` when there is no
@@ -183,6 +240,8 @@ module Appraisal =
         (terrain: Terrain)
         (threats: Contact[])
         (discipline: int)
+        (stress: int)
+        (suppressed: bool)
         (order: ReceivedOrder)
         (fromCell: Cell)
         (budget: int)
@@ -197,7 +256,7 @@ module Appraisal =
                 let exposure, topThreat = routeExposure terrain threats cells
                 let exposed = exposedCells terrain threats cells
 
-                if exposure <= resolveThreshold discipline order then
+                if exposure <= resolveThreshold discipline stress suppressed order then
                     Accepted, exposed
                 else
                     Refused(RouteTooExposed topThreat, [||]), exposed

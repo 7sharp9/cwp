@@ -1377,6 +1377,13 @@ let ``combat is deterministic across two runs and draws exactly once per shot fi
     let suppressionOf (r: StepResult) = r.State.Agents |> Array.map (fun a -> a.Suppression)
     Assert.Equal<int[]>(suppressionOf r1, suppressionOf r2)
 
+    // TASK-033: Stress and the SuppressionBand hysteresis latch are also
+    // canonical per-tick state now — reproducible from the same inputs.
+    let stressOf (r: StepResult) = r.State.Agents |> Array.map (fun a -> a.Stress)
+    let bandOf (r: StepResult) = r.State.Agents |> Array.map (fun a -> a.SuppressionBand)
+    Assert.Equal<int[]>(stressOf r1, stressOf r2)
+    Assert.Equal<bool[]>(bandOf r1, bandOf r2)
+
 // --- Suppression and exposure model (TASK-032) --------------------------
 
 [<Fact>]
@@ -1480,3 +1487,151 @@ let ``an agent never shot at stays at Suppression 0 indefinitely`` () =
         let r = stepIdle st
         Assert.Equal(0, (r.State.Agents |> Array.find (fun a -> a.Id = agent 0)).Suppression)
         st <- r.State
+
+// --- Stress and bounded reappraisal (TASK-033) ---------------------------
+
+let private testOrder (risk: RiskTolerance) (urgency: Urgency) : ReceivedOrder =
+    { Command = CommandId.ofInt 1
+      Intent = MoveTo { X = 0; Y = 0 }
+      IssuedAtTick = 0L
+      Urgency = urgency
+      RiskTolerance = risk }
+
+[<Fact>]
+let ``Stress.gain returns GainPerTick in contact, 0 otherwise`` () =
+    Assert.Equal(StressConfig.GainPerTick, Stress.gain true)
+    Assert.Equal(0, Stress.gain false)
+
+[<Fact>]
+let ``Stress.raise accumulates two gains and clamps at MaxStress`` () =
+    Assert.Equal(300, Stress.raise 100 200)
+    Assert.Equal(StressConfig.MaxStress, Stress.raise 900 900)
+
+[<Fact>]
+let ``Stress.decay drops by DecayPerTick, floored at 0`` () =
+    Assert.Equal(500 - StressConfig.DecayPerTick, Stress.decay 500)
+    Assert.Equal(0, Stress.decay 10)
+    Assert.Equal(0, Stress.decay 0)
+
+[<Fact>]
+let ``resolveThreshold drops by exactly SuppressionBandPenalty when suppressed, all else equal`` () =
+    let o = testOrder Standard Routine
+    let unsuppressed = Appraisal.resolveThreshold 3 0 false o
+    let suppressed = Appraisal.resolveThreshold 3 0 true o
+    Assert.Equal(AppraisalConfig.SuppressionBandPenalty, unsuppressed - suppressed)
+
+[<Fact>]
+let ``resolveThreshold drops by MaxStress / StressDivisor at full stress`` () =
+    let o = testOrder Standard Routine
+    let noStress = Appraisal.resolveThreshold 3 0 false o
+    let maxStress = Appraisal.resolveThreshold 3 StressConfig.MaxStress false o
+    Assert.Equal(StressConfig.MaxStress / AppraisalConfig.StressDivisor, noStress - maxStress)
+
+[<Fact>]
+let ``resolveThreshold is floored at 0 even at minimum discipline, cautious risk, full stress, and suppressed`` () =
+    let o = testOrder Cautious Routine
+    Assert.Equal(0, Appraisal.resolveThreshold 0 StressConfig.MaxStress true o)
+
+[<Fact>]
+let ``an agent with a visible contact gains net Stress this tick; one with none stays at 0`` () =
+    let b: GridBounds = { Width = 10; Height = 10 }
+    let w = perceptionWorld b [ 0, { X = 0; Y = 0 } ] [ 1, { X = 3; Y = 0 } ] (Terrain.empty b)
+    let r = stepIdle w
+    let net = StressConfig.GainPerTick - StressConfig.DecayPerTick
+    Assert.Equal(net, (agentOf (agent 0) r.State).Stress)
+    Assert.Equal(net, (agentOf (agent 1) r.State).Stress)
+
+    let alone = perceptionWorld b [ 0, { X = 0; Y = 0 } ] [] (Terrain.empty b)
+    Assert.Equal(0, (agentOf (agent 0) (stepIdle alone).State).Stress)
+
+[<Fact>]
+let ``Stress accumulates over continuous contact and decays once contact is lost`` () =
+    let b: GridBounds = { Width = 10; Height = 10 }
+    let mutable st = perceptionWorld b [ 0, { X = 0; Y = 0 } ] [ 1, { X = 3; Y = 0 } ] (Terrain.empty b)
+
+    for _ in 1..5 do
+        st <- (stepIdle st).State
+
+    let afterContact = (agentOf (agent 0) st).Stress
+    Assert.Equal(5 * (StressConfig.GainPerTick - StressConfig.DecayPerTick), afterContact)
+
+    // The hostile leaves sight (removed outright, standing in for moving out
+    // of range/LOS — VisibleContacts is re-derived from scratch every tick,
+    // so this is equivalent from agent 0's perspective).
+    let cleared = { st with Agents = st.Agents |> Array.filter (fun a -> a.Id <> agent 1) }
+    let after = stepIdle cleared
+    Assert.Equal(afterContact - StressConfig.DecayPerTick, (agentOf (agent 0) after.State).Stress)
+
+[<Fact>]
+let ``a Refused order is reappraised to Accepted once its only known threat's contact expires`` () =
+    // No real hostile agent needed: Appraisal.appraise reads WorldState.TacticalKnowledge
+    // directly, not VisibleContacts, so a fabricated stale Contact is enough.
+    let w = appraisalWorld [ 0, { X = 1; Y = 5 }, 1 ] []
+
+    let staleContact: Contact =
+        { Contact = agent 9
+          LastKnownCell = { X = 5; Y = 5 } // sits on the (1,5) -> (10,5) route
+          LastSeenTick = 0L
+          Confidence = PerceptionConfig.ConfidenceFull }
+
+    let seeded = { w with TacticalKnowledge = [| staleContact |] }
+    let tick1 = stepWith [| cmd 1 (agent 0) { X = 10; Y = 5 } |] seeded
+
+    match dispositionOf (agent 0) tick1 with
+    | Some(Refused(RouteTooExposed(Some threat), _)) -> Assert.Equal(agent 9, threat)
+    | other -> Assert.Fail($"expected Refused RouteTooExposed (Some agent 9), got {other}")
+
+    let mutable st = tick1.State
+
+    for _ in 2..59 do
+        st <- (stepIdle st).State
+
+    // Tick 60: 60 - 0 >= PerceptionConfig.ExpireAfter (60), so the contact
+    // expires this tick; the knowledge-change reappraisal trigger (TASK-033)
+    // resets Disposition to None and Appraisal re-judges the same tick with
+    // no known threats left.
+    let final = stepIdle st
+
+    Assert.True(
+        bodies final
+        |> Array.exists (function
+            | ContactExpired _ -> true
+            | _ -> false),
+        "expected a ContactExpired event"
+    )
+
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) final)
+    Assert.Equal(Some { X = 10; Y = 5 }, (agentOf (agent 0) final.State).Destination)
+
+[<Fact>]
+let ``the suppression-band hysteresis latch reappraises an Accepted order when it flips, in either direction`` () =
+    let w = appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] []
+    let tick1 = stepWith [| cmd 1 (agent 0) { X = 10; Y = 5 } |] w
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) tick1)
+    Assert.False((agentOf (agent 0) tick1.State).SuppressionBand)
+
+    // Bump Suppression above the enter threshold directly (standing in for
+    // an earlier tick's combat) and step once: the latch flips true, a
+    // material trigger — even though the route stays safe (0 exposure, so
+    // the outcome stays Accepted: resolveThreshold's floor at 0 guarantees a
+    // fully clear route is never refused for stress or suppression alone).
+    let withSuppression suppression (state: WorldState) =
+        { state with
+            Agents =
+                state.Agents
+                |> Array.map (fun a -> if a.Id = agent 0 then { a with Suppression = suppression } else a) }
+
+    let entered = stepIdle (withSuppression AppraisalConfig.SuppressionBandEnter tick1.State)
+    Assert.True((agentOf (agent 0) entered.State).SuppressionBand)
+    Assert.Equal(1, (appraisedIn entered).Length)
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) entered)
+
+    // No further trigger on a quiet tick with the band unchanged.
+    let quiet = stepIdle entered.State
+    Assert.Empty(appraisedIn quiet)
+
+    // Drop Suppression to the exit threshold and step again: the latch flips
+    // back false, another material trigger.
+    let exited = stepIdle (withSuppression AppraisalConfig.SuppressionBandExit quiet.State)
+    Assert.False((agentOf (agent 0) exited.State).SuppressionBand)
+    Assert.Equal(1, (appraisedIn exited).Length)

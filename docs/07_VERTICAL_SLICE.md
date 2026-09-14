@@ -78,9 +78,17 @@ Direct leader movement may use a separate immediate input command, but it must p
   weapon readiness, or wound/death consequence yet, deliberately deferred);
 - suppression (realised by TASK-032, backlog B-020: `Combat` raises the
   target's `AgentState.Suppression`, cover-mitigated and independent of a
-  hit; `State consequences` decays it every tick — the raw value only, no
-  effect yet on appraisal, movement, or executor behaviour, B-021);
-- stress, discipline, and leader trust;
+  hit; `State consequences` decays it every tick. TASK-033, backlog B-021,
+  added the first consumer: a `SuppressionBand` hysteresis latch feeds a
+  discrete resolve-threshold penalty and a reappraisal trigger — still no
+  effect on movement or executor behaviour);
+- stress (realised by TASK-033, backlog B-021, partial: `AgentState.Stress`
+  rises from `VisibleContacts` — the one `docs/05` section 8 source with a
+  system behind it — and feeds the resolve threshold as a continuous drag;
+  casualty-, wound-, explosion-, and isolation-driven stress remain unbuilt),
+  discipline (static since TASK-028; stays static, B-021 confirmed no reason
+  to make it dynamic), and leader trust (unbuilt — `docs/05` section 8
+  leaves it "minimal" for the vertical slice);
 - explicit order appraisal;
 - accepted, delayed, adapted, refused, and broken outcomes;
 - finite execution states;
@@ -163,14 +171,14 @@ approach past an observed machine-gun position, and the Appraisal phase
 reissues the original intent") is realised in isolation by TASK-030 (backlog
 B-018): the `reissued-order` corpus entry shows a superseding order taking
 over an in-progress commitment, though without the preceding suppress/reroute
-correction step 7 presupposes in the full sequence. Steps 4–6 and 8 (the UI
-explanation, the suppress / reroute response, recalculation, and consistent
-re-acceptance) still need reappraisal triggers (B-021) and enemy doctrine
-(B-022); the full sequence is B-023. TASK-032 (backlog B-020) landed the raw
-`AgentState.Suppression` value real fire now creates and decays, but not the
-`Suppress` order itself (B-030, "order another fireteam to suppress the
-machine-gun position") or any reappraisal reacting to it (B-021) — step 5
-still needs both.
+correction step 7 presupposes in the full sequence. TASK-032 (backlog B-020)
+landed the raw `AgentState.Suppression` value real fire now creates and
+decays; TASK-033 (backlog B-021, partial) landed the recalculation mechanism
+step 6 needs — the knowledge-change reappraisal trigger re-judges a `Refused`
+order once its blocking threat's contact expires — but not the `Suppress`
+order itself (B-030, "order another fireteam to suppress the machine-gun
+position") that step 5 needs to fire, nor the UI explanation surface (step
+4) or enemy doctrine (B-022). The full sequence is B-023.
 
 ## 9. Functional acceptance criteria
 

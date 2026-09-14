@@ -117,10 +117,12 @@ below). Stage 2 is `Pathfinding.findWithin`. Stage 3 is route exposure to the
 sight from the threat's last-known cell, and directional `Terrain.cover` — the
 only stage-3 term realised; fire lanes, ally support, suppression, and wounds
 are B-019 / B-020 / B-021. Stage 4 compares that exposure to a threshold from
-`AgentState.Discipline` and the order's `RiskTolerance` / `Urgency` only (trust,
-stress, suppression are B-021). Stage 5 is deferred (B-018): no `Adapted`
-outcome. Every threshold is an integer literal in one `AppraisalConfig` module
-(section 15).
+`AgentState.Discipline`, the order's `RiskTolerance` / `Urgency`, and (TASK-033,
+backlog B-021) `AgentState.Stress` (a continuous drag) and `.SuppressionBand`
+(a discrete penalty) — trust is still not a stage-4 term (`docs/05` section 8
+leaves it "minimal" for the vertical slice). Stage 5 is deferred (B-018): no
+`Adapted` outcome. Every threshold is an integer literal in one
+`AppraisalConfig` module (section 15).
 
 ### Stage 1: comprehension and authority
 
@@ -281,6 +283,19 @@ Slow-changing confidence in the current commander's judgement. The vertical slic
 
 Accumulates through nearby casualties, wounds, isolation, explosions, and threat. Decays when safe.
 
+Realised by TASK-033 (backlog B-021), partially: of the five sources listed
+above, only "threat" has a system behind it today —
+`AgentState.VisibleContacts` (TASK-026). `AgentState.Stress`, an integer on
+the `0..1000` scale (the `Suppression` precedent), rises by
+`StressConfig.GainPerTick` every tick an agent has an opposing-side agent in
+`VisibleContacts`, and always decays by `StressConfig.DecayPerTick`, floored
+at `0` — both in the State consequences phase (`docs/04` section 12.9),
+since no other system produces stress yet. Read by the stage-4 resolve
+threshold as a continuous drag (`AppraisalConfig.StressDivisor`), overall
+floored at `0` so a completely unexposed route is never refused for stress
+alone. Casualty-, wound-, explosion-, and isolation-driven stress remain
+unrealised (B-031 and unassigned future work).
+
 ### Suppression
 
 Immediate effect of hostile fire and impacts. It reduces action effectiveness, raises assault pressure, and may trigger taking cover.
@@ -294,9 +309,16 @@ independent of a hit, mitigated by the same directional `Terrain.cover`
 geometry Combat uses for hit chance; the State consequences phase (section
 12.9) decays it every tick, unconditionally, floored at `0`. This is the
 "immediate effect of hostile fire" value only — "reduces action
-effectiveness", "raises assault pressure", and "may trigger taking cover"
-are not realised by any system yet, and nothing reads `Suppression` in
-Appraisal or reappraisal (both B-021).
+effectiveness" and "may trigger taking cover" are not realised by any
+system yet.
+
+TASK-033 (backlog B-021) adds the first consumer: a hysteresis latch
+`AgentState.SuppressionBand` (`true` once `Suppression >=
+AppraisalConfig.SuppressionBandEnter`, back to `false` at `<=
+SuppressionBandExit`) drives both a discrete resolve-threshold penalty
+("raises assault pressure", read narrowly as appraisal resolve, not
+movement or executor speed) and the suppression-band reappraisal trigger
+(section 14) whenever it flips.
 
 ## 9. Commitment
 
@@ -476,10 +498,27 @@ Reappraise only when:
 Realised by TASK-028 (backlog B-017): **"a new order is received"** only — the
 Communication phase resets `AgentState.Disposition` to `None` when it writes a
 fresh `AgentState.Order`, and the Appraisal phase judges exactly the agents
-whose `Disposition` is `None`. The knowledge-change, exposure-band,
-suppression-band, wounded, support, and leadership triggers are B-021; "the
-route becomes blocked" cannot fire for an appraisal-`Accepted` order under
-static terrain (its route was verified at stage 2), so it too waits for B-021's
+whose `Disposition` is `None`.
+
+Realised by TASK-033 (backlog B-021), two more: **knowledge-change** — any
+`ContactObserved` / `ContactExpired` event emitted earlier the same tick
+(Perception / Tactical-knowledge both run before Appraisal) resets every
+agent's already-appraised, non-fulfilled order, global rather than filtered
+to "was this agent's own route affected" (the R-023 "same observation
+contract" precedent: a broad, simple trigger over a precise, expensive one);
+and **suppression-band** — `AgentState.SuppressionBand` (the hysteresis latch
+over `AgentState.Suppression`, section 8) flipping this tick. Both are
+realised entirely inside the Appraisal phase (`docs/04` section 12.5), not a
+new phase slot, and both exclude a fulfilled order (`commitmentAndLocalAction`
+needs to see it unchanged to recognise completion).
+
+**Exposure-band**, **wounded**, **support**, and **leadership** stay
+unrealised: exposure-band needs per-tick route-exposure tracking for every
+agent with a live order (a materially larger cut than TASK-033's); the other
+three need systems that do not exist (wound/casualty state, a
+support-commitment concept, a leadership entity — B-030 / B-031). "The route
+becomes blocked" cannot fire for an appraisal-`Accepted` order under static
+terrain (its route was verified at stage 2), so it too waits for a future
 persistent-obstruction handling.
 
 This improves stability and makes decisions easier to trace.
@@ -500,8 +539,17 @@ range, per-cell exposure weight, cover mitigation, base resolve, and the
 Discipline / RiskTolerance / Urgency modifiers), the `PerceptionConfig`
 precedent. All appraisal arithmetic is integer; appraisal draws no randomness
 (B-019 combat spread stays the deterministic stream's first gameplay consumer).
-Hysteresis has nothing to act on until B-021 adds an exposure-band reappraisal
-trigger, so its constant lands then.
+
+Realised by TASK-033 (backlog B-021): hysteresis lands on the
+**suppression-band** trigger, not the exposure-band one this section
+originally anticipated — exposure-band stays deferred (needs per-tick
+route-exposure tracking, out of this task's cut), while suppression-band is
+fully buildable now on the already-canonical `AgentState.Suppression`
+(TASK-032). `AppraisalConfig.SuppressionBandEnter` (500) /
+`.SuppressionBandExit` (300) are the two-threshold latch; the gap between
+them (200) exceeds one `SuppressionConfig.DecayPerTick` (50) so a value
+sitting right at one boundary cannot cross it, and flip the latch, in a
+single tick of decay alone.
 
 ## 16. Vertical-slice scenarios for tests
 
@@ -514,7 +562,12 @@ entry and the `SimulationTests` "exposed route ... Refused for a low-discipline
 agent" fact deliver the refusal half — a low-`Discipline` agent `Refused
 RouteTooExposed`, a high-`Discipline` one `Accepted` on the same order (the G3
 divergence, `docs/07` section 9 criterion 2). `Delayed` and "suppression makes
-it acceptable" are B-020 / B-021.
+it acceptable" (an ally suppressing the machine gun reduces the route's
+exposure — the opposite direction from TASK-033's `SuppressionBand`, which
+only ever makes an already-suppressed *soldier's own* resolve threshold
+harder to clear) still need the `Delayed` disposition (B-018 follow-up) and
+a `Suppress` order that reduces a threat's contribution to stage-3 exposure
+(B-030) — neither exists yet.
 
 ### Covered alternative
 

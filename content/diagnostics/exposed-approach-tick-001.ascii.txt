@@ -42,7 +42,10 @@ overlays:
   commitment (1,3): agent 0  holding
   commitment (2,5): agent 1  moving to (11,5)
   commitment (10,4): agent 2  holding
+  stress (1,3): agent 0  50/1000
+  stress (2,5): agent 1  50/1000
+  stress (10,4): agent 2  50/1000
 
 events: command-accepted@(11,3); command-accepted@(11,5); contact-observed@(10,4); contact-observed@(10,4); contact-observed@(1,3); contact-observed@(1,5); order-appraised; order-appraised; commitment-established@(11,5); movement-stepped@(1,5),(2,5)
 
-tick 1 | hash 0x2FA6E43B32599EE5 (format 5) | draws 0 | agents 3 | cover-edges 0 | events 10
+tick 1 | hash 0x2066BC1FAF990E4A (format 6) | draws 0 | agents 3 | cover-edges 0 | events 10

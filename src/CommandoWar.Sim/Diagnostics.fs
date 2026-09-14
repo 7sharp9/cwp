@@ -108,17 +108,19 @@ type EventMarker =
 ///   * B-017 appraisal       -> `OrderAppraisal` (realised by TASK-028);
 ///   * B-018 commitment      -> `Commitment` (realised by TASK-030);
 ///   * B-019 combat          -> `FireLine` (realised by TASK-031);
-///   * B-020 suppression     -> `AgentSuppression` (realised by TASK-032).
+///   * B-020 suppression     -> `AgentSuppression` (realised by TASK-032);
+///   * B-021 stress          -> `AgentStress` (realised by TASK-033).
 ///
 /// `Diagnostics.frame` produces one `KnownContact` per contact in
 /// `WorldState.TacticalKnowledge`, one `OrderAppraisal` per agent that holds
-/// an appraised order, one `AgentCommitment` per agent, and one
-/// `AgentSuppression` per agent with non-zero `Suppression` (bare
-/// authoritative state carries the squad picture and every per-agent field
-/// these need, so `frame` can draw all four — unlike `Reserved` /
-/// `Obstructed`, which need a completed step).
+/// an appraised order, one `AgentCommitment` per agent, one
+/// `AgentSuppression` per agent with non-zero `Suppression`, and one
+/// `AgentStress` per agent with non-zero `Stress` (bare authoritative state
+/// carries the squad picture and every per-agent field these need, so
+/// `frame` can draw all five — unlike `Reserved` / `Obstructed`, which need a
+/// completed step).
 /// `Diagnostics.frameOf` produces the same `KnownContact`, `OrderAppraisal`,
-/// `AgentCommitment`, and `AgentSuppression` sets plus one `PlannedPath` per
+/// `AgentCommitment`, `AgentSuppression`, and `AgentStress` sets plus one `PlannedPath` per
 /// agent following a route (TASK-015), one
 /// `Reserved` per cell contested this tick (TASK-017), one `Obstructed` per
 /// cell an agent was held out of this tick (TASK-022), one
@@ -222,6 +224,12 @@ type Overlay =
     /// `Diagnostics.frameOf` derive it — the `KnownContact` / `AgentCommitment`
     /// precedent, not the `FireLine` / `UndeliveredOrder` `frameOf`-only one.
     | AgentSuppression of agent: AgentId * at: Cell * suppression: int
+    /// An agent's current stress (TASK-033, backlog B-021; `docs/04` section
+    /// 12.9): `agent` at `at` currently holds `stress` on the `0..1000`
+    /// scale. Follows the `AgentSuppression` sparse shape: emitted only for
+    /// an agent with `stress > 0`. Standing canonical state, so both
+    /// `Diagnostics.frame` and `Diagnostics.frameOf` derive it.
+    | AgentStress of agent: AgentId * at: Cell * stress: int
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -343,7 +351,15 @@ module Diagnostics =
             match a.Order, a.Disposition with
             | Some o, Some d ->
                 let _, exposed =
-                    Appraisal.appraise world.Terrain world.TacticalKnowledge a.Discipline o a.Position budget
+                    Appraisal.appraise
+                        world.Terrain
+                        world.TacticalKnowledge
+                        a.Discipline
+                        a.Stress
+                        a.SuppressionBand
+                        o
+                        a.Position
+                        budget
 
                 Some(OrderAppraisal(a.Id, a.Position, d, exposed))
             | _ -> None)
@@ -370,6 +386,13 @@ module Diagnostics =
             else
                 None)
 
+    /// An `AgentStress` overlay per agent with non-zero `Stress` (TASK-033),
+    /// ascending by agent id. The `AgentSuppression` precedent exactly.
+    let private stressOverlays (world: WorldState) : Overlay[] =
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.choose (fun a -> if a.Stress > 0 then Some(AgentStress(a.Id, a.Position, a.Stress)) else None)
+
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
     /// (a bare `WorldState` carries no per-tick event history); use
@@ -386,7 +409,8 @@ module Diagnostics =
             [| knownContactOverlays world
                orderAppraisalOverlays world
                commitmentOverlays world
-               suppressionOverlays world |]
+               suppressionOverlays world
+               stressOverlays world |]
             |> Array.concat
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
@@ -527,7 +551,8 @@ module Diagnostics =
     /// contact, an `AgentCommitment` overlay per agent (TASK-030), a
     /// `FireLine` overlay per shot fired this tick (TASK-031), an
     /// `AgentSuppression` overlay per agent with non-zero suppression
-    /// (TASK-032), and the post-step canonical hash recorded on the
+    /// (TASK-032), an `AgentStress` overlay per agent with non-zero stress
+    /// (TASK-033), and the post-step canonical hash recorded on the
     /// `StepResult`. Total, pure, deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
         { frame result.State with
@@ -542,5 +567,6 @@ module Diagnostics =
                       orderAppraisalOverlays result.State
                       commitmentOverlays result.State
                       fireLineOverlays result
-                      suppressionOverlays result.State ]
+                      suppressionOverlays result.State
+                      stressOverlays result.State ]
             Hash = result.StateHash }

@@ -67,8 +67,29 @@ module Canonical =
     /// `Suppression` is 0 at every checkpoint and the moved hashes are a
     /// byte-layout change, not a behaviour change; tick counts and event
     /// counts are unchanged everywhere (TASK-032 ledger).
+    ///
+    /// 6 (TASK-033): `writeAgent` gained `AgentState.SuppressionBand` and
+    /// `AgentState.Stress` (docs/04 section 12.9, `docs/05` sections 14/15,
+    /// backlog B-021). Both are genuine per-tick memory on the `Suppression`
+    /// precedent: `SuppressionBand` is a hysteresis latch that cannot be
+    /// recomputed from `Suppression` alone (it also depends on which side of
+    /// the band it was already on), and `Stress` changes every tick from
+    /// gameplay events (State consequences' `Stress.gain` / `.decay`) and
+    /// cannot be recomputed from `Position` alone. **Unlike TASK-032,
+    /// `AgentState.Discipline` is deliberately NOT written here** — B-021 as
+    /// originally scoped in the backlog said it would move Discipline into
+    /// the canonical image, but Discipline itself never mutates in this
+    /// task's cut (only the new `Stress` field does), so by the same
+    /// mutability rule that keeps `CommunicationAvailable` out, it stays
+    /// static authored data (confirmed with Dave 2026-09-14; corrects the
+    /// comment on `writeAgent` below and the B-021 backlog row). Every
+    /// scenario pinned before this version has no agent ever shot at or ever
+    /// in another side's `VisibleContacts`, so `SuppressionBand` is `false`
+    /// and `Stress` is 0 at every checkpoint and the moved hashes are a
+    /// byte-layout change, not a behaviour change; tick counts and event
+    /// counts are unchanged everywhere (TASK-033 ledger).
     [<Literal>]
-    let FormatVersion = 5
+    let FormatVersion = 6
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -125,7 +146,10 @@ module Canonical =
     // authored scenario data (`Deployment.Discipline`), the same argument as
     // `CommunicationAvailable`. A discipline-driven behaviour difference
     // surfaces in the hash within one tick via `Disposition` / `Position`.
-    // B-021 makes discipline dynamic and bumps `FormatVersion` then.
+    // TASK-033 (backlog B-021) confirmed Discipline stays exactly here: it
+    // never mutates even once B-021's Stress field lands, so it never enters
+    // the canonical image (corrects this comment's earlier "B-021 makes
+    // discipline dynamic" claim).
     //
     // `AgentState.Order` and `AgentState.Disposition` (TASK-028) ARE written:
     // they carry per-tick memory no other field reproduces (an order's
@@ -136,6 +160,12 @@ module Canonical =
     // argument: it changes every tick from gameplay events (Combat's gain,
     // State consequences' decay) and cannot be recomputed from `Position`
     // alone.
+    //
+    // `AgentState.SuppressionBand` and `AgentState.Stress` (TASK-033) ARE
+    // written, the `Suppression` precedent: a hysteresis latch that depends
+    // on more than the current `Suppression` value, and a field that changes
+    // every tick from gameplay events and cannot be recomputed from
+    // `Position` alone.
 
     let private reasonCode (r: DecisionReason) : int =
         match r with
@@ -221,6 +251,8 @@ module Canonical =
             writeDisposition w d
 
         w.I32 a.Suppression
+        w.U8(if a.SuppressionBand then 1uy else 0uy)
+        w.I32 a.Stress
 
     // The friendly squad's shared tactical picture (TASK-026,
     // `WorldState.TacticalKnowledge`, docs/04 section 12.4). Genuine per-tick

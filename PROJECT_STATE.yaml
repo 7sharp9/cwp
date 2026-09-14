@@ -5,7 +5,7 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-14 (TASK-032 accepted and merged to main; no task selected)
+  updated: 2026-09-15 (TASK-033 accepted and merged to main; no task selected)
 
 active_work:
   selected_task: none
@@ -13,29 +13,53 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-14
+  updated: 2026-09-15
   note: >-
-    2026-09-14: TASK-032 (Suppression and exposure model, backlog B-020)
+    2026-09-15: TASK-033 (Stress and bounded reappraisal, backlog B-021,
+    partial) accepted by Dave and merged to main (--no-ff; the two commits
+    were originally directly on main, unpushed -- moved onto branch
+    task-033-stress-and-bounded-reappraisal before acceptance for
+    consistency with the established per-task branch workflow; branch
+    deleted after merge, not pushed). New Stress.fs leaf; AgentState.Stress
+    (raised while VisibleContacts is non-empty, decayed every tick, both in
+    State consequences) and AgentState.SuppressionBand (a hysteresis latch
+    over Suppression, computed in Appraisal) are new canonical fields.
+    resolveThreshold gains a continuous Stress drag and a discrete
+    SuppressionBand penalty, the whole threshold floored at 0 so a fully
+    safe route is never refused for stress/suppression alone. Two new
+    reappraisal triggers inside Simulation.appraisal: knowledge-change (any
+    ContactObserved/ContactExpired this tick, global) and suppression-band
+    (the latch flipping, either direction) -- both exclude a fulfilled
+    order (found necessary during implementation: it would otherwise defeat
+    commitmentAndLocalAction's completion clear). Discipline deliberately
+    stays static and non-canonical -- corrects B-021's literal backlog
+    wording. Deliberately narrower than B-021's full text: exposure-band,
+    wounded, support, and leadership triggers, and dynamic trust, stay
+    deferred (need systems that don't exist, or a materially larger cut) --
+    B-021 stays "review", not "done", until those land or are explicitly
+    descoped. No new event type; new sparse Overlay.AgentStress.
+    Canonical.FormatVersion 5 -> 6, full re-pin (tick counts and event
+    counts unchanged everywhere). 274 -> 285 green; dotnet build 0/0; --
+    corpus 12/12; -- fixture format 6, 36 events unchanged; -- replay-file
+    envelope-full OK at canonical 6, 78 events unchanged. No ADR. No task
+    selected. (docs/ledger/2026-09-14-TASK-033-stress-and-bounded-reappraisal.md)
+
+    Newly unblocked (from TASK-033, B-021 still open): none new -- B-022
+    (enemy doctrine) and B-023 (canonical refusal sequence) were already
+    unblocked-or-nearly-unblocked before this task; B-023 still additionally
+    needs B-021's remaining triggers and B-022.
+
+    Prior: TASK-032 (Suppression and exposure model, backlog B-020)
     accepted by Dave and merged to main (--no-ff, branch
-    task-032-suppression-and-exposure deleted; not pushed). Combat now also
-    raises the target's AgentState.Suppression on every qualifying shot
-    (independent of a hit, mitigated by directional Terrain.cover); the
-    previously no-op State consequences phase decays it every tick,
-    unconditionally, floored at 0. New Suppression.fs leaf; Combat.fs
-    itself unchanged; no new event (a rise derives from ShotFired, decay is
-    silent); new sparse Overlay.AgentSuppression. AgentState.Suppression is
-    genuine canonical state -- Canonical.FormatVersion 4 -> 5, full re-pin
-    (tick counts and event counts unchanged everywhere). Mechanic only: no
-    wiring into Appraisal's resolve threshold or a reappraisal trigger,
-    both deliberately deferred to B-021. 265 -> 274 green; dotnet build
-    0/0; -- corpus 12/12; -- fixture format 5, 36 events unchanged; --
-    replay-file envelope-full OK at canonical 5, 78 events unchanged. No
-    ADR. No task selected.
+    task-032-suppression-and-exposure deleted; not pushed) 2026-09-14.
+    Combat raises AgentState.Suppression on every qualifying shot,
+    State consequences decays it every tick. Canonical.FormatVersion 4 ->
+    5, full re-pin. Mechanic only at the time: no wiring into Appraisal,
+    deliberately deferred to B-021 (this task).
     (docs/ledger/2026-09-14-TASK-032-suppression-and-exposure.md)
 
-    Newly unblocked (from TASK-032, still open): B-021 (stress, discipline,
-    trust, and bounded reappraisal) now has every dependency done (B-020
-    was the last one).
+    Newly unblocked (from TASK-032, still open): B-021 (this task) now has
+    every dependency done (B-020 was the last one).
 
     Prior: TASK-031 (Basic hitscan combat and directional cover
     effects, backlog B-019) accepted by Dave and merged to main (--no-ff,

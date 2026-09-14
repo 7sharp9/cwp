@@ -78,10 +78,10 @@ let ``the state hash is FNV-1a-64 over the canonical encoding`` () =
 [<Fact>]
 let ``the followed-path cache is outside the canonical image and the format version is unaffected by it`` () =
     // TASK-015: AgentState.Route is a derived cache, excluded from the hash.
-    // (Canonical.FormatVersion is 5 as of TASK-032 — Progress (TASK-018),
+    // (Canonical.FormatVersion is 6 as of TASK-033 — Progress (TASK-018),
     // TacticalKnowledge (TASK-026), Order / Disposition (TASK-028), Suppression
-    // (TASK-032), not Route — but nothing about those bumps is exercised by
-    // this test.)
+    // (TASK-032), SuppressionBand / Stress (TASK-033), not Route — but nothing
+    // about those bumps is exercised by this test.)
     let moved = (step [| move 1 0 { X = 5; Y = 0 } |] (world 1UL)).State
     let a0 = moved.Agents |> Array.find (fun a -> AgentId.value a.Id = 0)
     Assert.True(a0.Route.IsSome, "expected agent 0 to be following a route")
@@ -92,7 +92,7 @@ let ``the followed-path cache is outside the canonical image and the format vers
 
     Assert.Equal<byte[]>(Canonical.encode stripped, Canonical.encode moved)
     Assert.Equal(Hashing.hash stripped, Hashing.hash moved)
-    Assert.Equal(5, Canonical.FormatVersion)
+    Assert.Equal(6, Canonical.FormatVersion)
 
 [<Fact>]
 let ``communication availability is static authored data outside the canonical image`` () =
@@ -108,7 +108,7 @@ let ``communication availability is static authored data outside the canonical i
 
     Assert.Equal<byte[]>(Canonical.encode w, Canonical.encode blackedOut)
     Assert.Equal(Hashing.hash w, Hashing.hash blackedOut)
-    Assert.Equal(5, Canonical.FormatVersion)
+    Assert.Equal(6, Canonical.FormatVersion)
 
     // But the order the blackout suppresses changes the hash within one tick,
     // via the recipient's Position: the delivered order moves agent 0, the
