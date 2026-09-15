@@ -8,14 +8,31 @@ project:
   updated: 2026-09-15 (TASK-034 accepted and merged to main; no task selected)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-036
+  task_file: tasks/TASK-036-SHARED-FIXTURE-BUILDER.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-15
   note: >-
-    2026-09-15: TASK-035 (Event agent attribution for diagnostic narration,
+    2026-09-15: TASK-036 (Shared F# fixture builder for the test corpus,
+    backlog B-049) drafted and selected. Of the backlog items ready per
+    docs/11 section 7 after TASK-035 (B-016b, B-049, B-050, B-011d), none
+    sit on G3's critical path -- that is blocked on a slice of B-030 for
+    B-023 step 5, a separate larger discussion flagged to Dave, not
+    resolved here. B-049 picked as the one paying down compounding risk
+    (Corpus.fs / .cwlog / SimulationTests.fs duplication and drift). One
+    builder in Corpus.fs will author scenario geometry and a per-agent
+    command schedule as a single value, replacing the eleven hand-written
+    ...World() functions and hand-authored .cwlog files with a generated,
+    diff-checked .cwreplay per entry (ReplaySerialisation, B-045's
+    production format). Two central decisions confirmed with Dave via
+    AskUserQuestion: .cwreplay over the frozen .cwlog v1 grammar; migrate
+    all eleven existing entries. No CommandoWar.Sim change, no
+    Canonical.FormatVersion change, no ADR. Not yet implemented.
+    (docs/ledger/2026-09-15-TASK-036-drafted.md)
+
+    Prior: 2026-09-15: TASK-035 (Event agent attribution for diagnostic narration,
     presentation-only, no backlog item) accepted by Dave ("looks good");
     status `done` -- never occupied the selected-task slot (the DIAG-001
     precedent for a short single-session task, implemented and self-verified
