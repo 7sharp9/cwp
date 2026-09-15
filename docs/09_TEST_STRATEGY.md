@@ -185,10 +185,21 @@ by TASK-026: the `perception-contact` corpus entry places a hostile inside
 `PerceptionConfig.SightRange` but behind an opaque wall — it is not in
 `WorldState.TacticalKnowledge` until the friendly clears the wall, and
 `SimulationTests` pins that an opaque cell blocks the observation entirely and
-that a hostile beyond `SightRange` is not observed. The **targeting** half
-(the enemy not firing on an unobserved position) needs the hostile squad
-picture and enemy doctrine, which are B-022. The rest name systems not yet
-implemented.
+that a hostile beyond `SightRange` is not observed.
+
+The **targeting** half (the enemy not firing on an unobserved position) is now
+**fully realised** by TASK-034 (backlog B-022, partial): `Simulation.combat`
+already drew its candidate list from a shooter's own same-tick
+`AgentState.VisibleContacts` only (TASK-031 Decision A, the R-023 "same
+observation contract" mitigation) — a strictly tighter, real-time check than
+anything the stale-tolerant `WorldState.HostileTacticalKnowledge` memory could
+provide, so this was true before TASK-034 and needed no `Combat.fs` change.
+`SimulationTests` pins it directly: a Hostile agent seeded with a stale
+`HostileTacticalKnowledge` entry for a friendly it can no longer see never
+appears as a shooter in that tick's `ShotFired` events. Only "observe and
+report" — giving the Hostile side its own `WorldState.HostileTacticalKnowledge`
+picture, symmetric to the friendly one — was actually newly built by this
+task; enemy doctrine *reacting* to either picture stays open on B-022.
 
 Each scenario should specify:
 

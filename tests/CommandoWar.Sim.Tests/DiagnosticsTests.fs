@@ -104,7 +104,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0xF1A703A752C0F6B9UL, f.Hash.Value)
+    Assert.Equal(0xBE2636723F99F53AUL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -415,7 +415,8 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | AgentCommitment _
         | FireLine _
         | AgentSuppression _
-        | AgentStress _ -> None) with
+        | AgentStress _
+        | HostileKnownContact _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -482,7 +483,8 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | AgentCommitment _
             | FireLine _
             | AgentSuppression _
-            | AgentStress _ -> None)
+            | AgentStress _
+            | HostileKnownContact _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -525,7 +527,8 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | AgentCommitment _
             | FireLine _
             | AgentSuppression _
-            | AgentStress _ -> None)
+            | AgentStress _
+            | HostileKnownContact _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -542,6 +545,31 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
         frames.[4].Overlays,
         (function
         | KnownContact _ -> true
+        | _ -> false)
+    )
+
+    // TASK-034: perception is symmetric, so the same wall-clearing tick also
+    // gives the Hostile side's own picture its first (and only) contact —
+    // friendly agent 0 — via the identical `mergeKnowledge` call filtered the
+    // other way.
+    match
+        tick5.Overlays
+        |> Array.tryPick (function
+            | HostileKnownContact(cell, contact, confidence, lastSeenTick) ->
+                Some(cell, contact, confidence, lastSeenTick)
+            | _ -> None)
+    with
+    | Some(cell, contact, confidence, lastSeenTick) ->
+        Assert.Equal(AgentId.ofInt 0, contact)
+        Assert.Equal(1000, confidence)
+        Assert.Equal(5L, lastSeenTick)
+        Assert.NotEqual({ X = 9; Y = 1 }, cell) // agent 0's own cell, not agent 1's
+    | None -> Assert.Fail($"expected one HostileKnownContact overlay, got {tick5.Overlays}")
+
+    Assert.DoesNotContain(
+        frames.[4].Overlays,
+        (function
+        | HostileKnownContact _ -> true
         | _ -> false)
     )
 
@@ -580,7 +608,8 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | AgentCommitment _
             | FireLine _
             | AgentSuppression _
-            | AgentStress _ -> None)
+            | AgentStress _
+            | HostileKnownContact _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)
@@ -789,7 +818,7 @@ let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` ()
 let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
     let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
     Assert.Equal(13, frames.Length)
-    Assert.Equal(0x2066BC1FAF990E4AUL, frames.[1].Hash.Value)
+    Assert.Equal(0xB1EBA36EC0A977F4UL, frames.[1].Hash.Value)
 
     let appraisals =
         frames.[1].Overlays
@@ -824,11 +853,23 @@ let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the
     // same tick), and the sparse AgentStress overlay now fires for all three
     // — three more unhandled entries, six total. Genuine new behaviour, not a
     // bug: this disposable demo does not render AgentStress either.
-    Assert.Equal(6, view.UnhandledOverlays.Length)
+    //
+    // TASK-034: the same tick-1 mutual sighting also gives the Hostile side's
+    // own picture (`WorldState.HostileTacticalKnowledge`) one entry per
+    // friendly the hostile agent 2 now sees (both of them), so two more
+    // unhandled `HostileKnownContact` entries — eight total. Genuine new
+    // behaviour, not a bug: this disposable demo only ever renders the
+    // friendly squad's `KnownContact` picture.
+    Assert.Equal(8, view.UnhandledOverlays.Length)
 
     Assert.All(
         view.UnhandledOverlays,
-        (fun (o: string) -> Assert.True(o.StartsWith "commitment agent " || o.StartsWith "stress agent "))
+        (fun (o: string) ->
+            Assert.True(
+                o.StartsWith "commitment agent "
+                || o.StartsWith "stress agent "
+                || o.StartsWith "hostile known contact agent "
+            ))
     )
 
 // --- the pin: diagnostics do not perturb the shared fixture -----------
@@ -838,8 +879,8 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0xF1A703A752C0F6B9UL, frames.[0].Hash.Value)
-    Assert.Equal(0x507D041E109404B6UL, frames.[40].Hash.Value)
+    Assert.Equal(0xBE2636723F99F53AUL, frames.[0].Hash.Value)
+    Assert.Equal(0x56395A49904D017DUL, frames.[40].Hash.Value)
     // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
     // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
     // since Commitment is derived, not canonical (Decision B).
@@ -848,5 +889,5 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x507D041E109404B6UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0x56395A49904D017DUL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(36, outcome.Events.Length)

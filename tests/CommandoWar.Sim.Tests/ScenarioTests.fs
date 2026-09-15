@@ -100,11 +100,12 @@ let private errorsOf (raw: RawScenario) : ScenarioError list =
 [<Fact>]
 let ``the content version is independent of the canonical and replay versions`` () =
     // The three version constants move independently: ScenarioContent.Version
-    // is 2 (TASK-010 authored terrain layer), Canonical.FormatVersion is 6
-    // (TASK-018 / TASK-026 / TASK-028 / TASK-032 / TASK-033), Replay.FormatVersion
-    // is 1. This test documents the intent, not an inequality.
+    // is 2 (TASK-010 authored terrain layer), Canonical.FormatVersion is 7
+    // (TASK-018 / TASK-026 / TASK-028 / TASK-032 / TASK-033 / TASK-034),
+    // Replay.FormatVersion is 1. This test documents the intent, not an
+    // inequality.
     Assert.Equal(2, ScenarioContent.Version)
-    Assert.Equal(6, Canonical.FormatVersion)
+    Assert.Equal(7, Canonical.FormatVersion)
     Assert.Equal(1, Replay.FormatVersion)
 
 // --- the happy path -------------------------------------------------
@@ -658,7 +659,7 @@ let private fixtureScenario () : Scenario =
 let ``the six-agent fixture as a Scenario reproduces the pinned initial hash`` () =
     match World.ofScenario (fixtureScenario ()) Fixture.Seed with
     | Error e -> Assert.Fail($"World.ofScenario failed: {e}")
-    | Ok world -> Assert.Equal(0xF1A703A752C0F6B9UL, (Hashing.hash world).Value)
+    | Ok world -> Assert.Equal(0xBE2636723F99F53AUL, (Hashing.hash world).Value)
 
 [<Fact>]
 let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the pinned final hash`` () =
@@ -676,4 +677,4 @@ let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the
         let cmds = if tick = Fixture.CommandIssueTick then [| command |] else [||]
         state <- (Simulation.step SimConfig.standard cmds state).State
 
-    Assert.Equal(0x507D041E109404B6UL, (Hashing.hash state).Value)
+    Assert.Equal(0x56395A49904D017DUL, (Hashing.hash state).Value)

@@ -71,11 +71,17 @@ across every `Friendly` agent (there is no `SquadStore`), with confidence
 dropping a band after `StaleAfter` unseen ticks and the contact removed after
 `ExpireAfter`. Perception is symmetric (a `Hostile` agent's
 `VisibleContacts` is populated too, so combat can validate line of fire for
-both sides), but the **shared picture is the friendly squad's only**: a
-hostile squad picture, enemy doctrine, and "suspected threat class or field of
-fire" are B-022. Source and reporting agent are not yet stored (identity is
-always known at this stage). Private persistent beliefs and confidence
-divergence between squad members stay deferred (section 17).
+both sides).
+
+Realised for the Hostile side by TASK-034 (backlog B-022, partial): the same
+Tactical-knowledge phase calls `Perception.mergeKnowledge` a second time,
+filtered to `Side = Hostile`, into a new `WorldState.HostileTacticalKnowledge`
+— the identical shape and staleness/expiry rules, symmetric to the friendly
+picture. Enemy doctrine *reacting* to this picture, and "suspected threat
+class or field of fire", stay B-022. Source and reporting agent are not yet
+stored for either picture (identity is always known at this stage). Private
+persistent beliefs and confidence divergence between squad members stay
+deferred (section 17).
 
 ## 4. Orders
 
@@ -435,6 +441,21 @@ therefore already true in the narrow mechanical sense; a hostile squad
 tactical picture and doctrine choosing *when* or *whether* to engage (the
 rest of this list) is B-022 — this task's automatic auto-engage is the
 mechanic that doctrine will eventually gate, not the doctrine itself.
+
+"Observe and report" is realised by TASK-034 (backlog B-022, partial):
+`WorldState.HostileTacticalKnowledge`, symmetric to the friendly squad's
+picture (section 3). The same task also proves the targeting half of "engage
+visible targets" implicitly bounds itself to observed positions —
+`Simulation.combat` already draws its candidates from a shooter's own
+same-tick `VisibleContacts`, never the stale-tolerant tactical-knowledge
+store, so a Hostile agent never fires on a friendly position it has since
+lost sight of (`docs/09` section 8). "Hold assigned area" stays true by
+omission (an unordered agent never moves). "Suppress likely routes", "seek
+adjacent cover under pressure", and "fall back only under a scenario-defined
+condition" — the doctrine that *decides* to move or fire a Hostile agent —
+remain open on B-022: they need a `Suppress` order (B-030), the first
+reactive-movement decision for an unordered agent (no design exists yet), and
+authored fallback conditions with `Withdraw` semantics, respectively.
 
 ## 13. Explanation surface
 

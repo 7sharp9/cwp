@@ -776,6 +776,9 @@ let private opaqueCells (b: GridBounds) (cells: (int * int) list) : Terrain =
 let private contactOf (id: AgentId) (s: WorldState) =
     s.TacticalKnowledge |> Array.tryFind (fun c -> c.Contact = id)
 
+let private hostileContactOf (id: AgentId) (s: WorldState) =
+    s.HostileTacticalKnowledge |> Array.tryFind (fun c -> c.Contact = id)
+
 [<Fact>]
 let ``a friendly with clear line of sight to an in-range hostile observes it and shares it in the squad picture`` () =
     let b: GridBounds = { Width = 16; Height = 8 }
@@ -788,19 +791,28 @@ let ``a friendly with clear line of sight to an in-range hostile observes it and
 
     Assert.Equal<AgentId[]>([| agent 1 |], (agentOf (agent 0) r.State).VisibleContacts)
 
-    // Only the friendly's observation reaches the shared squad picture (the
-    // hostile squad picture is B-022).
+    // The friendly's observation reaches the shared friendly squad picture.
     let c = Assert.Single r.State.TacticalKnowledge
     Assert.Equal(agent 1, c.Contact)
     Assert.Equal({ X = 6; Y = 1 }, c.LastKnownCell)
     Assert.Equal(1L, c.LastSeenTick)
     Assert.Equal(PerceptionConfig.ConfidenceFull, c.Confidence)
 
+    // TASK-034 (backlog B-022, partial): the hostile's symmetric observation
+    // reaches the Hostile side's own picture the same tick, via the identical
+    // Perception.mergeKnowledge call filtered the other way.
+    let hc = Assert.Single r.State.HostileTacticalKnowledge
+    Assert.Equal(agent 0, hc.Contact)
+    Assert.Equal({ X = 1; Y = 1 }, hc.LastKnownCell)
+    Assert.Equal(1L, hc.LastSeenTick)
+    Assert.Equal(PerceptionConfig.ConfidenceFull, hc.Confidence)
+
     // A new sighting emits ContactObserved once; a second idle tick with the
     // contact still visible does not re-emit it (no per-tick flood).
     let r2 = stepIdle r.State
     Assert.DoesNotContain(bodies r2, (function ContactObserved _ -> true | _ -> false))
     Assert.Equal(2L, (contactOf (agent 1) r2.State).Value.LastSeenTick)
+    Assert.Equal(2L, (hostileContactOf (agent 0) r2.State).Value.LastSeenTick)
 
 [<Fact>]
 let ``an opaque cell between a friendly and a hostile blocks the observation entirely`` () =
@@ -1383,6 +1395,36 @@ let ``combat is deterministic across two runs and draws exactly once per shot fi
     let bandOf (r: StepResult) = r.State.Agents |> Array.map (fun a -> a.SuppressionBand)
     Assert.Equal<int[]>(stressOf r1, stressOf r2)
     Assert.Equal<bool[]>(bandOf r1, bandOf r2)
+
+[<Fact>]
+let ``a hostile with a stale HostileTacticalKnowledge contact for a friendly it can no longer see never fires on it`` () =
+    // TASK-034 Decision E: Simulation.combat already draws its candidate list
+    // from the shooter's own (same-tick, real-time) VisibleContacts only, a
+    // strictly tighter check than anything HostileTacticalKnowledge's
+    // stale-tolerant memory could provide — so this proves "the enemy does
+    // not target an unobserved player position" without changing Combat.fs.
+    let b: GridBounds = { Width = 10; Height = 10 }
+    // An opaque wall between the two agents blocks line of sight both ways,
+    // so this tick's Perception phase gives the hostile an empty
+    // VisibleContacts, exactly the Combat.chooseTarget-blocked-by-a-wall
+    // precedent.
+    let terrain = opaqueCells b [ (4, 2) ]
+    let w = perceptionWorld b [ 0, { X = 2; Y = 2 } ] [ 1, { X = 7; Y = 2 } ] terrain
+
+    let staleContact: Contact =
+        { Contact = agent 0
+          LastKnownCell = { X = 2; Y = 2 }
+          LastSeenTick = 0L
+          Confidence = PerceptionConfig.ConfidenceFull }
+
+    let seeded = { w with HostileTacticalKnowledge = [| staleContact |] }
+    let r = stepIdle seeded
+
+    Assert.Empty((agentOf (agent 1) r.State).VisibleContacts)
+    Assert.Empty(shotsFiredIn r)
+    // The stale entry is untouched by Perception / Combat — it only decays
+    // through the ordinary Tactical-knowledge phase (Perception.mergeKnowledge).
+    Assert.Equal(Some staleContact, hostileContactOf (agent 0) r.State)
 
 // --- Suppression and exposure model (TASK-032) --------------------------
 

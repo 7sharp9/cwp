@@ -109,18 +109,21 @@ type EventMarker =
 ///   * B-018 commitment      -> `Commitment` (realised by TASK-030);
 ///   * B-019 combat          -> `FireLine` (realised by TASK-031);
 ///   * B-020 suppression     -> `AgentSuppression` (realised by TASK-032);
-///   * B-021 stress          -> `AgentStress` (realised by TASK-033).
+///   * B-021 stress          -> `AgentStress` (realised by TASK-033);
+///   * B-022 hostile picture -> `HostileKnownContact` (realised by TASK-034).
 ///
 /// `Diagnostics.frame` produces one `KnownContact` per contact in
 /// `WorldState.TacticalKnowledge`, one `OrderAppraisal` per agent that holds
 /// an appraised order, one `AgentCommitment` per agent, one
-/// `AgentSuppression` per agent with non-zero `Suppression`, and one
-/// `AgentStress` per agent with non-zero `Stress` (bare authoritative state
-/// carries the squad picture and every per-agent field these need, so
-/// `frame` can draw all five — unlike `Reserved` / `Obstructed`, which need a
-/// completed step).
+/// `AgentSuppression` per agent with non-zero `Suppression`, one
+/// `AgentStress` per agent with non-zero `Stress`, and one
+/// `HostileKnownContact` per contact in `WorldState.HostileTacticalKnowledge`
+/// (bare authoritative state carries both squad pictures and every per-agent
+/// field these need, so `frame` can draw all six — unlike `Reserved` /
+/// `Obstructed`, which need a completed step).
 /// `Diagnostics.frameOf` produces the same `KnownContact`, `OrderAppraisal`,
-/// `AgentCommitment`, `AgentSuppression`, and `AgentStress` sets plus one `PlannedPath` per
+/// `AgentCommitment`, `AgentSuppression`, `AgentStress`, and
+/// `HostileKnownContact` sets plus one `PlannedPath` per
 /// agent following a route (TASK-015), one
 /// `Reserved` per cell contested this tick (TASK-017), one `Obstructed` per
 /// cell an agent was held out of this tick (TASK-022), one
@@ -230,6 +233,17 @@ type Overlay =
     /// an agent with `stress > 0`. Standing canonical state, so both
     /// `Diagnostics.frame` and `Diagnostics.frameOf` derive it.
     | AgentStress of agent: AgentId * at: Cell * stress: int
+    /// One contact in the Hostile side's own shared tactical picture
+    /// (TASK-034, backlog B-022, partial; `WorldState.HostileTacticalKnowledge`,
+    /// docs/04 section 12.4): `contact` was last seen at `cell` on tick
+    /// `lastSeenTick` with `confidence` on the `0..1000` scale — the identical
+    /// `KnownContact` shape, symmetric to the friendly side. A **distinct**
+    /// case rather than a reuse of `KnownContact` (the `AgentStress` /
+    /// `AgentSuppression` precedent), so a reviewer inspecting a golden render
+    /// can tell which side's picture put a marker on a cell without
+    /// cross-referencing `WorldState.Agents`. Both `Diagnostics.frame` and
+    /// `Diagnostics.frameOf` derive one per contact, ascending by contact id.
+    | HostileKnownContact of cell: Cell * contact: AgentId * confidence: int * lastSeenTick: int64
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -393,11 +407,22 @@ module Diagnostics =
         |> Array.sortBy (fun a -> a.Id)
         |> Array.choose (fun a -> if a.Stress > 0 then Some(AgentStress(a.Id, a.Position, a.Stress)) else None)
 
+    /// A `HostileKnownContact` overlay per contact in the Hostile side's own
+    /// shared tactical picture (TASK-034), ascending by contact id — the
+    /// `knownContactOverlays` precedent, reading
+    /// `WorldState.HostileTacticalKnowledge` instead.
+    let private hostileKnownContactOverlays (world: WorldState) : Overlay[] =
+        world.HostileTacticalKnowledge
+        |> Array.sortBy (fun c -> c.Contact)
+        |> Array.map (fun c -> HostileKnownContact(c.LastKnownCell, c.Contact, c.Confidence, c.LastSeenTick))
+
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
     /// (a bare `WorldState` carries no per-tick event history); use
     /// `frameOf` for the this-tick event markers. `Overlays` carries the
-    /// `KnownContact` set (the squad picture is on `WorldState`).
+    /// `KnownContact` set (the squad picture is on `WorldState`) and, since
+    /// TASK-034, the `HostileKnownContact` set for the Hostile side's own
+    /// picture.
     let frame (world: WorldState) : DiagnosticFrame =
         { Tick = world.Tick
           Bounds = world.Bounds
@@ -410,7 +435,8 @@ module Diagnostics =
                orderAppraisalOverlays world
                commitmentOverlays world
                suppressionOverlays world
-               stressOverlays world |]
+               stressOverlays world
+               hostileKnownContactOverlays world |]
             |> Array.concat
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
@@ -552,7 +578,8 @@ module Diagnostics =
     /// `FireLine` overlay per shot fired this tick (TASK-031), an
     /// `AgentSuppression` overlay per agent with non-zero suppression
     /// (TASK-032), an `AgentStress` overlay per agent with non-zero stress
-    /// (TASK-033), and the post-step canonical hash recorded on the
+    /// (TASK-033), a `HostileKnownContact` overlay per Hostile-picture contact
+    /// (TASK-034), and the post-step canonical hash recorded on the
     /// `StepResult`. Total, pure, deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
         { frame result.State with
@@ -568,5 +595,6 @@ module Diagnostics =
                       commitmentOverlays result.State
                       fireLineOverlays result
                       suppressionOverlays result.State
-                      stressOverlays result.State ]
+                      stressOverlays result.State
+                      hostileKnownContactOverlays result.State ]
             Hash = result.StateHash }

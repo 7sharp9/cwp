@@ -45,7 +45,8 @@ overlays:
   suppression (9,1): agent 1  100/1000
   stress (6,5): agent 0  50/1000
   stress (9,1): agent 1  50/1000
+  hostile known contact (5,5): agent 0  confidence 1000  seen tick 5
 
 events: contact-observed@(9,1); contact-observed@(5,5); order-appraised; commitment-established@(9,5); movement-stepped@(5,5),(6,5); shot-fired-miss; shot-fired-hit
 
-tick 5 | hash 0x2A29EE05276908C8 (format 6) | draws 2 | agents 2 | cover-edges 0 | events 7
+tick 5 | hash 0xB0072D4A340AE028 (format 7) | draws 2 | agents 2 | cover-edges 0 | events 7

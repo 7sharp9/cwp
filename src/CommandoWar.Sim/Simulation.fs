@@ -89,6 +89,7 @@ module World =
                               Terrain = terrain
                               Agents = List.toArray sorted
                               TacticalKnowledge = [||]
+                              HostileTacticalKnowledge = [||]
                               Random = SplitMix64.create seed }
 
     /// Builds a validated world at tick 0 with a SplitMix64 random stream
@@ -165,6 +166,11 @@ module Simulation =
           /// input `WorldState` and rewritten by the Tactical-knowledge phase
           /// (TASK-026). Genuine per-tick canonical state.
           mutable TacticalKnowledge: Contact[]
+          /// The Hostile side's own shared tactical picture, carried in from
+          /// the input `WorldState` and rewritten by the Tactical-knowledge
+          /// phase (TASK-034, backlog B-022, partial). Genuine per-tick
+          /// canonical state, the `TacticalKnowledge` precedent.
+          mutable HostileTacticalKnowledge: Contact[]
           /// The deterministic stream for this tick. No phase draws from it
           /// yet; a future gameplay phase reassigns it after each draw so the
           /// advanced state is carried forward.
@@ -407,20 +413,37 @@ module Simulation =
         let byId (id: AgentId) =
             s.Agents |> Array.tryFind (fun x -> x.Id = id)
 
-        let seenThisTick =
+        let seenBy (side: Side) =
             s.Agents
-            |> Array.filter (fun a -> a.Side = Friendly)
+            |> Array.filter (fun a -> a.Side = side)
             |> Array.collect (fun a -> a.VisibleContacts)
             |> Array.distinct
             |> Array.choose (fun id -> byId id |> Option.map (fun x -> id, x.Position))
             |> Map.ofArray
 
-        let store, expired = Perception.mergeKnowledge s.Tick s.TacticalKnowledge seenThisTick
+        let store, expired = Perception.mergeKnowledge s.Tick s.TacticalKnowledge (seenBy Friendly)
 
         for c in expired |> Array.sortBy (fun c -> c.Contact) do
             emit (ContactExpired(c.Contact, c.LastKnownCell)) s
 
         s.TacticalKnowledge <- store
+
+        // TASK-034 (backlog B-022, partial): the Hostile side's own shared
+        // tactical picture, symmetric to the friendly one above and built by
+        // calling the identical side-agnostic `Perception.mergeKnowledge` a
+        // second time, filtered to `Side = Hostile` instead. `ContactObserved`
+        // already fires for a Hostile agent's new sighting (TASK-026); this is
+        // the first phase that retains it. `ContactExpired` for a contact
+        // dropping out of THIS store reuses the identical event shape — a
+        // reader distinguishes which picture an expiry came from by the
+        // contact's own `AgentState.Side`, not by the event.
+        let hostileStore, hostileExpired =
+            Perception.mergeKnowledge s.Tick s.HostileTacticalKnowledge (seenBy Hostile)
+
+        for c in hostileExpired |> Array.sortBy (fun c -> c.Contact) do
+            emit (ContactExpired(c.Contact, c.LastKnownCell)) s
+
+        s.HostileTacticalKnowledge <- hostileStore
 
     // --- Phase: appraisal -------------------------------------------------
     // Realised by TASK-028 (backlog B-017). Turns the docs/04 section 12.5
@@ -1133,6 +1156,7 @@ module Simulation =
               Agents = state.Agents
               PendingOrders = []
               TacticalKnowledge = state.TacticalKnowledge
+              HostileTacticalKnowledge = state.HostileTacticalKnowledge
               Random = state.Random
               EventsRev = []
               Snapshot = { Tick = nextTick; Agents = [||] }
@@ -1146,6 +1170,7 @@ module Simulation =
                 Tick = nextTick
                 Agents = acc.Agents
                 TacticalKnowledge = acc.TacticalKnowledge
+                HostileTacticalKnowledge = acc.HostileTacticalKnowledge
                 Random = acc.Random }
 
         // Hashing runs strictly after the phase loop. `finalState` is already

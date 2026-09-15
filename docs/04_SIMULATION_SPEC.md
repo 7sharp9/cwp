@@ -399,9 +399,14 @@ squad's shared contact picture, ascending by contact id, each
 `{ Contact: AgentId; LastKnownCell: Cell; LastSeenTick: int64;
 Confidence: int }`. It is genuine per-tick canonical state (it carries memory
 the current positions cannot reproduce) and is in `Canonical.encode`
-(`Canonical.FormatVersion` 3). `Squads`, `Orders`, `Projectiles`, `Mission`
-are not implemented yet. There is no `SquadStore`: every `Friendly` agent is
-the one squad (formation grouping is B-011d).
+(`Canonical.FormatVersion` 3). **`HostileTacticalKnowledge: Contact[]`**
+(TASK-034, backlog B-022, partial) is the identical shape, symmetric to the
+Hostile side: the Tactical-knowledge phase calls the same side-agnostic
+`Perception.mergeKnowledge` a second time, filtered to `Side = Hostile`
+instead. Also genuine per-tick canonical state, in `Canonical.encode`
+(`Canonical.FormatVersion` 6 -> 7). `Squads`, `Orders`, `Projectiles`,
+`Mission` are not implemented yet. There is no `SquadStore`: every `Friendly`
+agent is the one squad (formation grouping is B-011d).
 
 ## 11. Agent state
 
@@ -584,9 +589,18 @@ on the section 4 `0..1000` scale); a contact unseen for
 `ContactExpired`. The store is kept ascending by contact id. It is **genuine
 per-tick canonical state** (`LastSeenTick` and the decaying `Confidence` carry
 memory the current positions cannot reproduce), so it is in `Canonical.encode`
-and `Canonical.FormatVersion` bumped **2 -> 3** (section 17). A **hostile**
-squad picture, enemy doctrine reacting to it, and communication range / delay /
-failure are B-016 / B-022; per-agent private beliefs are `docs/05` section 17.
+and `Canonical.FormatVersion` bumped **2 -> 3** (section 17).
+
+Realised for the Hostile side by TASK-034 (backlog B-022, partial): the
+identical `Simulation.tacticalKnowledge` phase gains a second
+`Perception.mergeKnowledge` call, filtered to `Side = Hostile`, folding into
+`WorldState.HostileTacticalKnowledge`. `ContactObserved` already fired
+symmetrically for both sides since TASK-026; this is the first phase to
+retain a Hostile agent's sightings. `Canonical.FormatVersion` bumped **6 ->
+7**. Communication range / delay / failure for either side stay B-016; enemy
+doctrine *reacting* to this picture (suppress likely routes, seek cover,
+scripted fallback) stays open on B-022; per-agent private beliefs are `docs/05`
+section 17.
 
 ### 12.5 Appraisal
 
@@ -733,6 +747,16 @@ suppresses less than a hit, mitigated by the identical directional-cover
 geometry `Combat.hitChance` uses. No new event: the rise is a deterministic
 function of the already-emitted `ShotFired`. No `AgentState` weapon/ammo/wound
 field is added; a hit still has no wound/death consequence (B-031).
+
+**"The enemy does not target an unobserved player position" proven by
+TASK-034 (backlog B-022, partial; `docs/09` section 8):** candidates are
+already drawn from the shooter's own same-tick `AgentState.VisibleContacts`
+only (Decision A above, the R-023 "same observation contract" mitigation) —
+strictly tighter than anything `WorldState.HostileTacticalKnowledge`'s
+stale-tolerant memory could provide. So a Hostile shooter with a stale
+tactical-knowledge entry for a friendly it can no longer see never fires on
+it; nothing in this section or `Combat.fs` changed to make this true, TASK-034
+only adds the `SimulationTests` fact that pins it.
 
 ### 12.9 State consequences
 
@@ -1003,6 +1027,24 @@ navigation — same tick count, same event count). Tick counts are unchanged for
 every entry; event counts moved by exactly one `OrderAppraised` per order
 (TASK-028 ledger).
 
+TASK-034 note: `encode` gained a hostile-tactical-knowledge section (present
+after the agents and the friendly tactical-knowledge section — an explicit
+contact count, then each `Contact` in ascending contact-id order, identical
+`writeContact` shape and ordering to `TacticalKnowledge`) for
+`WorldState.HostileTacticalKnowledge` (docs/04 section 12.4, backlog B-022
+partial). Genuine per-tick memory on the identical `TacticalKnowledge`
+argument, so under the ADR-0002 amendment it entered the canonical image and
+`Canonical.FormatVersion` bumped **6 -> 7**. Unlike TASK-026's original bump,
+this one is **not** behaviour-neutral: every corpus entry where a hostile
+currently gains a friendly in `VisibleContacts` (`open-engagement`,
+`perception-contact`, `exposed-approach`) now also carries a genuine new
+non-zero `HostileTacticalKnowledge` entry from the tick that first happens —
+real new state, not a byte-layout artefact. Every other pinned entry, the
+fixture, and `envelope-full` are enemy-free or one-sided and re-pin
+behaviour-neutrally; tick counts and event counts are unchanged everywhere
+(TASK-034 ledger). `firstDifferingSection` gains a
+`"HostileTacticalKnowledge"` label.
+
 ## 18. Save state
 
 Save-state support is not required for the first command-loop proof. Replay from the start is sufficient for short scenarios. If load times become material, add periodic snapshots through a versioned format and ADR.
@@ -1056,7 +1098,9 @@ At minimum:
 - every contact in `WorldState.TacticalKnowledge` was observed by a friendly
   on its own `LastSeenTick` and is within `PerceptionConfig.ExpireAfter` ticks
   of that sighting; a surviving contact's `LastSeenTick` never decreases
-  (TASK-026; `DeterminismPropertyTests` property 6);
+  (TASK-026; `DeterminismPropertyTests` property 6); the identical invariant
+  holds for `WorldState.HostileTacticalKnowledge` against a Hostile agent's
+  own observation (TASK-034; the same property 6, extended);
 - an accepted order writes `AgentState.Destination` only for a recipient with
   `CommunicationAvailable = true`; an order to a recipient with `false` writes
   no `Destination`, leaves any existing one untouched, and emits exactly one
