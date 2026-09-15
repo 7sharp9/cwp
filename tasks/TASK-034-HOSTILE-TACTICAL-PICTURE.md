@@ -1,7 +1,8 @@
 # TASK-034: Hostile tactical picture and observed-only targeting proof
 
-Status: review (drafted 2026-09-15; central decisions A-F confirmed with
-Dave 2026-09-15; implemented 2026-09-15, pending Dave's acceptance)
+Status: done (drafted 2026-09-15; central decisions A-F confirmed with
+Dave 2026-09-15; implemented 2026-09-15; accepted by Dave and merged to
+main 2026-09-15)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-022, partial (see Decision A)
@@ -311,11 +312,18 @@ Full command output and per-entry hash diffs:
 ## Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-15)
 - Notes: implemented 2026-09-15 on branch `task-034-hostile-tactical-picture`
   (all six central decisions A-F confirmed 2026-09-15, implemented exactly as
-  written — no deviation found necessary). Left at `review`; acceptance
-  (independent re-verification and merge to `main`) is a separate later step,
-  the same way TASK-032/033 were accepted. Godot's `--selfcheck` was updated
-  to the new pinned hash but not re-run through Godot in this session (no
-  Godot install here) — flagged for Dave to confirm before accepting.
+  written — no deviation found necessary). Re-verified before accepting:
+  `dotnet build` 0/0, `dotnet test` `Passed: 287`, `-- corpus` 12/12
+  (`--regenerate` twice byte-identical), `-- fixture` format 7 / 36 events
+  unchanged, `-- replay-file envelope-full` OK at canonical 7 / 78 events
+  unchanged, `git status` clean, `dotnet list` `FSharp.Core` only. Merged to
+  `main` (`--no-ff`, branch `task-034-hostile-tactical-picture` deleted; not
+  pushed). B-022 stays `review`, not `done` — suppress-likely-routes,
+  seek-adjacent-cover-under-pressure, and scripted fall-back remain open.
+  Godot's `--selfcheck` pinned hash was updated for the moved
+  `exposed-approach` tick-1 hash but not independently re-run through Godot
+  this session (no Godot install here) — Dave should confirm
+  `0xB1EBA36EC0A977F4` on his machine when convenient.

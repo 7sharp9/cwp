@@ -6,11 +6,10 @@ tip of `main`; work done on branch `task-034-hostile-tactical-picture`
 **Environment:** Windows 11 Pro 26200; .NET SDK 10.0.303; .NET 10.0.11; xUnit
 2.9.3; FsCheck / FsCheck.Xunit 3.3.4
 **Status change:** `tasks/TASK-034-HOSTILE-TACTICAL-PICTURE.md` `ready ->
-review` (pending Dave's acceptance); `docs/11_BACKLOG.md` TASK-034 row
-`ready -> review`, B-022 row `ready -> review`; `PROJECT_STATE.yaml`
-`active_work.selected_task` `none -> TASK-034` then left at `review` pending
-acceptance. No `Canonical.FormatVersion` change beyond the task's own bump
-(`6 -> 7`).
+review -> done`; `docs/11_BACKLOG.md` TASK-034 row `ready -> review -> done`,
+B-022 row `ready -> review` (stays `review`, partial); `PROJECT_STATE.yaml`
+`active_work.selected_task` `none -> TASK-034 -> none`. No
+`Canonical.FormatVersion` change beyond the task's own bump (`6 -> 7`).
 
 ### Changes
 
@@ -205,7 +204,16 @@ acceptance. No `Canonical.FormatVersion` change beyond the task's own bump
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: left at `review`. Acceptance (re-verification, merge to `main`, and
-  moving `docs/11_BACKLOG.md` / `PROJECT_STATE.yaml` accordingly) is a
-  separate later step, the same way TASK-032/033 were accepted.
+- Accepted: yes (2026-09-15)
+- Notes: re-verified before accepting: `dotnet build CommandoWar.slnx -c
+  Release` 0/0; `dotnet test` `Passed: 287`; `cwheadless corpus` 12/12 PASS
+  (`--regenerate` twice byte-identical); `cwheadless fixture` format 7, `36`
+  events unchanged; `cwheadless replay-file
+  content/replays/envelope-full.cwreplay` checkpoints OK at canonical 7, `78`
+  events unchanged; `git status --porcelain` clean; `dotnet list
+  src/CommandoWar.Sim/CommandoWar.Sim.fsproj package --include-transitive`
+  `FSharp.Core` only; source scan clean. All match the ledger detail above
+  exactly. Merged to `main` (`--no-ff`, branch
+  `task-034-hostile-tactical-picture` deleted; not pushed). B-022 stays
+  `review`, not `done` — suppress-likely-routes,
+  seek-adjacent-cover-under-pressure, and scripted fall-back remain open.

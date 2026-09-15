@@ -5,21 +5,20 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-15 (TASK-034 implemented on branch
-    task-034-hostile-tactical-picture, awaiting review)
+  updated: 2026-09-15 (TASK-034 accepted and merged to main; no task selected)
 
 active_work:
-  selected_task: TASK-034
-  task_file: tasks/TASK-034-HOSTILE-TACTICAL-PICTURE.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-15
   note: >-
     2026-09-15: TASK-034 (Hostile tactical picture and observed-only
-    targeting proof, backlog B-022, partial) implemented on branch
-    task-034-hostile-tactical-picture (single session; not yet accepted).
-    New WorldState.HostileTacticalKnowledge: Contact[], symmetric to the
+    targeting proof, backlog B-022, partial) accepted by Dave and merged to
+    main (--no-ff, branch task-034-hostile-tactical-picture deleted; not
+    pushed). New WorldState.HostileTacticalKnowledge: Contact[], symmetric to the
     friendly TacticalKnowledge (TASK-026), built by the tacticalKnowledge
     phase calling the already side-agnostic Perception.mergeKnowledge a
     second time filtered to Side = Hostile -- no change to Perception.fs.
@@ -44,7 +43,8 @@ active_work:
     replay-file envelope-full OK at canonical 7, 78 events unchanged. No
     ADR. Godot's --selfcheck pinned hash updated for the moved
     exposed-approach tick-1 hash but not re-run through Godot this session
-    (no Godot install here) -- flagged for Dave to confirm before accepting.
+    (no Godot install here) -- Dave to confirm on his machine when
+    convenient.
     (docs/ledger/2026-09-15-TASK-034-hostile-tactical-picture.md)
 
     Newly unblocked (from TASK-034, B-022 still open): none new -- B-023
