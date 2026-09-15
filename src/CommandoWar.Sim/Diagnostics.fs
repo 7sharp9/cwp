@@ -88,12 +88,21 @@ type AgentMarker =
       CommunicationAvailable: bool }
 
 /// A small framework-neutral summary of one `DomainEvent` emitted this tick:
-/// a kind label and the cells the event concerns. This lets a frame show
-/// what happened, not only the end state. `Diagnostics.frame` carries none
-/// (it has no `StepResult`); `Diagnostics.frameOf` carries one per event.
+/// a kind label, the cells the event concerns, and the agent(s) it concerns
+/// (TASK-035; the `Cells` precedent — a generic non-speculative array a
+/// renderer can always fall back to). Empty only for the three
+/// `CommandRejected` reasons that name no agent (`EmptyRecipients`,
+/// `DuplicateCommandId`, `IssueTickOutOfRange`); one entry for a
+/// single-agent event; two for a two-party event, primary first — shooter
+/// before target (`ShotFired`), the yielding/obstructed agent before the
+/// winner/occupant (`MovementYielded` / `MovementObstructed`), observer
+/// before contact (`ContactObserved`). This lets a frame show what happened,
+/// and to whom, not only the end state. `Diagnostics.frame` carries none (it
+/// has no `StepResult`); `Diagnostics.frameOf` carries one per event.
 type EventMarker =
     { Kind: string
-      Cells: Cell[] }
+      Cells: Cell[]
+      Agents: AgentId[] }
 
 /// Open extension point for overlays that later tactical systems attach.
 /// Every renderer draws an overlay through the cells it names, so a new
@@ -314,28 +323,40 @@ module Diagnostics =
 
     let private eventMarker (e: DomainEvent) : EventMarker =
         match e.Body with
-        | CommandAccepted(_, _, dest) -> { Kind = "command-accepted"; Cells = [| dest |] }
-        | CommandRejected(_, UnknownAgent _) -> { Kind = "command-rejected"; Cells = [||] }
-        | CommandRejected(_, EmptyRecipients) -> { Kind = "command-rejected"; Cells = [||] }
-        | CommandRejected(_, DuplicateRecipient _) -> { Kind = "command-rejected"; Cells = [||] }
-        | CommandRejected(_, UnauthorisedRecipient _) -> { Kind = "command-rejected"; Cells = [||] }
-        | CommandRejected(_, DuplicateCommandId _) -> { Kind = "command-rejected"; Cells = [||] }
-        | CommandRejected(_, IssueTickOutOfRange _) -> { Kind = "command-rejected"; Cells = [||] }
-        | CommandRejected(_, TargetOutOfBounds target) -> { Kind = "command-rejected"; Cells = [| target |] }
-        | OrderUndelivered _ -> { Kind = "order-undelivered"; Cells = [||] }
-        | OrderAppraised _ -> { Kind = "order-appraised"; Cells = [||] }
-        | CommitmentEstablished(_, _, target) -> { Kind = "commitment-established"; Cells = [| target |] }
-        | CommitmentCompleted(_, _, at) -> { Kind = "commitment-completed"; Cells = [| at |] }
-        | ShotFired(_, _, hit) ->
+        | CommandAccepted(_, agent, dest) -> { Kind = "command-accepted"; Cells = [| dest |]; Agents = [| agent |] }
+        | CommandRejected(_, UnknownAgent agent) -> { Kind = "command-rejected"; Cells = [||]; Agents = [| agent |] }
+        | CommandRejected(_, EmptyRecipients) -> { Kind = "command-rejected"; Cells = [||]; Agents = [||] }
+        | CommandRejected(_, DuplicateRecipient agent) ->
+            { Kind = "command-rejected"; Cells = [||]; Agents = [| agent |] }
+        | CommandRejected(_, UnauthorisedRecipient agent) ->
+            { Kind = "command-rejected"; Cells = [||]; Agents = [| agent |] }
+        | CommandRejected(_, DuplicateCommandId _) -> { Kind = "command-rejected"; Cells = [||]; Agents = [||] }
+        | CommandRejected(_, IssueTickOutOfRange _) -> { Kind = "command-rejected"; Cells = [||]; Agents = [||] }
+        | CommandRejected(_, TargetOutOfBounds target) ->
+            { Kind = "command-rejected"; Cells = [| target |]; Agents = [||] }
+        | OrderUndelivered(_, recipient, _) -> { Kind = "order-undelivered"; Cells = [||]; Agents = [| recipient |] }
+        | OrderAppraised(agent, _, _) -> { Kind = "order-appraised"; Cells = [||]; Agents = [| agent |] }
+        | CommitmentEstablished(agent, _, target) ->
+            { Kind = "commitment-established"; Cells = [| target |]; Agents = [| agent |] }
+        | CommitmentCompleted(agent, _, at) ->
+            { Kind = "commitment-completed"; Cells = [| at |]; Agents = [| agent |] }
+        | ShotFired(shooter, target, hit) ->
             { Kind = (if hit then "shot-fired-hit" else "shot-fired-miss")
-              Cells = [||] }
-        | MovementStepped(_, from, into) -> { Kind = "movement-stepped"; Cells = [| from; into |] }
-        | MovementCompleted(_, at) -> { Kind = "movement-completed"; Cells = [| at |] }
-        | MovementBlocked(_, at, target) -> { Kind = "movement-blocked"; Cells = [| at; target |] }
-        | MovementYielded(_, at, contested, _) -> { Kind = "movement-yielded"; Cells = [| at; contested |] }
-        | MovementObstructed(_, at, blocked, _) -> { Kind = "movement-obstructed"; Cells = [| at; blocked |] }
-        | ContactObserved(_, _, at) -> { Kind = "contact-observed"; Cells = [| at |] }
-        | ContactExpired(_, lastKnownCell) -> { Kind = "contact-expired"; Cells = [| lastKnownCell |] }
+              Cells = [||]
+              Agents = [| shooter; target |] }
+        | MovementStepped(agent, from, into) ->
+            { Kind = "movement-stepped"; Cells = [| from; into |]; Agents = [| agent |] }
+        | MovementCompleted(agent, at) -> { Kind = "movement-completed"; Cells = [| at |]; Agents = [| agent |] }
+        | MovementBlocked(agent, at, target) ->
+            { Kind = "movement-blocked"; Cells = [| at; target |]; Agents = [| agent |] }
+        | MovementYielded(agent, at, contested, winner) ->
+            { Kind = "movement-yielded"; Cells = [| at; contested |]; Agents = [| agent; winner |] }
+        | MovementObstructed(agent, at, blocked, occupant) ->
+            { Kind = "movement-obstructed"; Cells = [| at; blocked |]; Agents = [| agent; occupant |] }
+        | ContactObserved(observer, contact, at) ->
+            { Kind = "contact-observed"; Cells = [| at |]; Agents = [| observer; contact |] }
+        | ContactExpired(contact, lastKnownCell) ->
+            { Kind = "contact-expired"; Cells = [| lastKnownCell |]; Agents = [| contact |] }
 
     /// A `KnownContact` overlay per contact in the friendly squad's shared
     /// tactical picture (TASK-026), ascending by contact id. Reads

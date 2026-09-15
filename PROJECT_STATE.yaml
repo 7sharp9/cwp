@@ -15,7 +15,27 @@ active_work:
   blockers: []
   updated: 2026-09-15
   note: >-
-    2026-09-15: TASK-034 (Hostile tactical picture and observed-only
+    2026-09-15: TASK-035 (Event agent attribution for diagnostic narration,
+    presentation-only, no backlog item) accepted by Dave ("looks good");
+    status `done` -- never occupied the selected-task slot (the DIAG-001
+    precedent for a short single-session task, implemented and self-verified
+    directly on main, no branch). Re-verified before accepting: dotnet build
+    0/0, dotnet test 287/287, -- corpus 12/12, -- fixture format 7 / 36
+    events unchanged, git status matched expected scope. Closes the gap
+    DIAG-001 flagged: `Diagnostics.EventMarker` gains
+    `Agents: AgentId[]` (the `Cells` shape precedent), populated from fields
+    each `DomainEvent` already carries; `DiagnosticRender.eventNarration`
+    now names the agent(s) in every sentence (e.g. "Shot fired: hit." ->
+    "Agent 0 fired at agent 5: hit."). `Ascii`'s terse events line
+    deliberately left unchanged (Decision B, flagged for Dave's review) --
+    redundant with the fuller `overlays:` section already one line above it.
+    No `Canonical.FormatVersion` change (`Diagnostics` is not referenced by
+    `Canonical.fs`); only `content/diagnostics/demo.html` moves. 287 -> 287
+    green (two existing `DiagnosticsTests` facts extended in place, no new
+    facts). `dotnet build` 0/0; `-- corpus` 12/12; `-- fixture` format 7, 36
+    events unchanged. No ADR. (docs/ledger/2026-09-15-TASK-035-event-agent-attribution.md)
+
+    Prior: 2026-09-15: TASK-034 (Hostile tactical picture and observed-only
     targeting proof, backlog B-022, partial) accepted by Dave and merged to
     main (--no-ff, branch task-034-hostile-tactical-picture deleted; not
     pushed). New WorldState.HostileTacticalKnowledge: Contact[], symmetric to the

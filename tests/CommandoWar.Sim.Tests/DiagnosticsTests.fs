@@ -99,6 +99,9 @@ let ``frameOf carries agent destinations and this-tick event markers`` () =
     Assert.NotEmpty(atTick1.Events)
     Assert.Contains(atTick1.Events, fun (e: EventMarker) -> e.Kind = "command-accepted")
 
+    // TASK-035: the accepted-order event names its recipient.
+    Assert.Contains(atTick1.Events, fun (e: EventMarker) -> e.Kind = "command-accepted" && e.Agents = [| AgentId.ofInt 0 |])
+
 [<Fact>]
 let ``the fixture frame hash equals Hashing.hash of the same state and its draw count is zero`` () =
     let w = Fixture.initialState ()
@@ -746,6 +749,15 @@ let ``frameOf derives FireLine overlays for the open-engagement entry's first ti
     | other -> Assert.Fail($"expected agent 0 -> agent 1 and agent 1 -> agent 0, got {other}")
 
     Assert.Equal(2, tick1.Events |> Array.filter (fun e -> e.Kind.StartsWith "shot-fired-") |> Array.length)
+
+    // TASK-035: each shot event names shooter then target, matching its FireLine overlay.
+    let shotFiredAgents =
+        tick1.Events
+        |> Array.filter (fun e -> e.Kind.StartsWith "shot-fired-")
+        |> Array.map (fun e -> e.Agents |> Array.map AgentId.value)
+        |> Array.sortBy (fun agents -> agents.[0])
+
+    Assert.Equal<int[][]>([| [| 0; 1 |]; [| 1; 0 |] |], shotFiredAgents)
 
     // Suppression (TASK-032): both agents were fired on this tick, so both
     // carry a non-zero AgentSuppression overlay, net of the same-tick decay.

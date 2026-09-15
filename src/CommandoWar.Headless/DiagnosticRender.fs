@@ -64,6 +64,13 @@ module DiagnosticRender =
         | Refused _ -> "R", "#c53030"
         | Unable _ -> "U", "#718096"
 
+    /// The commitment status text shared by the ASCII overlay line and the
+    /// HTML per-agent annotation panel: "holding" or "moving to (x,y)".
+    let private commitmentText (c: Commitment) : string =
+        match c with
+        | Holding -> "holding"
+        | Moving mc -> sprintf "moving to %s" (cellText mc.Target)
+
     /// Steps `initial` through `log` for `tickCount` ticks and collects the
     /// diagnostic frame at every tick: index 0 is tick 0 (`Diagnostics.frame`
     /// of the initial state, no events), index `i` is tick `i`
@@ -367,12 +374,9 @@ module DiagnosticRender =
                             exposed
                     )
                 | AgentCommitment(agent, at, commitment) ->
-                    let status =
-                        match commitment with
-                        | Holding -> "holding"
-                        | Moving mc -> sprintf "moving to %s" (cellText mc.Target)
-
-                    line (sprintf "  commitment %s: agent %d  %s" (cellText at) (AgentId.value agent) status)
+                    line (
+                        sprintf "  commitment %s: agent %d  %s" (cellText at) (AgentId.value agent) (commitmentText commitment)
+                    )
                 | FireLine(shooter, from, target, at, hit) ->
                     line (
                         sprintf
@@ -834,12 +838,193 @@ module DiagnosticRender =
         line "</svg>"
         sb.ToString()
 
+    // --- HTML annotations -------------------------------------------------
+
+    /// A readable sentence for one this-tick `EventMarker`, used only by the
+    /// HTML narration panel. Distinct from `Ascii`'s terse `kind@cell,cell`
+    /// events line: this is prose for a reader scrubbing a run, built from
+    /// the same `Kind` / `Cells` / `Agents` fields, so it needs nothing
+    /// `Ascii` does not already have. Names the agent(s) the event concerns
+    /// (TASK-035) — `Agents.[0]` is always the primary agent, `Agents.[1]`
+    /// the second party for a two-agent event (`ShotFired`,
+    /// `MovementYielded`, `MovementObstructed`, `ContactObserved`).
+    let private eventNarration (e: EventMarker) : string =
+        let c i = cellText e.Cells.[i]
+        let a i = AgentId.value e.Agents.[i]
+        match e.Kind with
+        | "command-accepted" -> sprintf "Agent %d: order accepted, destination %s." (a 0) (c 0)
+        | "command-rejected" ->
+            if e.Agents.Length > 0 then
+                sprintf "Agent %d: order rejected." (a 0)
+            elif e.Cells.Length > 0 then
+                sprintf "Order rejected (target %s out of bounds)." (c 0)
+            else
+                "Order rejected."
+        | "order-undelivered" -> sprintf "Agent %d: order undelivered (communication unavailable)." (a 0)
+        | "order-appraised" -> sprintf "Agent %d: order appraised." (a 0)
+        | "commitment-established" -> sprintf "Agent %d: new commitment toward %s." (a 0) (c 0)
+        | "commitment-completed" -> sprintf "Agent %d: commitment completed at %s." (a 0) (c 0)
+        | "shot-fired-hit" -> sprintf "Agent %d fired at agent %d: hit." (a 0) (a 1)
+        | "shot-fired-miss" -> sprintf "Agent %d fired at agent %d: miss." (a 0) (a 1)
+        | "movement-stepped" -> sprintf "Agent %d moved %s to %s." (a 0) (c 0) (c 1)
+        | "movement-completed" -> sprintf "Agent %d arrived at %s." (a 0) (c 0)
+        | "movement-blocked" -> sprintf "Agent %d: movement blocked at %s toward %s." (a 0) (c 0) (c 1)
+        | "movement-yielded" -> sprintf "Agent %d yielded at %s to agent %d (cell %s contested)." (a 0) (c 0) (a 1) (c 1)
+        | "movement-obstructed" ->
+            sprintf "Agent %d obstructed at %s by agent %d (blocked cell %s)." (a 0) (c 0) (a 1) (c 1)
+        | "contact-observed" -> sprintf "Agent %d observed agent %d at %s." (a 0) (a 1) (c 0)
+        | "contact-expired" -> sprintf "Contact (agent %d) expired (last seen %s)." (a 0) (c 0)
+        | other -> other
+
+    /// One `<tr>` of per-agent state for the HTML annotation panel: position,
+    /// destination/progress, comms, order disposition (TASK-028), commitment
+    /// (TASK-030), suppression (TASK-032), and stress (TASK-033) joined per
+    /// agent — the same fields the ASCII roster line and overlay lines
+    /// already report, read off `frame.Overlays`. The lookups are sparse
+    /// (`OrderAppraisal` / `AgentSuppression` / `AgentStress` are emitted only
+    /// when meaningful), so a missing entry renders as "-" or `0`.
+    let private agentRow
+        (dispositions: Map<AgentId, OrderDisposition>)
+        (commitments: Map<AgentId, Commitment>)
+        (suppressions: Map<AgentId, int>)
+        (stresses: Map<AgentId, int>)
+        (a: AgentMarker)
+        : string =
+        let side =
+            match a.Side with
+            | Friendly -> "friendly"
+            | Hostile -> "hostile"
+
+        let move =
+            let dest =
+                match a.Destination with
+                | Some d -> sprintf "-> %s" (cellText d)
+                | None -> "at rest"
+            if a.Progress > 0 then sprintf "%s (progress %d)" dest a.Progress else dest
+
+        let comms = if a.CommunicationAvailable then "yes" else "no"
+
+        let order =
+            dispositions |> Map.tryFind a.Id |> Option.map dispositionText |> Option.defaultValue "-"
+
+        let commitment =
+            commitments |> Map.tryFind a.Id |> Option.map commitmentText |> Option.defaultValue "-"
+
+        let suppression = suppressions |> Map.tryFind a.Id |> Option.defaultValue 0
+        let stress = stresses |> Map.tryFind a.Id |> Option.defaultValue 0
+
+        sprintf
+            "<tr><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%d/%d</td><td>%d/%d</td></tr>"
+            (AgentId.value a.Id)
+            side
+            (esc (cellText a.Cell))
+            (esc move)
+            comms
+            (esc order)
+            (esc commitment)
+            suppression
+            SuppressionConfig.MaxSuppression
+            stress
+            StressConfig.MaxStress
+
+    /// One entry of a shared tactical picture (`KnownContact` /
+    /// `HostileKnownContact`), rendered the same way for both sides.
+    let private contactText (cell: Cell, contact: AgentId, confidence: int, lastSeenTick: int64) : string =
+        sprintf "agent %d @ %s (confidence %d, seen tick %d)" (AgentId.value contact) (cellText cell) confidence lastSeenTick
+
+    /// The narration + per-agent panel shown next to each tick's SVG: a
+    /// readable sentence per this-tick event (`Diagnostics.frameOf`'s
+    /// `Events`, empty at tick 0), a table joining each agent's position,
+    /// order disposition, commitment, suppression, and stress off
+    /// `frame.Overlays`, and the two shared tactical pictures (`KnownContact`
+    /// / `HostileKnownContact`, docs/04 section 12.4 — squad-shared state, so
+    /// listed once rather than attached to one agent). Presentation only:
+    /// reads nothing `Ascii` / `Svg` do not already read from the same frame.
+    let private annotations (frame: DiagnosticFrame) : string =
+        let sb = StringBuilder()
+        let line (s: string) = sb.Append(s).Append('\n') |> ignore
+
+        line "<div class=\"cw-annotations\">"
+
+        line "<div class=\"cw-narration\">"
+        if frame.Events.Length = 0 then
+            line "<p>No events this tick.</p>"
+        else
+            line "<ul>"
+            for e in frame.Events do
+                line (sprintf "<li>%s</li>" (esc (eventNarration e)))
+            line "</ul>"
+        line "</div>"
+
+        let dispositions =
+            frame.Overlays
+            |> Array.choose (function
+                | OrderAppraisal(a, _, d, _) -> Some(a, d)
+                | _ -> None)
+            |> Map.ofArray
+
+        let commitments =
+            frame.Overlays
+            |> Array.choose (function
+                | AgentCommitment(a, _, c) -> Some(a, c)
+                | _ -> None)
+            |> Map.ofArray
+
+        let suppressions =
+            frame.Overlays
+            |> Array.choose (function
+                | AgentSuppression(a, _, s) -> Some(a, s)
+                | _ -> None)
+            |> Map.ofArray
+
+        let stresses =
+            frame.Overlays
+            |> Array.choose (function
+                | AgentStress(a, _, s) -> Some(a, s)
+                | _ -> None)
+            |> Map.ofArray
+
+        line "<table class=\"cw-agents\">"
+        line "<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>"
+        line "<tbody>"
+        for a in frame.Agents |> Array.sortBy (fun a -> a.Id) do
+            line (agentRow dispositions commitments suppressions stresses a)
+        line "</tbody>"
+        line "</table>"
+
+        let knownContacts =
+            frame.Overlays
+            |> Array.choose (function
+                | KnownContact(cell, contact, confidence, lastSeenTick) -> Some(cell, contact, confidence, lastSeenTick)
+                | _ -> None)
+
+        let hostileKnownContacts =
+            frame.Overlays
+            |> Array.choose (function
+                | HostileKnownContact(cell, contact, confidence, lastSeenTick) -> Some(cell, contact, confidence, lastSeenTick)
+                | _ -> None)
+
+        let contactList (contacts: (Cell * AgentId * int * int64)[]) =
+            if contacts.Length = 0 then
+                "none"
+            else
+                contacts |> Array.map contactText |> String.concat "; " |> esc
+
+        line "<div class=\"cw-contacts\">"
+        line (sprintf "<p><strong>Squad tactical picture:</strong> %s</p>" (contactList knownContacts))
+        line (sprintf "<p><strong>Hostile tactical picture:</strong> %s</p>" (contactList hostileKnownContacts))
+        line "</div>"
+
+        line "</div>"
+        sb.ToString()
+
     // --- HTML ----------------------------------------------------------
 
     /// One self-contained XHTML file (inline CSS and JS, no external
-    /// references) embedding one SVG per tick with a slider / prev / next to
-    /// scrub the run. Deterministic bytes. This is the primary "reason about
-    /// a run" artefact.
+    /// references) embedding one SVG per tick, plus a narration/agent-state
+    /// annotation panel per tick (built by `annotations`), with a slider /
+    /// prev / next to scrub the run. Deterministic bytes. This is the primary
+    /// "reason about a run" artefact.
     let Html (frames: DiagnosticFrame[]) : string =
         let count = frames.Length
         let maxIndex = max 0 (count - 1)
@@ -857,6 +1042,11 @@ module DiagnosticRender =
         line ".cw-controls { margin: 8px 0; }"
         line ".cw-frame { display: none; }"
         line ".cw-frame.cw-active { display: block; }"
+        line ".cw-annotations { margin-top: 8px; max-width: 640px; }"
+        line ".cw-narration ul { margin: 4px 0; padding-left: 20px; }"
+        line ".cw-agents { border-collapse: collapse; font-size: 12px; margin: 8px 0; }"
+        line ".cw-agents th, .cw-agents td { border: 1px solid #cccccc; padding: 2px 6px; text-align: left; }"
+        line ".cw-contacts p { margin: 4px 0; }"
         line "/*]]>*/</style>"
         line "</head>"
         line "<body>"
@@ -875,6 +1065,7 @@ module DiagnosticRender =
             let cls = if i = 0 then "cw-frame cw-active" else "cw-frame"
             line (sprintf "<div class=\"%s\" data-tick=\"%d\">" cls f.Tick)
             sb.Append(Svg f) |> ignore
+            sb.Append(annotations f) |> ignore
             line "</div>")
 
         line "</div>"
