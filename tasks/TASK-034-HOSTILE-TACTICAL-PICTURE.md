@@ -1,7 +1,7 @@
 # TASK-034: Hostile tactical picture and observed-only targeting proof
 
-Status: ready (drafted 2026-09-15; central decisions A-F proposed below,
-not yet confirmed with Dave; not started)
+Status: ready (drafted 2026-09-15; central decisions A-F confirmed with
+Dave 2026-09-15; not started)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-022, partial (see Decision A)
@@ -67,9 +67,9 @@ Depends only on TASK-026 (backlog B-015, `WorldState.TacticalKnowledge` +
 `Perception.mergeKnowledge`) and TASK-031 (backlog B-019, `Simulation.combat`
 reading `AgentState.VisibleContacts`), both on `main`.
 
-## Central decisions (proposed 2026-09-15, to confirm with Dave before the phase bodies)
+## Central decisions (confirmed with Dave 2026-09-15 before the phase bodies)
 
-### Decision A — scope cut: hostile tactical picture + observed-only-targeting proof only; suppress-routes, seek-cover, and scripted fallback deferred — PROPOSED
+### Decision A — scope cut: hostile tactical picture + observed-only-targeting proof only; suppress-routes, seek-cover, and scripted fallback deferred — CONFIRMED
 
 Matches the TASK-032/033 narrow-cut precedent and `docs/05` section 12's own
 caution: "do not build a symmetric enemy commander planner before the player
@@ -83,7 +83,7 @@ task's `M` size alongside the tactical-picture work. **Because these three
 stay unbuilt, B-022 stays `review`, not `done`, after this task** — the same
 disposition TASK-033 left B-021 in.
 
-### Decision B — new `WorldState.HostileTacticalKnowledge: Contact[]`, built by calling the existing `Perception.mergeKnowledge` a second time — PROPOSED
+### Decision B — new `WorldState.HostileTacticalKnowledge: Contact[]`, built by calling the existing `Perception.mergeKnowledge` a second time — CONFIRMED
 
 `Perception.mergeKnowledge` (TASK-026) is already side-agnostic: it takes a
 tick, a prior `Contact[]`, and a `Map<AgentId, Cell>` of this tick's
@@ -102,7 +102,7 @@ tag) — a reader distinguishes which picture a given expiry came from by the
 contact's own `AgentState.Side`, not by the event, matching the existing
 single-shape-event precedent (`docs/05` section 13).
 
-### Decision C — new `Overlay.HostileKnownContact` diagnostic case, not a reuse of `Overlay.KnownContact` — PROPOSED
+### Decision C — new `Overlay.HostileKnownContact` diagnostic case, not a reuse of `Overlay.KnownContact` — CONFIRMED
 
 The `AgentStress`/`AgentSuppression` precedent: a new sparse overlay case
 rather than widening an existing one, so the two pictures stay visually and
@@ -112,7 +112,7 @@ cross-referencing `WorldState.Agents`). Derived in both `frame` and
 `frameOf`, one entry per contact in `HostileTacticalKnowledge`, same fields
 as `KnownContact` (cell, contact id, confidence, last-seen tick).
 
-### Decision D — `Canonical.FormatVersion` 6 -> 7, full re-pin; NOT behaviour-neutral this time — PROPOSED
+### Decision D — `Canonical.FormatVersion` 6 -> 7, full re-pin; NOT behaviour-neutral this time — CONFIRMED
 
 `HostileTacticalKnowledge` is genuine per-tick canonical state (the
 `TacticalKnowledge` precedent: `LastSeenTick` and decaying `Confidence`
@@ -128,7 +128,7 @@ byte-layout artefact. Every other corpus entry, the fixture, and
 re-pin only. No new corpus entry needed — the three already-hostile-bearing
 entries exercise it.
 
-### Decision E — the "does not target an unobserved position" criterion is proven, not built — PROPOSED
+### Decision E — the "does not target an unobserved position" criterion is proven, not built — CONFIRMED
 
 `Simulation.combat` already draws its shooter's candidate list only from
 `shooter.VisibleContacts` (TASK-031 Decision A, "candidates from a shooter's
@@ -147,7 +147,7 @@ enemy doctrine" wording to record the targeting half as fully realised
 (citing this task), leaving only "observe and report" as the part this task
 newly builds.
 
-### Decision F — no new event type, no new corpus entry, no ADR — PROPOSED
+### Decision F — no new event type, no new corpus entry, no ADR — CONFIRMED
 
 New canonical field via the existing ADR-0002 amendment (the
 `TacticalKnowledge` / `Suppression` / `Stress` precedent); no new
@@ -230,6 +230,7 @@ sized on its own merits, once Dave wants it.
 
 - Reviewer: Dave
 - Accepted: pending
-- Notes: task file drafted only. Selecting it (setting
-  `PROJECT_STATE.yaml active_work.selected_task: TASK-034`) and confirming
-  Decisions A-F are separate deliberate steps before implementation begins.
+- Notes: task file drafted only; Decisions A-F confirmed with Dave
+  2026-09-15. Selecting it (setting
+  `PROJECT_STATE.yaml active_work.selected_task: TASK-034`) and
+  implementing are separate deliberate steps.
