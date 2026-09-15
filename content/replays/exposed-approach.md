@@ -16,23 +16,23 @@ See `content/replays/CORPUS.md`.
 | Command log | `exposed-approach.cwlog` |
 | Initial state | Corpus exposed-approach scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / 6 + 1 hostile) |
 | Tick count | 12 |
-| Initial hash (tick 0) | `0x43C07501D99419BA` |
-| Final hash (tick 12) | `0x65F1C76367050210` |
+| Initial hash (tick 0) | `0x8BBEC4176AE8B541` |
+| Final hash (tick 12) | `0x61BDB76F6DE3D928` |
 | Domain events | 45 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x2066BC1FAF990E4A` |
-|    2 | `0xBF594A858CF9E778` |
-|    3 | `0x734A69DC72A68CE5` |
-|    4 | `0x9D94231EA30582A9` |
-|    5 | `0xB147127D09A5181F` |
-|    6 | `0x6922B8F7843C62E7` |
-|    7 | `0xFB4015720E327FBC` |
-|    8 | `0x0837BCD7DBB0AE08` |
-|    9 | `0x02C802137F54E22D` |
-|   10 | `0x4BE9105CFF79429B` |
-|   11 | `0xD3E07D22247E5162` |
-|   12 | `0x65F1C76367050210` |
+|    1 | `0xB1EBA36EC0A977F4` |
+|    2 | `0xDCA3ABB99644988F` |
+|    3 | `0x5CB7C7DB4807E915` |
+|    4 | `0xC67E960B45F350D0` |
+|    5 | `0xC56FEEF84296F591` |
+|    6 | `0x05BA2DA29DE73620` |
+|    7 | `0x30EE64E23C5976E8` |
+|    8 | `0x150F4CC2612F83FD` |
+|    9 | `0x41549E849C43DA9F` |
+|   10 | `0x722C1706FA0D0368` |
+|   11 | `0x08E2B7057CC419FA` |
+|   12 | `0x61BDB76F6DE3D928` |

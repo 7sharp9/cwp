@@ -51,8 +51,8 @@ let ``the corpus includes the spike fixture and is not an independent re-pin of 
     | Error m, _ -> Assert.Fail(m)
     | _, Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok table, Ok outcome ->
-        Assert.Equal(0xF1A703A752C0F6B9UL, table.InitialHash)
-        Assert.Equal(0x507D041E109404B6UL, table.FinalHash)
+        Assert.Equal(0xBE2636723F99F53AUL, table.InitialHash)
+        Assert.Equal(0x56395A49904D017DUL, table.FinalHash)
         // TASK-030: 34 -> 36 (+1 CommitmentEstablished, +1 CommitmentCompleted).
         Assert.Equal(36, table.EventCount)
 

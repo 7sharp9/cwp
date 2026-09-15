@@ -123,7 +123,8 @@ module DiagnosticRender =
                 | AgentCommitment _
                 | FireLine _
                 | AgentSuppression _
-                | AgentStress _ -> None)
+                | AgentStress _
+                | HostileKnownContact _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -153,7 +154,8 @@ module DiagnosticRender =
                 | AgentCommitment _
                 | FireLine _
                 | AgentSuppression _
-                | AgentStress _ -> None)
+                | AgentStress _
+                | HostileKnownContact _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -398,6 +400,15 @@ module DiagnosticRender =
                             (AgentId.value agent)
                             stress
                             StressConfig.MaxStress
+                    )
+                | HostileKnownContact(cell, contact, confidence, lastSeenTick) ->
+                    line (
+                        sprintf
+                            "  hostile known contact %s: agent %d  confidence %d  seen tick %d"
+                            (cellText cell)
+                            (AgentId.value contact)
+                            confidence
+                            lastSeenTick
                     )
 
         line ""
@@ -786,6 +797,27 @@ module DiagnosticRender =
                         (at.X * s + 4)
                         (at.Y * s + s - 4)
                         opacity
+                )
+            | HostileKnownContact(cell, contact, _, _) ->
+                // The Hostile side's own last-known cell for a contact
+                // (TASK-034, backlog B-022 partial): an amber dashed ring
+                // labelled `H<id>`, deliberately distinct from the friendly
+                // squad's purple dashed `KnownContact` ring (Decision C — the
+                // two pictures must stay visually distinguishable without
+                // cross-referencing `WorldState.Agents`).
+                line (
+                    sprintf
+                        "  <circle cx=\"%d\" cy=\"%d\" r=\"6\" fill=\"none\" stroke=\"#b7791f\" stroke-width=\"2\" stroke-dasharray=\"3,2\"/>"
+                        (cell.X * s + mid)
+                        (cell.Y * s + mid)
+                )
+
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"9\" fill=\"#b7791f\">H%d</text>"
+                        (cell.X * s + 1)
+                        (cell.Y * s + s - 2)
+                        (AgentId.value contact)
                 )
 
         // Footer.

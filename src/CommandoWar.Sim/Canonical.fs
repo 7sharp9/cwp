@@ -88,8 +88,23 @@ module Canonical =
     /// and `Stress` is 0 at every checkpoint and the moved hashes are a
     /// byte-layout change, not a behaviour change; tick counts and event
     /// counts are unchanged everywhere (TASK-033 ledger).
+    ///
+    /// 7 (TASK-034): `encode` gained a hostile-tactical-knowledge section
+    /// (`WorldState.HostileTacticalKnowledge`, docs/04 section 12.4, backlog
+    /// B-022 partial), reusing `writeContact` — the identical
+    /// `TacticalKnowledge` precedent, symmetric to the friendly side. Genuine
+    /// per-tick memory (`LastSeenTick`, the decaying `Confidence`), so under
+    /// the ADR-0002 amendment it is in the canonical image. Unlike TASK-026's
+    /// original 2 -> 3 bump, this one is **not** behaviour-neutral: every
+    /// scenario pinned before this version where a hostile currently gains a
+    /// friendly in `VisibleContacts` (`open-engagement`, `perception-contact`,
+    /// `exposed-approach`) now also carries a genuine new non-zero
+    /// `HostileTacticalKnowledge` entry from the tick that first happens —
+    /// real new state, not a byte-layout artefact. Every other pinned entry is
+    /// enemy-free or one-sided and re-pins behaviour-neutrally. Tick counts
+    /// and event counts are unchanged everywhere (TASK-034 ledger).
     [<Literal>]
-    let FormatVersion = 6
+    let FormatVersion = 7
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -287,6 +302,14 @@ module Canonical =
         for c in contacts do
             writeContact w c
 
+        // The Hostile side's own shared tactical picture (TASK-034, backlog
+        // B-022, partial) — the identical `TacticalKnowledge` shape and
+        // ordering, reusing `writeContact`.
+        let hostileContacts = world.HostileTacticalKnowledge |> Array.sortBy (fun c -> c.Contact)
+        w.I32 hostileContacts.Length
+        for c in hostileContacts do
+            writeContact w c
+
         w.ToArray()
 
     /// Names of the top-level canonical sections, in encoding order. Used by
@@ -305,6 +328,11 @@ module Canonical =
           section "AgentCount" (fun w -> w.I32 world.Agents.Length)
           section "TacticalKnowledge" (fun w ->
               let contacts = world.TacticalKnowledge |> Array.sortBy (fun c -> c.Contact)
+              w.I32 contacts.Length
+              for c in contacts do
+                  writeContact w c)
+          section "HostileTacticalKnowledge" (fun w ->
+              let contacts = world.HostileTacticalKnowledge |> Array.sortBy (fun c -> c.Contact)
               w.I32 contacts.Length
               for c in contacts do
                   writeContact w c) ]

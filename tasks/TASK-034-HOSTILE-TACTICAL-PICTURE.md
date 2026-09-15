@@ -1,11 +1,77 @@
 # TASK-034: Hostile tactical picture and observed-only targeting proof
 
-Status: ready (drafted 2026-09-15; central decisions A-F confirmed with
-Dave 2026-09-15; not started)
+Status: review (drafted 2026-09-15; central decisions A-F confirmed with
+Dave 2026-09-15; implemented 2026-09-15, pending Dave's acceptance)
 Owner: Dave
 Phase: P3
 Gate: G3 (command loop); realises backlog B-022, partial (see Decision A)
 Size: M
+
+## Outcome (2026-09-15)
+
+Implemented on branch `task-034-hostile-tactical-picture`, all six central
+decisions (A-F) implemented exactly as confirmed — no deviation found
+necessary during implementation.
+
+New `WorldState.HostileTacticalKnowledge: Contact[]`, the identical `Contact`
+shape as the friendly `TacticalKnowledge` (TASK-026). Built inside the
+existing `tacticalKnowledge` phase slot by a second call to the already
+side-agnostic `Perception.mergeKnowledge`, filtered to `Side = Hostile`
+instead of `Side = Friendly` — `Perception.fs` itself is unchanged.
+`ContactObserved` already fired symmetrically for both sides since TASK-026;
+this is simply the first phase that retains a Hostile agent's sightings. The
+new store's own `ContactExpired` emissions reuse the identical event shape,
+ascending by contact id, emitted after the friendly store's own expiries.
+
+New `Overlay.HostileKnownContact` diagnostic case (Decision C — a distinct
+case, not a reuse of `KnownContact`, so a golden render stays visually
+distinguishable by which side's picture a marker belongs to): derived in both
+`frame` and `frameOf`, rendered as an amber (`#b7791f`) dashed ring labelled
+`H<id>` in SVG (`KnownContact`'s ring is purple), and a `hostile known
+contact ...` line in ASCII.
+
+Proves, rather than builds, `docs/09` section 8's "enemy does not target an
+unobserved player position" (Decision E): `Simulation.combat` already drew
+its candidate list from a shooter's own same-tick `VisibleContacts` only
+(TASK-031 Decision A) — strictly tighter than anything the stale-tolerant
+`HostileTacticalKnowledge` memory could provide — so no `Combat.fs` change
+was needed. One new `SimulationTests` fact pins it directly: a Hostile agent
+seeded with a stale `HostileTacticalKnowledge` entry for a friendly it can no
+longer see (line of sight blocked by an opaque wall) never appears as a
+shooter in that tick's `ShotFired` events. `docs/09` section 8's wording is
+corrected from "partially realised" to fully realised for the targeting half.
+
+`WorldState.HostileTacticalKnowledge` is genuine per-tick canonical state
+(the `TacticalKnowledge` precedent exactly): `Canonical.FormatVersion`
+**6 -> 7**, full re-pin — **not** behaviour-neutral this time (Decision D):
+`open-engagement`, `perception-contact`, and `exposed-approach` each
+legitimately gain a genuine new non-zero `HostileTacticalKnowledge` entry
+from the tick a hostile first sees a friendly (tick counts and event counts
+unchanged everywhere — see the ledger detail for the corpus diff). No new
+corpus entry, no new event type, no ADR (Decision F).
+
+`285 -> 287` green: one new `CanonicalHashTests` fact (the
+hostile-tactical-knowledge canonical section / `firstDifferingSection`
+label), one new `SimulationTests` fact (the Decision E proof above);
+`DeterminismPropertyTests` property 6 extended in place to also ground
+`HostileTacticalKnowledge` against a Hostile agent's own observation (same
+generator, already deploys hostiles); the perception-contact `DiagnosticsTests`
+fact and the exposed-approach `AppraisalDemo` unhandled-overlay
+`DiagnosticsTests` fact (`6 -> 8`) both extended in place for the new
+symmetric state. `dotnet build` 0/0; `-- corpus` 12/12 (`--regenerate` twice
+byte-identical); `-- fixture` format 7, 36 events unchanged; `-- replay-file
+envelope-full` OK at canonical 7, 78 events unchanged; `src/CommandoWar.Sim`
+packages `FSharp.Core` only; source scan clean. No ADR.
+
+As anticipated, suppress-likely-routes, seek-adjacent-cover-under-pressure,
+and scripted fall-back all stay open — B-022 stays `review`, not `done`.
+
+Godot: the pinned `--selfcheck` hash in `AppraisalDemoScene.cs` / `README.md`
+was updated for the moved `exposed-approach` tick-1 hash but not
+independently re-run through Godot in this session (no Godot install in this
+environment) — flagged for Dave to re-check before accepting.
+
+Full detail: `docs/ledger/2026-09-15-TASK-034-hostile-tactical-picture.md`.
 
 ## Objective
 
@@ -194,25 +260,41 @@ the codebase (which cell counts as "adjacent cover", how it interacts with
 inside what is supposed to be a tactical-picture task. That is its own task,
 sized on its own merits, once Dave wants it.
 
-## Verification plan (to run once implemented, before requesting acceptance)
+## Verification (run 2026-09-15, before requesting acceptance)
 
-- `dotnet build CommandoWar.slnx -c Release`: expect 0/0.
-- `dotnet test CommandoWar.slnx -c Release`: expect all green, count moves
-  by the new facts added.
-- `cwheadless corpus`: expect 12/12 PASS after regeneration;
-  `--regenerate` twice in a row should be byte-identical.
-- `cwheadless fixture`: expect format 7, event count unchanged (no
-  Hostile-vs-Friendly contact in the fixture scenario).
-- `cwheadless replay-file content/replays/envelope-full.cwreplay`: expect
-  checkpoints OK at canonical 7, event count unchanged (enemy-free
-  scenario).
+- `dotnet build CommandoWar.slnx -c Release`: `0/0` before and after.
+- `dotnet test CommandoWar.slnx -c Release`: `285 -> 287` green. New: 1
+  `CanonicalHashTests` fact (the hostile-tactical-knowledge canonical section
+  / `firstDifferingSection` label — the `TacticalKnowledge` fact's
+  precedent); 1 `SimulationTests` fact (Decision E — a Hostile agent seeded
+  with a stale `HostileTacticalKnowledge` entry for a friendly it can no
+  longer see, line of sight blocked by an opaque wall, never appears as a
+  shooter in that tick's `ShotFired` events). Extended in place (not new
+  facts): `DeterminismPropertyTests` property 6 (also grounds
+  `HostileTacticalKnowledge` against a Hostile agent's own observation, the
+  same generator); the perception-contact `DiagnosticsTests` fact (asserts
+  the new `HostileKnownContact` overlay alongside `KnownContact`); the
+  exposed-approach `AppraisalDemo` unhandled-overlay `DiagnosticsTests` fact
+  (`6 -> 8` — two more `HostileKnownContact` entries this disposable demo
+  doesn't render).
+- `cwheadless corpus`: 12/12 PASS after regeneration; `--regenerate` twice in
+  a row is byte-identical (confirmed via `git diff --stat` before/after the
+  second run).
+- `cwheadless fixture`: format 7, `36` events unchanged, `0` draws
+  (enemy-free).
+- `cwheadless replay-file content/replays/envelope-full.cwreplay`:
+  checkpoints OK at canonical 7, `24` ticks / `78` events unchanged
+  (enemy-free scenario; re-pinned by hand since `envelope-full.cwreplay` is
+  not part of `Corpus.all` and so outside the `corpus` verb).
 - `dotnet list src/CommandoWar.Sim/CommandoWar.Sim.fsproj package
-  --include-transitive`: expect `FSharp.Core` only.
+  --include-transitive`: `FSharp.Core` only.
 - Source scan of `src/CommandoWar.Sim` for
-  `float|stopwatch|datetime|system\.random|godot`: expect clean (comment
-  mentions only).
-- `git status --porcelain`: expect it to match this task file's "Allowed
-  scope".
+  `float|stopwatch|datetime|system\.random|godot`: clean (comment mentions
+  only).
+- `git status --porcelain`: matches this task file's "Allowed scope".
+
+Full command output and per-entry hash diffs:
+`docs/ledger/2026-09-15-TASK-034-hostile-tactical-picture.md`.
 
 ## Unresolved / follow-ups
 
@@ -230,7 +312,10 @@ sized on its own merits, once Dave wants it.
 
 - Reviewer: Dave
 - Accepted: pending
-- Notes: task file drafted only; Decisions A-F confirmed with Dave
-  2026-09-15. Selecting it (setting
-  `PROJECT_STATE.yaml active_work.selected_task: TASK-034`) and
-  implementing are separate deliberate steps.
+- Notes: implemented 2026-09-15 on branch `task-034-hostile-tactical-picture`
+  (all six central decisions A-F confirmed 2026-09-15, implemented exactly as
+  written — no deviation found necessary). Left at `review`; acceptance
+  (independent re-verification and merge to `main`) is a separate later step,
+  the same way TASK-032/033 were accepted. Godot's `--selfcheck` was updated
+  to the new pinned hash but not re-run through Godot in this session (no
+  Godot install here) — flagged for Dave to confirm before accepting.

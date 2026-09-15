@@ -250,6 +250,19 @@ module AppraisalDemo =
                 // opposing-side contact yet, so this never fires for the
                 // committed frame.
                 unhandled.Add(sprintf "stress agent %d (%d,%d) %d" (AgentId.value agent) at.X at.Y stress)
+            | HostileKnownContact(cell, contact, confidence, lastSeenTick) ->
+                // TASK-034: not yet surfaced in this disposable P3 demo (it
+                // predates the phase); the demo only ever renders the friendly
+                // squad's picture via `ContactRing`.
+                unhandled.Add(
+                    sprintf
+                        "hostile known contact agent %d (%d,%d) confidence %d seen tick %d"
+                        (AgentId.value contact)
+                        cell.X
+                        cell.Y
+                        confidence
+                        lastSeenTick
+                )
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

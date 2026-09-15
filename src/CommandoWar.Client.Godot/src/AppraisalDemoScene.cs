@@ -55,7 +55,7 @@ public partial class AppraisalDemoScene : Node2D
     private bool _selfCheck;
     private bool _screenshot;
     private string _screenshotPath;
-    private ulong _expectHash = 0x2066BC1FAF990E4AUL; // exposed-approach tick 1 (Canonical.FormatVersion 6, TASK-033)
+    private ulong _expectHash = 0xB1EBA36EC0A977F4UL; // exposed-approach tick 1 (Canonical.FormatVersion 7, TASK-034)
     private int? _headlessExit;
     private int _screenshotFrames;
 

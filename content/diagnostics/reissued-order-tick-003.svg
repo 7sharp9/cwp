@@ -160,7 +160,7 @@
   <rect x="224" y="128" width="16" height="16" fill="none" stroke="#dd6b20" stroke-width="3"/>
   <text x="73" y="73" font-family="monospace" font-size="9" font-weight="bold" fill="#2f855a">A</text>
   <circle cx="68" cy="68" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
-  <text x="4" y="160" font-family="monospace" font-size="11" fill="#111111">tick 3  hash 0x29979C2751831D73  draws 0</text>
+  <text x="4" y="160" font-family="monospace" font-size="11" fill="#111111">tick 3  hash 0x8DA25D584FAE3CD8  draws 0</text>
   <text x="4" y="174" font-family="monospace" font-size="11" fill="#111111">agents 1  cover-edges 0  events 4</text>
   <text x="4" y="188" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

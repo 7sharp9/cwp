@@ -45,4 +45,4 @@ overlays:
 
 events: command-accepted@(4,3); command-accepted@(3,3); order-appraised; order-appraised; commitment-established@(4,3); commitment-established@(3,3); movement-obstructed@(3,3),(4,3); movement-obstructed@(4,3),(3,3)
 
-tick 1 | hash 0x37808D1CA6B2A021 (format 6) | draws 0 | agents 2 | cover-edges 0 | events 8
+tick 1 | hash 0x77C44BAF6525D82A (format 7) | draws 0 | agents 2 | cover-edges 0 | events 8

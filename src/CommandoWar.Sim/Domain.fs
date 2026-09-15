@@ -322,6 +322,27 @@ type WorldState =
       /// 2 -> 3. A hostile squad picture and enemy doctrine reacting to it are
       /// backlog B-022; per-agent private beliefs are `docs/05` section 17.
       TacticalKnowledge: Contact[]
+      /// The Hostile side's own shared tactical picture (TASK-034, backlog
+      /// B-022, partial; `docs/04` section 10, 12.4; `docs/05` section 12
+      /// "observe and report"). Symmetric to `TacticalKnowledge`: ascending by
+      /// contact id, built by the same Tactical-knowledge phase calling the
+      /// side-agnostic `Perception.mergeKnowledge` a second time, filtered to
+      /// every `Hostile` agent's `VisibleContacts` instead of every
+      /// `Friendly`'s. `ContactObserved` already fires symmetrically for both
+      /// sides (TASK-026); this store's own upserts, staleness, and expiry
+      /// (emitting `ContactExpired`, the identical event shape) follow
+      /// unchanged.
+      ///
+      /// **Genuine per-tick canonical state**, the `TacticalKnowledge`
+      /// precedent exactly: `LastSeenTick` and the decaying `Confidence`
+      /// cannot be recomputed from the current tick's positions. Adding it
+      /// bumped `Canonical.FormatVersion` 6 -> 7. No Hostile agent reads it —
+      /// enemy doctrine reacting to it (suppress likely routes, seek cover,
+      /// scripted fallback) stays open on B-022; `Simulation.combat` already
+      /// draws its candidates from `AgentState.VisibleContacts` only, a
+      /// same-tick check strictly tighter than anything this stale-tolerant
+      /// store could provide (TASK-034 Decision E).
+      HostileTacticalKnowledge: Contact[]
       /// The authoritative deterministic random stream. It is threaded through
       /// every step and is part of the canonical state hash. No gameplay phase
       /// draws from it yet (TASK-003 wires the stream; gameplay draws arrive

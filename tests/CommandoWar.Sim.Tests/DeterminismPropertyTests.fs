@@ -109,6 +109,7 @@ let private randomCaseGen: Gen<RandomCase> =
               Terrain = terrain
               Agents = agents
               TacticalKnowledge = [||]
+              HostileTacticalKnowledge = [||]
               Random = SplitMix64.create (uint64 seed) }
 
         let! tickCount = Gen.choose (5, 15)
@@ -341,6 +342,12 @@ let ``Pathfinding.find on valid random terrain returns the true minimum cost and
 // through `Perception.visibleContactsFor`), (b) is within `ExpireAfter` ticks
 // of that sighting, (c) carries one of the two valid confidence bands, and (d)
 // has a `LastSeenTick` that never moves backwards while the contact survives.
+//
+// TASK-034 (backlog B-022, partial): extended in place to also run the
+// identical check against `WorldState.HostileTacticalKnowledge`, grounded in
+// a Hostile agent's own observation instead — the same generator already
+// deploys hostiles, and `Perception.mergeKnowledge` is the identical
+// side-agnostic function underneath both pictures.
 
 let private perceptionCaseGen: Gen<RandomCase> =
     gen {
@@ -374,6 +381,7 @@ let private perceptionCaseGen: Gen<RandomCase> =
               Terrain = terrain
               Agents = agents
               TacticalKnowledge = [||]
+              HostileTacticalKnowledge = [||]
               Random = SplitMix64.create (uint64 seed) }
 
         let! tickCount = Gen.choose (5, 15)
@@ -426,9 +434,10 @@ let ``every squad contact was seen by a friendly within ExpireAfter, with a non-
                   PerceptionConfig.ConfidenceFull - PerceptionConfig.ConfidenceBandDrop ]
 
         // Recompute, from the state as it stood at the START of `tick`
-        // (= post-tick state `tick - 1`), whether some friendly could see
-        // `contact` — the same inputs the Perception phase used that tick.
-        let seenAt (tick: int64) (contact: AgentId) =
+        // (= post-tick state `tick - 1`), whether some agent on `side` could
+        // see `contact` — the same inputs the Tactical-knowledge phase used
+        // that tick, for either side's own picture.
+        let seenAt (side: Side) (tick: int64) (contact: AgentId) =
             if tick < 1L || int tick > states.Length - 1 then
                 false
             else
@@ -436,27 +445,34 @@ let ``every squad contact was seen by a friendly within ExpireAfter, with a non-
 
                 pre.Agents
                 |> Array.exists (fun a ->
-                    a.Side = Friendly
+                    a.Side = side
                     && Perception.visibleContactsFor pre.Terrain a pre.Agents |> Array.contains contact)
 
-        seq { 1 .. states.Length - 1 }
-        |> Seq.forall (fun i ->
-            let cur = states.[i]
-            let prev = states.[i - 1]
+        let groundedPicture (side: Side) (pictureOf: WorldState -> Contact[]) =
+            seq { 1 .. states.Length - 1 }
+            |> Seq.forall (fun i ->
+                let cur = states.[i]
+                let prev = states.[i - 1]
 
-            cur.TacticalKnowledge
-            |> Array.forall (fun c ->
-                let withinExpiry = cur.Tick - c.LastSeenTick < int64 PerceptionConfig.ExpireAfter
-                let seenNotFuture = c.LastSeenTick >= 1L && c.LastSeenTick <= cur.Tick
-                let validBand = Set.contains c.Confidence bands
-                let grounded = seenAt c.LastSeenTick c.Contact
+                pictureOf cur
+                |> Array.forall (fun c ->
+                    let withinExpiry = cur.Tick - c.LastSeenTick < int64 PerceptionConfig.ExpireAfter
+                    let seenNotFuture = c.LastSeenTick >= 1L && c.LastSeenTick <= cur.Tick
+                    let validBand = Set.contains c.Confidence bands
+                    let grounded = seenAt side c.LastSeenTick c.Contact
 
-                let nonDecreasing =
-                    match prev.TacticalKnowledge |> Array.tryFind (fun p -> p.Contact = c.Contact) with
-                    | Some p -> c.LastSeenTick >= p.LastSeenTick
-                    | None -> true
+                    let nonDecreasing =
+                        match pictureOf prev |> Array.tryFind (fun p -> p.Contact = c.Contact) with
+                        | Some p -> c.LastSeenTick >= p.LastSeenTick
+                        | None -> true
 
-                withinExpiry && seenNotFuture && validBand && grounded && nonDecreasing)))
+                    withinExpiry && seenNotFuture && validBand && grounded && nonDecreasing))
+
+        // TASK-034 (backlog B-022, partial): HostileTacticalKnowledge is the
+        // identical mergeKnowledge machinery, filtered to Hostile observers —
+        // the same grounding property must hold for it too.
+        groundedPicture Friendly (fun s -> s.TacticalKnowledge)
+        && groundedPicture Hostile (fun s -> s.HostileTacticalKnowledge))
 
 // --- property 7: communication constraints gate order delivery -------------
 // TASK-027. `commsCaseGen` is `randomCaseGen` with a random subset of the
