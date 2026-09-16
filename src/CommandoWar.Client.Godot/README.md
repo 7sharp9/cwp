@@ -43,6 +43,47 @@ dotnet build CommandoWar.Client.Godot.slnx -c Debug
 
 Committed screenshot: `docs/evidence/task-029-appraisal-demo.png`.
 
+## Live snapshot-rendering demo (TASK-039)
+
+`scenes/SnapshotDemo.tscn` + `src/FSharpSceneHost.cs` is the first
+production Godot scene: it live-steps the terrain-demo scenario
+(`src/CommandoWar.Headless/DemoScenario.fs` — an elevation ridge, an
+impassable block, a movement-cost patch, an opaque wall, and directional
+cover) via `Simulation.step` and renders it isometrically with one unified,
+depth-sorted draw list (terrain interleaved with agents by screen depth, not
+"all terrain then all agents" — the disposable `MainNode.cs` spike's actual
+gap). Backlog B-027. No player input; the scene runs unattended once
+launched.
+
+`FSharpSceneHost.cs` is the first real use of ADR-0004's accepted
+architecture: a generic C# host (`[Export] SceneType`) resolves an F#
+`CwClientCore.IClientScene` implementation by name and forwards
+`_Ready`/`_Process`/`_Draw`/`_ExitTree`; every non-trivial concern (the
+fixed-step scheduler, stepping the simulation, building the depth-sorted
+`DrawItem[]`) lives in the new `Core/CommandoWar.Client.Godot.Core.fsproj`
+project (`CwClientCore.DemoRenderScene`). The C# host only does cell<->screen
+projection arithmetic and issues `Draw*` calls — the one thing ADR-0004
+explicitly allows there.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+"$GODOT" --editor --headless --quit --path .          # one-time import
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+# windowed: agents cross the ridge/wall/movement-cost patch over ~1 second
+"$GODOT" --path . scenes/SnapshotDemo.tscn
+
+# headless smoke: replays DemoScenario tick 1..20, prints each tick's hash,
+# asserts the final hash vs the pinned golden
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x11B06E6EDE0C52E3, exit 0
+
+# committed evidence screenshot (windowed; headless has no viewport texture)
+"$GODOT" --path . scenes/SnapshotDemo.tscn -- --screenshot <abs-path>.png
+```
+
+Committed screenshot: `docs/evidence/task-039-snapshot-rendering.png`.
+
 ## Pinned versions
 
 | Component | Version |
@@ -58,19 +99,30 @@ Editor path (not on `PATH` in the dev environment used):
 ## Layout
 
 ```
-project.godot              Godot project (main scene = Main.tscn)
-Main.tscn                   root: MainNode + the two content scenes
+project.godot              Godot project (run/main_scene = AppraisalDemo.tscn)
+Main.tscn                   root: MainNode + the two content scenes (TASK-004 spike)
 scenes/Greybox.tscn         authored 32x32 isometric greybox + 6 spawn markers + objective
 scenes/GreyboxInvalid.tscn  deliberately broken content for the failure path
-src/SimFacade.cs            thin C# facade over CommandoWar.Sim  (NO Godot types)
-src/SpikeContent.cs         framework-neutral content DTOs + validation  (NO Godot types)
-src/GreyboxScene.cs         reads the authored scene -> RawContent  (import boundary)
-src/SpikeMarker.cs          typed marker node
-src/MainNode.cs             fixed-step scheduling, input, isometric render, overlay
+scenes/AppraisalDemo.tscn   TASK-029: read-only corpus-scoped appraisal-divergence demo
+scenes/SnapshotDemo.tscn    TASK-039: live snapshot rendering + isometric depth ordering
+src/SimFacade.cs            thin C# facade over CommandoWar.Sim  (NO Godot types, TASK-004 spike)
+src/SpikeContent.cs         framework-neutral content DTOs + validation  (NO Godot types, TASK-004 spike)
+src/GreyboxScene.cs         reads the authored scene -> RawContent  (import boundary, TASK-004 spike)
+src/SpikeMarker.cs          typed marker node (TASK-004 spike)
+src/MainNode.cs             fixed-step scheduling, input, isometric render, overlay (TASK-004 disposable spike)
+src/AppraisalDemoScene.cs   TASK-029's thin renderer (a scoped ADR-0004 deviation, see the file header)
+src/FSharpSceneHost.cs      TASK-039: the generic ADR-0004 C# host over Core/ -- every future
+                            production scene's `.tscn` uses this, not a new per-scene C# file
+Core/                       TASK-039: the ADR-0004 F# client-core library (CwClientCore.*)
 ```
 
-Only `SimFacade.cs` calls `CommandoWar.Sim`. Everything it passes across the
-boundary is a primitive, an array, or an F# value type.
+In the TASK-004 spike, only `SimFacade.cs` calls `CommandoWar.Sim`, and
+everything it passes across the C#/F# boundary is a primitive, an array, or
+an F# value type. Since TASK-039, `Core/` (the ADR-0004 F# client-core
+library) also references `CommandoWar.Sim`/`CommandoWar.Headless` directly —
+expected under ADR-0002 ("the client references the simulation"); no C# file
+outside `FSharpSceneHost.cs` (which only resolves `Core`'s `IClientScene` by
+name) touches either.
 
 ## Build
 

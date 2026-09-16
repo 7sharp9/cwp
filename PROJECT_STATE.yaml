@@ -8,14 +8,44 @@ project:
   updated: 2026-09-16 (G3 declared passed; TASK-038 accepted; phase/gate advanced to P4/G4; no task selected)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-039
+  task_file: tasks/TASK-039-SNAPSHOT-RENDERING-AND-DEPTH-ORDERING.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-16
   note: >-
-    2026-09-16: G3 gate decision. Following B-023's completion (TASK-038),
+    2026-09-16: TASK-039 (Snapshot rendering and isometric depth ordering,
+    backlog B-027) drafted, implemented, and self-verified through the real
+    Godot 4.7.2 editor (confirmed available in this environment); awaiting
+    Dave's acceptance. The first P4 client task, chosen by Dave via
+    AskUserQuestion over B-026/B-030 proper/B-031. Central decision confirmed
+    via AskUserQuestion: renders DemoScenario (the terrain-demo scenario),
+    not a corpus entry or the Greybox.tscn content-import path, since the
+    real Bridgehead map is still blocked on B-043/B-024. Stands up ADR-0004's
+    F# client-core architecture for real for the first time:
+    src/CommandoWar.Client.Godot/Core/ (CwClientCore.IClientScene/DrawItem/
+    DemoRenderScene) and the generic src/FSharpSceneHost.cs (ADR-0004 form
+    1); scenes/SnapshotDemo.tscn is the first production scene built on it
+    (AppraisalDemo.tscn stays run/main_scene, unchanged). Terrain and agents
+    draw from one depth-sorted list ((Cx + Cy) ascending, terrain before an
+    agent on the same cell), not "all terrain then all agents" (the
+    disposable TASK-004 spike's actual gap). No CommandoWar.Sim/
+    CommandoWar.Headless change. Verified for real: --editor --headless
+    import, dotnet build both .slnx files, --selfcheck (MATCH the pinned
+    tick-20 hash 0x11B06E6EDE0C52E3, byte-identical to an independent dotnet
+    test computation outside Godot, exit 0), and a windowed --screenshot
+    (docs/evidence/task-039-snapshot-rendering.png, committed). Sized L in
+    practice (docs/11's M undercounts the client-core scaffold cost).
+    ADR-0004's own review trigger 1 (interactive F# debugging: breakpoint
+    hit, hot-reload) is explicitly NOT discharged by this task -- needs
+    Dave's own interactive editor session. dotnet build CommandoWar.slnx
+    0/0; dotnet test 297/297 (both unaffected -- no Sim/Headless change).
+    docs/11 B-027 row (proposed -> done), README.md, ADR-0004, docs/12, and
+    this file updated.
+    (docs/ledger/2026-09-16-TASK-039-snapshot-rendering-and-depth-ordering.md)
+
+    Prior: 2026-09-16: G3 gate decision. Following B-023's completion (TASK-038),
     docs/08 section 6's "five vertical-slice intents" required-work line was
     only partly built (PlayerIntent has MoveTo/Suppress; Hold/Assault/
     Withdraw are B-030 proper, explicitly re-scoped to P4/G4 by TASK-037's

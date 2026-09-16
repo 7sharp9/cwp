@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- Must match CommandoWar.Sim / the Godot host C# project: a C# project
+         cannot reference a higher-TFM F# assembly. -->
+    <RootNamespace>CwClientCore</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="IClientScene.fs" />
+    <Compile Include="DemoRenderScene.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The client references the simulation. The simulation never
+         references a client (ADR-0002). -->
+    <ProjectReference Include="..\..\CommandoWar.Sim\CommandoWar.Sim.fsproj" />
+    <!-- DemoScenario (the terrain-demo scenario, TASK-039's confirmed render
+         source) lives in the shared headless reference, the TASK-029
+         precedent for referencing CommandoWar.Headless from Godot client
+         code. No GodotSharp reference: nothing here marshals a Godot type
+         (ADR-0004's IClientScene contract crosses the boundary as primitives
+         only), deferred until a later task needs Godot.InputEvent (B-026). -->
+    <ProjectReference Include="..\..\CommandoWar.Headless\CommandoWar.Headless.fsproj" />
+  </ItemGroup>
+
+</Project>

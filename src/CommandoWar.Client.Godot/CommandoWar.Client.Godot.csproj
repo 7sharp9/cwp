@@ -20,6 +20,10 @@
          view-model prep the AppraisalDemoScene renders). Still a client -> Sim
          edge; the simulation references neither project. -->
     <ProjectReference Include="..\CommandoWar.Headless\CommandoWar.Headless.fsproj" />
+    <!-- TASK-039: the ADR-0004 F# client-core library. FSharpSceneHost.cs
+         resolves an IClientScene implementation from it by name; no other
+         C# file references it directly. -->
+    <ProjectReference Include="Core\CommandoWar.Client.Godot.Core.fsproj" />
   </ItemGroup>
 
 </Project>

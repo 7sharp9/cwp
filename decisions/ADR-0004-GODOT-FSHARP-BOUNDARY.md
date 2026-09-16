@@ -333,6 +333,24 @@ direction, ownership split, and allow/forbid lists are unchanged and satisfied.
   ADR, exactly as the TASK-004/005 spikes are retained. It is removable
   wholesale.
 
+## 2026-09-16 note: the scaffold now exists for real (TASK-039)
+
+TASK-039 (backlog B-027, snapshot rendering and isometric depth ordering)
+stood up form 1 for real: `src/CommandoWar.Client.Godot/Core/` (the F#
+client-core library, `CwClientCore.*`) and `src/FSharpSceneHost.cs` (the
+generic C# host, `[Export] SceneType` resolving an `IClientScene`
+implementation by reflection). `scenes/SnapshotDemo.tscn` is the first
+production scene built on it, live-stepping `DemoScenario` and rendering a
+depth-sorted `DrawItem[]` — every subsequent P4 client task (B-026, B-028,
+B-029 proper) reuses this host rather than writing a new one.
+
+Review trigger 1 (an F# breakpoint hit from an editor/F5-launched run;
+hot-reload not severing the reference) is **not yet discharged** by this
+task — TASK-039 was implemented and verified via `--editor --headless`
+import, `dotnet build`, `--selfcheck`, and one windowed `--screenshot` run,
+none of which is an interactive F5-launched debugging session. Still open,
+needs Dave's own interactive editor use.
+
 ## Rollback
 
 If P4 client evidence contradicts this structure (for example the shim cannot
