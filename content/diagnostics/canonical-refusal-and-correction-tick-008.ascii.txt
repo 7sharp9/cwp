@@ -1,0 +1,58 @@
+# CommandoWar diagnostic frame
+tick 8
+
+              11
+    012345678901
+  0 ............
+  1 ..........@.
+  2 ............
+  3 .S++++@++++G
+  4 ..........X.
+  5 ............
+  6 ............
+  7 ............
+
+cover edges (N/E/S/W per cell, * for more than one):
+    012345678901
+  0 ............
+  1 ............
+  2 ............
+  3 ............
+  4 ............
+  5 ............
+  6 ............
+  7 ............
+
+legend:
+  @ friendly agent   X hostile agent
+  # impassable        o opaque (passable)
+  1-9 elevation       . open flat ground
+movement-cost: uniform
+
+agents:
+  agent 0  friendly  (6,3)  -> (11,3)
+  agent 1  friendly  (10,1)  at rest
+  agent 2  hostile   (10,4)  at rest
+
+overlays:
+  path (1,3) -> (11,3): reached, cost 10
+  known contact (10,4): agent 2  confidence 1000  seen tick 8
+  order appraisal (6,3): agent 0  accepted
+  order appraisal (10,1): agent 1  accepted
+  commitment (6,3): agent 0  moving to (11,3)
+  commitment (10,1): agent 1  suppressing agent 2
+  commitment (10,4): agent 2  holding
+  fire (6,3) -> (10,4): agent 0 -> agent 2  hit
+  fire (10,1) -> (10,4): agent 1 -> agent 2  hit
+  fire (10,4) -> (10,1): agent 2 -> agent 1  hit
+  suppression (10,1): agent 1  950/1000
+  suppression (10,4): agent 2  950/1000
+  stress (6,3): agent 0  400/1000
+  stress (10,1): agent 1  400/1000
+  stress (10,4): agent 2  400/1000
+  hostile known contact (5,3): agent 0  confidence 1000  seen tick 8
+  hostile known contact (10,1): agent 1  confidence 1000  seen tick 8
+
+events: command-accepted@(11,3); order-appraised; commitment-established@(11,3); movement-stepped@(5,3),(6,3); shot-fired-hit; shot-fired-hit; shot-fired-hit
+
+tick 8 | hash 0x0F2E324EAC127E43 (format 8) | draws 20 | agents 3 | cover-edges 0 | events 7

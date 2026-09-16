@@ -188,11 +188,30 @@ flipping, not only the appraising agent's own) re-judges the first agent's
 `Refused` order the same tick — step 5 ("the player orders another fireteam
 to suppress the machine-gun position") and step 6 ("tactical knowledge and
 exposure are recalculated") both proven end to end by the new
-`suppress-relieves-exposure` corpus entry. Still open: the UI explanation
-surface (step 4) and enemy doctrine (B-022, explicitly descoped by TASK-037 —
-suppress-likely-routes, seek-cover, and scripted fall-back are Hostile-side
-concerns TASK-037's player-issued order does not touch). The full sequence,
-scripted end to end as one scenario, is B-023.
+`suppress-relieves-exposure` corpus entry. Enemy doctrine (B-022) was
+explicitly descoped by TASK-037 — suppress-likely-routes, seek-cover, and
+scripted fall-back are Hostile-side concerns TASK-037's player-issued order
+does not touch.
+
+The full 8-step sequence is realised end to end by TASK-038 (backlog B-023)
+as the `canonical-refusal-and-correction` corpus entry: the
+`suppress-relieves-exposure` geometry, plus a step 7 reissue of agent 0's
+identical `(11,3)` intent on tick 8, once it is already mid-route under the
+automatic reappraisal. Step 4 needed no new mechanism: `OrderAppraised` only
+ever carries a structured `OrderDisposition`/`DecisionReason` (`Domain.fs`)
+— no event or overlay in the codebase emits a raw numeric exposure/threshold
+value, and `DiagnosticRender.reasonText`/`dispositionText` already render it
+as named text ("refused route-too-exposed threat-agent-2"), never a score;
+this task adds a test assertion turning that standing type-system guarantee
+into checked evidence. Step 8 is proven for its accepts-branch only: the
+reissued order is `Accepted` again at tick 8, with a fresh
+`CommitmentEstablished`, and stays `Accepted` (or unappraised, on arrival)
+through tick 13 — never flipping back to `Refused`, including through one
+extra reappraisal blip at tick 12. The literal "or adapts" half of step 8 is
+**not** realised: no `Adapted` `OrderDisposition` case exists (`Appraisal.fs`:
+"Stage 5 (safer adaptation) is deferred (B-018): no `Adapted` outcome, no
+route recomputation") — a separate, larger, not-yet-filed follow-up, deferred
+by Dave's explicit decision rather than silently dropped.
 
 ## 9. Functional acceptance criteria
 

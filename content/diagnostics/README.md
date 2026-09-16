@@ -46,6 +46,8 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `blocked-goal-tick-001.svg` | SVG of the same frame: a grey `U` glyph at the agent's cell (no exposed cells, no route). |
 | `reissued-order-tick-003.ascii.txt` | The `content/replays/reissued-order` corpus entry (TASK-030) at tick 3: a friendly agent 0, mid-route toward `(14,4)` (ordered tick 1), receives a second order to `(14,8)`. The Communication phase resets `Disposition`, Appraisal re-accepts against the new target, and the new `commitmentAndLocalAction` phase (12.6) emits a fresh `CommitmentEstablished` — the overlays section carries `commitment (4,4): agent 0  moving to (14,8)` and the events line `commitment-established` (no `commitment-completed`: the first commitment's end is not separately reported, since `Commitment` is derived, not stored). |
 | `reissued-order-tick-003.svg` | SVG of the same frame: agent 0's `PlannedPath` polyline toward the new target `(14,8)`, plus the small teal `AgentCommitment` marker (hollow, since it is `Moving`) at the top-left corner of the agent's cell. |
+| `canonical-refusal-and-correction-tick-008.ascii.txt` | The `content/replays/canonical-refusal-and-correction` corpus entry (TASK-038, backlog B-023) at tick 8: `docs/07` section 8's full 8-step sequence in one run. Tick 1 (not pictured — see `exposed-approach-tick-001.*` for the identical geometry) `Refused RouteTooExposed threat-agent-2`; tick 4 the automatic threat-suppression-change reappraisal `Accepted` it once friendly 1's `Suppressing` order latched hostile 2's `SuppressionBand`; this frame is tick 8, the moment the player reissues the identical `(11,3)` intent mid-route — the overlays section carries a second `order appraisal (6,3): agent 0  accepted` and `commitment (6,3): agent 0  moving to (11,3)`, and the events line carries a second `commitment-established` for agent 0, with no event for the superseded one (the `reissued-order` precedent). Agent 0 goes on to arrive at `(11,3)` by tick 13, never refusing again. |
+| `canonical-refusal-and-correction-tick-008.svg` | SVG of the same frame: agent 0's `PlannedPath` polyline resuming toward `(11,3)`, the hollow teal `AgentCommitment` marker at agent 0's cell, the solid `AgentCommitment` marker at friendly 1's `Suppressing` cell, and the ongoing fire/suppression state between friendly 1 and hostile 2. |
 
 ## Regeneration
 
@@ -76,15 +78,17 @@ $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 `converging-routes-tick-003.*`, `slow-terrain-tick-002.*`,
 `swap-standoff-tick-001.*`, `perception-contact-tick-005.*`,
 `lost-comms-tick-001.*`, `exposed-approach-tick-001.*`,
-`blocked-goal-tick-001.*`, and `reissued-order-tick-003.*` are not produced by
-the `render` verb: each entry's initial state is corpus-owned (`Corpus.all`),
+`blocked-goal-tick-001.*`, `reissued-order-tick-003.*`, and
+`canonical-refusal-and-correction-tick-008.*` are not produced by the
+`render` verb: each entry's initial state is corpus-owned (`Corpus.all`),
 not the shared fixture or demo scenario `render` knows about. All are
 regenerated the same way — `DiagnosticRender.runFrames` over the named
 `Corpus.all` entry and its committed `.cwlog`, at the tick named in the file —
 using the exact helper (`convergingRoutesFrames ()` / `slowTerrainFrames ()` /
 `swapStandoffFrames ()` / `perceptionContactFrames ()` / `lostCommsFrames ()`
-/ `exposedApproachFrames ()` / `reissuedOrderFrames ()`, and an inline
-`runFrames` for `blocked-goal`) the corresponding `DiagnosticsTests.fs` fact
+/ `exposedApproachFrames ()` / `reissuedOrderFrames ()` /
+`canonicalRefusalAndCorrectionFrames ()`, and an inline `runFrames` for
+`blocked-goal`) the corresponding `DiagnosticsTests.fs` fact
 uses to compare against these files, so a regeneration and its test cannot
 silently disagree.
 

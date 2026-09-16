@@ -15,7 +15,47 @@ active_work:
   blockers: []
   updated: 2026-09-16
   note: >-
-    2026-09-16: TASK-037 (Minimal Suppress order and B-021/B-022 dependency
+    2026-09-16: TASK-038 (Canonical refusal-and-correction scenario end to
+    end, backlog B-023) drafted, implemented, self-verified, and accepted by
+    Dave -- status done. B-023's four dependencies (B-018, B-020, B-021,
+    B-022) were all done as of TASK-037, so this row was selectable per
+    docs/11 section 7. Central decision confirmed with Dave via
+    AskUserQuestion before drafting: docs/07 section 8 step 8 says "accepts
+    or adapts it consistently," but no Adapted OrderDisposition case exists
+    (stage-5 adaptation deferred by B-018) -- Dave chose to close B-023 on
+    the accepts-only proof, with the Adapted/stage-5 half recorded as a new,
+    not-yet-filed follow-up rather than silently dropped.
+
+    Implemented 2026-09-16: new canonical-refusal-and-correction corpus
+    entry (src/CommandoWar.Headless/Corpus.fs) -- the suppress-relieves-
+    exposure geometry exactly, plus one more order reissuing agent 0's
+    identical (11,3) target on tick 8. Real seeded trace: Refused
+    RouteTooExposed threat-agent-2 ticks 1-3; automatic threat-suppression-
+    change reappraisal Accepts it at tick 4; the tick-8 reissue produces its
+    own fresh Accepted + CommitmentEstablished for the same target;
+    disposition stays Accepted (or unappraised, on arrival) through tick 13,
+    never flipping back to Refused. Three new DiagnosticsTests facts plus
+    one golden ASCII/SVG pair at tick 8. No CommandoWar.Sim change, no
+    Canonical.FormatVersion bump -- every mechanism already existed
+    (TASK-028/030/033/037). Deviation found during implementation: the
+    drafted task file treated a new golden diagnostic pair as required by
+    AGENTS.md's diagnostics rule; on inspection it is not (no new Overlay
+    case, the TASK-037 precedent), but one was added anyway for legibility
+    on a G3 headline-evidence entry. 293 -> 297 green; dotnet build 0/0; --
+    corpus 14/14 (--regenerate twice byte-identical); -- fixture format 8,
+    36 events unchanged; dotnet list FSharp.Core only; source scan clean.
+    docs/07 section 8, docs/11 B-023 row (proposed -> done),
+    content/diagnostics/README.md, docs/12, and this file updated. No Godot
+    re-verification needed (no corpus-entry tick-1 hash moved).
+
+    Accepted by Dave 2026-09-16 ("accept"). Implemented directly on main, no
+    branch (the TASK-035/036 low-risk precedent). B-023 is now done, closing
+    out G3's headline evidence item. Re-verified before accepting: dotnet
+    build 0/0, dotnet test 297/297, -- corpus 14/14, -- fixture format 8 /
+    36 events unchanged, git status matched expected scope.
+    (docs/ledger/2026-09-16-TASK-038-canonical-refusal-and-correction.md)
+
+    Prior: 2026-09-16: TASK-037 (Minimal Suppress order and B-021/B-022 dependency
     closeout) drafted and selected. G3's critical path runs through B-023
     (the canonical refusal sequence), blocked on B-021/B-022's remaining
     review-partial scope and, more fundamentally, on B-030's never-built

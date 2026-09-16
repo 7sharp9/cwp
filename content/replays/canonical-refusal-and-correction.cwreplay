@@ -1,0 +1,9 @@
+version 1
+seed 20260904
+ticks 14
+canonical 8
+build cwheadless
+scenario canonical-refusal-and-correction
+command 1 0 1 1 routine standard corpus 0 move 11 3
+command 1 1 2 1 routine standard corpus 1 suppress 2
+command 8 0 3 8 routine standard corpus 0 move 11 3

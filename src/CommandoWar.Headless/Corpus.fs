@@ -439,6 +439,28 @@ module Corpus =
           Extraction = { X = 0; Y = 7 }
           Orders = [ order 1L 0 { X = 11; Y = 3 }; suppressOrder 1L 1 2 ] }
 
+    /// The `suppress-relieves-exposure` geometry exactly, extended with one
+    /// more order: on tick 8 (under the real seeded run, agent 0's order
+    /// already reappraised `Accepted` at tick 4 and has been mid-route since,
+    /// at `(6,3)`; hostile 2's `SuppressionBand` stays latched the whole run,
+    /// friendly 1's `Suppressing` order never lapses) the player reissues
+    /// agent 0's original intent — the identical `(11,3)` target — as a new
+    /// command (TASK-030's "second order mid-route" mechanism: a fresh
+    /// `Accepted` and `CommitmentEstablished` for the same target, no event
+    /// for the superseded commitment). `docs/07` section 8's full 8-step
+    /// sequence end to end: 1-3 (order across the approach, known
+    /// machine-gun lane, `Refused RouteTooExposed`), 4 (the refusal's
+    /// `DecisionReason` is a named, structured reason — never a raw score),
+    /// 5-6 (suppress the machine-gun, exposure recalculated, automatic
+    /// reappraisal to `Accepted`), 7 (the player reissues the original
+    /// intent), 8 (it is `Accepted` again, consistently — the `Adapted`
+    /// stage-5 half of "accepts or adapts" is out of scope, no such
+    /// disposition exists yet; TASK-038, backlog B-023).
+    let private canonicalRefusalAndCorrectionSpec: ScenarioSpec =
+        { suppressRelievesExposureSpec with
+            Id = "corpus-canonical-refusal-and-correction"
+            Orders = suppressRelievesExposureSpec.Orders @ [ order 8L 0 { X = 11; Y = 3 } ] }
+
     /// A friendly and a hostile within `CombatConfig.WeaponRange` and clear
     /// line of sight from tick 1, both stationary (no orders) — the Combat
     /// phase alone drives the trace, proving the phase wiring end-to-end
@@ -578,6 +600,25 @@ module Corpus =
              InitialState = fun () -> worldOfSpec suppressRelievesExposureSpec
              TickCount = 10L
              Commands = Some(commandsOfSpec suppressRelievesExposureSpec) }
+           { Name = "canonical-refusal-and-correction"
+             Description =
+               "The full docs/07 section 8 sequence in one run: the suppress-relieves-exposure geometry (friendly 0, "
+               + "Discipline 1, at (1,3) -> (11,3), hostile 2 at (10,4), friendly 1 at (10,1) suppressing hostile 2) "
+               + "plus a reissue of friendly 0's original (11,3) order on tick 8, once it is already mid-route under "
+               + "the automatic reappraisal. Steps 1-3: friendly 0 is Refused RouteTooExposed threat-agent-2 at tick "
+               + "1. Step 4: the refusal's DecisionReason is a named, structured reason, never a raw score. Steps "
+               + "5-6: friendly 1's Suppressing order latches hostile 2's SuppressionBand, Appraisal.routeExposure "
+               + "zeroes its contribution, and friendly 0's order reappraises Accepted at tick 4. Step 7: the player "
+               + "reissues the identical (11,3) intent at tick 8. Step 8: it is Accepted again, with a fresh "
+               + "CommitmentEstablished and no event for the superseded commitment -- consistent with the automatic "
+               + "reappraisal's earlier Accepted (the Adapted/stage-5 half of 'accepts or adapts' is out of scope, "
+               + "no such disposition exists yet). G3's headline evidence item (docs/07 section 9; TASK-038, "
+               + "backlog B-023)."
+             InitialStateNote =
+               "Corpus canonical-refusal-and-correction scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile)"
+             InitialState = fun () -> worldOfSpec canonicalRefusalAndCorrectionSpec
+             TickCount = 14L
+             Commands = Some(commandsOfSpec canonicalRefusalAndCorrectionSpec) }
            { Name = "reissued-order"
              Description =
                "One friendly agent at (1,4) ordered east to (14,4) on tick 1 (Accepted, CommitmentEstablished), "

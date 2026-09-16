@@ -774,6 +774,99 @@ let ``frameOf derives FireLine overlays for the open-engagement entry's first ti
     Assert.Equal(golden "open-engagement-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
     Assert.Equal(golden "open-engagement-tick-001.svg", DiagnosticRender.Svg tick1)
 
+// --- canonical refusal-and-correction sequence, end to end (TASK-038, backlog B-023) --
+
+let private canonicalRefusalAndCorrectionFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "canonical-refusal-and-correction")
+
+    match Corpus.commandsOf corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+let private agent0Appraisal (f: DiagnosticFrame) =
+    f.Overlays
+    |> Array.tryPick (function
+        | OrderAppraisal(a, _, d, _) when AgentId.value a = 0 -> Some d
+        | _ -> None)
+
+[<Fact>]
+let ``docs/07 section 8 steps 1-4: agent 0 is Refused with a structured, named reason, never a raw score`` () =
+    let tick1 = (canonicalRefusalAndCorrectionFrames ()).[1]
+
+    // OrderAppraised/OrderAppraisal only ever carry a structured
+    // OrderDisposition/DecisionReason (Domain.fs) -- no event or overlay in
+    // the codebase emits a raw numeric exposure/threshold value, so this
+    // pattern match alone is step 4's evidence: the "explanation surface" is
+    // a named reason by construction, not a score that could leak.
+    match agent0Appraisal tick1 with
+    | Some(Refused(RouteTooExposed(Some threat), _)) -> Assert.Equal(AgentId.ofInt 2, threat)
+    | other -> Assert.Fail($"expected Refused RouteTooExposed threat-agent-2, got {other}")
+
+    // The rendered text form is the same named reason, never a number
+    // (exposed-approach-tick-001.ascii.txt already pins this exact string
+    // for the identical Refused case; this is the same phase, same geometry).
+    Assert.Contains("refused route-too-exposed threat-agent-2", DiagnosticRender.Ascii tick1)
+
+[<Fact>]
+let ``docs/07 section 8 steps 5-6: the automatic reappraisal Accepts agent 0's order once hostile 2 is suppressed`` () =
+    let frames = canonicalRefusalAndCorrectionFrames ()
+
+    // Ticks 2-3: still Refused, no CommitmentEstablished.
+    for t in 2 .. 3 do
+        match agent0Appraisal frames.[t] with
+        | Some(Refused(RouteTooExposed(Some _), _)) -> ()
+        | other -> Assert.Fail($"tick {t}: expected still Refused, got {other}")
+
+    // Tick 4: hostile 2's SuppressionBand has latched, the threat-suppression-
+    // change reappraisal trigger fires, and agent 0's order reappraises
+    // Accepted with a fresh CommitmentEstablished -- no reissue involved yet.
+    let tick4 = frames.[4]
+    Assert.Equal(Some Accepted, agent0Appraisal tick4)
+
+    Assert.Contains(
+        tick4.Events,
+        (fun (e: EventMarker) -> e.Kind = "commitment-established" && e.Agents |> Array.contains (AgentId.ofInt 0))
+    )
+
+[<Fact>]
+let ``docs/07 section 8 steps 7-8: reissuing the original intent Accepts it again, consistently`` () =
+    let frames = canonicalRefusalAndCorrectionFrames ()
+
+    // Tick 8: the player reissues the identical (11,3) order while agent 0 is
+    // already mid-route under the automatic reappraisal. A fresh Accepted +
+    // CommitmentEstablished for the same target, no event for the superseded
+    // commitment (the TASK-030 "second order mid-route" precedent).
+    let tick8 = frames.[8]
+    Assert.Equal(Some Accepted, agent0Appraisal tick8)
+
+    Assert.Contains(
+        tick8.Events,
+        (fun (e: EventMarker) -> e.Kind = "commitment-established" && e.Agents |> Array.contains (AgentId.ofInt 0))
+    )
+
+    Assert.Contains(tick8.Overlays, (function
+        | AgentCommitment(a, _, Moving mc) -> AgentId.value a = 0 && mc.Target = { X = 11; Y = 3 }
+        | _ -> false))
+
+    // Every tick from the first automatic Accepted through arrival stays
+    // Accepted or unappraised (arrival clears Order/Disposition) -- the
+    // reissue and the tick-12 reappraisal blip never flip it back to
+    // Refused. "Consistently" (step 8) means this, not a one-tick fluke.
+    for t in 4 .. 13 do
+        match agent0Appraisal frames.[t] with
+        | Some Accepted
+        | None -> ()
+        | other -> Assert.Fail($"tick {t}: expected Accepted or unappraised, got {other}")
+
+    // Tick 13: agent 0 arrives at (11,3), completing the sequence.
+    Assert.Contains(
+        frames.[13].Events,
+        (fun (e: EventMarker) -> e.Kind = "movement-completed" && e.Agents |> Array.contains (AgentId.ofInt 0))
+    )
+
+    Assert.Equal(golden "canonical-refusal-and-correction-tick-008.ascii.txt", DiagnosticRender.Ascii tick8)
+    Assert.Equal(golden "canonical-refusal-and-correction-tick-008.svg", DiagnosticRender.Svg tick8)
+
 [<Fact>]
 let ``rendering is deterministic: two renders of the same frame are byte-equal`` () =
     let frames = demoFrames ()
