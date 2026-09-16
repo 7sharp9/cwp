@@ -106,6 +106,18 @@ module Command =
           RiskTolerance = Standard
           Intent = MoveTo target }
 
+    /// Builds a single-recipient suppress command with the default envelope
+    /// (TASK-037, a thin B-030 slice) — the `moveTo` precedent, naming a
+    /// specific known contact by `AgentId` rather than a `Cell` (Domain.fs
+    /// Decision B).
+    let suppress (id: CommandId) (issuedAtTick: int64) (agent: AgentId) (target: AgentId) : PlayerCommand =
+        { Id = id
+          IssuedAtTick = issuedAtTick
+          Recipients = [ agent ]
+          Urgency = Routine
+          RiskTolerance = Standard
+          Intent = Suppress target }
+
     /// Builds a move command addressing several agents, with an explicit
     /// urgency and risk tolerance. Exercised only from code (TASK-020's unit
     /// tests): the legacy `.cwlog` fixture grammar is one recipient per line

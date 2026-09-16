@@ -36,15 +36,18 @@ namespace CommandoWar.Sim
 ///   initial-hash 0x<16 hex>         -- optional
 ///   checkpoint <tick> 0x<16 hex>    -- zero or more, strictly ascending tick
 ///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> move <x> <y>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> suppress <targetAgentId>
 ///                                   -- zero or more, strictly ascending
 ///                                      (deliveryTick, sequence)
 ///
 /// `<urgency>` is `routine` | `immediate`; `<risk>` is `cautious` | `standard`
 /// | `aggressive` (lowercase, culture-invariant). `<issuer>` is a single
 /// whitespace-free token. `<recipients>` is a non-empty comma-separated list of
-/// non-negative agent ids with no spaces. `move <x> <y>` is the only intent
-/// today; the grammar has room for `hold` / `suppress` / `assault` / `withdraw`
-/// as later intent keywords without a version bump.
+/// non-negative agent ids with no spaces. `move <x> <y>` and `suppress
+/// <targetAgentId>` (TASK-037, a thin B-030 slice) are the two intents today,
+/// added without a version bump, exactly as this grammar always had room for;
+/// it still has room for `hold` / `assault` / `withdraw` as later intent
+/// keywords the same way.
 ///
 /// Output is deterministic: fixed field order, integers only, uppercase hex,
 /// `\n` line endings, commands emitted in `(RecordedCommand.Tick,
@@ -119,6 +122,7 @@ module ReplaySerialisation =
     let private intentText (intent: PlayerIntent) : string =
         match intent with
         | MoveTo target -> sprintf "move %d %d" target.X target.Y
+        | Suppress target -> sprintf "suppress %d" (AgentId.value target)
 
     /// Serialises a parsed-file view to the canonical text form. Deterministic
     /// and idempotent under `parse`. Throws `invalidArg` on data the grammar
@@ -267,11 +271,18 @@ module ReplaySerialisation =
             | [| "move"; xTok; yTok |] ->
                 parseI32 lineNo "x" xTok
                 >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(MoveTo { X = x; Y = y })
+            | [| "suppress"; idTok |] ->
+                parseI32 lineNo "target" idTok
+                >>= fun id ->
+                    if id < 0 then
+                        Error(FieldOutOfRange(lineNo, "target", idTok))
+                    else
+                        Ok(Suppress(AgentId.ofInt id))
             | [||] -> Error(UnknownIntent(lineNo, ""))
             | _ -> Error(UnknownIntent(lineNo, toks.[0]))
 
         let commandShape =
-            "command <tick> <seq> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> move <x> <y>"
+            "command <tick> <seq> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> move <x> <y> | suppress <targetAgentId>"
 
         let parseCommand lineNo (rest: string) : Result<RecordedCommand, ParseError> =
             let p = rest.Split(ws, System.StringSplitOptions.RemoveEmptyEntries)
@@ -463,7 +474,8 @@ module ReplaySerialisation =
             $"line {line}: checkpoint ticks must strictly ascend: {previous} then {current}"
         | CommandsOutOfOrder(line, struct (pt, ps), struct (ct, cs)) ->
             $"line {line}: commands must strictly ascend by (tick, sequence): ({pt},{ps}) then ({ct},{cs})"
-        | UnknownIntent(line, keyword) -> $"line {line}: unknown intent '{keyword}', only 'move <x> <y>' is supported"
+        | UnknownIntent(line, keyword) ->
+            $"line {line}: unknown intent '{keyword}', only 'move <x> <y>' or 'suppress <targetAgentId>' is supported"
 
     /// The serialisable view of a replay record, recording the hash of its
     /// initial state so a reader can detect a mismatched scenario builder.

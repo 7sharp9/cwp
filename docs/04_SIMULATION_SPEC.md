@@ -660,8 +660,22 @@ explicitly exclude a fulfilled order (`Disposition = Some Accepted,
 Destination = None, Position = target`) — resetting it would re-run the
 `fromCell = target` short-circuit and defeat `commitmentAndLocalAction`'s
 completion clear. Exposure-band, wounded, support, and leadership triggers,
-and dynamic trust, remain B-021 but out of this task's cut — see `docs/05`
-section 14.
+and dynamic trust, remain unbuilt (explicitly descoped, `docs/11` B-021's
+row) — see `docs/05` section 14.
+
+A `Suppress` order and a third reappraisal trigger realised by TASK-037 (a
+thin B-030 slice pulled forward as P3 decision-support): `PlayerIntent.Suppress
+of target: AgentId` appraises on stage 2 alone (is the named contact known —
+`Unable(TargetNotKnown)` otherwise) and never reaches stage 3/4. Its effect is
+on *other* agents' stage-3 exposure: `Appraisal.routeExposure`/`cellPressure`
+gain a `suppressedThreats: AgentId[]` parameter and zero a threat's
+contribution while its own `AgentState.SuppressionBand` is latched (reusing
+the TASK-033 hysteresis latch, whatever raised it — an ordered `Suppress` or
+incidental automatic engagement, TASK-031 — not new bookkeeping). The third
+trigger, threat-suppression-change, is the identical suppression-band check
+but global across every agent, not only the appraising agent's own, so a
+threat's flip reappraises a *different* agent's order that names it (`docs/05`
+section 14; `docs/07` section 8 step 6).
 
 ### 12.6 Commitment and local action
 
@@ -671,22 +685,27 @@ section 14.
 
 Realised by TASK-030 (backlog B-018) as `Simulation.commitmentAndLocalAction`,
 its own phase in `Phases.order` between Appraisal and Navigation. `Commitment`
-(`Holding | Moving of MoveCommitment`) is a pure derived value over `Order` /
-`Disposition` / `Destination` (`Commitment.fs`) — not a stored commitment
-store, since those three fields already carry every bit of memory a
-commitment needs. The finite executor for `Move` is correspondingly thin:
-establish (`Order` freshly `Accepted` this tick -> emit
-`CommitmentEstablished`), continue (unchanged, no event), or complete
-(`Order` cleared on fulfilment, relocated from the Appraisal phase's prior
-housekeeping -> emit `CommitmentCompleted`). Of the `docs/05` section 11
+(`Holding | Moving of MoveCommitment`, extended by TASK-037 with `Suppressing
+of SuppressCommitment`) is a pure derived value over `Order` / `Disposition` /
+`Destination` (`Commitment.fs`) — not a stored commitment store, since those
+three fields already carry every bit of memory a commitment needs. The finite
+executor for `Move` is correspondingly thin: establish (`Order` freshly
+`Accepted` this tick -> emit `CommitmentEstablished`), continue (unchanged, no
+event), or complete (`Order` cleared on fulfilment, relocated from the
+Appraisal phase's prior housekeeping -> emit `CommitmentCompleted`). A
+`Suppress` order's executor (TASK-037) has no complete state — it holds
+position indefinitely (no `Destination` is ever written for it) and ends only
+by supersession; in the Combat phase (12.8) it pins its named contact as the
+shooter's sole candidate rather than the nearest `VisibleContacts` entry,
+`Combat.chooseTarget` itself unchanged. Of the `docs/05` section 11
 seven-priority interrupt table, only priority 6 ("new higher-priority
 command") has a live signal: a superseding order's fresh
 `CommitmentEstablished` is the complete trace, with no separate event
 reporting the superseded commitment's end (nothing is lost — `Commitment` is
 derived, not stored). Priorities 1–4 need combat/suppression state that does
 not exist (B-019/B-020); priority 5 ("route invalidated") was already
-assigned to B-021 by TASK-028 (it needs a stall counter). `Suppressing` /
-`Assaulting` / `Withdrawing` commitments and their `PlayerIntent` cases are
+assigned to B-021 by TASK-028 (it needs a stall counter). `Assaulting` /
+`Withdrawing` commitments and their `PlayerIntent` cases remain the rest of
 B-030.
 
 ### 12.7 Navigation and movement
@@ -758,6 +777,16 @@ tactical-knowledge entry for a friendly it can no longer see never fires on
 it; nothing in this section or `Combat.fs` changed to make this true, TASK-034
 only adds the `SimulationTests` fact that pins it.
 
+**A `Suppress` order's executor realised by TASK-037 (backlog B-030 thin
+slice):** a shooter with a `Suppressing` commitment (12.6) narrows its
+candidate set from every `VisibleContacts` entry to just its one named
+contact before the same nearest-candidate `Combat.chooseTarget` call runs —
+so it either fires on that contact (still gated by this tick's actual range
+and line of fire) or not at all this tick, never silently retargeting onto
+something else that wanders into view. `Combat.fs` and `Combat.chooseTarget`
+are otherwise unchanged; the target's `Suppression` still rises through the
+identical TASK-031/032 `ShotFired` -> `Suppression.gain` pipeline.
+
 ### 12.9 State consequences
 
 - update suppression decay;
@@ -826,6 +855,13 @@ is stored on the order as provenance (staleness is still deferred — B-021).
 `PlayerIntent`, `Urgency`, and `RiskTolerance` moved to `Domain.fs` (TASK-028)
 so `AgentState.Order` can reference them. Still **out of this partial
 envelope**: issuer identity (not modelled — one player).
+
+**`Suppress` realised in reduced form by TASK-037** (a thin B-030 slice):
+`Suppress of target: AgentId`, not this section's `TargetArea` — it names a
+specific known contact, never an area or a "suspected" (id-less) target (no
+suspected-threat model exists). `Command.suppress` is the `Command.moveTo`
+precedent. `MoveTo`'s `posture`, `Hold`, `Assault`, and `WithdrawTo` remain
+unbuilt.
 
 **On-disk form realised by TASK-025 (backlog B-045).** The full accepted
 envelope now has a lossless serialisation:
@@ -1045,6 +1081,21 @@ fixture, and `envelope-full` are enemy-free or one-sided and re-pin
 behaviour-neutrally; tick counts and event counts are unchanged everywhere
 (TASK-034 ledger). `firstDifferingSection` gains a
 `"HostileTacticalKnowledge"` label.
+
+TASK-037 note (a thin B-030 slice): `writeOrder` gained a second
+`PlayerIntent` case (`Suppress of target: AgentId`) and `writeReason` gained a
+third `DecisionReason` case (`TargetNotKnown`) — both inside the
+already-canonical `AgentState.Order` / `.Disposition` sections (TASK-028,
+format 4), so this is a byte-layout change to an existing section, not a new
+one; `Canonical.FormatVersion` bumped **7 -> 8**. `Commitment.Suppressing` is
+**not** written — `Commitment` stays a pure derived value (TASK-030), never
+part of `Canonical.encode`. Every scenario pinned before this version issues
+no `Suppress` order, so the re-pin is behaviour-neutral everywhere except the
+new `suppress-relieves-exposure` corpus entry (genuine new `Suppress`-order
+and `Suppression` state); tick counts and event counts are unchanged
+elsewhere (TASK-037 ledger). No new `firstDifferingSection` label — a
+`Suppress`-order difference surfaces through the existing per-agent
+`"Agent[N]"` fallback, not a new top-level section.
 
 ## 18. Save state
 

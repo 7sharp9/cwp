@@ -60,10 +60,22 @@ type Contact =
 
 /// What a command asks an agent to do (moved here from `Commands.fs` by
 /// TASK-028: `AgentState.Order` below carries a `PlayerIntent`, and `Domain.fs`
-/// compiles before `Commands.fs`). Only movement is needed for the vertical
-/// slice; `Hold`, `Suppress`, `Assault` and `Withdraw`
-/// (`docs/04_SIMULATION_SPEC.md` section 13) are added by later tasks (B-030).
-type PlayerIntent = MoveTo of target: Cell
+/// compiles before `Commands.fs`). `Hold`, `Assault` and `Withdraw`
+/// (`docs/04_SIMULATION_SPEC.md` section 13) remain later tasks (the rest of
+/// B-030 — assault/withdraw executors, ammunition).
+///
+/// `Suppress` (TASK-037, a thin B-030 slice pulled forward as P3
+/// decision-support) names a specific known contact by `AgentId`, not a bare
+/// `Cell`: `docs/05` section 4's "known or suspected threat area" wording
+/// also covers an unconfirmed, id-less "suspected" target, but no
+/// suspected-threat model exists anywhere in the codebase, so that half stays
+/// out (`AGENTS.md` "no speculative type machinery"). The target must be a
+/// contact already present in the issuing agent's own tactical knowledge
+/// (`Appraisal.appraise`'s `Unable(TargetNotKnown)` check) — never
+/// authoritative hostile state (risk R-023).
+type PlayerIntent =
+    | MoveTo of target: Cell
+    | Suppress of target: AgentId
 
 /// How urgently an order should be acted on, relative to an agent's current
 /// activity (moved here from `Commands.fs` by TASK-028). `docs/05` section 5
@@ -103,11 +115,12 @@ type ReceivedOrder =
 
 /// A typed reason for an appraisal outcome (TASK-028; `docs/05` section 7
 /// "structured reasons" — "do not add prose-only reasons; UI text is derived
-/// from structured values"). TASK-028 realises only the two reasons its staged
-/// checks can produce; the rest of the `docs/05` vocabulary
-/// (`RouteBlocked`, `HeavySuppression`, `CriticallyWounded`, `MissingCapability`,
-/// `TargetNotKnown`, ...) arrives with the systems that can trigger it
-/// (B-019 / B-020 / B-021). The doc's `ContactId` is `AgentId` in the code.
+/// from structured values"). TASK-028 realised the two reasons its staged
+/// checks could produce; TASK-037 adds the one a `Suppress` order's stage-2
+/// check can produce. The rest of the `docs/05` vocabulary (`RouteBlocked`,
+/// `HeavySuppression`, `CriticallyWounded`, `MissingCapability`, ...) arrives
+/// with the systems that can trigger it (B-019 / B-020 / B-021 / B-030). The
+/// doc's `ContactId` is `AgentId` in the code.
 type DecisionReason =
     /// Stage 2: no known traversable route connects the agent's cell to the
     /// order target (`Pathfinding.findWithin` returned `NoPath` /
@@ -118,6 +131,12 @@ type DecisionReason =
     /// contact from `WorldState.TacticalKnowledge`, or `None` when the
     /// pressure is diffuse.
     | RouteTooExposed of threat: AgentId option
+    /// Stage 2 (TASK-037): a `Suppress` order names an `AgentId` absent from
+    /// the issuing agent's own tactical knowledge — never authoritative
+    /// hostile state (risk R-023), so this is checked against
+    /// `WorldState.TacticalKnowledge` / `HostileTacticalKnowledge`, not
+    /// `WorldState.Agents`.
+    | TargetNotKnown
 
 /// The agent's appraisal of its current `Order` (TASK-028; `docs/05` section
 /// 6). TASK-028 subset: `Adapted` (stage 5 safer adaptation) is B-018 and

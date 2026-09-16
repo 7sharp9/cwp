@@ -1287,6 +1287,18 @@ let ``Commitment.ofAgent matches every reachable (Order, Disposition, Destinatio
     // No order at all -> Holding.
     Assert.Equal(Holding, Commitment.ofAgent None None None)
 
+    // Accepted Suppress order (TASK-037) -> Suppressing, keyed by AgentId,
+    // never by Destination (a Suppress order never writes one).
+    let suppressOrder =
+        Some
+            { Command = CommandId.ofInt 2
+              Intent = Suppress(agent 9)
+              IssuedAtTick = 0L
+              Urgency = Routine
+              RiskTolerance = Standard }
+
+    Assert.Equal(Suppressing { Command = CommandId.ofInt 2; Target = agent 9 }, Commitment.ofAgent suppressOrder (Some Accepted) None)
+
 // --- Hitscan combat and directional cover effects (TASK-031) ----------
 
 let private shotsFiredIn (r: StepResult) =
@@ -1677,3 +1689,105 @@ let ``the suppression-band hysteresis latch reappraises an Accepted order when i
     let exited = stepIdle (withSuppression AppraisalConfig.SuppressionBandExit quiet.State)
     Assert.False((agentOf (agent 0) exited.State).SuppressionBand)
     Assert.Equal(1, (appraisedIn exited).Length)
+
+// --- Suppress order and threat-suppression reappraisal (TASK-037) --------
+
+let private suppressCmd (id: int) (recipient: AgentId) (target: AgentId) =
+    Command.suppress (CommandId.ofInt id) 0L recipient target
+
+[<Fact>]
+let ``a Suppress order naming an unknown contact is Unable TargetNotKnown`` () =
+    let w = appraisalWorld [ 0, { X = 5; Y = 10 }, 3 ] []
+    let r = stepWith [| suppressCmd 1 (agent 0) (agent 9) |] w
+
+    Assert.Equal(Some(Unable(TargetNotKnown, [||])), dispositionOf (agent 0) r)
+    let a0 = agentOf (agent 0) r.State
+    Assert.Equal(None, a0.Destination)
+    Assert.Equal(Holding, Commitment.ofAgent a0.Order a0.Disposition a0.Destination)
+
+[<Fact>]
+let ``a Suppress order naming a known contact is Accepted with no Destination and a Suppressing commitment`` () =
+    let w = appraisalWorld [ 0, { X = 5; Y = 10 }, 3 ] [ 9, { X = 9; Y = 3 } ]
+    let r = stepWith [| suppressCmd 1 (agent 0) (agent 9) |] w
+
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) r)
+    let a0 = agentOf (agent 0) r.State
+    Assert.Equal(None, a0.Destination)
+    Assert.Equal({ X = 5; Y = 10 }, a0.Position) // holds position, never moves
+    Assert.Equal(
+        Suppressing { Command = CommandId.ofInt 1; Target = agent 9 },
+        Commitment.ofAgent a0.Order a0.Disposition a0.Destination
+    )
+
+[<Fact>]
+let ``routeExposure zeroes a threat's contribution once it is in suppressedThreats`` () =
+    let terrain = Terrain.empty { Width = 20; Height = 20 }
+
+    let threat: Contact =
+        { Contact = agent 9
+          LastKnownCell = { X = 5; Y = 5 }
+          LastSeenTick = 0L
+          Confidence = PerceptionConfig.ConfidenceFull }
+
+    let routeCells = [| for x in 0..10 -> { X = x; Y = 5 } |]
+
+    let exposedPressure, exposedTop = Appraisal.routeExposure terrain [| threat |] [||] routeCells
+    Assert.True(exposedPressure > 0)
+    Assert.Equal(Some(agent 9), exposedTop)
+
+    let suppressedPressure, suppressedTop = Appraisal.routeExposure terrain [| threat |] [| agent 9 |] routeCells
+    Assert.Equal(0, suppressedPressure)
+    Assert.Equal(None, suppressedTop)
+
+[<Fact>]
+let ``a threat's SuppressionBand flip reappraises a DIFFERENT agent's Refused order to Accepted`` () =
+    // The "exposed route ... Refused" scenario exactly, but the trigger under
+    // test is a THIRD agent's threat-suppression flip, not agent 0's own
+    // stress/suppression (the suppression-band trigger above only covers the
+    // appraising agent's own state).
+    let w = appraisalWorld [ 0, { X = 5; Y = 10 }, 1 ] [ 5, { X = 9; Y = 3 } ]
+    let tick1 = stepWith [| cmd 1 (agent 0) { X = 14; Y = 10 } |] w
+
+    match dispositionOf (agent 0) tick1 with
+    | Some(Refused(RouteTooExposed(Some threat), _)) -> Assert.Equal(agent 5, threat)
+    | other -> Assert.Fail($"expected Refused RouteTooExposed (Some agent 5), got {other}")
+
+    // Stand in for an earlier tick's combat already having raised the
+    // threat's Suppression past SuppressionBandEnter, before its stored
+    // SuppressionBand latch has been recomputed (the real-play ordering:
+    // Combat writes Suppression; SuppressionBand is only recomputed at the
+    // NEXT tick's Appraisal, docs/05 sections 14/15) — the identical
+    // `withSuppression` mutation the suppression-band-latch test above uses,
+    // applied to the THREAT (agent 5) instead of the appraising agent.
+    let suppressed =
+        { tick1.State with
+            Agents =
+                tick1.State.Agents
+                |> Array.map (fun a ->
+                    if a.Id = agent 5 then
+                        { a with Suppression = AppraisalConfig.SuppressionBandEnter }
+                    else
+                        a) }
+
+    let tick2 = stepIdle suppressed
+
+    Assert.True((agentOf (agent 5) tick2.State).SuppressionBand)
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) tick2)
+    Assert.Equal(Some { X = 14; Y = 10 }, (agentOf (agent 0) tick2.State).Destination)
+
+[<Fact>]
+let ``a Suppressing agent fires at its named target even when a nearer contact is also visible`` () =
+    let b: GridBounds = { Width = 20; Height = 20 }
+
+    let w =
+        perceptionWorld b [ 0, { X = 0; Y = 0 } ] [ 1, { X = 3; Y = 0 }; 2, { X = 6; Y = 0 } ] (Terrain.empty b)
+
+    let r = stepWith [| suppressCmd 1 (agent 0) (agent 2) |] w
+
+    let fromShooter0 =
+        bodies r
+        |> Array.choose (function
+            | ShotFired(shooter, target, _) when shooter = agent 0 -> Some target
+            | _ -> None)
+
+    Assert.Equal<AgentId[]>([| agent 2 |], fromShooter0)

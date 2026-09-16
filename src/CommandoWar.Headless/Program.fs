@@ -195,6 +195,7 @@ let private cmdReplayFile (args: string list) : int =
                                 let intent =
                                     match c.Command.Intent with
                                     | MoveTo t -> sprintf "move (%d,%d)" t.X t.Y
+                                    | Suppress t -> sprintf "suppress agent-%d" (AgentId.value t)
 
                                 printfn
                                     "    tick %d seq %d  id %d  issued@%d  %A/%A  -> [%s]  %s"

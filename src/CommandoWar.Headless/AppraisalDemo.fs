@@ -52,6 +52,7 @@ module AppraisalDemo =
             | NoKnownRoute -> "no-known-route"
             | RouteTooExposed None -> "route-too-exposed"
             | RouteTooExposed(Some id) -> sprintf "route-too-exposed threat-agent-%d" (AgentId.value id)
+            | TargetNotKnown -> "target-not-known"
 
         match d with
         | Accepted -> "accepted"

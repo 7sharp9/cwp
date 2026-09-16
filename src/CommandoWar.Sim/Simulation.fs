@@ -265,23 +265,39 @@ module Simulation =
             elif cmd.IssuedAtTick < 0L || cmd.IssuedAtTick > s.Tick then
                 emit (CommandRejected(cmd.Id, IssueTickOutOfRange(cmd.IssuedAtTick, s.Tick))) s
             else
-                match cmd.Intent with
-                | MoveTo target ->
-                    match cmd.Recipients with
-                    | [] -> emit (CommandRejected(cmd.Id, EmptyRecipients)) s
-                    | recipients ->
-                        match firstDuplicate recipients with
-                        | Some repeated -> emit (CommandRejected(cmd.Id, DuplicateRecipient repeated)) s
-                        | None when not (GridBounds.contains target s.Bounds) ->
+                match cmd.Recipients with
+                | [] -> emit (CommandRejected(cmd.Id, EmptyRecipients)) s
+                | recipients ->
+                    match firstDuplicate recipients with
+                    | Some repeated -> emit (CommandRejected(cmd.Id, DuplicateRecipient repeated)) s
+                    | None ->
+                        // The bounds check (TASK-020) applies only to a
+                        // MoveTo target Cell. A Suppress target (TASK-037,
+                        // backlog B-030 thin slice) is an AgentId, not a
+                        // bounds-checkable Cell — whether it names a contact
+                        // the recipient actually knows about is Appraisal's
+                        // stage-2 TargetNotKnown check, never authoritative
+                        // hostile state at intake (risk R-023).
+                        match cmd.Intent with
+                        | MoveTo target when not (GridBounds.contains target s.Bounds) ->
                             emit (CommandRejected(cmd.Id, TargetOutOfBounds target)) s
-                        | None ->
+                        | MoveTo _
+                        | Suppress _ ->
                             for recipient in recipients |> List.sortBy AgentId.value do
                                 match Map.tryFind recipient indexOf with
                                 | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
                                 | Some idx when agents.[idx].Side = Hostile ->
                                     emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
-                                | Some _ ->
-                                    emit (CommandAccepted(cmd.Id, recipient, target)) s
+                                | Some idx ->
+                                    // CommandAccepted's Cell reports the move
+                                    // target, or (Suppress has none) the
+                                    // recipient's own unmoving position.
+                                    let cell =
+                                        match cmd.Intent with
+                                        | MoveTo target -> target
+                                        | Suppress _ -> agents.[idx].Position
+
+                                    emit (CommandAccepted(cmd.Id, recipient, cell)) s
 
                                     pending.Add(
                                         recipient,
@@ -502,10 +518,27 @@ module Simulation =
     //     Suppression (Combat / State consequences for THIS tick have not
     //     run yet).
     //
+    // A third trigger is added by TASK-037 (a thin B-030 slice):
+    //
+    //   * threat-suppression-change: ANY agent's SuppressionBand flips this
+    //     tick (not just the appraising agent's own) — global scope, the
+    //     knowledge-change precedent. This is what lets a Suppress order (or
+    //     incidental automatic engagement) against one agent's threat
+    //     reappraise a DIFFERENT agent's Refused/Unable order once
+    //     Appraisal.routeExposure (Decision F) stops charging that threat's
+    //     pressure — docs/07 section 8 step 6, "tactical knowledge and
+    //     exposure are recalculated". Precomputed for every agent up front
+    //     (newBands below), not inline, so a later-id threat's flip is known
+    //     before an earlier-id agent's order is judged.
+    //
     // Both Appraisal.resolveThreshold terms (a continuous Stress drag, a
     // discrete SuppressionBand penalty) are read only when an appraisal
     // actually runs, exactly like Discipline — the fast path still emits
-    // nothing and reads neither.
+    // nothing and reads neither. Appraisal.appraise also takes
+    // suppressedThreats (TASK-037): the ids of every agent currently
+    // SuppressionBand-latched, used only by a MoveTo order's stage-3
+    // exposure (Decision F) — a Suppress order's own stage-2
+    // TargetNotKnown check reads `threats` directly, not this set.
     let private appraisal (s: StepState) =
         let terrain = s.Terrain
         let threats = s.TacticalKnowledge
@@ -520,34 +553,64 @@ module Simulation =
                 | ContactExpired _ -> true
                 | _ -> false)
 
-        for i in 0 .. agents.Length - 1 do
-            let a = agents.[i]
-
-            let newBand =
+        // Precomputed for every agent up front (TASK-037), not inline per
+        // iteration as before TASK-037: the threatSuppressionChanged /
+        // suppressedThreats triggers below need to know whether a threat
+        // LATER in ascending-id order just flipped its SuppressionBand while
+        // still processing an EARLIER agent's order, which inline
+        // computation cannot see.
+        let newBands =
+            agents
+            |> Array.map (fun a ->
                 if a.Suppression >= AppraisalConfig.SuppressionBandEnter then true
                 elif a.Suppression <= AppraisalConfig.SuppressionBandExit then false
-                else a.SuppressionBand
+                else a.SuppressionBand)
+
+        // Decision G (TASK-037, backlog B-030 thin slice): has any agent's
+        // SuppressionBand flipped this tick? Global scope, the
+        // knowledgeChanged precedent (docs/05 section 14) — reappraises
+        // every non-fulfilled Refused/Unable order, not only the ones whose
+        // recorded topThreat is the specific agent that flipped. This is
+        // what realises docs/07 section 8 step 6 ("tactical knowledge and
+        // exposure are recalculated") once a `Suppress` order (or incidental
+        // automatic engagement) drives a threat's Suppression into its band.
+        let threatSuppressionChanged =
+            Array.zip agents newBands |> Array.exists (fun (a, newBand) -> newBand <> a.SuppressionBand)
+
+        // Decision F (TASK-037): the ids of every agent currently suppressed
+        // (this tick's newBand, not last tick's), for
+        // Appraisal.routeExposure/.appraise's stage-3 pressure zeroing.
+        let suppressedThreats =
+            Array.zip agents newBands
+            |> Array.choose (fun (a, newBand) -> if newBand then Some a.Id else None)
+
+        for i in 0 .. agents.Length - 1 do
+            let a = agents.[i]
+            let newBand = newBands.[i]
 
             match a.Order with
             | None -> agents.[i] <- { a with SuppressionBand = newBand }
             | Some o ->
-                let (MoveTo target) = o.Intent
-
-                // A fulfilled order (Accepted, arrived, Destination already
-                // cleared to None) must NOT be reset here: commitmentAndLocalAction
-                // (immediately after this phase) relies on seeing Disposition =
-                // Some Accepted with Destination = None to recognise completion
-                // and clear both fields. Resetting it here would re-run
-                // Appraisal.appraise's fromCell = target short-circuit, which
-                // re-writes Destination = Some target and silently defeats that
-                // clear.
+                // A fulfilled MoveTo order (Accepted, arrived, Destination
+                // already cleared to None) must NOT be reset here:
+                // commitmentAndLocalAction (immediately after this phase)
+                // relies on seeing Disposition = Some Accepted with
+                // Destination = None to recognise completion and clear both
+                // fields. Resetting it here would re-run
+                // Appraisal.appraise's fromCell = target short-circuit,
+                // which re-writes Destination = Some target and silently
+                // defeats that clear. A Suppress order (TASK-037) has no
+                // fulfilled state at all (Commitment.fs Decision D/E) — it
+                // only ends by supersession, so it is never "fulfilled" here.
                 let fulfilled =
-                    a.Disposition = Some Accepted && a.Destination = None && a.Position = target
+                    match o.Intent with
+                    | MoveTo target -> a.Disposition = Some Accepted && a.Destination = None && a.Position = target
+                    | Suppress _ -> false
 
                 let triggered =
                     a.Disposition.IsSome
                     && not fulfilled
-                    && (knowledgeChanged || newBand <> a.SuppressionBand)
+                    && (knowledgeChanged || newBand <> a.SuppressionBand || threatSuppressionChanged)
 
                 match (if triggered then None else a.Disposition) with
                 | Some _ ->
@@ -560,7 +623,16 @@ module Simulation =
                     agents.[i] <- { a with SuppressionBand = newBand }
                 | None ->
                     let disposition, _ =
-                        Appraisal.appraise terrain threats a.Discipline a.Stress newBand o a.Position budget
+                        Appraisal.appraise
+                            terrain
+                            threats
+                            suppressedThreats
+                            a.Discipline
+                            a.Stress
+                            newBand
+                            o
+                            a.Position
+                            budget
 
                     // On Accepted, hand the target to Navigation as the
                     // Destination (which clears any Destination a superseded
@@ -568,12 +640,15 @@ module Simulation =
                     // Accepted with Destination = the cell; Navigation then
                     // emits MovementCompleted and clears it, exactly as the
                     // pre-TASK-028 Communication write did. On Refused / Unable
-                    // the agent holds no Destination.
+                    // the agent holds no Destination. A Suppress order
+                    // (TASK-037) never writes a Destination even when
+                    // Accepted — it does not move (Commitment.fs Decision D).
                     let destination =
-                        match disposition with
-                        | Accepted -> Some target
-                        | Refused _
-                        | Unable _ -> None
+                        match disposition, o.Intent with
+                        | Accepted, MoveTo target -> Some target
+                        | Accepted, Suppress _
+                        | Refused _, _
+                        | Unable _, _ -> None
 
                     agents.[i] <-
                         { a with
@@ -600,23 +675,26 @@ module Simulation =
     // job is entirely to notice the two transitions those fields can now
     // produce and name them with an event:
     //
-    //   1. Fulfilled. Order = Some o, Disposition = Some Accepted, Destination
-    //      = None, Position = o's target -> the order was completed last
-    //      tick (Navigation cleared Destination on arrival). Clear Order and
-    //      Disposition (relocated, unchanged, from the Appraisal phase's
-    //      prior housekeeping branch — TASK-028) and emit
-    //      CommitmentCompleted(agent, command, at).
+    //   1. Fulfilled (MoveTo only). Order = Some o, Disposition = Some
+    //      Accepted, Destination = None, Position = o's target -> the order
+    //      was completed last tick (Navigation cleared Destination on
+    //      arrival). Clear Order and Disposition (relocated, unchanged, from
+    //      the Appraisal phase's prior housekeeping branch — TASK-028) and
+    //      emit CommitmentCompleted(agent, command, at). A Suppress order
+    //      (TASK-037) has no fulfilled state — it never reaches this branch.
     //   2. Established. Order = Some o, Disposition = Some Accepted, and this
     //      tick's Appraisal just emitted OrderAppraised(agent, o.Command,
     //      Accepted) (checked via this tick's already-emitted events, not
     //      persisted state) -> a fresh commitment begins. Emit
-    //      CommitmentEstablished(agent, command, target). This single check
-    //      covers both "from Holding" and "supersedes an in-progress Moving
-    //      commitment" (docs/05 section 11 priority 6, "new higher-priority
-    //      command" — the only interrupt priority with a live signal today;
-    //      priorities 1-4 need combat/suppression state that does not exist,
-    //      B-019/B-020, and priority 5 "route invalidated" needs a stall
-    //      counter TASK-028 already assigned to B-021): because Commitment is
+    //      CommitmentEstablished(agent, command, target) — target is the
+    //      MoveTo destination, or (Suppress, TASK-037) the named contact's
+    //      last-known cell. This single check covers both "from Holding" and
+    //      "supersedes an in-progress Moving/Suppressing commitment"
+    //      (docs/05 section 11 priority 6, "new higher-priority command" —
+    //      the only interrupt priority with a live signal today; priorities
+    //      1-4 need combat/suppression state that does not exist, B-019/
+    //      B-020, and priority 5 "route invalidated" needs a stall counter
+    //      TASK-028 already assigned to B-021): because Commitment is
     //      derived, not stored, the prior commitment simply stops being
     //      produced the instant Order/Disposition/Destination change: there
     //      is nothing to interrupt as a side effect, and no event reports the
@@ -645,17 +723,37 @@ module Simulation =
 
             match a.Order, a.Disposition with
             | Some o, Some Accepted ->
-                let (MoveTo target) = o.Intent
+                match o.Intent with
+                | MoveTo target ->
+                    if a.Destination = None && a.Position = target then
+                        // Fulfilled: relocated from the Appraisal phase's prior
+                        // housekeeping (TASK-028).
+                        agents.[i] <- { a with Order = None; Disposition = None }
+                        emit (CommitmentCompleted(a.Id, o.Command, a.Position)) s
+                    elif Set.contains a.Id acceptedThisTick then
+                        // Freshly accepted this tick: a commitment begins.
+                        emit (CommitmentEstablished(a.Id, o.Command, target)) s
+                    // else: a Moving commitment continues unchanged; no event.
+                | Suppress target ->
+                    // A Suppress commitment (TASK-037) has no fulfilled state
+                    // (Commitment.fs Decision D/E) — it holds position
+                    // indefinitely and ends only by supersession (a new Order
+                    // overwriting this one), which needs no event of its own
+                    // (Commitment is derived, not stored — the prior
+                    // commitment simply stops being produced). Report the
+                    // establishment at the target contact's last-known cell,
+                    // when still known (the CommitmentEstablished Cell field
+                    // precedent), or the agent's own position as a fallback
+                    // (only reachable if the contact expired the same tick it
+                    // was accepted).
+                    if Set.contains a.Id acceptedThisTick then
+                        let at =
+                            s.TacticalKnowledge
+                            |> Array.tryFind (fun c -> c.Contact = target)
+                            |> Option.map (fun c -> c.LastKnownCell)
+                            |> Option.defaultValue a.Position
 
-                if a.Destination = None && a.Position = target then
-                    // Fulfilled: relocated from the Appraisal phase's prior
-                    // housekeeping (TASK-028).
-                    agents.[i] <- { a with Order = None; Disposition = None }
-                    emit (CommitmentCompleted(a.Id, o.Command, a.Position)) s
-                elif Set.contains a.Id acceptedThisTick then
-                    // Freshly accepted this tick: a commitment begins.
-                    emit (CommitmentEstablished(a.Id, o.Command, target)) s
-                // else: a Moving commitment continues unchanged; no event.
+                        emit (CommitmentEstablished(a.Id, o.Command, at)) s
             | _ -> ()
             // Order = None, or Disposition = Some (Refused | Unable): Holding.
             // Nothing to establish or complete; no event.
@@ -1012,7 +1110,10 @@ module Simulation =
     //      R-023 "same observation contract". Because Combat runs three phases
     //      after Perception, a candidate's position may have moved since it
     //      was observed; Combat.chooseTarget re-verifies line of fire fresh
-    //      against each candidate's CURRENT cell.
+    //      against each candidate's CURRENT cell. A Suppressing agent
+    //      (TASK-037, backlog B-030 thin slice) narrows this to its one named
+    //      contact instead of every VisibleContacts entry — Combat.chooseTarget
+    //      itself is unchanged, still re-verifying range/line-of-fire fresh.
     //   2. Combat.chooseTarget picks the nearest candidate within
     //      CombatConfig.WeaponRange and current Sight.visible line of fire,
     //      ties broken by ascending AgentId. No candidate qualifies -> no
@@ -1037,8 +1138,21 @@ module Simulation =
 
         for shooter in candidateSource do
             let candidates =
-                shooter.VisibleContacts
-                |> Array.choose (fun id -> candidateSource |> Array.tryFind (fun a -> a.Id = id))
+                // A Suppressing agent (TASK-037, backlog B-030 thin slice)
+                // pins its named contact as the only candidate — a
+                // deliberate Suppress order does not silently retarget onto
+                // whatever else wanders into view — still gated by this
+                // tick's actual VisibleContacts, range, and line of fire via
+                // the unchanged Combat.chooseTarget below (Decision E).
+                match Commitment.ofAgent shooter.Order shooter.Disposition shooter.Destination with
+                | Suppressing sc ->
+                    shooter.VisibleContacts
+                    |> Array.filter (fun id -> id = sc.Target)
+                    |> Array.choose (fun id -> candidateSource |> Array.tryFind (fun a -> a.Id = id))
+                | Holding
+                | Moving _ ->
+                    shooter.VisibleContacts
+                    |> Array.choose (fun id -> candidateSource |> Array.tryFind (fun a -> a.Id = id))
 
             match Combat.chooseTarget terrain shooter candidates with
             | None -> ()

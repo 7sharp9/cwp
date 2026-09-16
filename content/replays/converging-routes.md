@@ -16,23 +16,23 @@ See `content/replays/CORPUS.md`.
 | Command log | `converging-routes.cwreplay` |
 | Initial state | Corpus converging-routes scenario (8 x 8, seed 20260904) |
 | Tick count | 12 |
-| Initial hash (tick 0) | `0xAD2BAB9543DA3FBF` |
-| Final hash (tick 12) | `0x7BBD60A7AC93A2FB` |
+| Initial hash (tick 0) | `0xC0FCC13D8A85DEBE` |
+| Final hash (tick 12) | `0x93AEA8F89A458552` |
 | Domain events | 25 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xBA4CDBB7D93E0819` |
-|    2 | `0x21AE3E4C828EAE48` |
-|    3 | `0xB362C53E450A5684` |
-|    4 | `0xFA6EF8873537822F` |
-|    5 | `0x1103D0175B2373BA` |
-|    6 | `0x0DC71394109B74A5` |
-|    7 | `0xF6AC36E6714D67AD` |
-|    8 | `0xB68EE870FB7EF82F` |
-|    9 | `0xD76C82D978FB9A40` |
-|   10 | `0x8A3102F67BCE0321` |
-|   11 | `0x2B4745402EDA6BCA` |
-|   12 | `0x7BBD60A7AC93A2FB` |
+|    1 | `0x1E8F64A9235746E4` |
+|    2 | `0x19F26441CA578015` |
+|    3 | `0xE15440E7EBE55029` |
+|    4 | `0x87F0B376D5B2DEE6` |
+|    5 | `0xDAB680FCAB38CA9B` |
+|    6 | `0xE367F439A926F418` |
+|    7 | `0x70273008CCB557D0` |
+|    8 | `0xC9E2847E4CDB531E` |
+|    9 | `0xD61F675D1C46FE9D` |
+|   10 | `0xFF2116170F6C5DDC` |
+|   11 | `0xAE280DF9B2E2E3E3` |
+|   12 | `0x93AEA8F89A458552` |

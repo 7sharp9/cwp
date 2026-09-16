@@ -49,6 +49,7 @@ module DiagnosticRender =
         | NoKnownRoute -> "no-known-route"
         | RouteTooExposed None -> "route-too-exposed"
         | RouteTooExposed(Some id) -> sprintf "route-too-exposed threat-agent-%d" (AgentId.value id)
+        | TargetNotKnown -> "target-not-known"
 
     /// Short text for an `OrderDisposition` (TASK-028).
     let private dispositionText (d: OrderDisposition) : string =
@@ -70,6 +71,7 @@ module DiagnosticRender =
         match c with
         | Holding -> "holding"
         | Moving mc -> sprintf "moving to %s" (cellText mc.Target)
+        | Suppressing sc -> sprintf "suppressing agent %d" (AgentId.value sc.Target)
 
     /// Steps `initial` through `log` for `tickCount` ticks and collects the
     /// diagnostic frame at every tick: index 0 is tick 0 (`Diagnostics.frame`
@@ -740,13 +742,16 @@ module DiagnosticRender =
             | AgentCommitment(_, at, commitment) ->
                 // The agent's current commitment (TASK-030): a small teal
                 // marker at the top-left corner of the agent's cell, filled
-                // for Holding, hollow for Moving — deliberately distinct from
-                // the OrderAppraisal disposition glyph (bottom-right corner)
-                // and the PlannedPath polyline.
+                // teal for Holding, hollow for Moving, filled orange for
+                // Suppressing (TASK-037 — the FireLine "hit" colour, both
+                // reading as "active fire") — deliberately distinct from the
+                // OrderAppraisal disposition glyph (bottom-right corner) and
+                // the PlannedPath polyline.
                 let fill =
                     match commitment with
                     | Holding -> "#2c7a7b"
                     | Moving _ -> "none"
+                    | Suppressing _ -> "#dd6b20"
 
                 line (
                     sprintf

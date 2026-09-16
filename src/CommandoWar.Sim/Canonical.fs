@@ -103,8 +103,24 @@ module Canonical =
     /// real new state, not a byte-layout artefact. Every other pinned entry is
     /// enemy-free or one-sided and re-pins behaviour-neutrally. Tick counts
     /// and event counts are unchanged everywhere (TASK-034 ledger).
+    ///
+    /// 8 (TASK-037): `writeOrder` gained a second `PlayerIntent` case
+    /// (`Suppress of target: AgentId`, a thin B-030 slice pulled forward as
+    /// P3 decision-support) and `writeReason` gained a third `DecisionReason`
+    /// case (`TargetNotKnown`) — both inside `AgentState.Order` /
+    /// `.Disposition`'s already-canonical encoding (TASK-028, format 4), so
+    /// this is a genuine byte-layout change to an existing section, not a new
+    /// one. `Commitment.Suppressing` is NOT written: `Commitment` stays a
+    /// pure derived value (the TASK-030 precedent), never itself part of
+    /// `Canonical.encode`. Every scenario pinned before this version issues
+    /// no `Suppress` order, so the moved hashes are a byte-layout change, not
+    /// a behaviour change, for every entry except the new
+    /// `suppress-relieves-exposure` corpus entry (which gains genuine new
+    /// `Suppress`-order and `Suppression` state from the tick suppression
+    /// fire starts — real new state, not a byte-layout artefact). Tick counts
+    /// and event counts are unchanged everywhere else (TASK-037 ledger).
     [<Literal>]
-    let FormatVersion = 7
+    let FormatVersion = 8
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -186,6 +202,7 @@ module Canonical =
         match r with
         | NoKnownRoute -> 0
         | RouteTooExposed _ -> 1
+        | TargetNotKnown -> 2
 
     let private writeReason (w: Writer) (r: DecisionReason) =
         w.I32(reasonCode r)
@@ -198,6 +215,7 @@ module Canonical =
             | Some id ->
                 w.U8 1uy
                 w.I32(AgentId.value id)
+        | TargetNotKnown -> ()
 
     let private writeDisposition (w: Writer) (d: OrderDisposition) =
         match d with
@@ -223,6 +241,9 @@ module Canonical =
             w.I32 0
             w.I32 target.X
             w.I32 target.Y
+        | Suppress target ->
+            w.I32 1
+            w.I32(AgentId.value target)
 
         w.I64 o.IssuedAtTick
 

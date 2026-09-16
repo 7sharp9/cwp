@@ -174,11 +174,25 @@ over an in-progress commitment, though without the preceding suppress/reroute
 correction step 7 presupposes in the full sequence. TASK-032 (backlog B-020)
 landed the raw `AgentState.Suppression` value real fire now creates and
 decays; TASK-033 (backlog B-021, partial) landed the recalculation mechanism
-step 6 needs — the knowledge-change reappraisal trigger re-judges a `Refused`
-order once its blocking threat's contact expires — but not the `Suppress`
-order itself (B-030, "order another fireteam to suppress the machine-gun
-position") that step 5 needs to fire, nor the UI explanation surface (step
-4) or enemy doctrine (B-022). The full sequence is B-023.
+a *same-agent* trigger needs — the knowledge-change reappraisal trigger
+re-judges a `Refused` order once its blocking threat's contact expires.
+
+Steps 5–6 are realised by TASK-037 (a thin B-030 slice, pulled forward as P3
+decision-support): a `Suppress` order (`PlayerIntent.Suppress of target:
+AgentId`) that a second fireteam can issue against the known machine-gun
+contact, whose `Suppressing` commitment holds position and keeps it under
+fire; once that contact's `AgentState.SuppressionBand` latches,
+`Appraisal.routeExposure` zeroes its contribution to every other agent's
+route exposure, and a new reappraisal trigger (any agent's `SuppressionBand`
+flipping, not only the appraising agent's own) re-judges the first agent's
+`Refused` order the same tick — step 5 ("the player orders another fireteam
+to suppress the machine-gun position") and step 6 ("tactical knowledge and
+exposure are recalculated") both proven end to end by the new
+`suppress-relieves-exposure` corpus entry. Still open: the UI explanation
+surface (step 4) and enemy doctrine (B-022, explicitly descoped by TASK-037 —
+suppress-likely-routes, seek-cover, and scripted fall-back are Hostile-side
+concerns TASK-037's player-issued order does not touch). The full sequence,
+scripted end to end as one scenario, is B-023.
 
 ## 9. Functional acceptance criteria
 

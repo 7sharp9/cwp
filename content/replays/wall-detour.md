@@ -16,35 +16,35 @@ See `content/replays/CORPUS.md`.
 | Command log | `wall-detour.cwreplay` |
 | Initial state | Corpus wall-detour scenario (12 x 9, seed 20260904) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0xF7CA7481CDB8C29C` |
-| Final hash (tick 24) | `0x6BA08637D30F9DD5` |
+| Initial hash (tick 0) | `0x173E0F94C0D31FE1` |
+| Final hash (tick 24) | `0xEC11F5CCEE317788` |
 | Domain events | 22 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x23BBCC8EE8C91C28` |
-|    2 | `0x7027FA7E7CFC08F2` |
-|    3 | `0x98A36FF9BF2109B0` |
-|    4 | `0x54CCDD4805A01CA0` |
-|    5 | `0xB6543589EA729354` |
-|    6 | `0x92728371EB625E84` |
-|    7 | `0x89DBC7E0B6C4E988` |
-|    8 | `0x58E44FA36C3E4E06` |
-|    9 | `0x02AFC9025A94A800` |
-|   10 | `0xCD478834164088DA` |
-|   11 | `0x8C5E3EDC26BDF174` |
-|   12 | `0x364277CA90197112` |
-|   13 | `0x9FB9BE6919325940` |
-|   14 | `0x092A00A3A753223A` |
-|   15 | `0x01F3DF4789861CE8` |
-|   16 | `0xD8E8AE1080FC67D6` |
-|   17 | `0x35D51E0FB4B338E8` |
-|   18 | `0x473A7BF783BCC15B` |
-|   19 | `0xCE4F061468FB7A8C` |
-|   20 | `0x36D69D9AB9176E29` |
-|   21 | `0x887C2D672044A81A` |
-|   22 | `0xFB4A07A95866C237` |
-|   23 | `0x6A57831179DDB6A8` |
-|   24 | `0x6BA08637D30F9DD5` |
+|    1 | `0xFBC6481D82944695` |
+|    2 | `0xFB64117F290A690B` |
+|    3 | `0x15B84E8743B0B67D` |
+|    4 | `0xB4E48BDC9D35144D` |
+|    5 | `0x46CFF9B5C244F9A9` |
+|    6 | `0x19E64467A03373C9` |
+|    7 | `0xB5DA90BDCB96E105` |
+|    8 | `0x4F90DEE1D1551AD7` |
+|    9 | `0xC88E41A0FEBF569D` |
+|   10 | `0x05E395628CCBC683` |
+|   11 | `0x70BD584555926429` |
+|   12 | `0x60081B62ABCD1ECB` |
+|   13 | `0x26FFE6447777C50D` |
+|   14 | `0xC2826077885A9953` |
+|   15 | `0xE22EF5C3D4406D25` |
+|   16 | `0x30B3E73862E74F27` |
+|   17 | `0xF160888F822ED445` |
+|   18 | `0x857DABF83E331842` |
+|   19 | `0x38DB0E8FE1AAE531` |
+|   20 | `0xB21676B6D8D5EF14` |
+|   21 | `0xCF364E9DA0FC6D43` |
+|   22 | `0x619237E1043D0DF6` |
+|   23 | `0xED5AF8F347635EB5` |
+|   24 | `0xEC11F5CCEE317788` |
