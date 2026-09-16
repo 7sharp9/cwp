@@ -13,7 +13,7 @@ See `content/replays/CORPUS.md`.
 
 | Parameter | Value |
 |---|---|
-| Command log | `wall-detour.cwlog` |
+| Command log | `wall-detour.cwreplay` |
 | Initial state | Corpus wall-detour scenario (12 x 9, seed 20260904) |
 | Tick count | 24 |
 | Initial hash (tick 0) | `0xF7CA7481CDB8C29C` |

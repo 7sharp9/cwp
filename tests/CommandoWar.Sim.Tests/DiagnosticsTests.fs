@@ -393,7 +393,7 @@ let private corpusDir = Path.Combine(AppContext.BaseDirectory, "replays")
 let private convergingRoutesFrames () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "converging-routes")
 
-    match Corpus.loadLog corpusDir entry with
+    match Corpus.commandsOf corpusDir entry with
     | Error m -> failwith m
     | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 
@@ -436,7 +436,7 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
 let private slowTerrainFrames () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "slow-terrain")
 
-    match Corpus.loadLog corpusDir entry with
+    match Corpus.commandsOf corpusDir entry with
     | Error m -> failwith m
     | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 
@@ -459,7 +459,7 @@ let ``the frame carries AgentMarker.Progress for the slow-terrain entry's accumu
 let private swapStandoffFrames () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "swap-standoff")
 
-    match Corpus.loadLog corpusDir entry with
+    match Corpus.commandsOf corpusDir entry with
     | Error m -> failwith m
     | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 
@@ -501,7 +501,7 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
 let private perceptionContactFrames () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "perception-contact")
 
-    match Corpus.loadLog corpusDir entry with
+    match Corpus.commandsOf corpusDir entry with
     | Error m -> failwith m
     | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 
@@ -584,7 +584,7 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
 let private lostCommsFrames () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "lost-comms")
 
-    match Corpus.loadLog corpusDir entry with
+    match Corpus.commandsOf corpusDir entry with
     | Error m -> failwith m
     | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 
@@ -634,7 +634,7 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
 let private exposedApproachFrames () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "exposed-approach")
 
-    match Corpus.loadLog corpusDir entry with
+    match Corpus.commandsOf corpusDir entry with
     | Error m -> failwith m
     | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 
@@ -666,7 +666,7 @@ let ``frameOf shows blocked-goal's order as Unable at appraisal (byte-equal to t
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "blocked-goal")
 
     let frames =
-        match Corpus.loadLog corpusDir entry with
+        match Corpus.commandsOf corpusDir entry with
         | Error m -> failwith m
         | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 
@@ -685,7 +685,7 @@ let ``frameOf shows blocked-goal's order as Unable at appraisal (byte-equal to t
 let private reissuedOrderFrames () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "reissued-order")
 
-    match Corpus.loadLog corpusDir entry with
+    match Corpus.commandsOf corpusDir entry with
     | Error m -> failwith m
     | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 
@@ -720,7 +720,7 @@ let ``frameOf derives an AgentCommitment overlay for the reissued-order entry's 
 let private openEngagementFrames () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "open-engagement")
 
-    match Corpus.loadLog corpusDir entry with
+    match Corpus.commandsOf corpusDir entry with
     | Error m -> failwith m
     | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 

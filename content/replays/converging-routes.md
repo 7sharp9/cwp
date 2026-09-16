@@ -13,7 +13,7 @@ See `content/replays/CORPUS.md`.
 
 | Parameter | Value |
 |---|---|
-| Command log | `converging-routes.cwlog` |
+| Command log | `converging-routes.cwreplay` |
 | Initial state | Corpus converging-routes scenario (8 x 8, seed 20260904) |
 | Tick count | 12 |
 | Initial hash (tick 0) | `0xAD2BAB9543DA3FBF` |

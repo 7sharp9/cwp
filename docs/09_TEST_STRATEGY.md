@@ -232,10 +232,14 @@ Replay verification must identify:
 - simulation and content versions.
 
 Realised by TASK-016 (backlog B-012): `content/replays/` (index
-`CORPUS.md`), a committed, regenerable multi-entry replay corpus over the
-existing `.cwlog` v1 format (`src/CommandoWar.Headless/CommandLogFile.fs`) plus
-a per-tick authoritative-hash table per entry (mirroring
-`content/fixtures/SPIKE-FIXTURE.md`). Seven entries: the shared spike fixture
+`CORPUS.md`), a committed, regenerable multi-entry replay corpus originally
+over the `.cwlog` v1 format (`src/CommandoWar.Headless/CommandLogFile.fs`)
+plus a per-tick authoritative-hash table per entry (mirroring
+`content/fixtures/SPIKE-FIXTURE.md`); TASK-036 (backlog B-049) later migrated
+every entry but the shared spike fixture onto the production
+`ReplaySerialisation` format (`.cwreplay`), authored alongside its geometry as
+one `ScenarioSpec` value rather than a separately hand-typed command file.
+Seven entries at the time: the shared spike fixture
 (cross-checked against `Fixture.run ()`, not an independent re-pin), a
 single-agent wall detour and a `MovementBlocked` no-path case (both exercising
 the TASK-015 executor), a two-agent "converging routes" entry that pinned the

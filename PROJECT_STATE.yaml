@@ -13,24 +13,45 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-15
+  updated: 2026-09-16
   note: >-
-    2026-09-15: TASK-036 (Shared F# fixture builder for the test corpus,
-    backlog B-049) drafted and selected. Of the backlog items ready per
-    docs/11 section 7 after TASK-035 (B-016b, B-049, B-050, B-011d), none
-    sit on G3's critical path -- that is blocked on a slice of B-030 for
-    B-023 step 5, a separate larger discussion flagged to Dave, not
-    resolved here. B-049 picked as the one paying down compounding risk
-    (Corpus.fs / .cwlog / SimulationTests.fs duplication and drift). One
-    builder in Corpus.fs will author scenario geometry and a per-agent
-    command schedule as a single value, replacing the eleven hand-written
-    ...World() functions and hand-authored .cwlog files with a generated,
-    diff-checked .cwreplay per entry (ReplaySerialisation, B-045's
-    production format). Two central decisions confirmed with Dave via
+    2026-09-16: TASK-036 (Shared F# fixture builder for the test corpus,
+    backlog B-049) implemented and self-verified; status `review`, awaiting
+    Dave's acceptance. One ScenarioSpec value in Corpus.fs now authors
+    geometry and a per-agent command schedule together; all eleven
+    non-fixture corpus entries migrated onto it, replacing rawScenario and
+    the eleven ...World() functions. Entry gains Commands:
+    RecordedCommand[] option (Some = the sole runtime source of truth for
+    a migrated entry, None for spike-fixture, unchanged). regenerateEntry
+    now writes each migrated entry's content/replays/<name>.cwreplay
+    (ReplaySerialisation) instead of a hand-authored .cwlog; CommandId /
+    Sequence numbering deliberately mirrors CommandLogFile.parse's
+    order-of-appearance convention exactly, since CommandId is part of
+    Canonical.encode. Deviation found during implementation, beyond the
+    drafted Allowed scope: DiagnosticsTests.fs (nine call sites) and
+    AppraisalDemo.fs (the TASK-029 Godot demo helper) also called
+    Corpus.loadLog directly on a migrated entry and needed the same swap
+    to Corpus.commandsOf -- both mechanical, no behaviour change. Every
+    migrated .md byte-identical except its "Command log" row (corrected
+    .cwlog -> .cwreplay, invisible to Corpus.parseTable). No
+    CommandoWar.Sim change, no Canonical.FormatVersion change, no ADR.
+    287 -> 287 green; dotnet build 0/0; -- corpus 12/12 (--regenerate
+    twice byte-identical); -- fixture format 7, 36 events unchanged; --
+    replay-file envelope-full unchanged. Implemented directly on main, no
+    branch -- the DIAG-001/TASK-035 precedent, justified by this task's
+    low-risk, fully-verified refactor profile (a departure from the
+    TASK-030-034 M-sized-task branch precedent, flagged to Dave).
+    (docs/ledger/2026-09-16-TASK-036-shared-fixture-builder.md)
+
+    Prior: 2026-09-15: TASK-036 drafted and selected. Of the backlog items
+    ready per docs/11 section 7 after TASK-035 (B-016b, B-049, B-050,
+    B-011d), none sit on G3's critical path -- that is blocked on a slice
+    of B-030 for B-023 step 5, a separate larger discussion flagged to
+    Dave, not resolved here. B-049 picked as the one paying down
+    compounding risk (Corpus.fs / .cwlog / SimulationTests.fs duplication
+    and drift). Two central decisions confirmed with Dave via
     AskUserQuestion: .cwreplay over the frozen .cwlog v1 grammar; migrate
-    all eleven existing entries. No CommandoWar.Sim change, no
-    Canonical.FormatVersion change, no ADR. Not yet implemented.
-    (docs/ledger/2026-09-15-TASK-036-drafted.md)
+    all eleven existing entries. (docs/ledger/2026-09-15-TASK-036-drafted.md)
 
     Prior: 2026-09-15: TASK-035 (Event agent attribution for diagnostic narration,
     presentation-only, no backlog item) accepted by Dave ("looks good");

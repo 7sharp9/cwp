@@ -13,7 +13,7 @@ See `content/replays/CORPUS.md`.
 
 | Parameter | Value |
 |---|---|
-| Command log | `swap-standoff.cwlog` |
+| Command log | `swap-standoff.cwreplay` |
 | Initial state | Corpus swap-standoff scenario (8 x 8, seed 20260904) |
 | Tick count | 4 |
 | Initial hash (tick 0) | `0xD8FAB5C25C540226` |

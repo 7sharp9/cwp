@@ -13,7 +13,7 @@ See `content/replays/CORPUS.md`.
 
 | Parameter | Value |
 |---|---|
-| Command log | `blocked-goal.cwlog` |
+| Command log | `blocked-goal.cwreplay` |
 | Initial state | Corpus blocked-goal scenario (8 x 8, seed 20260904) |
 | Tick count | 5 |
 | Initial hash (tick 0) | `0x30277CEC8C43A156` |

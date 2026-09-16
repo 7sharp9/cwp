@@ -13,7 +13,7 @@ See `content/replays/CORPUS.md`.
 
 | Parameter | Value |
 |---|---|
-| Command log | `slow-terrain.cwlog` |
+| Command log | `slow-terrain.cwreplay` |
 | Initial state | Corpus slow-terrain scenario (8 x 8, seed 20260904) |
 | Tick count | 8 |
 | Initial hash (tick 0) | `0x2F5B138AC4197A25` |

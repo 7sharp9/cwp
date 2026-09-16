@@ -940,9 +940,10 @@ valid input. This file-format version is independent of `Replay.FormatVersion`,
 `CommandLog.Version`, and `Canonical.FormatVersion`, none of which move.
 `cwheadless replay-file <path>` parses, replays, prints the per-tick hash table
 and the ordered accepted commands, and exits 2 on a parse/validate failure or 3
-on a checkpoint divergence. The legacy `.cwlog` stays the frozen
-fixture-script format for the seven existing corpus entries (corpus migration
-is B-049).
+on a checkpoint divergence. TASK-036 (backlog B-049) migrated the corpus's
+other entries onto `.cwreplay`, generated from the same authored
+`ScenarioSpec` value as each entry's geometry; the legacy `.cwlog` grammar
+stays frozen and is used only by `spike-fixture`.
 
 ## 17. State hashing
 

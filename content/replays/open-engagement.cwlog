@@ -1,6 +1,0 @@
-# Replay corpus entry: open-engagement (command-log format v1).
-# Initial state: Corpus open-engagement scenario (10 x 10, seed 20260904), a
-# friendly at (2,2) and a hostile at (7,2), open ground. No commands: neither
-# side is ordered anywhere, so the Combat phase alone drives the trace
-# (TASK-031, backlog B-019).
-version 1

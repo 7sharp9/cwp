@@ -9,13 +9,19 @@ open CommandoWar.Sim
 /// The committed replay corpus (TASK-016, backlog B-012;
 /// `docs/09_TEST_STRATEGY.md` section 2.4 "Maintain a small replay corpus").
 ///
-/// Each entry is a named initial `WorldState`, a committed command-log file
-/// (`content/replays/<Name>.cwlog`, the existing v1 format), and a committed
-/// per-tick authoritative-hash table (`content/replays/<Name>.md`, mirroring
-/// `content/fixtures/SPIKE-FIXTURE.md`). `cwheadless corpus` and the in-suite
-/// `CorpusTests` theory both replay every entry and compare its per-tick hashes
-/// to the committed table: a mismatch is a determinism regression that fails a
-/// build instead of rotting silently.
+/// Each entry is a named initial `WorldState`, a committed command file, and a
+/// committed per-tick authoritative-hash table (`content/replays/<Name>.md`,
+/// mirroring `content/fixtures/SPIKE-FIXTURE.md`). Since TASK-036 (backlog
+/// B-049) every entry but `spike-fixture` authors its geometry and command
+/// schedule as one `ScenarioSpec` value (below); the committed
+/// `content/replays/<Name>.cwreplay` (`ReplaySerialisation`) is a generated,
+/// human-reviewable artefact derived from that value, not read back at
+/// runtime. `spike-fixture` alone still reads its commands from a
+/// hand-authored `content/replays/spike-fixture.cwlog` (the legacy v1
+/// grammar, `CommandLogFile`). `cwheadless corpus` and the in-suite
+/// `CorpusTests` theory both replay every entry and compare its per-tick
+/// hashes to the committed table: a mismatch is a determinism regression that
+/// fails a build instead of rotting silently.
 ///
 /// This module is an OBSERVER over `Replay` / `Divergence`, exactly as
 /// `DiagnosticRender` is over `Diagnostics`: it adds no authoritative state and
@@ -33,7 +39,9 @@ module Corpus =
 
     /// One corpus entry.
     type Entry =
-        { /// File stem: `<Name>.cwlog` and `<Name>.md` under `content/replays/`.
+        { /// File stem under `content/replays/`: `<Name>.md` always, plus
+          /// `<Name>.cwreplay` (builder-authored entries) or `<Name>.cwlog`
+          /// (`spike-fixture` only).
           Name: string
           /// One-paragraph explanation, copied verbatim into the generated
           /// `<Name>.md` so regeneration is byte-stable.
@@ -43,12 +51,22 @@ module Corpus =
           /// The authoritative world at tick 0 for this entry.
           InitialState: unit -> WorldState
           /// Ticks the entry's replay covers.
-          TickCount: int64 }
+          TickCount: int64
+          /// The entry's accepted commands, when authored in F# by the
+          /// `ScenarioSpec` builder (TASK-036, backlog B-049): this value is
+          /// the sole runtime source of truth, and the committed
+          /// `<name>.cwreplay` is a generated, diff-checked artefact derived
+          /// from it, never read back. `None` only for `spike-fixture`,
+          /// whose commands still come from its hand-authored
+          /// `content/replays/spike-fixture.cwlog` (out of this task's
+          /// scope — it is the framework-spike shared fixture, not a
+          /// `ScenarioSpec`).
+          Commands: RecordedCommand[] option }
 
-    // --- hand-built scenarios for the non-fixture entries -----------------
+    // --- shared fixture builder (TASK-036, backlog B-049) ------------------
 
-    /// Deterministic seed for the three built scenarios. No gameplay phase
-    /// draws from the stream; the value only has to be stable.
+    /// Deterministic seed for the eleven builder-authored scenarios. No
+    /// gameplay phase draws from the stream; the value only has to be stable.
     [<Literal>]
     let private Seed = 20260904UL
 
@@ -79,44 +97,71 @@ module Corpus =
           MoveCost = moveCost
           Opaque = false }
 
-    /// Fills the common `RawScenario` fields: one "reach" objective on an
-    /// objective area, one extraction area, no targets. `enemies` is `[]` for
-    /// every entry except `perception-contact` (TASK-026): `rawScenario` used
-    /// to hard-wire no enemy deployments, so the first enemy-bearing entry
-    /// needed this generalisation. `commsBlackout` is `[]` for every entry
-    /// except `lost-comms` (TASK-027): the agent ids it names get
-    /// `CommunicationAvailable = false`, so the Communication phase emits
-    /// `OrderUndelivered` and drops any order to them. `Scenario.validate` and
-    /// `World.ofScenario` already deploy friendly-then-enemy in ascending id
-    /// order.
-    let private rawScenario
-        (id: string)
-        (width: int)
-        (height: int)
-        (friendly: (int * Cell) list)
-        (enemies: (int * Cell) list)
-        (commsBlackout: int list)
-        (terrain: RawTerrainCell list)
-        (objective: Cell)
-        (extraction: Cell)
-        : RawScenario =
-        let deployment (a, c) : RawDeployment =
-            { AgentId = a
-              Cell = c
-              CommunicationAvailable = not (List.contains a commsBlackout)
-              // Every `rawScenario` entry uses the default discipline; the one
-              // entry that needs per-agent discipline (`exposed-approach`,
-              // TASK-028) has its own builder.
-              Discipline = AppraisalConfig.DisciplineDefault }
+    /// One agent's authored deployment.
+    type private ScenarioAgent =
+        { Id: int
+          Cell: Cell
+          Discipline: int
+          CommunicationAvailable: bool }
+
+    /// One authored `MoveTo` order, delivered on `Tick` to `Agent`. Every
+    /// corpus entry today needs only a single-recipient move with the
+    /// default envelope (`Command.moveTo`'s `Routine`/`Standard`); a richer
+    /// shape is deferred until an entry actually needs one (`AGENTS.md`:
+    /// prefer the smallest change).
+    type private ScenarioOrder = { Tick: int64; Agent: int; Target: Cell }
+
+    /// One corpus scenario authored as a single value: geometry and its
+    /// command schedule together, so the two cannot independently drift the
+    /// way a `Corpus.fs` deployment and a hand-typed `.cwlog` could
+    /// (TASK-036, backlog B-049; `docs/notes/2026-09-06-tooling-and-debug-
+    /// display.md` section 1). `worldOfSpec` and `commandsOfSpec` are this
+    /// value's two projections — the corpus `WorldState` and its
+    /// `RecordedCommand[]` — and are never authored independently.
+    type private ScenarioSpec =
+        { Id: string
+          Width: int
+          Height: int
+          Friendly: ScenarioAgent list
+          Enemies: ScenarioAgent list
+          Terrain: RawTerrainCell list
+          Objective: Cell
+          Extraction: Cell
+          Orders: ScenarioOrder list }
+
+    let private agent (id: int) (cell: Cell) : ScenarioAgent =
+        { Id = id
+          Cell = cell
+          Discipline = AppraisalConfig.DisciplineDefault
+          CommunicationAvailable = true }
+
+    /// An agent with a non-default `Discipline` (`exposed-approach`).
+    let private agentWith (id: int) (cell: Cell) (discipline: int) : ScenarioAgent =
+        { agent id cell with Discipline = discipline }
+
+    /// An agent with an authored comms blackout (`lost-comms`): the
+    /// Communication phase cannot reach it, so any order to it is dropped.
+    let private blackedOut (id: int) (cell: Cell) : ScenarioAgent =
+        { agent id cell with CommunicationAvailable = false }
+
+    let private order (tick: int64) (agentId: int) (target: Cell) : ScenarioOrder =
+        { Tick = tick; Agent = agentId; Target = target }
+
+    let private rawOf (spec: ScenarioSpec) : RawScenario =
+        let deployment (a: ScenarioAgent) : RawDeployment =
+            { AgentId = a.Id
+              Cell = a.Cell
+              CommunicationAvailable = a.CommunicationAvailable
+              Discipline = a.Discipline }
 
         { ContentVersion = ScenarioContent.Version
-          Id = id
-          Width = width
-          Height = height
-          FriendlyDeployments = friendly |> List.map deployment |> List.toArray
-          EnemyDeployments = enemies |> List.map deployment |> List.toArray
-          ObjectiveAreas = [| { AreaId = "objective"; Cell = objective } |]
-          ExtractionAreas = [| { AreaId = "exit"; Cell = extraction } |]
+          Id = spec.Id
+          Width = spec.Width
+          Height = spec.Height
+          FriendlyDeployments = spec.Friendly |> List.map deployment |> List.toArray
+          EnemyDeployments = spec.Enemies |> List.map deployment |> List.toArray
+          ObjectiveAreas = [| { AreaId = "objective"; Cell = spec.Objective } |]
+          ExtractionAreas = [| { AreaId = "exit"; Cell = spec.Extraction } |]
           StaticTargets = [||]
           Objectives =
             [| { Id = 1
@@ -127,20 +172,22 @@ module Corpus =
                  ExtractAgentIds = [||]
                  IsOptional = false } |]
           TerrainLayer =
-            match terrain with
+            match spec.Terrain with
             | [] -> None
             | cs ->
                 Some
-                    { Width = width
-                      Height = height
+                    { Width = spec.Width
+                      Height = spec.Height
                       Cells = List.toArray cs
                       Cover = [||] }
           FailOnFriendlyForceEliminated = true }
 
-    /// Validates and instantiates a corpus scenario. Fails hard: these are
-    /// fixed test vectors, so a validation or build error here is a bug in
-    /// this file.
-    let private worldOf (raw: RawScenario) : WorldState =
+    /// Validates and instantiates a corpus scenario's initial `WorldState`.
+    /// Fails hard: these are fixed test vectors, so a validation or build
+    /// error here is a bug in this file.
+    let private worldOfSpec (spec: ScenarioSpec) : WorldState =
+        let raw = rawOf spec
+
         match Scenario.validate raw with
         | Error es -> failwith $"corpus scenario '{raw.Id}' is malformed: {es}"
         | Ok scenario ->
@@ -148,84 +195,119 @@ module Corpus =
             | Ok w -> w
             | Error e -> failwith $"corpus world '{raw.Id}' build failed: {e}"
 
+    /// Derives the entry's accepted commands from the same authored value
+    /// `worldOfSpec` reads. `CommandId` is assigned from order of appearance
+    /// in `spec.Orders` (1-based) and `Sequence` from order of appearance
+    /// within a tick — the `CommandLogFile.parse` numbering, preserved here
+    /// so a migrated entry's canonical hashes (which encode `CommandId`,
+    /// `Canonical.fs`) do not move.
+    let private commandsOfSpec (spec: ScenarioSpec) : RecordedCommand[] =
+        spec.Orders
+        |> List.mapi (fun i o -> i + 1, o)
+        |> List.groupBy (fun (_, o) -> o.Tick)
+        |> List.collect (fun (tick, group) ->
+            group
+            |> List.sortBy fst
+            |> List.mapi (fun seq (appearanceId, o) ->
+                { Tick = tick
+                  Sequence = seq
+                  Command = Command.moveTo (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) o.Target
+                  Issuer = "corpus" }))
+        |> List.sortBy (fun c -> c.Tick, c.Sequence)
+        |> List.toArray
+
     /// One friendly agent at (1,3) with an impassable wall at x=5, rows 0..6
     /// (rows 7..8 open). A `MoveTo (10,3)` forces a detour around the gap.
-    let private wallDetourWorld () : WorldState =
-        worldOf (
-            rawScenario "corpus-wall-detour" 12 9 [ 0, { X = 1; Y = 3 } ] [] [] [ for y in 0..6 -> wall 5 y ] { X = 11; Y = 0 } { X = 0; Y = 8 }
-        )
+    let private wallDetourSpec: ScenarioSpec =
+        { Id = "corpus-wall-detour"
+          Width = 12
+          Height = 9
+          Friendly = [ agent 0 { X = 1; Y = 3 } ]
+          Enemies = []
+          Terrain = [ for y in 0..6 -> wall 5 y ]
+          Objective = { X = 11; Y = 0 }
+          Extraction = { X = 0; Y = 8 }
+          Orders = [ order 1L 0 { X = 10; Y = 3 } ] }
 
     /// One friendly agent at (1,4); the target (5,4) is passable but its four
     /// cardinal neighbours are impassable, so `Pathfinding` returns `NoPath`
     /// and the executor emits `MovementBlocked`.
-    let private blockedGoalWorld () : WorldState =
-        worldOf (
-            rawScenario
-                "corpus-blocked-goal"
-                8
-                8
-                [ 0, { X = 1; Y = 4 } ]
-                []
-                []
-                [ wall 4 4; wall 6 4; wall 5 3; wall 5 5 ]
-                { X = 7; Y = 0 }
-                { X = 0; Y = 7 }
-        )
+    let private blockedGoalSpec: ScenarioSpec =
+        { Id = "corpus-blocked-goal"
+          Width = 8
+          Height = 8
+          Friendly = [ agent 0 { X = 1; Y = 4 } ]
+          Enemies = []
+          Terrain = [ wall 4 4; wall 6 4; wall 5 3; wall 5 5 ]
+          Objective = { X = 7; Y = 0 }
+          Extraction = { X = 0; Y = 7 }
+          Orders = [ order 1L 0 { X = 5; Y = 4 } ] }
 
     /// Two friendly agents on open terrain: agent 0 at (3,0) -> (3,7) crosses
     /// agent 1 at (0,3) -> (7,3), both computing (3,3) as their next cell at
     /// tick 3. TASK-017 (B-011b) reservation resolves the contest: agent 0
     /// wins (tied remaining route length, lower agent id) and agent 1 yields
     /// one tick, then both reach their destinations by tick 12.
-    let private convergingRoutesWorld () : WorldState =
-        worldOf (
-            rawScenario "corpus-converging-routes" 8 8 [ 0, { X = 3; Y = 0 }; 1, { X = 0; Y = 3 } ] [] [] [] { X = 7; Y = 7 } { X = 0; Y = 0 }
-        )
+    let private convergingRoutesSpec: ScenarioSpec =
+        { Id = "corpus-converging-routes"
+          Width = 8
+          Height = 8
+          Friendly = [ agent 0 { X = 3; Y = 0 }; agent 1 { X = 0; Y = 3 } ]
+          Enemies = []
+          Terrain = []
+          Objective = { X = 7; Y = 7 }
+          Extraction = { X = 0; Y = 0 }
+          Orders = [ order 1L 0 { X = 3; Y = 7 }; order 1L 1 { X = 7; Y = 3 } ] }
 
     /// One friendly agent at (0,0) ordered to (4,0), open terrain except
     /// (1,0), which costs 3 to enter (`Terrain.BaseMoveCost` elsewhere is 1).
     /// Crossing that one cell takes 3 ticks of accumulated `AgentState.Progress`
     /// (TASK-018 sub-cell movement progress) before the agent enters it; every
     /// other cell is entered in the usual single tick.
-    let private slowTerrainWorld () : WorldState =
-        worldOf (rawScenario "corpus-slow-terrain" 8 8 [ 0, { X = 0; Y = 0 } ] [] [] [ costly 1 0 3 ] { X = 7; Y = 7 } { X = 0; Y = 7 })
+    let private slowTerrainSpec: ScenarioSpec =
+        { Id = "corpus-slow-terrain"
+          Width = 8
+          Height = 8
+          Friendly = [ agent 0 { X = 0; Y = 0 } ]
+          Enemies = []
+          Terrain = [ costly 1 0 3 ]
+          Objective = { X = 7; Y = 7 }
+          Extraction = { X = 0; Y = 7 }
+          Orders = [ order 1L 0 { X = 4; Y = 0 } ] }
 
     /// Three friendly agents in a line at (1,3), (2,3), (3,3), all ordered east
     /// to (11,3). Each tick the lead agent has a free cell ahead, so the
     /// TASK-022 vacation chain resolves and all three step together; no agent
     /// reaches (11,3) within the run, so the chain flows every tick with no
     /// obstruction.
-    let private followChainWorld () : WorldState =
-        worldOf (
-            rawScenario
-                "corpus-follow-chain"
-                12
-                9
-                [ 0, { X = 1; Y = 3 }; 1, { X = 2; Y = 3 }; 2, { X = 3; Y = 3 } ]
-                []
-                []
-                []
-                { X = 11; Y = 3 }
-                { X = 0; Y = 8 }
-        )
+    let private followChainSpec: ScenarioSpec =
+        { Id = "corpus-follow-chain"
+          Width = 12
+          Height = 9
+          Friendly = [ agent 0 { X = 1; Y = 3 }; agent 1 { X = 2; Y = 3 }; agent 2 { X = 3; Y = 3 } ]
+          Enemies = []
+          Terrain = []
+          Objective = { X = 11; Y = 3 }
+          Extraction = { X = 0; Y = 8 }
+          Orders =
+            [ order 1L 0 { X = 11; Y = 3 }
+              order 1L 1 { X = 11; Y = 3 }
+              order 1L 2 { X = 11; Y = 3 } ] }
 
     /// Two friendly agents at (3,3) and (4,3), each ordered onto the other's
     /// cell. A two-agent position swap is blocked (TASK-022): neither is ever a
     /// first mover, so both emit `MovementObstructed` every tick and neither
     /// agent ever leaves its start cell.
-    let private swapStandoffWorld () : WorldState =
-        worldOf (
-            rawScenario
-                "corpus-swap-standoff"
-                8
-                8
-                [ 0, { X = 3; Y = 3 }; 1, { X = 4; Y = 3 } ]
-                []
-                []
-                []
-                { X = 7; Y = 7 }
-                { X = 0; Y = 0 }
-        )
+    let private swapStandoffSpec: ScenarioSpec =
+        { Id = "corpus-swap-standoff"
+          Width = 8
+          Height = 8
+          Friendly = [ agent 0 { X = 3; Y = 3 }; agent 1 { X = 4; Y = 3 } ]
+          Enemies = []
+          Terrain = []
+          Objective = { X = 7; Y = 7 }
+          Extraction = { X = 0; Y = 0 }
+          Orders = [ order 1L 0 { X = 4; Y = 3 }; order 1L 1 { X = 3; Y = 3 } ] }
 
     /// One friendly agent at (1,5) ordered east to (9,5), and a stationary
     /// hostile agent 1 at (9,1) behind an opaque impassable wall at x = 6,
@@ -236,19 +318,16 @@ module Corpus =
     /// Tactical-knowledge phase puts it in the shared squad picture
     /// (`WorldState.TacticalKnowledge`). The first corpus entry with an enemy
     /// deployment and the "Unknown threat" shape (`docs/05` section 16).
-    let private perceptionContactWorld () : WorldState =
-        worldOf (
-            rawScenario
-                "corpus-perception-contact"
-                12
-                8
-                [ 0, { X = 1; Y = 5 } ]
-                [ 1, { X = 9; Y = 1 } ]
-                []
-                [ for y in 0..3 -> opaqueWall 6 y ]
-                { X = 9; Y = 5 }
-                { X = 0; Y = 7 }
-        )
+    let private perceptionContactSpec: ScenarioSpec =
+        { Id = "corpus-perception-contact"
+          Width = 12
+          Height = 8
+          Friendly = [ agent 0 { X = 1; Y = 5 } ]
+          Enemies = [ agent 1 { X = 9; Y = 1 } ]
+          Terrain = [ for y in 0..3 -> opaqueWall 6 y ]
+          Objective = { X = 9; Y = 5 }
+          Extraction = { X = 0; Y = 7 }
+          Orders = [ order 1L 0 { X = 9; Y = 5 } ] }
 
     /// One friendly agent 0 at (1,4) with `CommunicationAvailable = false`
     /// (an authored comms blackout), ordered east to (6,4) on tick 1. Command
@@ -257,19 +336,16 @@ module Corpus =
     /// drops the order: no `Destination` is ever written and the agent never
     /// moves. The "Lost communication" vertical-slice scenario
     /// (`docs/05` section 16; TASK-027, backlog B-016).
-    let private lostCommsWorld () : WorldState =
-        worldOf (
-            rawScenario
-                "corpus-lost-comms"
-                8
-                8
-                [ 0, { X = 1; Y = 4 } ]
-                []
-                [ 0 ]
-                []
-                { X = 7; Y = 0 }
-                { X = 0; Y = 7 }
-        )
+    let private lostCommsSpec: ScenarioSpec =
+        { Id = "corpus-lost-comms"
+          Width = 8
+          Height = 8
+          Friendly = [ blackedOut 0 { X = 1; Y = 4 } ]
+          Enemies = []
+          Terrain = []
+          Objective = { X = 7; Y = 0 }
+          Extraction = { X = 0; Y = 7 }
+          Orders = [ order 1L 0 { X = 6; Y = 4 } ] }
 
     /// Two friendlies on open ground ordered along the same exposed approach
     /// past a stationary hostile (a machine-gun position) the squad can see
@@ -282,37 +358,16 @@ module Corpus =
     /// written, it walks the approach). The G3 evidence scenario
     /// (`docs/07` section 9 criterion 2: "at least two soldiers appraise the
     /// same order differently for traceable reasons"; TASK-028, backlog B-017).
-    let private exposedApproachWorld () : WorldState =
-        let friendly (a: int) (c: Cell) (discipline: int) : RawDeployment =
-            { AgentId = a
-              Cell = c
-              CommunicationAvailable = true
-              Discipline = discipline }
-
-        worldOf
-            { ContentVersion = ScenarioContent.Version
-              Id = "corpus-exposed-approach"
-              Width = 12
-              Height = 8
-              FriendlyDeployments = [| friendly 0 { X = 1; Y = 3 } 1; friendly 1 { X = 1; Y = 5 } 6 |]
-              EnemyDeployments =
-                [| { AgentId = 2
-                     Cell = { X = 10; Y = 4 }
-                     CommunicationAvailable = true
-                     Discipline = AppraisalConfig.DisciplineDefault } |]
-              ObjectiveAreas = [| { AreaId = "objective"; Cell = { X = 11; Y = 4 } } |]
-              ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 0; Y = 7 } } |]
-              StaticTargets = [||]
-              Objectives =
-                [| { Id = 1
-                     Kind = "reach"
-                     AreaRef = "objective"
-                     TargetRef = ""
-                     HoldTicks = 0
-                     ExtractAgentIds = [||]
-                     IsOptional = false } |]
-              TerrainLayer = None
-              FailOnFriendlyForceEliminated = true }
+    let private exposedApproachSpec: ScenarioSpec =
+        { Id = "corpus-exposed-approach"
+          Width = 12
+          Height = 8
+          Friendly = [ agentWith 0 { X = 1; Y = 3 } 1; agentWith 1 { X = 1; Y = 5 } 6 ]
+          Enemies = [ agent 2 { X = 10; Y = 4 } ]
+          Terrain = []
+          Objective = { X = 11; Y = 4 }
+          Extraction = { X = 0; Y = 7 }
+          Orders = [ order 1L 0 { X = 11; Y = 3 }; order 1L 1 { X = 11; Y = 5 } ] }
 
     /// One friendly agent at (1,4), open ground, no threats: ordered east to
     /// (14,4) on tick 1 (Accepted, `CommitmentEstablished`), then re-ordered
@@ -325,15 +380,31 @@ module Corpus =
     /// current systems can source, `docs/05` section 11 priority 6 "new
     /// higher-priority command"; `docs/07` section 8 step 7, "the player
     /// reissues the original intent").
-    let private reissuedOrderWorld () : WorldState =
-        worldOf (rawScenario "corpus-reissued-order" 16 9 [ 0, { X = 1; Y = 4 } ] [] [] [] { X = 14; Y = 0 } { X = 0; Y = 8 })
+    let private reissuedOrderSpec: ScenarioSpec =
+        { Id = "corpus-reissued-order"
+          Width = 16
+          Height = 9
+          Friendly = [ agent 0 { X = 1; Y = 4 } ]
+          Enemies = []
+          Terrain = []
+          Objective = { X = 14; Y = 0 }
+          Extraction = { X = 0; Y = 8 }
+          Orders = [ order 1L 0 { X = 14; Y = 4 }; order 3L 0 { X = 14; Y = 8 } ] }
 
     /// A friendly and a hostile within `CombatConfig.WeaponRange` and clear
     /// line of sight from tick 1, both stationary (no orders) — the Combat
     /// phase alone drives the trace, proving the phase wiring end-to-end
     /// (TASK-031, backlog B-019).
-    let private openEngagementWorld () : WorldState =
-        worldOf (rawScenario "corpus-open-engagement" 10 10 [ 0, { X = 2; Y = 2 } ] [ 1, { X = 7; Y = 2 } ] [] [] { X = 9; Y = 0 } { X = 0; Y = 9 })
+    let private openEngagementSpec: ScenarioSpec =
+        { Id = "corpus-open-engagement"
+          Width = 10
+          Height = 10
+          Friendly = [ agent 0 { X = 2; Y = 2 } ]
+          Enemies = [ agent 1 { X = 7; Y = 2 } ]
+          Terrain = []
+          Objective = { X = 9; Y = 0 }
+          Extraction = { X = 0; Y = 9 }
+          Orders = [] }
 
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
@@ -344,31 +415,35 @@ module Corpus =
                + "CorpusTests cross-checks this table against Fixture.run () so it is not an independent re-pin."
              InitialStateNote = "Fixture.initialState () (Setup.sixAgentWorld, 32 x 32, seed 20260902)"
              InitialState = Fixture.initialState
-             TickCount = Fixture.TickCount }
+             TickCount = Fixture.TickCount
+             Commands = None }
            { Name = "wall-detour"
              Description =
                "One friendly agent at (1,3) ordered to (10,3) with an impassable wall at x=5, rows 0..6. "
                + "Pathfinding.findWithin routes it around the gap at rows 7..8 and the executor advances one "
                + "cell per tick (docs/04 section 8 steps 2, 4, 5)."
              InitialStateNote = "Corpus wall-detour scenario (12 x 9, seed 20260904)"
-             InitialState = wallDetourWorld
-             TickCount = 24L }
+             InitialState = fun () -> worldOfSpec wallDetourSpec
+             TickCount = 24L
+             Commands = Some(commandsOfSpec wallDetourSpec) }
            { Name = "blocked-goal"
              Description =
                "One friendly agent at (1,4) ordered to (5,4), a passable cell ringed by impassable cells. "
                + "Pathfinding returns NoPath, so the executor emits MovementBlocked and clears the destination; "
                + "the remaining ticks are rest (the agent does not retry)."
              InitialStateNote = "Corpus blocked-goal scenario (8 x 8, seed 20260904)"
-             InitialState = blockedGoalWorld
-             TickCount = 5L }
+             InitialState = fun () -> worldOfSpec blockedGoalSpec
+             TickCount = 5L
+             Commands = Some(commandsOfSpec blockedGoalSpec) }
            { Name = "converging-routes"
              Description =
                "Agent 0 at (3,0) -> (3,7) crosses agent 1 at (0,3) -> (7,3); both compute (3,3) as their next "
                + "cell at tick 3. TASK-017 reservation resolves the contest (tied remaining route length, lower "
                + "agent id wins): agent 0 enters (3,3), agent 1 yields one tick and catches up."
              InitialStateNote = "Corpus converging-routes scenario (8 x 8, seed 20260904)"
-             InitialState = convergingRoutesWorld
-             TickCount = 12L }
+             InitialState = fun () -> worldOfSpec convergingRoutesSpec
+             TickCount = 12L
+             Commands = Some(commandsOfSpec convergingRoutesSpec) }
            { Name = "slow-terrain"
              Description =
                "One friendly agent at (0,0) ordered to (4,0); cell (1,0) costs 3 to enter (elsewhere "
@@ -376,8 +451,9 @@ module Corpus =
                + "and the agent enters the cell on the third tick (TASK-018); every other cell is entered in "
                + "the usual single tick."
              InitialStateNote = "Corpus slow-terrain scenario (8 x 8, seed 20260904)"
-             InitialState = slowTerrainWorld
-             TickCount = 8L }
+             InitialState = fun () -> worldOfSpec slowTerrainSpec
+             TickCount = 8L
+             Commands = Some(commandsOfSpec slowTerrainSpec) }
            { Name = "follow-chain"
              Description =
                "Three friendly agents in a line at (1,3), (2,3), (3,3), all ordered east to (11,3). Each tick the "
@@ -385,16 +461,18 @@ module Corpus =
                + "advance on the same tick; no agent reaches (11,3) within the run, so the chain flows every tick "
                + "with no MovementObstructed."
              InitialStateNote = "Corpus follow-chain scenario (12 x 9, seed 20260904)"
-             InitialState = followChainWorld
-             TickCount = 6L }
+             InitialState = fun () -> worldOfSpec followChainSpec
+             TickCount = 6L
+             Commands = Some(commandsOfSpec followChainSpec) }
            { Name = "swap-standoff"
              Description =
                "Two friendly agents at (3,3) and (4,3), each ordered onto the other's cell. A two-agent position "
                + "swap is blocked (TASK-022): neither agent is ever a first mover, so both emit MovementObstructed "
                + "every tick and neither agent ever leaves its start cell (only the tick counter advances)."
              InitialStateNote = "Corpus swap-standoff scenario (8 x 8, seed 20260904)"
-             InitialState = swapStandoffWorld
-             TickCount = 4L }
+             InitialState = fun () -> worldOfSpec swapStandoffSpec
+             TickCount = 4L
+             Commands = Some(commandsOfSpec swapStandoffSpec) }
            { Name = "perception-contact"
              Description =
                "One friendly agent at (1,5) ordered east to (9,5); a stationary hostile agent 1 at (9,1) behind an "
@@ -406,8 +484,9 @@ module Corpus =
                + "order is issued on tick 1, before the contact is known, so it is Accepted at appraisal and not "
                + "re-judged when the contact appears (TASK-028; reappraisal on a knowledge change is B-021)."
              InitialStateNote = "Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile)"
-             InitialState = perceptionContactWorld
-             TickCount = 14L }
+             InitialState = fun () -> worldOfSpec perceptionContactSpec
+             TickCount = 14L
+             Commands = Some(commandsOfSpec perceptionContactSpec) }
            { Name = "lost-comms"
              Description =
                "One friendly agent 0 at (1,4) with CommunicationAvailable = false (an authored comms blackout), "
@@ -418,8 +497,9 @@ module Corpus =
                + "AgentState.Order is written and the Appraisal phase (TASK-028) never runs on it: this is the one "
                + "entry with no OrderAppraised event."
              InitialStateNote = "Corpus lost-comms scenario (8 x 8, seed 20260904, 1 friendly, comms blackout)"
-             InitialState = lostCommsWorld
-             TickCount = 4L }
+             InitialState = fun () -> worldOfSpec lostCommsSpec
+             TickCount = 4L
+             Commands = Some(commandsOfSpec lostCommsSpec) }
            { Name = "exposed-approach"
              Description =
                "Two friendlies ordered along the same exposed approach past a stationary hostile (a machine-gun "
@@ -431,8 +511,9 @@ module Corpus =
                + "criterion 2; TASK-028, backlog B-017; Canonical.FormatVersion 4)."
              InitialStateNote =
                "Corpus exposed-approach scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / 6 + 1 hostile)"
-             InitialState = exposedApproachWorld
-             TickCount = 12L }
+             InitialState = fun () -> worldOfSpec exposedApproachSpec
+             TickCount = 12L
+             Commands = Some(commandsOfSpec exposedApproachSpec) }
            { Name = "reissued-order"
              Description =
                "One friendly agent at (1,4) ordered east to (14,4) on tick 1 (Accepted, CommitmentEstablished), "
@@ -441,8 +522,9 @@ module Corpus =
                + "fresh CommitmentEstablished for the second command, with no event reporting the first "
                + "commitment's end (TASK-030, backlog B-018)."
              InitialStateNote = "Corpus reissued-order scenario (16 x 9, seed 20260904, 1 friendly)"
-             InitialState = reissuedOrderWorld
-             TickCount = 6L }
+             InitialState = fun () -> worldOfSpec reissuedOrderSpec
+             TickCount = 6L
+             Commands = Some(commandsOfSpec reissuedOrderSpec) }
            { Name = "open-engagement"
              Description =
                "A friendly at (2,2) and a hostile at (7,2), open ground, no orders on either side: the Combat "
@@ -451,15 +533,20 @@ module Corpus =
                + "chance, the stream's first real gameplay draw) fires every tick, symmetric both ways "
                + "(TASK-031, backlog B-019)."
              InitialStateNote = "Corpus open-engagement scenario (10 x 10, seed 20260904, 1 friendly + 1 hostile)"
-             InitialState = openEngagementWorld
-             TickCount = 3L } |]
+             InitialState = fun () -> worldOfSpec openEngagementSpec
+             TickCount = 3L
+             Commands = Some(commandsOfSpec openEngagementSpec) } |]
 
     // --- entry paths and loading ----------------------------------------
 
     let private logPathIn (dir: string) (e: Entry) = Path.Combine(dir, e.Name + ".cwlog")
+    let private replayPathIn (dir: string) (e: Entry) = Path.Combine(dir, e.Name + ".cwreplay")
     let private tablePathIn (dir: string) (e: Entry) = Path.Combine(dir, e.Name + ".md")
 
-    /// Parses an entry's committed command-log file.
+    /// Parses an entry's hand-authored command-log file. Only `spike-fixture`
+    /// still uses this (`content/replays/spike-fixture.cwlog`, TASK-036 out
+    /// of scope); every builder-authored entry carries `Entry.Commands`
+    /// directly and never reaches this function.
     let loadLog (dir: string) (e: Entry) : Result<RecordedCommand[], string> =
         let p = logPathIn dir e
 
@@ -469,6 +556,14 @@ module Corpus =
             match CommandLogFile.parse "corpus" (File.ReadAllText p) with
             | Ok cmds -> Ok cmds
             | Error err -> Error $"{p}: {CommandLogFile.describeError err}"
+
+    /// An entry's accepted commands: `Entry.Commands` when the builder
+    /// authored them (the sole runtime source of truth, TASK-036), otherwise
+    /// `loadLog` (`spike-fixture` only).
+    let commandsOf (dir: string) (e: Entry) : Result<RecordedCommand[], string> =
+        match e.Commands with
+        | Some cmds -> Ok cmds
+        | None -> loadLog dir e
 
     /// Replays an entry from its initial state and parsed command log.
     let run (e: Entry) (cmds: RecordedCommand[]) : Result<ReplayOutcome, ReplayError> =
@@ -521,7 +616,8 @@ module Corpus =
         line ""
         line "| Parameter | Value |"
         line "|---|---|"
-        line $"| Command log | `{e.Name}.cwlog` |"
+        let commandFileExt = if e.Commands.IsSome then "cwreplay" else "cwlog"
+        line $"| Command log | `{e.Name}.{commandFileExt}` |"
         line $"| Initial state | {e.InitialStateNote} |"
         line $"| Tick count | {e.TickCount} |"
         line $"| Initial hash (tick 0) | `{hx initial}` |"
@@ -671,7 +767,7 @@ module Corpus =
     /// Replays an entry, checks it replays deterministically, and compares its
     /// per-tick hashes to the committed table.
     let checkEntry (dir: string) (e: Entry) : EntryCheck =
-        match loadLog dir e with
+        match commandsOf dir e with
         | Error m -> LogError m
         | Ok cmds ->
             match run e cmds, run e cmds with
@@ -698,9 +794,27 @@ module Corpus =
         | RegenLogError of string
         | RegenReplayError of ReplayError
 
-    /// Rewrites an entry's `<Name>.md` from a fresh replay outcome.
+    /// The builder-authored `ReplayCommandFile` view of an entry's commands,
+    /// for the committed `<name>.cwreplay` artefact (TASK-036). `InitialHash`
+    /// and `Checkpoints` are left empty: `<name>.md` is already the one
+    /// committed hash-table artefact, and duplicating hashes here would be a
+    /// second source of the same truth.
+    let private replayFileOf (e: Entry) (cmds: RecordedCommand[]) : ReplaySerialisation.ReplayCommandFile =
+        { Version = ReplaySerialisation.FormatVersion
+          Seed = Seed
+          TickCount = e.TickCount
+          CanonicalFormat = Canonical.FormatVersion
+          Meta = { Build = "cwheadless"; Scenario = e.Name }
+          InitialHash = None
+          Checkpoints = [||]
+          Commands = cmds }
+
+    /// Rewrites an entry's `<Name>.md` from a fresh replay outcome, and, for a
+    /// builder-authored entry, its committed `<Name>.cwreplay` from the same
+    /// authored commands — a generated, human-reviewable artefact, not read
+    /// back at runtime (Entry.Commands is authoritative; TASK-036).
     let regenerateEntry (dir: string) (e: Entry) : RegenResult =
-        match loadLog dir e with
+        match commandsOf dir e with
         | Error m -> RegenLogError m
         | Ok cmds ->
             match run e cmds with
@@ -708,4 +822,9 @@ module Corpus =
             | Ok outcome ->
                 let p = tablePathIn dir e
                 File.WriteAllText(p, renderTable e outcome)
+
+                match e.Commands with
+                | Some builderCmds -> File.WriteAllText(replayPathIn dir e, ReplaySerialisation.serialise (replayFileOf e builderCmds))
+                | None -> ()
+
                 Wrote p

@@ -13,7 +13,7 @@ See `content/replays/CORPUS.md`.
 
 | Parameter | Value |
 |---|---|
-| Command log | `exposed-approach.cwlog` |
+| Command log | `exposed-approach.cwreplay` |
 | Initial state | Corpus exposed-approach scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / 6 + 1 hostile) |
 | Tick count | 12 |
 | Initial hash (tick 0) | `0x8BBEC4176AE8B541` |

@@ -13,7 +13,7 @@ See `content/replays/CORPUS.md`.
 
 | Parameter | Value |
 |---|---|
-| Command log | `reissued-order.cwlog` |
+| Command log | `reissued-order.cwreplay` |
 | Initial state | Corpus reissued-order scenario (16 x 9, seed 20260904, 1 friendly) |
 | Tick count | 6 |
 | Initial hash (tick 0) | `0x29CB80AC2E5021D5` |

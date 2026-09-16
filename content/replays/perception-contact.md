@@ -13,7 +13,7 @@ See `content/replays/CORPUS.md`.
 
 | Parameter | Value |
 |---|---|
-| Command log | `perception-contact.cwlog` |
+| Command log | `perception-contact.cwreplay` |
 | Initial state | Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile) |
 | Tick count | 14 |
 | Initial hash (tick 0) | `0xBB129AC148DFA754` |

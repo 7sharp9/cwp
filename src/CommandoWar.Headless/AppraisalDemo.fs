@@ -72,15 +72,16 @@ module AppraisalDemo =
     /// The `DiagnosticFrame` per tick for the `exposed-approach` entry: index 0
     /// is tick 0 (`Diagnostics.frame` of the initial state), index `i` is tick
     /// `i` (`Diagnostics.frameOf` of that step). `contentDir` is the repository
-    /// `content/replays` directory. Fails loud if the entry or its command-log
-    /// file is missing — this demo has no fallback scenario.
+    /// `content/replays` directory, unused since TASK-036 (the entry's
+    /// commands are builder-authored, `Corpus.commandsOf`) but kept for the
+    /// entry-lookup failure path — this demo has no fallback scenario.
     let loadExposedApproachFrames (contentDir: string) : DiagnosticFrame[] =
         let entry =
             Corpus.all
             |> Array.tryFind (fun e -> e.Name = EntryName)
             |> Option.defaultWith (fun () -> failwithf "corpus entry '%s' not found in Corpus.all" EntryName)
 
-        match Corpus.loadLog contentDir entry with
+        match Corpus.commandsOf contentDir entry with
         | Error m -> failwithf "TASK-029 appraisal demo: %s" m
         | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
 

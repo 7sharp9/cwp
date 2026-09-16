@@ -1,11 +1,40 @@
 # TASK-036: Shared F# fixture builder for the test corpus
 
-Status: ready (drafted 2026-09-15; central decisions confirmed with Dave via
-`AskUserQuestion` before this file was written — see "Central decisions")
+Status: review (drafted, implemented, and self-verified 2026-09-15/16;
+awaiting Dave's review — implemented directly on `main`, no branch, the
+DIAG-001/TASK-035 precedent for a low-risk, behaviour-neutral refactor)
 Owner: Dave, implemented by coding-agent assistance
 Phase: P3
 Gate: G3
 Size: M
+
+## Outcome (2026-09-16)
+
+One `ScenarioSpec` builder (`src/CommandoWar.Headless/Corpus.fs`) authors
+geometry (grid, friendly/enemy deployments, terrain, objective/extraction)
+and a per-agent command schedule (`ScenarioOrder list`) as a single value;
+`worldOfSpec` and `commandsOfSpec` are its two projections. All eleven
+non-fixture corpus entries (`wall-detour` through `open-engagement`) are
+rewritten onto it, replacing the individual `…World ()` functions and
+`rawScenario`. `Entry` gains `Commands: RecordedCommand[] option` — `Some`
+for a builder-authored entry (the sole runtime source of truth) and `None`
+for `spike-fixture` (unchanged, still reads its hand-authored
+`content/replays/spike-fixture.cwlog`). `Corpus.commandsOf` replaces direct
+`loadLog` calls in `run`/`checkEntry`/`regenerateEntry` and in every test
+call site that previously read a migrated entry's `.cwlog` directly
+(`CorpusTests.fs`, `DiagnosticsTests.fs`, and `AppraisalDemo.fs`'s Godot
+demo helper — a necessary fix beyond the task file's original "Allowed
+scope" list, since these called `Corpus.loadLog` on now-deleted `.cwlog`
+files). `regenerateEntry` additionally writes each builder-authored entry's
+`content/replays/<name>.cwreplay` (`ReplaySerialisation.serialise`, empty
+`InitialHash`/`Checkpoints` since `<name>.md` already owns that role); the
+eleven old `.cwlog` files are deleted. Every migrated entry's committed
+`<name>.md` is byte-identical except its "Command log" row, corrected from
+the deleted `.cwlog` name to the new `.cwreplay` name (a genuine, intended
+content change, not a regression — `Corpus.parseTable` never reads that
+row). `content/replays/CORPUS.md`, `docs/04_SIMULATION_SPEC.md`, and
+`docs/09_TEST_STRATEGY.md` updated to describe the new format; no ADR, no
+`Canonical.FormatVersion` change, no `CommandoWar.Sim` source change.
 
 ## Objective
 
@@ -92,6 +121,18 @@ refusal sequence will need from future corpus entries).
   API it calls changes shape (the test bodies' assertions should not need
   to change — this is a refactor, not a behaviour change).
 - `docs/12_PROGRESS_LEDGER.md`, `PROJECT_STATE.yaml`, `docs/11_BACKLOG.md`.
+
+**Deviation found during implementation:** the entry-loading API change
+(`Entry.Commands`, `Corpus.commandsOf` replacing direct `loadLog` calls)
+reaches two files not on this list, both of which called
+`Corpus.loadLog corpusDir entry` directly on a migrated entry to build a
+`DiagnosticFrame` sequence, and would fail outright once that entry's
+`.cwlog` was deleted: `tests/CommandoWar.Sim.Tests/DiagnosticsTests.fs`
+(nine call sites, one per migrated-entry golden-render fact) and
+`src/CommandoWar.Headless/AppraisalDemo.fs` (the TASK-029 Godot demo helper,
+which loads `exposed-approach`). Both are mechanical one-line swaps
+(`Corpus.loadLog` -> `Corpus.commandsOf`), not behaviour changes — no
+assertion, golden, or rendered frame changes.
 
 Nothing under `src/CommandoWar.Sim/` except reading it (no source change —
 `ReplaySerialisation` and `Scenario` already have everything this task
@@ -210,24 +251,30 @@ entries already need.
 
 ## Acceptance criteria
 
-- [ ] One builder in `Corpus.fs` authors deployment/terrain/command
-      schedule as a single value; all eleven non-fixture entries use it.
-- [ ] No `.cwlog` file is read at runtime by `run`/`checkEntry`/
-      `regenerateEntry` for a migrated entry (`loadLog` either removed or
-      unused for these entries).
-- [ ] Every migrated entry's committed `content/replays/<name>.md` is
-      byte-identical before and after the refactor.
-- [ ] Every migrated entry has a committed `content/replays/<name>.cwreplay`
+- [x] One builder in `Corpus.fs` authors deployment/terrain/command
+      schedule as a single value; all eleven non-fixture entries use it
+      (`ScenarioSpec`, `worldOfSpec`, `commandsOfSpec`).
+- [x] No `.cwlog` file is read at runtime by `run`/`checkEntry`/
+      `regenerateEntry` for a migrated entry (`commandsOf` returns
+      `e.Commands` directly; `loadLog` is called only for `spike-fixture`,
+      whose `Commands = None`).
+- [x] Every migrated entry's committed `content/replays/<name>.md` is
+      byte-identical **except** the "Command log" row, corrected from the
+      deleted `.cwlog` name to the generated `.cwreplay` name (evidence:
+      `git diff` shows exactly one changed line per migrated `.md`;
+      `Corpus.parseTable` never reads that row, confirmed by inspection —
+      no hash, tick count, or event count moved).
+- [x] Every migrated entry has a committed `content/replays/<name>.cwreplay`
       generated by `ReplaySerialisation.serialise`; the corresponding
       `.cwlog` is deleted.
-- [ ] `spike-fixture` entry and `spike-fixture.cwlog` untouched.
-- [ ] `tests/CommandoWar.Sim.Tests/SimulationTests.fs` untouched (Decision D).
-- [ ] No `Canonical.FormatVersion` change; no `src/CommandoWar.Sim/` source
+- [x] `spike-fixture` entry and `spike-fixture.cwlog` untouched.
+- [x] `tests/CommandoWar.Sim.Tests/SimulationTests.fs` untouched (Decision D).
+- [x] No `Canonical.FormatVersion` change; no `src/CommandoWar.Sim/` source
       change.
-- [ ] Full test suite green at the same count as before this task
-      (refactor only — no new `[<Fact>]` expected unless `CorpusTests.fs`
-      needs one for `.cwreplay` regeneration idempotency).
-- [ ] Required documentation updated.
+- [x] Full test suite green at the same count as before this task (287 ->
+      287; no new `[<Fact>]` — the entry-loading API swap in
+      `DiagnosticsTests.fs`/`CorpusTests.fs` reused existing facts).
+- [x] Required documentation updated.
 
 ## Required verification
 
@@ -248,33 +295,75 @@ entries already need.
 
 ## Evidence to capture
 
-- `dotnet build` / `dotnet test` output.
-- `-- corpus` output before and after, and the `--regenerate` idempotency
-  check.
-- `git diff --stat content/replays/` showing only `.cwlog` deletions,
-  `.cwreplay` additions, and zero changes to any `.md` file.
+- `dotnet build CommandoWar.slnx -c Release`: `0 Warning(s)  0 Error(s)`.
+- `dotnet test CommandoWar.slnx -c Release`: `Passed: 287, Failed: 0, Total:
+  287` — unchanged from before this task.
+- `dotnet run --project src/CommandoWar.Headless -c Release -- corpus`: `OK
+  - all 12 entries match their committed tables`.
+- `dotnet run --project src/CommandoWar.Headless -c Release -- corpus
+  --regenerate`, run twice: identical output both times; `git status`
+  showed no further change after the second run (idempotent).
+- `dotnet run --project src/CommandoWar.Headless -c Release -- fixture`:
+  final hash `0x56395A49904D017D` (format 7), 36 events — unchanged.
+- `dotnet run --project src/CommandoWar.Headless -c Release --
+  replay-file content/replays/envelope-full.cwreplay`: `checkpoints : OK
+  (24 ticks match the file's committed hashes)`, 78 events — unchanged
+  (confirms the `envelope-full` demonstration file, which is not in
+  `Corpus.all`, is unaffected by this task).
+- `git diff --stat content/replays/*.md`: eleven files, `1 insertion(+), 1
+  deletion(-)` each — exactly the "Command log" row.
+- `git status --porcelain content/replays/`: eleven `.cwlog` deletions,
+  eleven `.cwreplay` additions, `spike-fixture.{cwlog,md}` untouched.
+- Manual read of `content/replays/exposed-approach.cwreplay`: `command 1 0
+  1 1 routine standard corpus 0 move 11 3` / `command 1 1 2 1 routine
+  standard corpus 1 move 11 5` — `CommandId` 1 and 2 in the same order the
+  deleted `.cwlog`'s two lines had them, confirming the canonical-hash-
+  affecting numbering was preserved.
 
 ## Expected files
 
 - `src/CommandoWar.Headless/Corpus.fs`
+- `src/CommandoWar.Headless/AppraisalDemo.fs` (deviation: one `loadLog` ->
+  `commandsOf` call site, see "Allowed scope")
 - `content/replays/*.cwreplay` (new, eleven files)
 - `content/replays/*.cwlog` (deleted, eleven files; `spike-fixture.cwlog`
   kept)
-- `content/replays/CORPUS.md` (if it names `.cwlog`)
-- `tests/CommandoWar.Sim.Tests/CorpusTests.fs` (only if the loading API
-  changes shape)
+- `content/replays/CORPUS.md`
+- `tests/CommandoWar.Sim.Tests/CorpusTests.fs`,
+  `tests/CommandoWar.Sim.Tests/DiagnosticsTests.fs` (deviation, see
+  "Allowed scope")
+- `docs/04_SIMULATION_SPEC.md`, `docs/09_TEST_STRATEGY.md` (targeted
+  corrections to now-stale `.cwlog`-format claims this task's own change
+  made incorrect)
 - `docs/12_PROGRESS_LEDGER.md`, `docs/ledger/2026-09-15-TASK-036-*.md`
 - `docs/11_BACKLOG.md`, `PROJECT_STATE.yaml`
 
 ## Documentation updates
 
 - this task file (status, outcome, evidence);
-- `docs/11_BACKLOG.md`: new TASK-036 row, B-049 `proposed -> done`;
+- `docs/11_BACKLOG.md`: new TASK-036 row, B-049 `ready -> review`;
 - `docs/12_PROGRESS_LEDGER.md`: index row + detail file;
 - `PROJECT_STATE.yaml`: `active_work.note` updated; no phase/gate/decision
   change (tooling refactor, not a gameplay system);
+- `content/replays/CORPUS.md`, `docs/04_SIMULATION_SPEC.md`,
+  `docs/09_TEST_STRATEGY.md`: corrected `.cwlog`-format descriptions this
+  task's migration made stale;
 - no ADR (no decision an ADR owns — `ReplaySerialisation` was already the
   accepted production format from B-045).
+
+## Review
+
+- Reviewer: Dave
+- Accepted: pending
+- Notes: implemented and self-verified directly on `main`, no branch (the
+  DIAG-001/TASK-035 precedent — a low-risk, behaviour-neutral refactor with
+  every hash/tick/event count re-verified unchanged). Two deviations from
+  the drafted "Allowed scope" found necessary during implementation (see
+  that section): `AppraisalDemo.fs` and `DiagnosticsTests.fs` each had a
+  direct `Corpus.loadLog` call on a migrated entry that would otherwise
+  fail once its `.cwlog` was deleted. Flagging for Dave's review: the
+  "Command log" row change in every migrated `.md` (intended correction,
+  not a regression — see Acceptance criteria).
 
 ## Rollback or removal
 

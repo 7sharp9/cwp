@@ -1,0 +1,8 @@
+version 1
+seed 20260904
+ticks 12
+canonical 7
+build cwheadless
+scenario converging-routes
+command 1 0 1 1 routine standard corpus 0 move 3 7
+command 1 1 2 1 routine standard corpus 1 move 7 3

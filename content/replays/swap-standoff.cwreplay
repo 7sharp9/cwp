@@ -1,0 +1,8 @@
+version 1
+seed 20260904
+ticks 4
+canonical 7
+build cwheadless
+scenario swap-standoff
+command 1 0 1 1 routine standard corpus 0 move 4 3
+command 1 1 2 1 routine standard corpus 1 move 3 3

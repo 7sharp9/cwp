@@ -63,7 +63,7 @@ let ``the corpus includes the spike fixture and is not an independent re-pin of 
 let ``a perturbed command log is reported as a table mismatch at the first divergent tick`` () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "wall-detour")
 
-    match Corpus.loadLog corpusDir entry with
+    match Corpus.commandsOf corpusDir entry with
     | Error m -> Assert.Fail(m)
     | Ok cmds ->
         // Perturb the one recorded destination without touching the file on

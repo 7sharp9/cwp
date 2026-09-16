@@ -21,12 +21,21 @@ strengthening that is an ADR-gated decision.
 
 ## Entries
 
-Each entry is `<name>.cwlog` (existing command-log format v1,
-`src/CommandoWar.Headless/CommandLogFile.fs`) and `<name>.md` (the committed
-hash table: initial state, tick count, initial/final hash, domain-event count,
-and the tick -> hash column). Initial states are defined in
-`src/CommandoWar.Headless/Corpus.fs` (`Corpus.all`); none is authoritative game
-content and none needs an on-disk format (backlog B-024).
+Each entry is `<name>.md` (the committed hash table: initial state, tick
+count, initial/final hash, domain-event count, and the tick -> hash column)
+plus a committed command file. Since TASK-036 (backlog B-049), every entry but
+`spike-fixture` authors its geometry and command schedule as one `ScenarioSpec`
+value in `src/CommandoWar.Headless/Corpus.fs`; that value is the sole runtime
+source of truth, and the committed `<name>.cwreplay`
+(`src/CommandoWar.Sim/ReplaySerialisation.fs`, replay-command format v1) is a
+generated, human-reviewable artefact derived from it — never read back, so it
+cannot drift from the geometry the way a hand-typed command file could.
+`spike-fixture` alone still reads its commands from a hand-authored
+`spike-fixture.cwlog` (the legacy command-log format v1,
+`src/CommandoWar.Headless/CommandLogFile.fs`) — out of TASK-036's scope, since
+it is the framework-spike shared fixture, not a `ScenarioSpec`. Initial states
+are defined in `src/CommandoWar.Headless/Corpus.fs` (`Corpus.all`); none is
+authoritative game content and none needs an on-disk format (backlog B-024).
 
 | Entry | Shows |
 |---|---|
@@ -84,6 +93,13 @@ already-appraised order's outcome, never add or remove a tick or an event —
 so every entry's byte-layout-only re-pin is confirmed by the "Tick count" /
 "Domain events" columns holding.
 
+**Migrated by TASK-036** (shared F# fixture builder, backlog B-049): no hash
+re-pin — a pure tooling refactor. Every entry but `spike-fixture` now authors
+its geometry and command schedule as one `ScenarioSpec` value in `Corpus.fs`
+instead of a separate hand-typed `.cwlog`; every `<name>.md` is byte-identical
+except the "Command log" row, which now correctly names the generated
+`<name>.cwreplay` in place of the deleted `<name>.cwlog`.
+
 ## Production replay-command format (TASK-025, backlog B-045)
 
 `envelope-full.cwreplay` is the first committed replay in the **production
@@ -114,17 +130,21 @@ build, so the data file had to move even though no serialisation code changed.
 `envelope-full.md` is the same table in the shape above.
 `tests/CommandoWar.Sim.Tests/ReplayTests.fs` cross-checks the file's
 checkpoints, the `.md` table, a pinned hash array, and a fresh `Replay.run`
-against one another. It is **not** in `Corpus.all` (that path is `.cwlog` + a
-generated `.md` only), so `cwheadless corpus` does not touch it; run it with:
+against one another. It is **not** in `Corpus.all` (a corpus entry's
+`.cwreplay` carries no checkpoints of its own — `<name>.md` is the one
+committed hash-table artefact there, TASK-036), so `cwheadless corpus` does
+not touch it; run it with:
 
 ```sh
 dotnet run --project src/CommandoWar.Headless -c Release -- replay-file content/replays/envelope-full.cwreplay
 ```
 
 which prints the per-tick hash table and the ordered accepted commands and
-exits `2` on a parse/validate failure, `3` on a checkpoint divergence. The
-seven `.cwlog` entries are unaffected; migrating them to the new format is
-backlog B-049.
+exits `2` on a parse/validate failure, `3` on a checkpoint divergence.
+TASK-036 (backlog B-049) migrated the corpus's other eleven entries onto this
+same production format (`.cwreplay`, empty `checkpoints`/`initial-hash`, since
+`<name>.md` already owns that role for a `Corpus.all` entry); `spike-fixture`
+alone still uses the legacy `.cwlog` grammar.
 
 ## Regeneration
 
@@ -134,9 +154,10 @@ From the repository root, after `dotnet build CommandoWar.slnx -c Release`:
 dotnet run --project src/CommandoWar.Headless -c Release -- corpus --regenerate
 ```
 
-This rewrites every `<name>.md` from a fresh replay. Regeneration is
-idempotent: running it twice with no other change leaves every file
-byte-identical (`git status` shows nothing).
+This rewrites every `<name>.md` from a fresh replay, and, for every
+builder-authored entry, its `<name>.cwreplay` from the same authored commands
+(TASK-036). Regeneration is idempotent: running it twice with no other change
+leaves every file byte-identical (`git status` shows nothing).
 
 ## Checking
 
@@ -159,4 +180,6 @@ fails `dotnet test` without an opt-in CLI run.
 regenerate it instead. The parser (`Corpus.parseTable`) reads only: the "Tick
 count", "Initial hash", "Final hash", and "Domain events" parameter rows, and
 the per-tick table rows (`| <tick> | \`0x...\` |`). Everything else in the file
-is prose for a human reader.
+is prose for a human reader. Since TASK-036, `<name>.cwreplay` is likewise
+fully generated (from the entry's `ScenarioSpec`) and never read back — do not
+hand-edit it either.

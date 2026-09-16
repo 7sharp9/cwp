@@ -13,7 +13,7 @@ See `content/replays/CORPUS.md`.
 
 | Parameter | Value |
 |---|---|
-| Command log | `open-engagement.cwlog` |
+| Command log | `open-engagement.cwreplay` |
 | Initial state | Corpus open-engagement scenario (10 x 10, seed 20260904, 1 friendly + 1 hostile) |
 | Tick count | 3 |
 | Initial hash (tick 0) | `0x4754D88B11EC5973` |
