@@ -51,8 +51,8 @@ let ``the corpus includes the spike fixture and is not an independent re-pin of 
     | Error m, _ -> Assert.Fail(m)
     | _, Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok table, Ok outcome ->
-        Assert.Equal(0xBE2636723F99F53AUL, table.InitialHash)
-        Assert.Equal(0x56395A49904D017DUL, table.FinalHash)
+        Assert.Equal(0x68F435EF0364DC03UL, table.InitialHash)
+        Assert.Equal(0x06E4E1CD02EEA0C0UL, table.FinalHash)
         // TASK-030: 34 -> 36 (+1 CommitmentEstablished, +1 CommitmentCompleted).
         Assert.Equal(36, table.EventCount)
 
@@ -74,7 +74,9 @@ let ``a perturbed command log is reported as a table mismatch at the first diver
                 match c.Command.Intent with
                 | MoveTo _ ->
                     { c with
-                        Command = Command.moveTo c.Command.Id c.Command.IssuedAtTick c.Command.Agent { X = 9; Y = 3 } })
+                        Command = Command.moveTo c.Command.Id c.Command.IssuedAtTick c.Command.Agent { X = 9; Y = 3 } }
+                // wall-detour issues only MoveTo orders; unreachable here.
+                | Suppress _ -> c)
 
         match Corpus.run entry cmds, Corpus.run entry perturbed with
         | Ok reference, Ok candidate ->

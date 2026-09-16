@@ -380,6 +380,12 @@ module Diagnostics =
     let private orderAppraisalOverlays (world: WorldState) : Overlay[] =
         let budget = world.Bounds.Width * world.Bounds.Height
 
+        // TASK-037: the ids of every agent currently SuppressionBand-latched,
+        // the identical Simulation.appraisal computation, for
+        // Appraisal.appraise's stage-3 exposure zeroing (Decision F).
+        let suppressedThreats =
+            world.Agents |> Array.filter (fun a -> a.SuppressionBand) |> Array.map (fun a -> a.Id)
+
         world.Agents
         |> Array.sortBy (fun a -> a.Id)
         |> Array.choose (fun a ->
@@ -389,6 +395,7 @@ module Diagnostics =
                     Appraisal.appraise
                         world.Terrain
                         world.TacticalKnowledge
+                        suppressedThreats
                         a.Discipline
                         a.Stress
                         a.SuppressionBand

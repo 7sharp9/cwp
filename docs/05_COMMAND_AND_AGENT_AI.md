@@ -104,6 +104,15 @@ Occupy and defend an area. The executor may choose nearby cover.
 
 Fire toward a known or suspected threat area to reduce enemy effectiveness and perceived route danger.
 
+Partially realised by TASK-037 (`PlayerIntent.Suppress of target: AgentId`, a
+thin B-030 slice): the "known threat, reduce perceived route danger" half
+only — it targets a specific contact already in the issuing agent's own
+tactical knowledge (never a bare area, and never a "suspected", id-less
+target — no suspected-threat model exists), and its only effect is zeroing
+that contact's contribution to *other* agents' stage-3 route exposure while
+it stays suppressed (section 5). "Reduce enemy effectiveness" beyond that —
+degraded accuracy, forced cover-seeking — is not modelled by any system yet.
+
 ### Assault
 
 Close with and secure a target area. This is deliberately more demanding than Move and receives stricter appraisal.
@@ -118,11 +127,16 @@ Appraisal is staged, not one opaque weighted sum.
 
 Realised by TASK-028 (backlog B-017): `Simulation.appraisal` (`docs/04` section
 12.5) over the `Appraisal` leaf module. Stage 1 is guaranteed upstream (see
-below). Stage 2 is `Pathfinding.findWithin`. Stage 3 is route exposure to the
-*known* threats in `WorldState.TacticalKnowledge` — engagement range, line of
-sight from the threat's last-known cell, and directional `Terrain.cover` — the
-only stage-3 term realised; fire lanes, ally support, suppression, and wounds
-are B-019 / B-020 / B-021. Stage 4 compares that exposure to a threshold from
+below). Stage 2 is `Pathfinding.findWithin` for a `MoveTo` order, or (TASK-037)
+whether the named contact is known at all for a `Suppress` order. Stage 3 is
+route exposure to the *known* threats in `WorldState.TacticalKnowledge` —
+engagement range, line of sight from the threat's last-known cell, directional
+`Terrain.cover`, and (TASK-037, backlog B-030 thin slice) zeroed entirely for
+a threat whose own `AgentState.SuppressionBand` is latched — "suppression" is
+now the one stage-3 term fully realised alongside exposure; fire lanes and
+ally support otherwise, and wounds, are still open (B-019's fire-lanes half,
+B-021's remaining triggers). A `Suppress` order itself has no route and never
+reaches stage 3/4. Stage 4 compares that exposure to a threshold from
 `AgentState.Discipline`, the order's `RiskTolerance` / `Urgency`, and (TASK-033,
 backlog B-021) `AgentState.Stress` (a continuous drag) and `.SuppressionBand`
 (a discrete penalty) — trust is still not a stage-4 term (`docs/05` section 8
@@ -259,14 +273,16 @@ type DecisionReason =
 Do not add prose-only reasons. UI text is derived from structured values.
 
 Realised by TASK-028 (backlog B-017) as the subset
-`NoKnownRoute | RouteTooExposed of threat: AgentId option` — the only two the
-staged checks in scope can produce. The doc's `ContactId` is `AgentId` in the
-code (there is no `ContactId` type). `UnableToCommunicate` stays a
-`DeliveryFailure` case (TASK-027) — an undelivered order never reaches
-appraisal. The rest (`RouteBlocked`, `HeavySuppression`, `CriticallyWounded`,
-`MissingCapability`, `InsufficientAmmunition`, `TargetNotKnown`,
-`IssuerNotRecognised`, `ImmediateThreat`, `UnsupportedAssault`) arrive with the
-systems that can trigger them — B-019 / B-020 / B-021 / B-030 — rather than as
+`NoKnownRoute | RouteTooExposed of threat: AgentId option`, extended by
+TASK-037 (backlog B-030 thin slice) with `TargetNotKnown` — a `Suppress`
+order naming a contact absent from the issuing agent's own tactical
+knowledge. The doc's `ContactId` is `AgentId` in the code (there is no
+`ContactId` type). `UnableToCommunicate` stays a `DeliveryFailure` case
+(TASK-027) — an undelivered order never reaches appraisal. The rest
+(`RouteBlocked`, `HeavySuppression`, `CriticallyWounded`, `MissingCapability`,
+`InsufficientAmmunition`, `IssuerNotRecognised`, `ImmediateThreat`,
+`UnsupportedAssault`) arrive with the systems that can trigger them — B-019 /
+B-020 / B-021 / B-030 — rather than as
 speculative type machinery now (`AGENTS.md`).
 
 ## 8. Minimal psychological model
@@ -349,11 +365,15 @@ The agent does not reselect its high-level goal every tick. It continues until:
 
 This prevents oscillation.
 
-Realised by TASK-030 (backlog B-018) as the subset `Holding | Moving of
-MoveCommitment` in `CommandoWar.Sim` — `Suppressing` / `Assaulting` /
-`Withdrawing` need `PlayerIntent` cases that do not exist yet (`Hold` /
-`Suppress` / `Assault` / `Withdraw` — B-030) and get no case, per `AGENTS.md`
-"do not build speculative type machinery". `Commitment` is **not** a stored
+Realised by TASK-030 (backlog B-018) as `Holding | Moving of MoveCommitment`
+in `CommandoWar.Sim`, extended by TASK-037 (backlog B-030 thin slice) with
+`Suppressing of SuppressCommitment` (`{ Command: CommandId; Target: AgentId }`
+— the exact shape this section names). `Assaulting` / `Withdrawing` still
+need `PlayerIntent` cases that do not exist yet (`Hold` / `Assault` /
+`Withdraw` — the rest of B-030) and get no case, per `AGENTS.md` "do not
+build speculative type machinery". A `Suppressing` commitment has no
+completed state of its own — it ends only by supersession, exactly like the
+"prevents oscillation" list above minus "completed". `Commitment` is **not** a stored
 `AgentState` field: it is a pure derived value
 (`Commitment.ofAgent : ReceivedOrder option -> OrderDisposition option -> Cell
 option -> Commitment`) recoverable from the already-canonical `Order` /
@@ -453,9 +473,13 @@ lost sight of (`docs/09` section 8). "Hold assigned area" stays true by
 omission (an unordered agent never moves). "Suppress likely routes", "seek
 adjacent cover under pressure", and "fall back only under a scenario-defined
 condition" — the doctrine that *decides* to move or fire a Hostile agent —
-remain open on B-022: they need a `Suppress` order (B-030), the first
-reactive-movement decision for an unordered agent (no design exists yet), and
-authored fallback conditions with `Withdraw` semantics, respectively.
+remain open, explicitly descoped by TASK-037 (2026-09-16): they are all
+**Hostile-side** doctrine (the enemy proactively choosing to suppress or fall
+back without a player order), not the **player-issued** `Suppress` order
+TASK-037 built (section 4) — a `Suppress`-order-equivalent for Hostile AI,
+the first reactive-movement decision for an unordered agent (no design exists
+yet), and authored fallback conditions with `Withdraw` semantics,
+respectively, none built by any task to date.
 
 ## 13. Explanation surface
 
@@ -533,6 +557,15 @@ realised entirely inside the Appraisal phase (`docs/04` section 12.5), not a
 new phase slot, and both exclude a fulfilled order (`commitmentAndLocalAction`
 needs to see it unchanged to recognise completion).
 
+Realised by TASK-037 (backlog B-030 thin slice), a third: **threat-suppression-change**
+— the identical suppression-band flip, but checked globally across every
+agent rather than only the appraising agent's own state, so a `Suppress`
+order (or incidental automatic engagement) driving a *different* agent's
+known threat into its `SuppressionBand` re-judges a `Refused`/`Unable` order
+that names it (section 5 stage 3's exposure zeroing is what changes the
+outcome; this trigger is what notices to re-check). The same knowledge-change
+precedent, same phase, same fulfilled-order exclusion.
+
 **Exposure-band**, **wounded**, **support**, and **leadership** stay
 unrealised: exposure-band needs per-tick route-exposure tracking for every
 agent with a live order (a materially larger cut than TASK-033's); the other
@@ -582,13 +615,16 @@ Partially realised by TASK-028 (backlog B-017): the `exposed-approach` corpus
 entry and the `SimulationTests` "exposed route ... Refused for a low-discipline
 agent" fact deliver the refusal half — a low-`Discipline` agent `Refused
 RouteTooExposed`, a high-`Discipline` one `Accepted` on the same order (the G3
-divergence, `docs/07` section 9 criterion 2). `Delayed` and "suppression makes
-it acceptable" (an ally suppressing the machine gun reduces the route's
-exposure — the opposite direction from TASK-033's `SuppressionBand`, which
-only ever makes an already-suppressed *soldier's own* resolve threshold
-harder to clear) still need the `Delayed` disposition (B-018 follow-up) and
-a `Suppress` order that reduces a threat's contribution to stage-3 exposure
-(B-030) — neither exists yet.
+divergence, `docs/07` section 9 criterion 2). "Suppression makes it
+acceptable" (an ally suppressing the machine gun reduces the route's exposure
+— the opposite direction from TASK-033's `SuppressionBand`, which only ever
+makes an already-suppressed *soldier's own* resolve threshold harder to
+clear) is now realised by TASK-037: a `Suppress` order that reduces a
+threat's contribution to stage-3 exposure, proven end to end by the
+`suppress-relieves-exposure` corpus entry. `Delayed` (the soldier waits,
+rather than simply becoming `Accepted` once the threat is suppressed) still
+needs the `Delayed` disposition (B-018 follow-up) — not built by any task to
+date.
 
 ### Covered alternative
 

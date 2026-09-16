@@ -49,4 +49,4 @@ overlays:
 
 events: contact-observed@(9,1); contact-observed@(5,5); order-appraised; commitment-established@(9,5); movement-stepped@(5,5),(6,5); shot-fired-miss; shot-fired-hit
 
-tick 5 | hash 0xB0072D4A340AE028 (format 7) | draws 2 | agents 2 | cover-edges 0 | events 7
+tick 5 | hash 0x48653BB02D3F0F29 (format 8) | draws 2 | agents 2 | cover-edges 0 | events 7

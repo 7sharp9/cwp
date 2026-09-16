@@ -104,12 +104,19 @@ module Corpus =
           Discipline: int
           CommunicationAvailable: bool }
 
-    /// One authored `MoveTo` order, delivered on `Tick` to `Agent`. Every
-    /// corpus entry today needs only a single-recipient move with the
-    /// default envelope (`Command.moveTo`'s `Routine`/`Standard`); a richer
-    /// shape is deferred until an entry actually needs one (`AGENTS.md`:
-    /// prefer the smallest change).
-    type private ScenarioOrder = { Tick: int64; Agent: int; Target: Cell }
+    /// One authored order's intent (TASK-036's single-recipient-move
+    /// precedent, extended by TASK-037 for a `Suppress` order — the smallest
+    /// case-set an entry actually needs, `AGENTS.md` "prefer the smallest
+    /// change"; a richer envelope, e.g. non-default `Urgency`/`RiskTolerance`,
+    /// stays deferred the same way).
+    type private ScenarioIntent =
+        | MoveOrder of target: Cell
+        | SuppressOrder of target: int
+
+    /// One authored order, delivered on `Tick` to `Agent`, with the default
+    /// envelope (`Command.moveTo` / `Command.suppress`'s
+    /// `Routine`/`Standard`).
+    type private ScenarioOrder = { Tick: int64; Agent: int; Intent: ScenarioIntent }
 
     /// One corpus scenario authored as a single value: geometry and its
     /// command schedule together, so the two cannot independently drift the
@@ -145,7 +152,12 @@ module Corpus =
         { agent id cell with CommunicationAvailable = false }
 
     let private order (tick: int64) (agentId: int) (target: Cell) : ScenarioOrder =
-        { Tick = tick; Agent = agentId; Target = target }
+        { Tick = tick; Agent = agentId; Intent = MoveOrder target }
+
+    /// A `Suppress` order (TASK-037, a thin B-030 slice) targeting a known
+    /// contact by its `AgentId` (the `order` precedent for `MoveTo`).
+    let private suppressOrder (tick: int64) (agentId: int) (targetAgentId: int) : ScenarioOrder =
+        { Tick = tick; Agent = agentId; Intent = SuppressOrder targetAgentId }
 
     let private rawOf (spec: ScenarioSpec) : RawScenario =
         let deployment (a: ScenarioAgent) : RawDeployment =
@@ -209,9 +221,15 @@ module Corpus =
             group
             |> List.sortBy fst
             |> List.mapi (fun seq (appearanceId, o) ->
+                let command =
+                    match o.Intent with
+                    | MoveOrder target -> Command.moveTo (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) target
+                    | SuppressOrder target ->
+                        Command.suppress (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) (AgentId.ofInt target)
+
                 { Tick = tick
                   Sequence = seq
-                  Command = Command.moveTo (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) o.Target
+                  Command = command
                   Issuer = "corpus" }))
         |> List.sortBy (fun c -> c.Tick, c.Sequence)
         |> List.toArray
@@ -391,6 +409,36 @@ module Corpus =
           Extraction = { X = 0; Y = 8 }
           Orders = [ order 1L 0 { X = 14; Y = 4 }; order 3L 0 { X = 14; Y = 8 } ] }
 
+    /// Three agents: friendly 0 (Discipline 1) at (1,3) is ordered on tick 1
+    /// to (11,3), the `exposed-approach` geometry exactly — `Refused
+    /// RouteTooExposed` against the known hostile 2 at (10,4), the only
+    /// threat in this entry. Friendly 1 at (10,1), within
+    /// `CombatConfig.WeaponRange` and clear line of sight of hostile 2 from
+    /// the start, is given a `Suppress` order against it on the same tick:
+    /// its `Suppressing` commitment holds position and keeps hostile 2
+    /// pinned as Combat's chosen candidate every tick (TASK-037, a thin
+    /// B-030 slice). Even in the worst case every shot misses
+    /// (`SuppressionConfig.GainOnMiss = 150`, `DecayPerTick = 50`, net +100 a
+    /// tick), hostile 2's `Suppression` crosses `AppraisalConfig.
+    /// SuppressionBandEnter = 500` by the end of tick 5, so by tick 6 its
+    /// `SuppressionBand` latches — the new threat-suppression-change
+    /// reappraisal trigger fires, `Appraisal.routeExposure` now zeroes
+    /// hostile 2's contribution (Decision F), and friendly 0's order
+    /// reappraises `Accepted` and starts walking: `docs/07` section 8 steps
+    /// 5-6 realised end to end ("the player orders another fireteam to
+    /// suppress the machine-gun position"; "tactical knowledge and exposure
+    /// are recalculated").
+    let private suppressRelievesExposureSpec: ScenarioSpec =
+        { Id = "corpus-suppress-relieves-exposure"
+          Width = 12
+          Height = 8
+          Friendly = [ agentWith 0 { X = 1; Y = 3 } 1; agent 1 { X = 10; Y = 1 } ]
+          Enemies = [ agent 2 { X = 10; Y = 4 } ]
+          Terrain = []
+          Objective = { X = 11; Y = 4 }
+          Extraction = { X = 0; Y = 7 }
+          Orders = [ order 1L 0 { X = 11; Y = 3 }; suppressOrder 1L 1 2 ] }
+
     /// A friendly and a hostile within `CombatConfig.WeaponRange` and clear
     /// line of sight from tick 1, both stationary (no orders) — the Combat
     /// phase alone drives the trace, proving the phase wiring end-to-end
@@ -514,6 +562,22 @@ module Corpus =
              InitialState = fun () -> worldOfSpec exposedApproachSpec
              TickCount = 12L
              Commands = Some(commandsOfSpec exposedApproachSpec) }
+           { Name = "suppress-relieves-exposure"
+             Description =
+               "The exposed-approach geometry (friendly 0, Discipline 1, at (1,3) -> (11,3), hostile 2 at (10,4)) "
+               + "plus a second friendly at (10,1) given a Suppress order against hostile 2 on the same tick 1. "
+               + "Friendly 0 is Refused RouteTooExposed at tick 1, exactly as in exposed-approach; friendly 1's "
+               + "Suppressing commitment keeps hostile 2 under fire every tick, and by tick 6 (worst case: every "
+               + "shot a miss) hostile 2's SuppressionBand latches, the new threat-suppression-change reappraisal "
+               + "trigger fires, Appraisal.routeExposure zeroes hostile 2's contribution, and friendly 0's order "
+               + "reappraises Accepted and starts walking. Proves docs/07 section 8 steps 5-6 end to end (TASK-037, "
+               + "a thin B-030 slice pulled forward as P3 decision-support; docs/07 section 9 criterion 4, 'a "
+               + "player action can predictably change an appraisal outcome'; Canonical.FormatVersion 8)."
+             InitialStateNote =
+               "Corpus suppress-relieves-exposure scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile)"
+             InitialState = fun () -> worldOfSpec suppressRelievesExposureSpec
+             TickCount = 10L
+             Commands = Some(commandsOfSpec suppressRelievesExposureSpec) }
            { Name = "reissued-order"
              Description =
                "One friendly agent at (1,4) ordered east to (14,4) on tick 1 (Accepted, CommitmentEstablished), "

@@ -1,6 +1,6 @@
 version 1
 seed 20260904
 ticks 3
-canonical 7
+canonical 8
 build cwheadless
 scenario open-engagement

@@ -26,8 +26,8 @@ See `content/replays/CORPUS.md`.
 | Command file | `envelope-full.cwreplay` |
 | Initial state | Shared spike fixture (`Setup.sixAgentWorld`, 32 x 32, seed 20260902) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0xBE2636723F99F53A` |
-| Final hash (tick 24) | `0x13E2EC63C0A76FCD` |
+| Initial hash (tick 0) | `0x68F435EF0364DC03` |
+| Final hash (tick 24) | `0x4153D3AB131B7934` |
 | Domain events | 78 |
 
 _Re-pinned by TASK-028 (`Canonical.FormatVersion` 3 -> 4, `AgentState.Order` /
@@ -60,31 +60,37 @@ enemy deployments, so the new section is empty at every checkpoint: the tick
 count (24) and domain event count (78) are unchanged, a byte-layout-only
 re-pin._
 
+_Re-pinned by TASK-037 (a thin B-030 slice; `Canonical.FormatVersion` 7 -> 8,
+`PlayerIntent.Suppress` / `DecisionReason.TargetNotKnown` added inside the
+already-canonical `Order` / `Disposition` sections). This entry's one command
+is a `MoveTo`, so the byte-layout change is the only difference: the tick
+count (24) and domain event count (78) are unchanged._
+
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x8FFCE1AC779980A9` |
-|    2 | `0xEAEBB9BA881C044D` |
-|    3 | `0x1BEAEF07F58FAAF7` |
-|    4 | `0x537C063D83998885` |
-|    5 | `0xD90BD814508511BB` |
-|    6 | `0x20A146A726C2486D` |
-|    7 | `0x4731CBC230F06707` |
-|    8 | `0x9B0BE103306B78B5` |
-|    9 | `0xED51DFB4278F3FE3` |
-|   10 | `0xCD4EAEF5CDEA7A6D` |
-|   11 | `0xFAD69C7966BCC037` |
-|   12 | `0x44B1F133666E5535` |
-|   13 | `0xAE4EF5128DFB8D1B` |
-|   14 | `0x9B14F0C778914BAD` |
-|   15 | `0x79A7A71D4F433227` |
-|   16 | `0x2F966804846B5645` |
-|   17 | `0x7D928AC19C5AC433` |
-|   18 | `0x56A78821920E916D` |
-|   19 | `0xCFF68CE0031C8AD7` |
-|   20 | `0xDC5B7A3CC8649105` |
-|   21 | `0x40BC1C87BEEC02FB` |
-|   22 | `0xCFA25A8D652430E1` |
-|   23 | `0x2B2BC1D576782DFB` |
-|   24 | `0x13E2EC63C0A76FCD` |
+|    1 | `0xB8DDA7A655C0B534` |
+|    2 | `0x1BB147B0A87EDD64` |
+|    3 | `0xF150D9830222FAD2` |
+|    4 | `0x7BA062A36A593924` |
+|    5 | `0xA5569EE929A6007E` |
+|    6 | `0xCB7BD1F927F15E7C` |
+|    7 | `0x20C80A529BEF81EA` |
+|    8 | `0x2864686FBC1EC28C` |
+|    9 | `0xB5DD0A7D7890C39E` |
+|   10 | `0x94C1AE3DBDBF3604` |
+|   11 | `0x1B547695F033A0B2` |
+|   12 | `0x9205745CEA3E84E4` |
+|   13 | `0x871C79FD39D8AD4E` |
+|   14 | `0xFB3E9812E21B656C` |
+|   15 | `0xF844B68C18888A5A` |
+|   16 | `0x2CBB853E0886881C` |
+|   17 | `0x5D612D4E35BEA3CE` |
+|   18 | `0x6D86C8AA58693E84` |
+|   19 | `0x2BB55DF306AE89F2` |
+|   20 | `0xE6E41DA52F45AC44` |
+|   21 | `0x5DFEA8A470D4267E` |
+|   22 | `0x1454F1FEEBD54A58` |
+|   23 | `0x35AE340873334556` |
+|   24 | `0x4153D3AB131B7934` |

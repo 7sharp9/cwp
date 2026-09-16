@@ -13,13 +13,17 @@ namespace CommandoWar.Sim
 /// ## The staged pipeline (`docs/05` section 5)
 ///
 ///   * **Stage 1 (comprehension / authority)** is guaranteed upstream: command
-///     intake rejects a `Hostile` recipient and an out-of-bounds target, and
-///     the Communication phase (TASK-027) only writes `AgentState.Order` for a
-///     recipient it could reach. So `appraise` is never called for an order
-///     that failed stage 1, and there is no stage-1 `DecisionReason`.
-///   * **Stage 2 (physical feasibility)** — `Pathfinding.findWithin`. No route
-///     -> `Unable(NoKnownRoute)`. Alive / capability / ammunition all trivially
-///     pass (no models yet).
+///     intake rejects a `Hostile` recipient and (a `MoveTo` order only) an
+///     out-of-bounds target, and the Communication phase (TASK-027) only
+///     writes `AgentState.Order` for a recipient it could reach. So `appraise`
+///     is never called for an order that failed stage 1, and there is no
+///     stage-1 `DecisionReason`.
+///   * **Stage 2 (physical feasibility)** — `Pathfinding.findWithin` for a
+///     `MoveTo` order (no route -> `Unable(NoKnownRoute)`); for a `Suppress`
+///     order (TASK-037, backlog B-030 thin slice) whether the named contact
+///     is known at all (`Unable(TargetNotKnown)` otherwise) — its only stage,
+///     since it has no route and never reaches stages 3/4. Alive / capability
+///     / ammunition all trivially pass (no models yet).
 ///   * **Stage 3 (tactical viability)** — route exposure to the *known*
 ///     threats in `WorldState.TacticalKnowledge` (never authoritative hostile
 ///     state, risk R-023). `routeExposure` below.
@@ -53,6 +57,17 @@ namespace CommandoWar.Sim
 /// `AgentState.Disposition` to `None` so this module's fast path is skipped —
 /// live in `Simulation.appraisal`, not here: this module stays a pure leaf
 /// with no event emission and no `StepState` access.
+///
+/// A `Suppress` order (TASK-037, a thin B-030 slice) appraises on stage 2
+/// alone (is the named contact known at all — `Unable(TargetNotKnown)`
+/// otherwise); it has no route, so stages 3/4 never run for it. Its actual
+/// effect is on a *different* agent's stage-3 `MoveTo` exposure: while the
+/// named threat's own `AgentState.SuppressionBand` is latched,
+/// `cellPressure` zeroes that threat's contribution for every route
+/// (`suppressedThreats` below). The threat-SuppressionBand-flip reappraisal
+/// trigger that actually re-judges that other agent's `Refused` order lives
+/// in `Simulation.appraisal`, the identical knowledge-change/suppression-band
+/// precedent.
 
 /// Every appraisal threshold, in one place (`docs/05` section 15 "record every
 /// threshold in one configuration structure"). Module literals rather than a
@@ -157,12 +172,19 @@ module Appraisal =
         else
             North
 
-    /// The pressure one known threat puts on one route cell: 0 unless the cell
-    /// is within `ThreatEngagementRange` Chebyshev cells of the threat's
-    /// last-known cell and in `Sight.visible` line of sight from it; otherwise
-    /// `max 0 (ExposedCellWeight - cover * CoverMitigationPerLevel)`.
-    let private cellPressure (terrain: Terrain) (threat: Contact) (cell: Cell) : int =
-        if
+    /// The pressure one known threat puts on one route cell: `0` while that
+    /// threat's own `AgentState.SuppressionBand` is latched (TASK-037,
+    /// backlog B-030 thin slice, Decision F — a `Suppress` order's whole
+    /// effect on route exposure, reusing the already-canonical, symmetric
+    /// hysteresis latch TASK-033/034 built rather than tracking "who is
+    /// suppressing whom" separately); otherwise `0` unless the cell is within
+    /// `ThreatEngagementRange` Chebyshev cells of the threat's last-known cell
+    /// and in `Sight.visible` line of sight from it; otherwise `max 0
+    /// (ExposedCellWeight - cover * CoverMitigationPerLevel)`.
+    let private cellPressure (terrain: Terrain) (suppressedThreats: AgentId[]) (threat: Contact) (cell: Cell) : int =
+        if suppressedThreats |> Array.contains threat.Contact then
+            0
+        elif
             Perception.chebyshev threat.LastKnownCell cell <= AppraisalConfig.ThreatEngagementRange
             && Sight.visible terrain threat.LastKnownCell cell
         then
@@ -174,11 +196,22 @@ module Appraisal =
     /// Total exposure of a route to the known squad picture, plus the single
     /// highest-contributing threat (ties broken by ascending id), or `None`
     /// when no known threat contributes any pressure. `routeCells` is a
-    /// `Pathfinding` path; `threats` is `WorldState.TacticalKnowledge`.
-    let routeExposure (terrain: Terrain) (threats: Contact[]) (routeCells: Cell[]) : int * AgentId option =
+    /// `Pathfinding` path; `threats` is `WorldState.TacticalKnowledge`;
+    /// `suppressedThreats` (TASK-037) is the ids of every agent whose
+    /// `AgentState.SuppressionBand` is latched this tick, regardless of what
+    /// suppressed it (an ordered `Suppress` or incidental automatic
+    /// engagement, TASK-031, both raise the identical `AgentState.Suppression`
+    /// this reads through the latch).
+    let routeExposure
+        (terrain: Terrain)
+        (threats: Contact[])
+        (suppressedThreats: AgentId[])
+        (routeCells: Cell[])
+        : int * AgentId option =
         let perThreat =
             threats
-            |> Array.map (fun t -> t.Contact, routeCells |> Array.sumBy (fun c -> cellPressure terrain t c))
+            |> Array.map (fun t ->
+                t.Contact, routeCells |> Array.sumBy (fun c -> cellPressure terrain suppressedThreats t c))
 
         let total = perThreat |> Array.sumBy snd
 
@@ -191,11 +224,17 @@ module Appraisal =
 
         total, top
 
-    /// The route cells that carry non-zero pressure from at least one known
-    /// threat — the "exposed stretch" a diagnostic overlay highlights.
-    let private exposedCells (terrain: Terrain) (threats: Contact[]) (routeCells: Cell[]) : Cell[] =
+    /// The route cells that carry non-zero pressure from at least one known,
+    /// currently-unsuppressed threat — the "exposed stretch" a diagnostic
+    /// overlay highlights.
+    let private exposedCells
+        (terrain: Terrain)
+        (threats: Contact[])
+        (suppressedThreats: AgentId[])
+        (routeCells: Cell[])
+        : Cell[] =
         routeCells
-        |> Array.filter (fun c -> threats |> Array.exists (fun t -> cellPressure terrain t c > 0))
+        |> Array.filter (fun c -> threats |> Array.exists (fun t -> cellPressure terrain suppressedThreats t c > 0))
 
     /// The stage-4 resolve threshold for an agent and an order (`docs/05`
     /// section 5 stage 4). Integer, bounded, order-independent of the world.
@@ -236,9 +275,14 @@ module Appraisal =
     /// exposed route cells (for the diagnostic overlay; `[||]` when there is no
     /// known route or no exposure). `budget` is the `Pathfinding` expansion
     /// ceiling (`Bounds.Width * Bounds.Height`, the Navigation-phase value).
+    /// `suppressedThreats` (TASK-037) is threaded straight to `routeExposure`
+    /// / `exposedCells` for a `MoveTo` order's stage 3; a `Suppress` order
+    /// (Decision C) has no route to expose — stages 3/4 are trivial and it
+    /// appraises purely on stage 2 (is the named contact known at all).
     let appraise
         (terrain: Terrain)
         (threats: Contact[])
+        (suppressedThreats: AgentId[])
         (discipline: int)
         (stress: int)
         (suppressed: bool)
@@ -246,21 +290,26 @@ module Appraisal =
         (fromCell: Cell)
         (budget: int)
         : OrderDisposition * Cell[] =
-        let (MoveTo target) = order.Intent
+        match order.Intent with
+        | MoveTo target ->
+            if fromCell = target then
+                Accepted, [||]
+            else
+                match Pathfinding.findWithin terrain fromCell target budget with
+                | Found(cells, _) when cells.Length >= 2 ->
+                    let exposure, topThreat = routeExposure terrain threats suppressedThreats cells
+                    let exposed = exposedCells terrain threats suppressedThreats cells
 
-        if fromCell = target then
-            Accepted, [||]
-        else
-            match Pathfinding.findWithin terrain fromCell target budget with
-            | Found(cells, _) when cells.Length >= 2 ->
-                let exposure, topThreat = routeExposure terrain threats cells
-                let exposed = exposedCells terrain threats cells
-
-                if exposure <= resolveThreshold discipline stress suppressed order then
-                    Accepted, exposed
-                else
-                    Refused(RouteTooExposed topThreat, [||]), exposed
-            | Found _
-            | NoPath
-            | BudgetExhausted _
-            | InvalidEndpoint _ -> Unable(NoKnownRoute, [||]), [||]
+                    if exposure <= resolveThreshold discipline stress suppressed order then
+                        Accepted, exposed
+                    else
+                        Refused(RouteTooExposed topThreat, [||]), exposed
+                | Found _
+                | NoPath
+                | BudgetExhausted _
+                | InvalidEndpoint _ -> Unable(NoKnownRoute, [||]), [||]
+        | Suppress target ->
+            if threats |> Array.exists (fun t -> t.Contact = target) then
+                Accepted, [||]
+            else
+                Unable(TargetNotKnown, [||]), [||]

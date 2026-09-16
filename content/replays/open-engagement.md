@@ -16,14 +16,14 @@ See `content/replays/CORPUS.md`.
 | Command log | `open-engagement.cwreplay` |
 | Initial state | Corpus open-engagement scenario (10 x 10, seed 20260904, 1 friendly + 1 hostile) |
 | Tick count | 3 |
-| Initial hash (tick 0) | `0x4754D88B11EC5973` |
-| Final hash (tick 3) | `0x45B89E07099FAF46` |
+| Initial hash (tick 0) | `0xE554AE8225B3E08A` |
+| Final hash (tick 3) | `0xE8CA3A4F491A8E57` |
 | Domain events | 8 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xE527E1AFDABF6EDD` |
-|    2 | `0x263FB570AABD3EE2` |
-|    3 | `0x45B89E07099FAF46` |
+|    1 | `0x407B1AD9F06CAD9C` |
+|    2 | `0xBFC50EE58EBD7533` |
+|    3 | `0xE8CA3A4F491A8E57` |

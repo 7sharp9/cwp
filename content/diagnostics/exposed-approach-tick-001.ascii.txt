@@ -50,4 +50,4 @@ overlays:
 
 events: command-accepted@(11,3); command-accepted@(11,5); contact-observed@(10,4); contact-observed@(10,4); contact-observed@(1,3); contact-observed@(1,5); order-appraised; order-appraised; commitment-established@(11,5); movement-stepped@(1,5),(2,5)
 
-tick 1 | hash 0xB1EBA36EC0A977F4 (format 7) | draws 0 | agents 3 | cover-edges 0 | events 10
+tick 1 | hash 0x5D5A30C0DF64AC93 (format 8) | draws 0 | agents 3 | cover-edges 0 | events 10

@@ -5,7 +5,7 @@ project:
   current_phase: P3_command_loop_headless
   current_gate: G3_command_loop_proven_headless
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-15 (TASK-034 accepted and merged to main; no task selected)
+  updated: 2026-09-16 (TASK-037 accepted and merged to main; no task selected)
 
 active_work:
   selected_task: none
@@ -15,7 +15,62 @@ active_work:
   blockers: []
   updated: 2026-09-16
   note: >-
-    2026-09-16: TASK-036 (Shared F# fixture builder for the test corpus,
+    2026-09-16: TASK-037 (Minimal Suppress order and B-021/B-022 dependency
+    closeout) drafted and selected. G3's critical path runs through B-023
+    (the canonical refusal sequence), blocked on B-021/B-022's remaining
+    review-partial scope and, more fundamentally, on B-030's never-built
+    Suppress order for docs/07 section 8 step 5. Flagged to Dave twice
+    before (TASK-036 drafting session, then again at TASK-036 acceptance);
+    resolved this session via AskUserQuestion: Dave chose "do whichever
+    unblocks the most progress; merge tasks if more than one unblocks more."
+    TASK-037 merges a thin B-030 slice (a Suppress order that zeroes a known
+    threat's stage-3 route-exposure contribution once that threat's own
+    AgentState.SuppressionBand latches, plus a new reappraisal trigger on
+    any threat's SuppressionBand flip) with an explicit descope of B-021 and
+    B-022's remaining open triggers (both to done, reduced scope) -- neither
+    half alone would leave B-023 selectable per docs/11 section 7 ("all
+    dependencies are done"). Eleven central decisions (A-K) confirmed with
+    Dave via AskUserQuestion before the phase bodies.
+
+    Implemented 2026-09-16: new WorldState-free PlayerIntent.Suppress of
+    target: AgentId and DecisionReason.TargetNotKnown; Appraisal.appraise's
+    Suppress branch is Accepted if the named contact is known, else
+    Unable(TargetNotKnown). New Commitment.Suppressing of SuppressCommitment
+    holds position and pins its named contact as Combat's sole candidate.
+    Appraisal.routeExposure/cellPressure gain a suppressedThreats: AgentId[]
+    parameter zeroing a latched threat's pressure. A third reappraisal
+    trigger (any agent's SuppressionBand flip, global) reappraises a
+    different agent's Refused/Unable order. New suppress-relieves-exposure
+    corpus entry proves the mechanism end to end, deterministically
+    regardless of hit/miss RNG. Canonical.FormatVersion 7 -> 8 (inside the
+    existing Order/Disposition sections); full re-pin, behaviour-neutral
+    except the new entry. ReplaySerialisation gained a suppress
+    <targetAgentId> keyword with no version bump. B-021 and B-022 explicitly
+    descoped to done (their remaining items are untouched by this task); all
+    four of B-023's dependencies are now done. 287 -> 293 green; dotnet
+    build 0/0; -- corpus 13/13 (--regenerate twice byte-identical); --
+    fixture format 8, 36 events unchanged; -- replay-file envelope-full OK
+    at canonical 8, 78 events unchanged; dotnet list FSharp.Core only;
+    source scan clean. Godot's --selfcheck pinned hash updated for the
+    moved exposed-approach tick-1 hash but not independently re-run through
+    Godot this session (no Godot install here) -- Dave to confirm
+    0x5D5A30C0DF64AC93 on his machine when convenient.
+
+    Accepted by Dave 2026-09-16 ("looks good, commit"). Merged to main
+    (--no-ff, branch task-037-suppress-order-and-dependency-closeout
+    deleted; not pushed). B-023's dependency list (B-018, B-020, B-021,
+    B-022) is now fully done, so it is selectable next per docs/11 section
+    7 -- not yet built. Dave separately flagged a UI polish item for a
+    later session, not yet investigated: content/diagnostics/demo.html's
+    per-tick view "jumps around between steps," making it harder to spot
+    what changed tick to tick -- root cause not yet diagnosed (candidates
+    include the SVG canvas or annotation-panel height varying with
+    per-tick overlay content). Dave noted this may be moot if a Godot
+    sprite-based client view ends up superseding the HTML scrubber, so
+    that direction is worth checking before investing in the HTML fix.
+    (docs/ledger/2026-09-16-TASK-037-suppress-order-and-dependency-closeout.md)
+
+    Prior: 2026-09-16: TASK-036 (Shared F# fixture builder for the test corpus,
     backlog B-049) accepted by Dave; status `done` -- never occupied the
     selected-task slot for long (the DIAG-001/TASK-035 precedent). One
     ScenarioSpec value in Corpus.fs now authors

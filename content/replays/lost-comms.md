@@ -16,15 +16,15 @@ See `content/replays/CORPUS.md`.
 | Command log | `lost-comms.cwreplay` |
 | Initial state | Corpus lost-comms scenario (8 x 8, seed 20260904, 1 friendly, comms blackout) |
 | Tick count | 4 |
-| Initial hash (tick 0) | `0x30277CEC8C43A156` |
-| Final hash (tick 4) | `0x42F6F2F0CDA82322` |
+| Initial hash (tick 0) | `0xC0A406D7498F3EA7` |
+| Final hash (tick 4) | `0xB919AB1CF1B3600B` |
 | Domain events | 2 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xC4A4740F81F7F4CD` |
-|    2 | `0x6B9A171B55E67ABC` |
-|    3 | `0x10A98A1A19E0C853` |
-|    4 | `0x42F6F2F0CDA82322` |
+|    1 | `0x6698FC68DC917150` |
+|    2 | `0xFE6F48DA693AB6C1` |
+|    3 | `0xFF757AAEAAA36B7A` |
+|    4 | `0xB919AB1CF1B3600B` |

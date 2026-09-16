@@ -602,18 +602,21 @@ let ``every appraisal outcome is consistent with a fresh recompute`` () =
                     st.Agents
                     |> Array.forall (fun a ->
                         match a.Order, a.Disposition with
-                        | Some o, Some d ->
-                            let (MoveTo target) = o.Intent
-
+                        | Some { Intent = MoveTo target }, Some d ->
                             match d with
                             | Accepted ->
                                 (a.Destination = Some target || a.Position = target)
                                 && reachable st a.Position target
                             | Refused(RouteTooExposed _, _) -> a.Destination = None
-                            | Refused(NoKnownRoute, _) -> false
+                            | Refused(NoKnownRoute, _)
+                            | Refused(TargetNotKnown, _) -> false
                             | Unable(NoKnownRoute, _) ->
                                 a.Destination = None && not (reachable st a.Position target)
                             | Unable _ -> a.Destination = None
+                        // This generator (appraisalCaseGen) only ever issues
+                        // MoveTo orders (TASK-037's Suppress is untested by
+                        // this property).
+                        | Some { Intent = Suppress _ }, Some _ -> false
                         | None, Some _ -> false
                         | _ -> true))
 
@@ -679,7 +682,13 @@ let ``every agent's derived Commitment matches its Order, Disposition, and Desti
 
                         match Commitment.ofAgent a.Order a.Disposition a.Destination with
                         | Moving _ -> expectedMoving
-                        | Holding -> not expectedMoving))
+                        | Holding -> not expectedMoving
+                        // This generator (appraisalCaseGen) only ever issues
+                        // MoveTo orders (TASK-037's Suppress is untested by
+                        // this property) — Suppressing here is unreachable,
+                        // and false fails loudly rather than silently passing
+                        // if that ever stops being true.
+                        | Suppressing _ -> false))
 
             commitmentsOk)
 

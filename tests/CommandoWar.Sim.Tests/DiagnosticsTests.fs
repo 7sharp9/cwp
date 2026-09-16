@@ -107,7 +107,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0xBE2636723F99F53AUL, f.Hash.Value)
+    Assert.Equal(0x68F435EF0364DC03UL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -830,7 +830,7 @@ let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` ()
 let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
     let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
     Assert.Equal(13, frames.Length)
-    Assert.Equal(0xB1EBA36EC0A977F4UL, frames.[1].Hash.Value)
+    Assert.Equal(0x5D5A30C0DF64AC93UL, frames.[1].Hash.Value)
 
     let appraisals =
         frames.[1].Overlays
@@ -891,8 +891,8 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0xBE2636723F99F53AUL, frames.[0].Hash.Value)
-    Assert.Equal(0x56395A49904D017DUL, frames.[40].Hash.Value)
+    Assert.Equal(0x68F435EF0364DC03UL, frames.[0].Hash.Value)
+    Assert.Equal(0x06E4E1CD02EEA0C0UL, frames.[40].Hash.Value)
     // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
     // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
     // since Commitment is derived, not canonical (Decision B).
@@ -901,5 +901,5 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x56395A49904D017DUL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0x06E4E1CD02EEA0C0UL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(36, outcome.Events.Length)

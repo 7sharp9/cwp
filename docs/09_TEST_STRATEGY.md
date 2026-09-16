@@ -168,7 +168,13 @@ for a low-`Discipline` agent. **"covered route adapts accepted order"** is
 partial: TASK-028 realises the *cover mitigation* term (directional
 `Terrain.cover` drops the exposure so the order is `Accepted`), but there is no
 `Adapted` outcome or route recomputation — that is B-018. **"suppression
-reverses refusal"** needs B-020 / B-021.
+reverses refusal"** is realised by TASK-037 (a thin B-030 slice): the new
+`suppress-relieves-exposure` corpus entry has a low-`Discipline` friendly
+`Refused RouteTooExposed` against a known hostile, a second friendly's
+`Suppress` order drives that hostile's `AgentState.SuppressionBand` into its
+latched band, and the first friendly's order reappraises `Accepted` the same
+tick `Appraisal.routeExposure` starts zeroing the suppressed threat's
+contribution.
 
 Partially realised for **"radio loss prevents immediate knowledge
 propagation"** by TASK-027: the `lost-comms` corpus entry
