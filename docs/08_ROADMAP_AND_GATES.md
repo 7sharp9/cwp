@@ -121,6 +121,19 @@ G2 blocker; G2 was declared passed on the evidence bullets alone.
 - implement simple enemy hold-and-defend doctrine;
 - implement the canonical refusal sequence as a deterministic scenario test.
 
+**Resolved 2026-09-16:** "the five vertical-slice intents" (`docs/05` section
+4: Move, Hold, Suppress, Assault, Withdraw) is only partly built —
+`PlayerIntent` has `MoveTo` and `Suppress` (TASK-028, TASK-037's thin B-030
+slice); `Hold`, `Assault`, and `Withdraw` are B-030 proper, explicitly
+re-scoped to P4/G4 by TASK-037's own backlog row ("B-030 proper... stays
+P4"), confirmed with Dave at that time. No G3 evidence bullet below names or
+depends on the missing three intents — the canonical refusal test (the one
+evidence item that does depend on an intent, `Suppress`) is the
+`canonical-refusal-and-correction` corpus entry (TASK-038), which needs only
+`MoveTo`/`Suppress`. Removed here as a forward-reference that belongs to P4,
+the same correction G2's "tactical knowledge" line received; G3 was declared
+passed on the evidence bullets alone.
+
 ### G3 evidence
 
 - the canonical refusal test passes;

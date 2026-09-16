@@ -2,10 +2,10 @@ project:
   working_name: Commando War spiritual successor
   public_title: null
   status: discovery
-  current_phase: P3_command_loop_headless
-  current_gate: G3_command_loop_proven_headless
+  current_phase: P4_playable_integration
+  current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-16 (TASK-037 accepted and merged to main; no task selected)
+  updated: 2026-09-16 (G3 declared passed; TASK-038 accepted; phase/gate advanced to P4/G4; no task selected)
 
 active_work:
   selected_task: none
@@ -15,7 +15,23 @@ active_work:
   blockers: []
   updated: 2026-09-16
   note: >-
-    2026-09-16: TASK-038 (Canonical refusal-and-correction scenario end to
+    2026-09-16: G3 gate decision. Following B-023's completion (TASK-038),
+    docs/08 section 6's "five vertical-slice intents" required-work line was
+    only partly built (PlayerIntent has MoveTo/Suppress; Hold/Assault/
+    Withdraw are B-030 proper, explicitly re-scoped to P4/G4 by TASK-037's
+    own backlog row). Put to Dave via AskUserQuestion rather than resolved by
+    inference (the G2 "tactical knowledge" precedent): Dave chose to declare
+    G3 passed now -- no G3 evidence bullet names or depends on the missing
+    three intents, and the canonical refusal test needed only MoveTo/
+    Suppress. docs/08 section 6's required-work list corrected (the same
+    move as G2's "tactical knowledge" line); gates.G3_command_loop_proven_headless
+    pending -> passed; current_gate G3 -> G4_vertical_slice_feature_complete;
+    current_phase P3_command_loop_headless -> P4_playable_integration. Next:
+    scope the first P4 client task (Dave's second AskUserQuestion answer:
+    "whichever the G3 answer implies").
+    (docs/ledger/2026-09-16-G3-gate-decision.md)
+
+    Prior: 2026-09-16: TASK-038 (Canonical refusal-and-correction scenario end to
     end, backlog B-023) drafted, implemented, self-verified, and accepted by
     Dave -- status done. B-023's four dependencies (B-018, B-020, B-021,
     B-022) were all done as of TASK-037, so this row was selectable per
@@ -347,7 +363,7 @@ gates:
   G0_project_control_ready: passed
   G1_framework_selected: passed
   G2_deterministic_core_proven: passed
-  G3_command_loop_proven_headless: pending
+  G3_command_loop_proven_headless: passed
   G4_vertical_slice_feature_complete: pending
   G5_external_playtest_passed: pending
   G6_production_go_no_go: pending
