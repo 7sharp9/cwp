@@ -1,7 +1,7 @@
 # TASK-036: Shared F# fixture builder for the test corpus
 
-Status: review (drafted, implemented, and self-verified 2026-09-15/16;
-awaiting Dave's review — implemented directly on `main`, no branch, the
+Status: done (drafted, implemented, self-verified, and accepted
+2026-09-15/16; implemented directly on `main`, no branch, the
 DIAG-001/TASK-035 precedent for a low-risk, behaviour-neutral refactor)
 Owner: Dave, implemented by coding-agent assistance
 Phase: P3
@@ -354,16 +354,18 @@ entries already need.
 ## Review
 
 - Reviewer: Dave
-- Accepted: pending
+- Accepted: yes (2026-09-16)
 - Notes: implemented and self-verified directly on `main`, no branch (the
   DIAG-001/TASK-035 precedent — a low-risk, behaviour-neutral refactor with
   every hash/tick/event count re-verified unchanged). Two deviations from
   the drafted "Allowed scope" found necessary during implementation (see
   that section): `AppraisalDemo.fs` and `DiagnosticsTests.fs` each had a
   direct `Corpus.loadLog` call on a migrated entry that would otherwise
-  fail once its `.cwlog` was deleted. Flagging for Dave's review: the
-  "Command log" row change in every migrated `.md` (intended correction,
-  not a regression — see Acceptance criteria).
+  fail once its `.cwlog` was deleted, both accepted as-is. The "Command
+  log" row change in every migrated `.md` (intended correction, not a
+  regression) accepted as-is. Re-verified before accepting: `dotnet build`
+  0/0, `dotnet test` 287/287, `-- corpus` 12/12, `-- fixture` format 7 / 36
+  events unchanged, `git status` matched expected scope.
 
 ## Rollback or removal
 

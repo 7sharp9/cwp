@@ -8,16 +8,17 @@ project:
   updated: 2026-09-15 (TASK-034 accepted and merged to main; no task selected)
 
 active_work:
-  selected_task: TASK-036
-  task_file: tasks/TASK-036-SHARED-FIXTURE-BUILDER.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-16
   note: >-
     2026-09-16: TASK-036 (Shared F# fixture builder for the test corpus,
-    backlog B-049) implemented and self-verified; status `review`, awaiting
-    Dave's acceptance. One ScenarioSpec value in Corpus.fs now authors
+    backlog B-049) accepted by Dave; status `done` -- never occupied the
+    selected-task slot for long (the DIAG-001/TASK-035 precedent). One
+    ScenarioSpec value in Corpus.fs now authors
     geometry and a per-agent command schedule together; all eleven
     non-fixture corpus entries migrated onto it, replacing rawScenario and
     the eleven ...World() functions. Entry gains Commands:
@@ -40,7 +41,11 @@ active_work:
     replay-file envelope-full unchanged. Implemented directly on main, no
     branch -- the DIAG-001/TASK-035 precedent, justified by this task's
     low-risk, fully-verified refactor profile (a departure from the
-    TASK-030-034 M-sized-task branch precedent, flagged to Dave).
+    TASK-030-034 M-sized-task branch precedent, flagged to Dave). Both
+    deviations found during implementation and the "Command log" row
+    correction accepted as-is. Re-verified before accepting: dotnet build
+    0/0, dotnet test 287/287, -- corpus 12/12, -- fixture format 7 / 36
+    events unchanged, git status matched expected scope.
     (docs/ledger/2026-09-16-TASK-036-shared-fixture-builder.md)
 
     Prior: 2026-09-15: TASK-036 drafted and selected. Of the backlog items

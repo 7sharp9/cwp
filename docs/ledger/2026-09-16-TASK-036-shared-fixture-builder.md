@@ -160,6 +160,9 @@ Evidence, Review), `docs/11_BACKLOG.md` (TASK-036 row, B-049 row),
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: implemented and self-verified in this session; see the task
-  file's Review section for the same notes.
+- Accepted: yes (2026-09-16)
+- Notes: re-verified before accepting: `dotnet build` 0/0, `dotnet test`
+  287/287, `-- corpus` 12/12, `-- fixture` format 7 / 36 events unchanged,
+  `git status` matched expected scope. Both deviations (`AppraisalDemo.fs`,
+  `DiagnosticsTests.fs`) and the "Command log" row correction accepted
+  as-is; see the task file's Review section for the same notes.
