@@ -1,8 +1,8 @@
 # TASK-039: Snapshot rendering and isometric depth ordering
 
-Status: review (drafted 2026-09-16; scenario-source decision confirmed with
+Status: done (drafted 2026-09-16; scenario-source decision confirmed with
 Dave via AskUserQuestion before drafting; implemented and self-verified
-2026-09-16 through the real Godot 4.7.2 editor; awaiting acceptance)
+2026-09-16 through the real Godot 4.7.2 editor; accepted by Dave 2026-09-16)
 Owner: Dave
 Phase: P4
 Gate: G4 (vertical slice feature-complete) — the first real P4 client task
@@ -281,3 +281,12 @@ remains the default scene throughout.
 
 Use the reporting structure in `AGENTS.md`. Do not start or offer the next
 task.
+
+## Review
+
+- Reviewer: Dave
+- Accepted: yes (2026-09-16). ADR-0004's own review trigger 1 (an F#
+  breakpoint hit from an interactive editor/F5-launched run; hot-reload not
+  severing the reference) explicitly deferred to a later session — not a
+  blocker for this task's own acceptance criteria (it is a separate,
+  longer-running ADR-level review item).

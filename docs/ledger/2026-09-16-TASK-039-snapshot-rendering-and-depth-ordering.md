@@ -162,5 +162,9 @@ windowed non-interactive screenshot capture).
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending
-- Notes: —
+- Accepted: yes (2026-09-16)
+- Notes: ADR-0004's own review trigger 1 (an F# breakpoint hit from an
+  interactive editor/F5-launched run; hot-reload not severing the
+  reference) explicitly deferred to a later session — not a blocker for
+  this task's own acceptance criteria, which this task fully satisfies
+  without it.

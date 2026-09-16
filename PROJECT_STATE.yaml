@@ -8,17 +8,36 @@ project:
   updated: 2026-09-16 (G3 declared passed; TASK-038 accepted; phase/gate advanced to P4/G4; no task selected)
 
 active_work:
-  selected_task: TASK-039
-  task_file: tasks/TASK-039-SNAPSHOT-RENDERING-AND-DEPTH-ORDERING.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-16
   note: >-
-    2026-09-16: TASK-039 (Snapshot rendering and isometric depth ordering,
+    2026-09-16: TASK-039 accepted by Dave -- status done. Deferred to a
+    later session: ADR-0004's own review trigger 1 (an F# breakpoint hit
+    from an interactive editor/F5-launched run; hot-reload not severing the
+    reference) -- not a blocker for this task's acceptance, but still open
+    and worth doing next time the project is opened in the actual Godot
+    editor (also feeds ADR-0001's still-open "is the editor loop faster
+    than a code relaunch" question, backlog B-043). Launch command:
+    `"$GODOT" --path src/CommandoWar.Client.Godot scenes/SnapshotDemo.tscn`
+    (windowed, not headless), then attach/F5 from the editor/IDE and set a
+    breakpoint in Core/DemoRenderScene.fs.
+
+    Also still open from an earlier session, untouched this session: the
+    content/diagnostics/demo.html per-tick scrubber's "jumps around between
+    steps" UI polish. Now that TASK-039 has landed a real Godot
+    live-rendering scene (scenes/SnapshotDemo.tscn), the case for the HTML
+    scrubber being superseded by a Godot sprite-based view is stronger than
+    it was -- worth deciding whether to fix the HTML scrubber at all before
+    investing more time in it.
+
+    Prior: 2026-09-16: TASK-039 (Snapshot rendering and isometric depth ordering,
     backlog B-027) drafted, implemented, and self-verified through the real
-    Godot 4.7.2 editor (confirmed available in this environment); awaiting
-    Dave's acceptance. The first P4 client task, chosen by Dave via
+    Godot 4.7.2 editor (confirmed available in this environment); accepted
+    by Dave -- status done. The first P4 client task, chosen by Dave via
     AskUserQuestion over B-026/B-030 proper/B-031. Central decision confirmed
     via AskUserQuestion: renders DemoScenario (the terrain-demo scenario),
     not a corpus entry or the Greybox.tscn content-import path, since the
