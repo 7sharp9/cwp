@@ -54,44 +54,6 @@ type DemoRenderScene() =
     let mutable alpha = 0.0
     let mutable hash = 0UL
 
-    /// One `DrawItem` per terrain cell, computed once at `Ready`: elevation
-    /// lightens open ground, impassable cells are dark, opaque-but-passable
-    /// cells (the demo's wall) get a warm tint distinct from the ridge.
-    let buildTerrainItems (t: Terrain) : DrawItem[] =
-        [| for y in 0 .. t.Bounds.Height - 1 do
-             for x in 0 .. t.Bounds.Width - 1 do
-                 let c = { X = x; Y = y }
-                 let r, g, b =
-                     if not (Terrain.passable t c) then
-                         0.20f, 0.22f, 0.27f
-                     elif Terrain.opaque t c then
-                         0.55f, 0.38f, 0.20f
-                     else
-                         let elevation = Terrain.elevation t c
-                         let shade = 0.30f + 0.06f * float32 (min elevation 6)
-                         shade, shade + 0.05f, shade - 0.05f
-
-                 yield
-                     { Kind = 0
-                       Cx = float32 x
-                       Cy = float32 y
-                       R = r
-                       G = g
-                       B = b
-                       A = 1.0f
-                       Radius = 0.0f } |]
-
-    let agentColor (side: Side) : float32 * float32 * float32 =
-        match side with
-        | Friendly -> 0.35f, 0.75f, 1.0f
-        | Hostile -> 1.0f, 0.40f, 0.35f
-
-    /// Ascending screen depth: `(Cx + Cy)`, terrain (`Kind = 0`) drawn
-    /// immediately before an agent (`Kind = 1`) occupying the same cell, so
-    /// terrain and agents interleave correctly instead of "all terrain then
-    /// all agents" (the fixed disposable-spike bug this task addresses).
-    let depthKey (item: DrawItem) : float32 = (item.Cx + item.Cy) * 2.0f + float32 item.Kind
-
     let advanceOneTick () =
         let next, snapshot, h = DemoDrive.stepOnce log state
         prevAgents <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Position) |> Map.ofArray
@@ -102,7 +64,7 @@ type DemoRenderScene() =
     interface IClientScene with
         member _.Ready() =
             state <- DemoScenario.initialState ()
-            terrainItems <- buildTerrainItems state.Terrain
+            terrainItems <- RenderShared.buildTerrainItems state.Terrain
             currAgents <-
                 state.Agents
                 |> Array.map (fun a ->
@@ -133,7 +95,7 @@ type DemoRenderScene() =
                 currAgents
                 |> Array.map (fun a ->
                     let from = prevAgents |> Map.tryFind (AgentId.value a.Id) |> Option.defaultValue a.Position
-                    let r, g, b = agentColor a.Side
+                    let r, g, b = RenderShared.agentColor a.Side
 
                     { Kind = 1
                       Cx = lerp from.X a.Position.X alpha
@@ -144,7 +106,7 @@ type DemoRenderScene() =
                       A = 1.0f
                       Radius = 10.0f })
 
-            Array.append terrainItems agentItems |> Array.sortBy depthKey
+            Array.append terrainItems agentItems |> Array.sortBy RenderShared.depthKey
 
         member _.HudText() =
             sprintf
@@ -153,5 +115,11 @@ type DemoRenderScene() =
                 DemoScenario.TickCount
                 hash
                 currAgents.Length
+
+        // No input this scene (TASK-039's task file forbids it -- unattended
+        // once launched). Real handling is CommandDemoScene's job (TASK-040).
+        member _.OnClick(_isLeftButton: bool, _cellX: int, _cellY: int) = ()
+        member _.OnHover(_cellX: int, _cellY: int) = ()
+        member _.OnTogglePause() = ()
 
         member _.Dispose() = ()

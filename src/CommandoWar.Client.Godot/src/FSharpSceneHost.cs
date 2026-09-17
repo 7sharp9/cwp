@@ -62,6 +62,23 @@ public partial class FSharpSceneHost : Node2D
         _scene = (IClientScene)Activator.CreateInstance(sceneClrType);
         _scene.Ready();
 
+        // Screenshot evidence for CommandDemoScene needs a selection, a
+        // route preview, and an issued order actually visible -- with no
+        // synthetic input in --screenshot mode otherwise, the capture would
+        // just show idle agents. Scripted, fixed arguments; the same
+        // scene-specific-dispatch precedent as RunSelfCheck below. Pauses
+        // immediately after issuing so the order stays queued/undelivered
+        // (the orange "pending" route) for the whole capture window, rather
+        // than completing before frame 45 -- the state Dave's review asked
+        // to actually see.
+        if (_screenshotMode && SceneType == "CwClientCore.CommandDemoScene")
+        {
+            _scene.OnClick(true, 0, 0);
+            _scene.OnTogglePause();
+            _scene.OnHover(3, 0);
+            _scene.OnClick(true, 3, 0);
+        }
+
         BuildHud();
 
         if (_selfCheck)
@@ -100,19 +117,32 @@ public partial class FSharpSceneHost : Node2D
 
     private int RunSelfCheck()
     {
-        if (SceneType != "CwClientCore.DemoRenderScene")
+        TickHash[] sequence;
+        ulong expected;
+        string label;
+
+        switch (SceneType)
         {
-            GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");
-            return 2;
+            case "CwClientCore.DemoRenderScene":
+                label = "demo-render-scene self-check (DemoScenario, terrain-demo)";
+                sequence = DemoDrive.runFullSequence();
+                expected = 0x11B06E6EDE0C52E3UL; // DemoScenario tick 20 (TASK-039)
+                break;
+            case "CwClientCore.CommandDemoScene":
+                label = "command-demo-scene self-check (scripted select + MoveTo(3,0))";
+                sequence = CommandDemoDrive.runScriptedSelfCheck();
+                expected = 0x649FA4D08E2931CAUL; // CommandDemoScene tick 20 (TASK-040)
+                break;
+            default:
+                GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");
+                return 2;
         }
 
-        GD.Print("# demo-render-scene self-check (DemoScenario, terrain-demo)");
-        TickHash[] sequence = DemoDrive.runFullSequence();
+        GD.Print($"# {label}");
         foreach (TickHash th in sequence)
             GD.Print($"tick={th.Tick} hash=0x{th.Hash:X16}");
 
         TickHash final = sequence[^1];
-        const ulong expected = 0x11B06E6EDE0C52E3UL; // DemoScenario tick 20 (TASK-039)
         bool ok = final.Hash == expected;
         GD.Print(ok
             ? $"MATCH expected final hash 0x{expected:X16} at tick {final.Tick}"
@@ -124,6 +154,68 @@ public partial class FSharpSceneHost : Node2D
 
     private Vector2 CellToScreen(float cx, float cy) =>
         Origin + new Vector2((cx - cy) * (TileW * 0.5f), (cx + cy) * (TileH * 0.5f));
+
+    // Exact inverse of CellToScreen -- the MainNode.cs disposable-spike
+    // precedent. Input -> typed command is F#'s job (ADR-0004); this stays
+    // "marshal + forward": resolve a cell, pass primitives into IClientScene.
+    // Correct for a terrain-diamond click; an agent's own circle is drawn
+    // TileH/2 above this (see _Draw), so a click resolves to the wrong cell
+    // near the top of a visible agent -- TryHitAgentCircle below corrects for
+    // that before falling back to this.
+    private Vector2I ScreenToCell(Vector2 screen)
+    {
+        Vector2 p = screen - Origin;
+        float a = p.X / (TileW * 0.5f); // cx - cy
+        float b = p.Y / (TileH * 0.5f); // cx + cy
+        return new Vector2I(Mathf.RoundToInt((a + b) * 0.5f), Mathf.RoundToInt((b - a) * 0.5f));
+    }
+
+    // Hit-tests against each agent's actual rendered circle (its screen
+    // position, TileH/2 above ScreenToCell's diamond-centre assumption), not
+    // the diamond grid -- fixes clicks only registering near the base of the
+    // sprite (Dave's review feedback on TASK-040). `item.A >= 0.99f` picks
+    // out real, fully-opaque agents only: the halo/preview/pending/committed
+    // overlays are also Kind = 1 but always drawn translucent.
+    private bool TryHitAgentCircle(Vector2 screenPos, out Vector2I cell)
+    {
+        foreach (DrawItem item in _scene.DrawList())
+        {
+            if (item.Kind != 1 || item.A < 0.99f)
+                continue;
+
+            Vector2 center = CellToScreen(item.Cx, item.Cy) - new Vector2(0, TileH * 0.5f);
+            if (screenPos.DistanceTo(center) <= item.Radius + 4f)
+            {
+                cell = new Vector2I(Mathf.RoundToInt(item.Cx), Mathf.RoundToInt(item.Cy));
+                return true;
+            }
+        }
+
+        cell = default;
+        return false;
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (_scene == null || _selfCheck || _screenshotMode)
+            return;
+
+        if (@event is InputEventMouseButton { Pressed: true } mb
+            && (mb.ButtonIndex == MouseButton.Left || mb.ButtonIndex == MouseButton.Right))
+        {
+            Vector2I cell = TryHitAgentCircle(mb.Position, out Vector2I hit) ? hit : ScreenToCell(mb.Position);
+            _scene.OnClick(mb.ButtonIndex == MouseButton.Left, cell.X, cell.Y);
+        }
+        else if (@event is InputEventMouseMotion mm)
+        {
+            Vector2I cell = ScreenToCell(mm.Position);
+            _scene.OnHover(cell.X, cell.Y);
+        }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Space })
+        {
+            _scene.OnTogglePause();
+        }
+    }
 
     public override void _Draw()
     {

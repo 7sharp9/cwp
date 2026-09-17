@@ -84,6 +84,48 @@ dotnet build CommandoWar.Client.Godot.slnx -c Debug
 
 Committed screenshot: `docs/evidence/task-039-snapshot-rendering.png`.
 
+## Interactive command demo (TASK-040)
+
+`scenes/CommandDemo.tscn` + `src/FSharpSceneHost.cs` is the first scene where
+the player, not a canned command log, drives `Simulation.step`: left-click a
+friendly agent to select it, left-click a cell to issue a real `Command.
+moveTo` (queued for delivery on the next tick, going through the same
+Communication/Appraisal pipeline as any other order); hovering a cell with an
+agent selected previews the actual route `Pathfinding.find` would take, not a
+straight line; right-click deselects; `Space` toggles tactical pause — an
+order can be composed and issued while paused, delivered once resumed.
+Backlog B-026.
+
+`CommandDemoScene` (`Core/CommandDemoScene.fs`) reuses TASK-039's
+`RenderShared` terrain/depth-sort helpers rather than duplicating them, and
+draws the selection halo, route preview, and destination marker as ordinary
+`DrawItem`s (reusing the existing `Kind = 1` agent-circle rendering — no
+`FSharpSceneHost.cs` render-side change). `IClientScene` gained three new
+primitives-only members for this task: `OnClick`, `OnHover`,
+`OnTogglePause`; `FSharpSceneHost.cs` resolves screen position to a grid cell
+(`ScreenToCell`, the exact inverse of `CellToScreen`) and forwards mouse/key
+input to them.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+"$GODOT" --editor --headless --quit --path .          # one-time import
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+# windowed: click an agent, click a cell, watch it move; Space to pause
+"$GODOT" --path . scenes/CommandDemo.tscn
+
+# headless smoke: scripted select-agent-0 + MoveTo(3,0), prints each tick's
+# hash, asserts the final hash vs the pinned golden
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck   # MATCH 0x649FA4D08E2931CA, exit 0
+
+# committed evidence screenshot (scripted selection/preview, since --screenshot
+# mode injects no real mouse input)
+"$GODOT" --path . scenes/CommandDemo.tscn -- --screenshot <abs-path>.png
+```
+
+Committed screenshot: `docs/evidence/task-040-selection-and-preview.png`.
+
 ## Pinned versions
 
 | Component | Version |
@@ -105,15 +147,18 @@ scenes/Greybox.tscn         authored 32x32 isometric greybox + 6 spawn markers +
 scenes/GreyboxInvalid.tscn  deliberately broken content for the failure path
 scenes/AppraisalDemo.tscn   TASK-029: read-only corpus-scoped appraisal-divergence demo
 scenes/SnapshotDemo.tscn    TASK-039: live snapshot rendering + isometric depth ordering
+scenes/CommandDemo.tscn     TASK-040: selection, input mapping, tactical pause, command preview
 src/SimFacade.cs            thin C# facade over CommandoWar.Sim  (NO Godot types, TASK-004 spike)
 src/SpikeContent.cs         framework-neutral content DTOs + validation  (NO Godot types, TASK-004 spike)
 src/GreyboxScene.cs         reads the authored scene -> RawContent  (import boundary, TASK-004 spike)
 src/SpikeMarker.cs          typed marker node (TASK-004 spike)
 src/MainNode.cs             fixed-step scheduling, input, isometric render, overlay (TASK-004 disposable spike)
 src/AppraisalDemoScene.cs   TASK-029's thin renderer (a scoped ADR-0004 deviation, see the file header)
-src/FSharpSceneHost.cs      TASK-039: the generic ADR-0004 C# host over Core/ -- every future
+src/FSharpSceneHost.cs      TASK-039/040: the generic ADR-0004 C# host over Core/ -- every future
                             production scene's `.tscn` uses this, not a new per-scene C# file
-Core/                       TASK-039: the ADR-0004 F# client-core library (CwClientCore.*)
+Core/                       TASK-039/040: the ADR-0004 F# client-core library (CwClientCore.*)
+Core/RenderShared.fs        TASK-040: terrain-item + depth-sort helpers shared by every render scene
+Core/CommandDemoScene.fs    TASK-040: live selection, input-mapped MoveTo, route preview, pause
 ```
 
 In the TASK-004 spike, only `SimFacade.cs` calls `CommandoWar.Sim`, and

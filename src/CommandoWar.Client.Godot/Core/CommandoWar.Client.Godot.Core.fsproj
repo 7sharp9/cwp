@@ -11,7 +11,9 @@
 
   <ItemGroup>
     <Compile Include="IClientScene.fs" />
+    <Compile Include="RenderShared.fs" />
     <Compile Include="DemoRenderScene.fs" />
+    <Compile Include="CommandDemoScene.fs" />
   </ItemGroup>
 
   <ItemGroup>

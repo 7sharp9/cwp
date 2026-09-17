@@ -43,4 +43,15 @@ type IClientScene =
     abstract DrawList: unit -> DrawItem[]
     /// One-line status text for a HUD label.
     abstract HudText: unit -> string
+    /// A mouse-button press, already projected from screen space to a grid
+    /// cell by the C# host (TASK-040, ADR-0004's screen<->cell projection
+    /// rule: the host resolves the cell, F# only ever sees cell
+    /// coordinates). `isLeftButton = false` is a right-click.
+    abstract OnClick: isLeftButton: bool * cellX: int * cellY: int -> unit
+    /// The mouse has moved over the given cell (already projected). Used to
+    /// drive a hover-dependent command preview.
+    abstract OnHover: cellX: int * cellY: int -> unit
+    /// The tactical-pause key was pressed. A scene that has nothing to pause
+    /// (like `DemoRenderScene`) may no-op.
+    abstract OnTogglePause: unit -> unit
     abstract Dispose: unit -> unit
