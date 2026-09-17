@@ -107,7 +107,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0x68F435EF0364DC03UL, f.Hash.Value)
+    Assert.Equal(0xA2726329BB740614UL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -419,7 +419,8 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | FireLine _
         | AgentSuppression _
         | AgentStress _
-        | HostileKnownContact _ -> None) with
+        | HostileKnownContact _
+        | AgentOrderQueue _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -487,7 +488,8 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | FireLine _
             | AgentSuppression _
             | AgentStress _
-            | HostileKnownContact _ -> None)
+            | HostileKnownContact _
+            | AgentOrderQueue _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -531,7 +533,8 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | FireLine _
             | AgentSuppression _
             | AgentStress _
-            | HostileKnownContact _ -> None)
+            | HostileKnownContact _
+            | AgentOrderQueue _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -612,7 +615,8 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | FireLine _
             | AgentSuppression _
             | AgentStress _
-            | HostileKnownContact _ -> None)
+            | HostileKnownContact _
+            | AgentOrderQueue _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)
@@ -774,6 +778,83 @@ let ``frameOf derives FireLine overlays for the open-engagement entry's first ti
     Assert.Equal(golden "open-engagement-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
     Assert.Equal(golden "open-engagement-tick-001.svg", DiagnosticRender.Svg tick1)
 
+// --- order queue: stacking and cancellation (TASK-044, backlog B-051) ----
+
+let private orderQueueFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "order-queue-stacking-and-cancellation")
+
+    match Corpus.commandsOf corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives an AgentOrderQueue overlay for the order-queue entry's first tick (byte-equal to the goldens)`` () =
+    // Tick 1: agent 0's first (Replace) waypoint is active; its second and
+    // third (both Append) are queued behind it, so the overlays section
+    // carries the two OrderQueued events and one two-entry AgentOrderQueue
+    // overlay naming both queued waypoints' CommandId and MoveTo target.
+    let tick1 = (orderQueueFrames ()).[1]
+
+    match
+        tick1.Overlays
+        |> Array.tryPick (function
+            | AgentOrderQueue(agent, at, queued) -> Some(agent, at, queued)
+            | _ -> None)
+    with
+    | Some(agent, at, queued) ->
+        Assert.Equal(AgentId.ofInt 0, agent)
+        Assert.Equal({ X = 1; Y = 0 }, at)
+        Assert.Equal<(CommandId * PlayerIntent)[]>(
+            [| CommandId.ofInt 2, MoveTo { X = 7; Y = 0 }; CommandId.ofInt 3, MoveTo { X = 10; Y = 0 } |],
+            queued
+        )
+    | None -> Assert.Fail($"expected one AgentOrderQueue overlay, got {tick1.Overlays}")
+
+    Assert.Equal(2, tick1.Events |> Array.filter (fun e -> e.Kind = "order-queued") |> Array.length)
+
+    Assert.Equal(golden "order-queue-stacking-and-cancellation-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
+    Assert.Equal(golden "order-queue-stacking-and-cancellation-tick-001.svg", DiagnosticRender.Svg tick1)
+
+[<Fact>]
+let ``the order-queue entry proves both cancel outcomes and the fulfilment-driven promotion gap`` () =
+    let frames = orderQueueFrames ()
+
+    // Tick 2: cancelling the still-queued third waypoint removes only it.
+    Assert.Contains(frames.[2].Events, fun (e: EventMarker) -> e.Kind = "order-cancelled-queued")
+
+    match
+        frames.[2].Overlays
+        |> Array.tryPick (function
+            | AgentOrderQueue(_, _, queued) -> Some queued
+            | _ -> None)
+    with
+    | Some queued -> Assert.Equal<CommandId[]>([| CommandId.ofInt 2 |], queued |> Array.map fst)
+    | None -> Assert.Fail("expected one remaining queued waypoint after the tick-2 cancel")
+
+    // Tick 4: the first waypoint's fulfilment promotes the queue head, but it
+    // is not yet appraised this same tick -- no OrderAppraised/movement, and
+    // the queue is now empty.
+    Assert.Contains(frames.[4].Events, fun (e: EventMarker) -> e.Kind = "commitment-completed")
+    Assert.DoesNotContain(frames.[4].Events, fun (e: EventMarker) -> e.Kind = "order-appraised")
+    Assert.DoesNotContain(
+        frames.[4].Overlays,
+        (function
+        | AgentOrderQueue _ -> true
+        | _ -> false)
+    )
+
+    // Tick 5: the promoted waypoint is finally appraised and movement resumes.
+    Assert.Contains(frames.[5].Events, fun (e: EventMarker) -> e.Kind = "order-appraised")
+
+    // Tick 7: cancelling the now-active second waypoint, with an empty
+    // queue behind it, clears both Order and Destination -- the agent
+    // genuinely stops rather than drifting on toward the cancelled target.
+    Assert.Contains(frames.[7].Events, fun (e: EventMarker) -> e.Kind = "order-cancelled-active")
+    let a7 = frames.[7].Agents |> Array.find (fun a -> a.Id = AgentId.ofInt 0)
+    Assert.Equal(None, a7.Destination)
+    Assert.Equal({ X = 5; Y = 0 }, frames.[8].Agents.[0].Cell)
+    Assert.Equal({ X = 5; Y = 0 }, frames.[9].Agents.[0].Cell)
+
 // --- canonical refusal-and-correction sequence, end to end (TASK-038, backlog B-023) --
 
 let private canonicalRefusalAndCorrectionFrames () =
@@ -923,7 +1004,7 @@ let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` ()
 let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
     let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
     Assert.Equal(13, frames.Length)
-    Assert.Equal(0x5D5A30C0DF64AC93UL, frames.[1].Hash.Value)
+    Assert.Equal(0x5FDDED09EDC18826UL, frames.[1].Hash.Value)
 
     let appraisals =
         frames.[1].Overlays
@@ -984,8 +1065,8 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0x68F435EF0364DC03UL, frames.[0].Hash.Value)
-    Assert.Equal(0x06E4E1CD02EEA0C0UL, frames.[40].Hash.Value)
+    Assert.Equal(0xA2726329BB740614UL, frames.[0].Hash.Value)
+    Assert.Equal(0xC9694E97A7210117UL, frames.[40].Hash.Value)
     // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
     // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
     // since Commitment is derived, not canonical (Decision B).
@@ -994,5 +1075,5 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x06E4E1CD02EEA0C0UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0xC9694E97A7210117UL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(36, outcome.Events.Length)

@@ -16,25 +16,25 @@ See `content/replays/CORPUS.md`.
 | Command log | `perception-contact.cwreplay` |
 | Initial state | Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile) |
 | Tick count | 14 |
-| Initial hash (tick 0) | `0x8B0369638C46B259` |
-| Final hash (tick 14) | `0xBFB62138CA829FDC` |
+| Initial hash (tick 0) | `0x74D748C3738329C2` |
+| Final hash (tick 14) | `0x5D4C2167AAB83C3F` |
 | Domain events | 39 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x6CE4872EB4EAED07` |
-|    2 | `0xAA305D4D84074FED` |
-|    3 | `0xF5FB677EF7DD1AE7` |
-|    4 | `0xDF948279AAFB1ED9` |
-|    5 | `0x48653BB02D3F0F29` |
-|    6 | `0x32252D7BB1B63C60` |
-|    7 | `0x641E8E72F2671D13` |
-|    8 | `0xDD16948B98FB01F0` |
-|    9 | `0x0A23E8ED067C8B4C` |
-|   10 | `0xC66B896D24696FE3` |
-|   11 | `0xA83869D5BAF6821D` |
-|   12 | `0xDA4BED2F9829A5DC` |
-|   13 | `0x6E20E77F939456C1` |
-|   14 | `0xBFB62138CA829FDC` |
+|    1 | `0xDA44E8A1E038B1C0` |
+|    2 | `0x42AAEAEED7AC06F6` |
+|    3 | `0xF2C04857206C5BB8` |
+|    4 | `0xBBAE5914901DF6DA` |
+|    5 | `0xBD3111D0FB5CBA5A` |
+|    6 | `0xE62C326580ECB173` |
+|    7 | `0x5A0426401226E768` |
+|    8 | `0x4F36E08C45B5D5FB` |
+|    9 | `0xBE79BE1522AFD613` |
+|   10 | `0xDF5A7F3D8BFC59D8` |
+|   11 | `0x961D0871B311A6AE` |
+|   12 | `0x80D3CB5EA0B8A137` |
+|   13 | `0x63DB27945E99B7B2` |
+|   14 | `0x5D4C2167AAB83C3F` |

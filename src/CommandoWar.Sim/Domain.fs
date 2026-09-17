@@ -205,6 +205,25 @@ type AgentState =
       /// ticks so appraisal is not re-run every tick. `None` when the agent
       /// holds no order; cleared when the order is fulfilled or superseded.
       Order: ReceivedOrder option
+      /// Orders stacked behind `Order`, awaiting their turn (TASK-044,
+      /// backlog B-051). Insertion order, not sorted — the queue's order
+      /// **is** the meaningful state, the one deliberate exception to the
+      /// rest of this codebase's "sort before encoding" convention
+      /// (`Canonical.fs`). A `PlayerCommand` whose `PlayerCommandBody` is
+      /// `Order(_, Append)` is appended here when the recipient already
+      /// holds an active `Order` (`Simulation.communication`); the head is
+      /// promoted into `Order` when the active order is fulfilled
+      /// (`Simulation.commitmentAndLocalAction`, `MoveTo` only) or
+      /// explicitly cancelled (`Simulation.communication`, a `Cancel`
+      /// command). An `Order(_, Replace)` command clears this list, exactly
+      /// as it replaces `Order` itself. Cancelling one specific queued
+      /// entry's `CommandId` splices it out without touching the rest.
+      ///
+      /// **Genuine canonical per-tick state** (`Canonical.FormatVersion` 9):
+      /// real per-tick memory no other field reproduces, the `Order`/
+      /// `Disposition` precedent exactly. Always `[]` before this task and
+      /// for every agent never issued a queued order.
+      OrderQueue: ReceivedOrder list
       /// This agent's appraisal outcome for `Order` (TASK-028). `None` until
       /// the Appraisal phase has run on the current `Order`; `Some` once
       /// appraised. **Genuine canonical per-tick state** — the Appraisal
@@ -396,6 +415,7 @@ module Agent =
           Route = None
           VisibleContacts = [||]
           Order = None
+          OrderQueue = []
           Disposition = None
           Discipline = DisciplineDefault
           CommunicationAvailable = true

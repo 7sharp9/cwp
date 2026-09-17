@@ -155,12 +155,12 @@ public partial class FSharpSceneHost : Node2D
             case "CwClientCore.DemoRenderScene":
                 label = "demo-render-scene self-check (DemoScenario, terrain-demo)";
                 sequence = DemoDrive.runFullSequence();
-                expected = 0x11B06E6EDE0C52E3UL; // DemoScenario tick 20 (TASK-039)
+                expected = 0xC68F993BC605313CUL; // DemoScenario tick 20 (TASK-044 re-pin, Canonical.FormatVersion 8 -> 9)
                 break;
             case "CwClientCore.CommandDemoScene":
                 label = "command-demo-scene self-check (scripted select + MoveTo(3,0))";
                 sequence = CommandDemoDrive.runScriptedSelfCheck();
-                expected = 0x649FA4D08E2931CAUL; // CommandDemoScene tick 20 (TASK-040)
+                expected = 0xD27E623504262CE9UL; // CommandDemoScene tick 20 (TASK-044 re-pin, Canonical.FormatVersion 8 -> 9)
                 break;
             default:
                 GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");

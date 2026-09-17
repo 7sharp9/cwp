@@ -104,6 +104,24 @@ module Canonical =
     /// enemy-free or one-sided and re-pins behaviour-neutrally. Tick counts
     /// and event counts are unchanged everywhere (TASK-034 ledger).
     ///
+    /// 9 (TASK-044): `writeAgent` gained an `OrderQueue` section
+    /// (`AgentState.OrderQueue`, docs/05 section 9, backlog B-051) — orders
+    /// stacked behind the active `Order`, written `writeOrder` per entry in
+    /// **list order, not sorted by id**: the queue's order is itself the
+    /// authoritative sequencing, the one deliberate exception to this
+    /// file's "ascending id order with an explicit sort" rule elsewhere.
+    /// Genuine per-tick memory (the `Order`/`Disposition` precedent
+    /// exactly), so under the ADR-0002 amendment it is in the canonical
+    /// image. `PlayerCommand.Intent` was renamed to `.Body:
+    /// PlayerCommandBody` (`Commands.fs`) in the same task, but
+    /// `ReceivedOrder.Intent` — what `writeOrder` actually encodes — keeps
+    /// its pre-existing `PlayerIntent` type unchanged (`MoveTo | Suppress`);
+    /// `writeOrder` needs no new case. Every scenario pinned before this
+    /// version never appends an order, so `OrderQueue` is `[||]` at every
+    /// checkpoint and the moved hashes are a byte-layout change, not a
+    /// behaviour change, for every entry except the new order-queue corpus
+    /// entry (TASK-044 ledger).
+    ///
     /// 8 (TASK-037): `writeOrder` gained a second `PlayerIntent` case
     /// (`Suppress of target: AgentId`, a thin B-030 slice pulled forward as
     /// P3 decision-support) and `writeReason` gained a third `DecisionReason`
@@ -120,7 +138,7 @@ module Canonical =
     /// fire starts — real new state, not a byte-layout artefact). Tick counts
     /// and event counts are unchanged everywhere else (TASK-037 ledger).
     [<Literal>]
-    let FormatVersion = 8
+    let FormatVersion = 9
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -285,6 +303,13 @@ module Canonical =
         | Some d ->
             w.U8 1uy
             writeDisposition w d
+
+        // AgentState.OrderQueue (TASK-044, backlog B-051): list order, NOT
+        // sorted — see the FormatVersion 9 doc comment above.
+        w.I32 a.OrderQueue.Length
+
+        for o in a.OrderQueue do
+            writeOrder w o
 
         w.I32 a.Suppression
         w.U8(if a.SuppressionBand then 1uy else 0uy)

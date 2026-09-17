@@ -118,13 +118,30 @@ type EventBody =
     /// carries no consequence yet: no wound, death, or suppression follows
     /// (B-020 / B-031).
     | ShotFired of shooter: AgentId * target: AgentId * hit: bool
+    /// An `Order(_, Append)` command for `recipient` joined the tail of
+    /// `AgentState.OrderQueue` this tick (TASK-044, backlog B-051) — the
+    /// recipient already held an active order, so this one is stacked
+    /// rather than taking effect immediately (`Simulation.communication`).
+    /// Not emitted when `Append` targets an idle recipient: it starts
+    /// immediately instead, the "zero-delay delivery emits no event"
+    /// precedent.
+    | OrderQueued of command: CommandId * recipient: AgentId
+    /// A `Cancel target` command withdrew `target` for `agent` this tick
+    /// (TASK-044, backlog B-051; `Simulation.communication`).
+    /// `wasActive = true`: `target` was the active `AgentState.Order`,
+    /// which is cleared and the queue head (if any) promoted in its place.
+    /// `wasActive = false`: `target` was a queued entry, spliced out of
+    /// `AgentState.OrderQueue` alone, leaving the active order and every
+    /// other queued entry untouched.
+    | OrderCancelled of command: CommandId * agent: AgentId * wasActive: bool
 
 /// An immutable domain event tagged with the tick it occurred on. Within a
 /// single step, events are emitted in a stable order:
 ///   1. command outcomes, ascending command id (`CommandAccepted` /
 ///      `CommandRejected`, from the Command-intake phase);
-///   2. order-delivery failures, ascending `(recipient, command)` id
-///      (`OrderUndelivered`, from the Communication phase — TASK-027);
+///   2. order-delivery and queue outcomes, ascending `(recipient, command)`
+///      id (`OrderUndelivered` — TASK-027; `OrderQueued` / `OrderCancelled`
+///      — TASK-044, backlog B-051; all from the Communication phase);
 ///   3. this tick's perception events — every `ContactObserved` ascending
 ///      `(observer, contact)`, then every `ContactExpired` ascending contact
 ///      id (from the Perception / Tactical-knowledge phases);

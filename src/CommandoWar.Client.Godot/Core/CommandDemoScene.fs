@@ -213,8 +213,8 @@ type CommandDemoScene() =
             let pendingItems =
                 pending
                 |> Seq.choose (fun c ->
-                    match c.Command.Intent, agentPosition c.Command.Agent with
-                    | MoveTo target, Some pos ->
+                    match c.Command.Body, agentPosition c.Command.Agent with
+                    | Order(MoveTo target, _), Some pos ->
                         match Pathfinding.find state.Terrain pos target with
                         | Found(cells, _) -> Some(routeDots cells (1.0f, 0.65f, 0.15f) 0.5f 6.0f)
                         | _ -> None

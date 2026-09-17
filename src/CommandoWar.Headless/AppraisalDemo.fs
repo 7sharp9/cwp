@@ -265,6 +265,10 @@ module AppraisalDemo =
                         confidence
                         lastSeenTick
                 )
+            | AgentOrderQueue(agent, at, queued) ->
+                // TASK-044: not yet surfaced in this disposable P3 demo (it
+                // predates the task); exposed-approach never queues an order.
+                unhandled.Add(sprintf "order queue agent %d (%d,%d) %d" (AgentId.value agent) at.X at.Y queued.Length)
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

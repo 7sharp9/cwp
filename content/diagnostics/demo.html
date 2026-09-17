@@ -139,7 +139,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <circle cx="4" cy="4" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="4" cy="20" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="180" cy="116" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 0  hash 0x84BCC298D6C2E9DB  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 0  hash 0x484A193CA07C1FA4  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 0</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -148,11 +148,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 <p>No events this tick.</p>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(0,0)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(0,1)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(0,0)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(0,1)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -292,7 +292,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <circle cx="20" cy="4" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="20" cy="20" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="180" cy="116" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 1  hash 0xE6B630AE4BB7CB17  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 1  hash 0xDFD0D2C0B9FB35F0  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 8</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -310,11 +310,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(1,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(1,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(1,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(1,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -450,7 +450,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <circle cx="36" cy="4" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="36" cy="20" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="180" cy="116" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 2  hash 0xCC980B4C88E38E66  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 2  hash 0xBA24664778E4F555  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 2</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -462,11 +462,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(2,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(2,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(2,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(2,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -602,7 +602,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <circle cx="52" cy="4" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="52" cy="20" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="180" cy="116" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 3  hash 0xC3DEB086FCE1254D  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 3  hash 0xC8DA29CC655E1FAE  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 2</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -614,11 +614,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(3,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(3,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(3,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(3,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -754,7 +754,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <circle cx="68" cy="4" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="68" cy="20" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="180" cy="116" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 4  hash 0x790BC1A59C31F3E4  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 4  hash 0x2C8634C7DD1FA69B  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 2</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -766,11 +766,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(4,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(4,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(4,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(4,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -906,7 +906,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <circle cx="84" cy="4" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="84" cy="20" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="180" cy="116" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 5  hash 0xE00440187985A033  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 5  hash 0x64C932E2D732014C  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 2</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -918,11 +918,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(5,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(5,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,1)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -1058,7 +1058,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <circle cx="100" cy="4" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="84" cy="36" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="180" cy="116" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 6  hash 0x36640CBBC7049E42  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 6  hash 0x9634C20D6DEBA441  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 2</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -1070,11 +1070,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(6,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,2)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(6,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,2)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -1210,7 +1210,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <circle cx="116" cy="4" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="84" cy="52" r="3" fill="none" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="180" cy="116" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 7  hash 0xAA68863BE3B67F89  draws 0</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 7  hash 0x730C1BC16196E35A  draws 0</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 2</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -1222,11 +1222,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(7,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,3)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(7,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,3)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -1384,7 +1384,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <circle cx="180" cy="124" r="3" fill="#6b46c1" fill-opacity="0.05"/>
   <circle cx="120" cy="8" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="113" y="14" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 8  hash 0xE217232774B5BF71  draws 2</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 8  hash 0x9E4276EE491A9B1C  draws 2</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 8</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -1402,11 +1402,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(7,0)</td><td>at rest</td><td>yes</td><td>refused route-too-exposed threat-agent-5</td><td>holding</td><td>100/1000</td><td>50/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,4)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>350/1000</td><td>50/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(7,0)</td><td>at rest</td><td>yes</td><td>refused route-too-exposed threat-agent-5</td><td>holding</td><td>100/1000</td><td>50/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,4)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>350/1000</td><td>50/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -1568,7 +1568,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="113" y="14" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="72" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="78" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 9  hash 0x9D49D8226D81D4DC  draws 5</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 9  hash 0x5DFA9B48650B1EF1  draws 5</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 9</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -1587,11 +1587,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(7,0)</td><td>at rest</td><td>yes</td><td>refused route-too-exposed threat-agent-5</td><td>holding</td><td>50/1000</td><td>100/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,5)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>350/1000</td><td>50/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>850/1000</td><td>100/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(7,0)</td><td>at rest</td><td>yes</td><td>refused route-too-exposed threat-agent-5</td><td>holding</td><td>50/1000</td><td>100/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,5)</td><td>-&gt; (5,6)</td><td>yes</td><td>accepted</td><td>moving to (5,6)</td><td>350/1000</td><td>50/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>850/1000</td><td>100/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -1740,7 +1740,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="113" y="14" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 10  hash 0xB3EEC2847B39C201  draws 7</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 10  hash 0x6D2602F96030760A  draws 7</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 9</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -1759,11 +1759,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(8,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>150/1000</td><td>150/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>accepted</td><td>holding</td><td>300/1000</td><td>100/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>150/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(8,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>150/1000</td><td>150/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>accepted</td><td>holding</td><td>300/1000</td><td>100/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>150/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -1907,7 +1907,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="129" y="14" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 11  hash 0x43CE08EDDAF387C4  draws 9</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 11  hash 0xFC25CE0E08966317  draws 9</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 4</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -1921,11 +1921,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(9,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>250/1000</td><td>200/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>250/1000</td><td>70/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>200/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(9,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>250/1000</td><td>200/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>250/1000</td><td>70/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>200/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -2068,7 +2068,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="145" y="14" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 12  hash 0x204731D13BA1A045  draws 11</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 12  hash 0x6C15E285A59E912E  draws 11</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 3</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -2081,11 +2081,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(10,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>350/1000</td><td>250/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>200/1000</td><td>40/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>250/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(10,0)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>350/1000</td><td>250/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>200/1000</td><td>40/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>250/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -2228,7 +2228,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="161" y="14" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 13  hash 0x6B8C629616FAC1C6  draws 13</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 13  hash 0x9113C009A394CE89  draws 13</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 3</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -2241,11 +2241,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(10,1)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>700/1000</td><td>300/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>150/1000</td><td>10/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>300/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(10,1)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>700/1000</td><td>300/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>150/1000</td><td>10/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>300/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -2388,7 +2388,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="161" y="30" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 14  hash 0xB2270137524D012B  draws 15</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 14  hash 0x6A2EBA16F8CA01C4  draws 15</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 5</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -2403,11 +2403,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(10,2)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>800/1000</td><td>350/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>100/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>350/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(10,2)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>800/1000</td><td>350/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>100/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>350/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -2549,7 +2549,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="161" y="46" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 15  hash 0x99D05FBAB6B6F128  draws 17</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 15  hash 0x44316E77DB90F68B  draws 17</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 3</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -2562,11 +2562,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(10,3)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>900/1000</td><td>400/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>50/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>400/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(10,3)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>900/1000</td><td>400/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>50/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>400/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -2707,7 +2707,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="161" y="62" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 16  hash 0x06E278F7F39DF15E  draws 19</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 16  hash 0x09E23FA6869DA6D1  draws 19</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 3</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -2720,11 +2720,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(10,4)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>950/1000</td><td>450/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>450/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(10,4)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>950/1000</td><td>450/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>450/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -2865,7 +2865,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="161" y="78" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 17  hash 0xE1EF817CA9FDD87A  draws 21</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 17  hash 0x7B969B4EC24D3A09  draws 21</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 3</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -2878,11 +2878,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(10,5)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>950/1000</td><td>500/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>500/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(10,5)</td><td>-&gt; (10,6)</td><td>yes</td><td>accepted</td><td>moving to (10,6)</td><td>950/1000</td><td>500/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>500/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -3020,7 +3020,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="161" y="94" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 18  hash 0xE4AF46CD9F1DD2ED  draws 23</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 18  hash 0x4291377C6E7BC5C6  draws 23</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 4</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -3034,11 +3034,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(10,6)</td><td>at rest</td><td>yes</td><td>accepted</td><td>holding</td><td>950/1000</td><td>550/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>550/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(10,6)</td><td>at rest</td><td>yes</td><td>accepted</td><td>holding</td><td>950/1000</td><td>550/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>550/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -3173,7 +3173,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="161" y="110" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 19  hash 0x4AC9D7F4FCEF2D6D  draws 25</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 19  hash 0xD2ACE565C57F2786  draws 25</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 3</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -3186,11 +3186,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(10,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>600/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>600/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(10,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>600/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>600/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">
@@ -3324,7 +3324,7 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
   <text x="161" y="110" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="88" cy="88" r="6" fill="none" stroke="#b7791f" stroke-width="2" stroke-dasharray="3,2"/>
   <text x="81" y="94" font-family="monospace" font-size="9" fill="#b7791f">H1</text>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 20  hash 0x11B06E6EDE0C52E3  draws 27</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 20  hash 0xC68F993BC605313C  draws 27</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 3  events 2</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>
@@ -3336,11 +3336,11 @@ h1 { font-size: 16px; margin: 0 0 4px 0; }
 </ul>
 </div>
 <table class="cw-agents">
-<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>
+<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>
 <tbody>
-<tr><td>0</td><td>friendly</td><td>(10,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>650/1000</td></tr>
-<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td></tr>
-<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>650/1000</td></tr>
+<tr><td>0</td><td>friendly</td><td>(10,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>650/1000</td><td>0</td></tr>
+<tr><td>1</td><td>friendly</td><td>(5,6)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>0/1000</td><td>0/1000</td><td>0</td></tr>
+<tr><td>5</td><td>hostile</td><td>(11,7)</td><td>at rest</td><td>yes</td><td>-</td><td>holding</td><td>950/1000</td><td>650/1000</td><td>0</td></tr>
 </tbody>
 </table>
 <div class="cw-contacts">

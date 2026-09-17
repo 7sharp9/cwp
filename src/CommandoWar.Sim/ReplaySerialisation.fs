@@ -37,6 +37,9 @@ namespace CommandoWar.Sim
 ///   checkpoint <tick> 0x<16 hex>    -- zero or more, strictly ascending tick
 ///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> move <x> <y>
 ///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> suppress <targetAgentId>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> queue-move <x> <y>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> queue-suppress <targetAgentId>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> cancel <targetCommandId>
 ///                                   -- zero or more, strictly ascending
 ///                                      (deliveryTick, sequence)
 ///
@@ -44,10 +47,18 @@ namespace CommandoWar.Sim
 /// | `aggressive` (lowercase, culture-invariant). `<issuer>` is a single
 /// whitespace-free token. `<recipients>` is a non-empty comma-separated list of
 /// non-negative agent ids with no spaces. `move <x> <y>` and `suppress
-/// <targetAgentId>` (TASK-037, a thin B-030 slice) are the two intents today,
-/// added without a version bump, exactly as this grammar always had room for;
-/// it still has room for `hold` / `assault` / `withdraw` as later intent
-/// keywords the same way.
+/// <targetAgentId>` (TASK-037, a thin B-030 slice) mean `PlayerCommandBody.
+/// Order(_, Replace)`; `queue-move` / `queue-suppress` (TASK-044, backlog
+/// B-051) mean `Order(_, Append)` — the same intent, stacked behind the
+/// recipient's active order instead of replacing it; `cancel
+/// <targetCommandId>` (TASK-044) means `Cancel target`, withdrawing a
+/// specific queued or active order by its own `CommandId`. Five intent
+/// keywords today, added without a version bump, exactly as this grammar
+/// always had room for; it still has room for `hold` / `assault` / `withdraw`
+/// as later intent keywords the same way. The legacy `.cwlog` fixture
+/// grammar (`CommandoWar.Headless.CommandLogFile`) is deliberately NOT
+/// extended for queueing/cancellation (TASK-044 Central decision 4) — it
+/// stays one-recipient-per-line, always-replace.
 ///
 /// Output is deterministic: fixed field order, integers only, uppercase hex,
 /// `\n` line endings, commands emitted in `(RecordedCommand.Tick,
@@ -119,10 +130,17 @@ module ReplaySerialisation =
         | Standard -> "standard"
         | Aggressive -> "aggressive"
 
-    let private intentText (intent: PlayerIntent) : string =
-        match intent with
-        | MoveTo target -> sprintf "move %d %d" target.X target.Y
-        | Suppress target -> sprintf "suppress %d" (AgentId.value target)
+    /// Text for a `PlayerCommandBody` (TASK-044, backlog B-051): the intent
+    /// keyword alone for `Replace` (unchanged since TASK-025/037, so every
+    /// pre-TASK-044 file serialises byte-identically), a `queue-` prefixed
+    /// keyword for `Append`, or `cancel <targetCommandId>`.
+    let private bodyText (body: PlayerCommandBody) : string =
+        match body with
+        | Order(MoveTo target, Replace) -> sprintf "move %d %d" target.X target.Y
+        | Order(Suppress target, Replace) -> sprintf "suppress %d" (AgentId.value target)
+        | Order(MoveTo target, Append) -> sprintf "queue-move %d %d" target.X target.Y
+        | Order(Suppress target, Append) -> sprintf "queue-suppress %d" (AgentId.value target)
+        | Cancel target -> sprintf "cancel %d" (CommandId.value target)
 
     /// Serialises a parsed-file view to the canonical text form. Deterministic
     /// and idempotent under `parse`. Throws `invalidArg` on data the grammar
@@ -171,7 +189,7 @@ module ReplaySerialisation =
                     (riskText c.Command.RiskTolerance)
                     issuer
                     recipients
-                    (intentText c.Command.Intent)
+                    (bodyText c.Command.Body)
             )
 
         sb.ToString()
@@ -266,23 +284,40 @@ module ReplaySerialisation =
                                 Ok(AgentId.ofInt id :: ids))
                 >>= fun rev -> Ok(List.rev rev)
 
-        let parseIntent lineNo (toks: string[]) : Result<PlayerIntent, ParseError> =
+        let parseBody lineNo (toks: string[]) : Result<PlayerCommandBody, ParseError> =
             match toks with
             | [| "move"; xTok; yTok |] ->
                 parseI32 lineNo "x" xTok
-                >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(MoveTo { X = x; Y = y })
+                >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(Order(MoveTo { X = x; Y = y }, Replace))
             | [| "suppress"; idTok |] ->
                 parseI32 lineNo "target" idTok
                 >>= fun id ->
                     if id < 0 then
                         Error(FieldOutOfRange(lineNo, "target", idTok))
                     else
-                        Ok(Suppress(AgentId.ofInt id))
+                        Ok(Order(Suppress(AgentId.ofInt id), Replace))
+            | [| "queue-move"; xTok; yTok |] ->
+                parseI32 lineNo "x" xTok
+                >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(Order(MoveTo { X = x; Y = y }, Append))
+            | [| "queue-suppress"; idTok |] ->
+                parseI32 lineNo "target" idTok
+                >>= fun id ->
+                    if id < 0 then
+                        Error(FieldOutOfRange(lineNo, "target", idTok))
+                    else
+                        Ok(Order(Suppress(AgentId.ofInt id), Append))
+            | [| "cancel"; idTok |] ->
+                parseI32 lineNo "target" idTok
+                >>= fun id ->
+                    if id < 0 then
+                        Error(FieldOutOfRange(lineNo, "target", idTok))
+                    else
+                        Ok(Cancel(CommandId.ofInt id))
             | [||] -> Error(UnknownIntent(lineNo, ""))
             | _ -> Error(UnknownIntent(lineNo, toks.[0]))
 
         let commandShape =
-            "command <tick> <seq> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> move <x> <y> | suppress <targetAgentId>"
+            "command <tick> <seq> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> move <x> <y> | suppress <targetAgentId> | queue-move <x> <y> | queue-suppress <targetAgentId> | cancel <targetCommandId>"
 
         let parseCommand lineNo (rest: string) : Result<RecordedCommand, ParseError> =
             let p = rest.Split(ws, System.StringSplitOptions.RemoveEmptyEntries)
@@ -304,8 +339,8 @@ module ReplaySerialisation =
                                     >>= fun risk ->
                                         parseRecipients lineNo p.[7]
                                         >>= fun recipients ->
-                                            parseIntent lineNo p.[8..]
-                                            >>= fun intent ->
+                                            parseBody lineNo p.[8..]
+                                            >>= fun body ->
                                                 if sequence < 0 then
                                                     Error(FieldOutOfRange(lineNo, "seq", p.[1]))
                                                 elif id < 0 then
@@ -320,7 +355,7 @@ module ReplaySerialisation =
                                                               Recipients = recipients
                                                               Urgency = urgency
                                                               RiskTolerance = risk
-                                                              Intent = intent }
+                                                              Body = body }
                                                           Issuer = p.[6] }
 
         let headerLine idx (keyword: string) : Result<int * string, ParseError> =
@@ -475,7 +510,7 @@ module ReplaySerialisation =
         | CommandsOutOfOrder(line, struct (pt, ps), struct (ct, cs)) ->
             $"line {line}: commands must strictly ascend by (tick, sequence): ({pt},{ps}) then ({ct},{cs})"
         | UnknownIntent(line, keyword) ->
-            $"line {line}: unknown intent '{keyword}', only 'move <x> <y>' or 'suppress <targetAgentId>' is supported"
+            $"line {line}: unknown intent '{keyword}', only 'move <x> <y>', 'suppress <targetAgentId>', 'queue-move <x> <y>', 'queue-suppress <targetAgentId>', or 'cancel <targetCommandId>' is supported"
 
     /// The serialisable view of a replay record, recording the hash of its
     /// initial state so a reader can detect a mismatched scenario builder.

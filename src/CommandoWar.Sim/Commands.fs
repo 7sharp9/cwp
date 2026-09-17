@@ -6,6 +6,33 @@ namespace CommandoWar.Sim
 // appraisal resolve-threshold inputs; the Appraisal phase (12.5) now reads
 // them, so they are no longer "inert envelope data".
 
+/// Whether a new `Order` command replaces an agent's active order (and
+/// clears anything already queued behind it) or joins the tail of
+/// `AgentState.OrderQueue` (TASK-044, backlog B-051). `Replace` is the
+/// default for every existing builder below, preserving every pre-TASK-044
+/// caller's exact behaviour; `Append` is reached only through
+/// `Command.queued`.
+type QueueMode =
+    | Replace
+    | Append
+
+/// What a `PlayerCommand` actually asks the simulation to do (TASK-044,
+/// backlog B-051). `Order` carries the existing `PlayerIntent` (`Domain.fs`,
+/// `MoveTo | Suppress`) unchanged, plus a `QueueMode`; `Cancel` names a
+/// specific `CommandId` — queued or currently active — to withdraw.
+///
+/// This wrapper exists so `PlayerIntent` itself, and therefore
+/// `ReceivedOrder.Intent`, never has to represent `Cancel` at all: a `Cancel`
+/// is consumed entirely inside `Simulation.commandIntake`/`.communication`
+/// and never becomes a stored `AgentState.Order`/`OrderQueue` entry or a
+/// `Canonical.writeOrder` case. `Appraisal.appraise` and `Commitment.ofAgent`
+/// therefore need no new case and no unreachable-match branch for a state
+/// that can never actually arise (`AGENTS.md` "make invalid states hard to
+/// construct").
+type PlayerCommandBody =
+    | Order of intent: PlayerIntent * mode: QueueMode
+    | Cancel of target: CommandId
+
 /// A player command envelope. This is a **partial** realisation of the
 /// `docs/04_SIMULATION_SPEC.md` section 13 envelope (TASK-020): command id,
 /// recipients, issue tick, urgency and risk tolerance are present. Issuer
@@ -40,7 +67,12 @@ type PlayerCommand =
       Recipients: AgentId list
       Urgency: Urgency
       RiskTolerance: RiskTolerance
-      Intent: PlayerIntent }
+      /// What this command asks the simulation to do (TASK-044, backlog
+      /// B-051; renamed from `Intent: PlayerIntent`). `Order(intent, mode)`
+      /// carries the pre-TASK-044 `PlayerIntent` unchanged, plus whether it
+      /// replaces or queues; `Cancel target` withdraws a specific queued or
+      /// active order by `CommandId`.
+      Body: PlayerCommandBody }
 
     /// The first recipient. Back-compatible read accessor for the
     /// pre-TASK-020 single-`Agent` shape, kept so existing single-recipient
@@ -88,6 +120,13 @@ type CommandRejection =
     /// tick and delivered now is accepted: staleness is appraisal's concern
     /// (backlog B-017), not command intake's.
     | IssueTickOutOfRange of issuedAtTick: int64 * tick: int64
+    /// Ineligible (TASK-044, backlog B-051): a `Cancel target` command names
+    /// a `CommandId` that is neither `recipient`'s active `AgentState.Order`
+    /// nor present in its `OrderQueue`, checked against the start-of-tick
+    /// `WorldState.Agents` snapshot `commandIntake` already reads read-only
+    /// — the `UnknownAgent` precedent, one rejection per (command,
+    /// recipient) pair.
+    | UnknownTargetCommand of recipient: AgentId * target: CommandId
 
 [<RequireQualifiedAccess>]
 module Command =
@@ -104,7 +143,7 @@ module Command =
           Recipients = [ agent ]
           Urgency = Routine
           RiskTolerance = Standard
-          Intent = MoveTo target }
+          Body = Order(MoveTo target, Replace) }
 
     /// Builds a single-recipient suppress command with the default envelope
     /// (TASK-037, a thin B-030 slice) — the `moveTo` precedent, naming a
@@ -116,7 +155,7 @@ module Command =
           Recipients = [ agent ]
           Urgency = Routine
           RiskTolerance = Standard
-          Intent = Suppress target }
+          Body = Order(Suppress target, Replace) }
 
     /// Builds a move command addressing several agents, with an explicit
     /// urgency and risk tolerance. Exercised only from code (TASK-020's unit
@@ -136,4 +175,27 @@ module Command =
           Recipients = agents
           Urgency = urgency
           RiskTolerance = riskTolerance
-          Intent = MoveTo target }
+          Body = Order(MoveTo target, Replace) }
+
+    /// Turns an `Order` command into a queued one (TASK-044, backlog B-051):
+    /// if the recipient already holds an active order, this one joins the
+    /// tail of its `AgentState.OrderQueue` instead of replacing it. A no-op
+    /// on a `Cancel` command (cancellation has no queue mode).
+    let queued (cmd: PlayerCommand) : PlayerCommand =
+        match cmd.Body with
+        | Order(intent, _) -> { cmd with Body = Order(intent, Append) }
+        | Cancel _ -> cmd
+
+    /// Builds a command withdrawing a specific queued or currently active
+    /// order, named by its own `CommandId` (TASK-044, backlog B-051;
+    /// Central decision 3 — cancel by `CommandId`, not a blunt "clear
+    /// everything"). `Urgency`/`RiskTolerance` are present only to keep the
+    /// envelope shape uniform (`docs/04` section 13); `Cancel` never reaches
+    /// `Appraisal`, so neither is read for it.
+    let cancel (id: CommandId) (issuedAtTick: int64) (agent: AgentId) (target: CommandId) : PlayerCommand =
+        { Id = id
+          IssuedAtTick = issuedAtTick
+          Recipients = [ agent ]
+          Urgency = Routine
+          RiskTolerance = Standard
+          Body = Cancel target }

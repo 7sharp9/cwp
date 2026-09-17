@@ -141,6 +141,19 @@ module Setup =
 [<RequireQualifiedAccess>]
 module Simulation =
 
+    /// What one accepted-but-not-yet-delivered command asks for (TASK-044,
+    /// backlog B-051): either a `ReceivedOrder` envelope, carrying the
+    /// `QueueMode` that decides whether `communication` replaces or appends
+    /// it, or a cancellation naming another command's id. Unified into one
+    /// list (`StepState.PendingCommands`), not two, so both kinds of pending
+    /// command for one recipient stay ordered by their own `CommandId`
+    /// relative to each other — the "same-tick batch is order-independent
+    /// only across recipients, ascending within one" precedent already
+    /// governing `PendingOrders` before this task.
+    type private PendingBody =
+        | PendingOrder of order: ReceivedOrder * mode: QueueMode
+        | PendingCancel of target: CommandId
+
     /// Mutable-but-contained accumulator for one step. It never escapes
     /// `step`; the input `WorldState` is never mutated (command intake,
     /// communication, and movement copy the agent array before writing).
@@ -151,17 +164,21 @@ module Simulation =
           /// the Navigation and movement phase reads it for pathfinding.
           Terrain: Terrain
           mutable Agents: AgentState[]
-          /// Orders accepted by Command intake this tick and not yet delivered
-          /// to their recipients, as `(recipient, order)` (TASK-027, backlog
-          /// B-016; the `ReceivedOrder` payload added by TASK-028). Populated
-          /// by `commandIntake`, drained by `communication` in the same tick: a
-          /// reachable recipient's `AgentState.Order` is written (and its
-          /// `Disposition` reset), an unreachable one gets an
-          /// `OrderUndelivered` event. Zero delivery delay, so this list never
-          /// survives past the Communication phase and is not canonical state
-          /// (`docs/04` section 12.2; TASK-024 "`WorldState` holds no command
+          /// Commands accepted by Command intake this tick and not yet
+          /// applied to their recipients, as `(recipient, commandId, body)`
+          /// (TASK-027, backlog B-016; the `ReceivedOrder` payload added by
+          /// TASK-028; `PendingBody`/`Cancel` added by TASK-044, backlog
+          /// B-051). Populated by `commandIntake`, drained by
+          /// `communication` in the same tick: for a reachable recipient, a
+          /// `PendingOrder` writes `AgentState.Order` (`Replace`) or appends
+          /// to `OrderQueue` (`Append`), and a `PendingCancel` clears/splices
+          /// the named `CommandId`; an unreachable recipient gets one
+          /// `OrderUndelivered` event and no state change either way. Zero
+          /// delivery delay, so this list never survives past the
+          /// Communication phase and is not canonical state (`docs/04`
+          /// section 12.2; TASK-024 "`WorldState` holds no command
           /// history"). Delayed delivery is backlog B-016b.
-          mutable PendingOrders: (AgentId * ReceivedOrder) list
+          mutable PendingCommands: (AgentId * CommandId * PendingBody) list
           /// The friendly squad's shared tactical picture, carried in from the
           /// input `WorldState` and rewritten by the Tactical-knowledge phase
           /// (TASK-026). Genuine per-tick canonical state.
@@ -245,6 +262,18 @@ module Simulation =
     // No agent array copy: this phase reads s.Agents (for the AgentId -> index
     // map and the hostile-side check) but never mutates it. Agent identity and
     // order are stable, so one index map is valid for the whole batch.
+    // Cancel handling (TASK-044, backlog B-051): whether `agent` currently
+    // holds `target` as its active Order or somewhere in its OrderQueue,
+    // checked against the START-of-tick s.Agents snapshot (this phase reads
+    // but never mutates it, the existing precedent) — so a same-tick
+    // "queue order, then cancel it" sequence cannot anticipate the queue
+    // effect its own batch has not been applied yet (the identical
+    // "same-tick batch cannot see its own not-yet-applied effects" rule
+    // DuplicateCommandId / UnauthorisedRecipient already observe).
+    let private holdsCommand (agent: AgentState) (target: CommandId) : bool =
+        (agent.Order |> Option.exists (fun o -> o.Command = target))
+        || (agent.OrderQueue |> List.exists (fun o -> o.Command = target))
+
     let private commandIntake (commands: PlayerCommand list) (s: StepState) =
         let agents = s.Agents
 
@@ -257,7 +286,7 @@ module Simulation =
             |> List.choose (fun (id, n) -> if n > 1 then Some id else None)
             |> Set.ofList
 
-        let pending = ResizeArray<AgentId * ReceivedOrder>()
+        let pending = ResizeArray<AgentId * CommandId * PendingBody>()
 
         for cmd in commands do
             if Set.contains cmd.Id duplicatedIds then
@@ -277,12 +306,12 @@ module Simulation =
                         // bounds-checkable Cell — whether it names a contact
                         // the recipient actually knows about is Appraisal's
                         // stage-2 TargetNotKnown check, never authoritative
-                        // hostile state at intake (risk R-023).
-                        match cmd.Intent with
-                        | MoveTo target when not (GridBounds.contains target s.Bounds) ->
+                        // hostile state at intake (risk R-023). A Cancel
+                        // (TASK-044) has no bounds-checkable target either.
+                        match cmd.Body with
+                        | Order(MoveTo target, _) when not (GridBounds.contains target s.Bounds) ->
                             emit (CommandRejected(cmd.Id, TargetOutOfBounds target)) s
-                        | MoveTo _
-                        | Suppress _ ->
+                        | Order(intent, mode) ->
                             for recipient in recipients |> List.sortBy AgentId.value do
                                 match Map.tryFind recipient indexOf with
                                 | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
@@ -293,75 +322,172 @@ module Simulation =
                                     // target, or (Suppress has none) the
                                     // recipient's own unmoving position.
                                     let cell =
-                                        match cmd.Intent with
+                                        match intent with
                                         | MoveTo target -> target
                                         | Suppress _ -> agents.[idx].Position
 
                                     emit (CommandAccepted(cmd.Id, recipient, cell)) s
 
-                                    pending.Add(
-                                        recipient,
+                                    let order: ReceivedOrder =
                                         { Command = cmd.Id
-                                          Intent = cmd.Intent
+                                          Intent = intent
                                           IssuedAtTick = cmd.IssuedAtTick
                                           Urgency = cmd.Urgency
                                           RiskTolerance = cmd.RiskTolerance }
-                                    )
 
-        s.PendingOrders <- List.ofSeq pending
+                                    pending.Add(recipient, cmd.Id, PendingOrder(order, mode))
+                        | Cancel target ->
+                            for recipient in recipients |> List.sortBy AgentId.value do
+                                match Map.tryFind recipient indexOf with
+                                | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
+                                | Some idx when agents.[idx].Side = Hostile ->
+                                    emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
+                                | Some idx when not (holdsCommand agents.[idx] target) ->
+                                    emit (CommandRejected(cmd.Id, UnknownTargetCommand(recipient, target))) s
+                                | Some idx ->
+                                    // No natural target Cell for a Cancel —
+                                    // the Suppress CommandAccepted precedent.
+                                    emit (CommandAccepted(cmd.Id, recipient, agents.[idx].Position)) s
+                                    pending.Add(recipient, cmd.Id, PendingCancel target)
+
+        s.PendingCommands <- List.ofSeq pending
 
     // --- Phase: communication --------------------------------------------
     // Realised by TASK-027 (backlog B-016); reworked by TASK-028 (backlog
-    // B-017). Turns the docs/04 section 12.2 no-op into a real phase:
+    // B-017); extended by TASK-044 (backlog B-051) for queueing and
+    // cancellation. Turns the docs/04 section 12.2 no-op into a real phase:
     // "determine which recipients receive an order this tick ... communication
-    // failure must be explicit, not silently ignored". For every order Command
-    // intake accepted this tick (s.PendingOrders), in ascending
+    // failure must be explicit, not silently ignored". For every command
+    // intake accepted this tick (s.PendingCommands), in ascending
     // (recipient, command) id order:
     //
-    //   * recipient CommunicationAvailable = true  -> write AgentState.Order
-    //     (the whole ReceivedOrder) and RESET AgentState.Disposition to None,
-    //     via the copy-before-write idiom. NOT Destination — that is the
-    //     Appraisal phase's job now (TASK-028). Zero delivery delay: the
-    //     Appraisal phase (12.5), which runs three phases later this same
-    //     tick, judges the order. No success event (backlog B-016b).
     //   * recipient CommunicationAvailable = false -> emit OrderUndelivered
-    //     (reason UnableToCommunicate) and DROP the order. An Order the
-    //     recipient already held (and any Destination it produced) is left
-    //     untouched: an undelivered new order does not cancel an order in
-    //     progress (docs/05 section 16 "Lost communication" — the trace shows
-    //     communication failure, not disobedience).
+    //     (reason UnableToCommunicate) and DROP the command, whether it was
+    //     an order or a cancel. An Order the recipient already held (and any
+    //     Destination it produced) is left untouched: an undelivered new
+    //     order does not cancel an order in progress (docs/05 section 16
+    //     "Lost communication" — the trace shows communication failure, not
+    //     disobedience).
+    //   * recipient CommunicationAvailable = true:
+    //     - PendingOrder(order, Replace): write AgentState.Order (the whole
+    //       ReceivedOrder), RESET Disposition to None, and CLEAR OrderQueue
+    //       — a bare new order still fully supersedes both the active order
+    //       and anything already stacked behind it (Central decision 2, the
+    //       pre-TASK-044 behaviour preserved exactly). NOT Destination —
+    //       that is the Appraisal phase's job (TASK-028). Zero delivery
+    //       delay for what becomes the active order: Appraisal, three
+    //       phases later this same tick, judges it. No success event
+    //       (backlog B-016b).
+    //     - PendingOrder(order, Append): if the recipient holds no active
+    //       Order, identical to Replace (an idle agent's first queued order
+    //       starts immediately). Otherwise append to the tail of
+    //       OrderQueue and emit OrderQueued — the active Order/Disposition
+    //       are untouched.
+    //     - PendingCancel target, target = the active Order's Command:
+    //       clear it and promote the queue head into Order (Disposition
+    //       reset to None, so THIS tick's Appraisal judges it) or go idle if
+    //       the queue is empty; emit OrderCancelled(target, recipient,
+    //       wasActive = true).
+    //     - PendingCancel target, target found in OrderQueue instead: splice
+    //       out that one entry, leaving the active order and every other
+    //       queued entry untouched; emit OrderCancelled(..., wasActive =
+    //       false).
+    //     - PendingCancel target, found in neither: a same-tick race only —
+    //       intake validated target's existence against the START-of-tick
+    //       snapshot, but an EARLIER-processed command this same tick (lower
+    //       CommandId, e.g. a Replace) already superseded it. No state
+    //       change, no event: the superseding command's own events already
+    //       explain the trace.
     //
-    // A fresh Order overwrites any prior one and resets Disposition to None, so
-    // the Appraisal phase re-appraises it (docs/05 section 14 "a new order is
-    // received"). CommunicationAvailable is STATIC authored scenario data,
-    // excluded from Canonical.encode (ADR-0002 amendment; B-016b). This phase
-    // draws nothing from the deterministic stream.
+    // Multiple pending commands for one recipient are processed in ascending
+    // CommandId order against the incrementally-mutated `agents` array (this
+    // loop already reads its own prior iterations' writes), so a same-tick
+    // "issue three waypoints" or "issue then cancel" sequence composes
+    // correctly with no extra bookkeeping.
+    //
+    // CommunicationAvailable is STATIC authored scenario data, excluded from
+    // Canonical.encode (ADR-0002 amendment; B-016b). This phase draws
+    // nothing from the deterministic stream.
     let private communication (s: StepState) =
-        match s.PendingOrders with
+        match s.PendingCommands with
         | [] -> ()
-        | orders ->
+        | items ->
             let agents = Array.copy s.Agents
 
             let indexOf: Map<AgentId, int> =
                 agents |> Array.mapi (fun i a -> a.Id, i) |> Map.ofArray
 
             let ordered =
-                orders
-                |> List.sortBy (fun (recipient, order) -> AgentId.value recipient, CommandId.value order.Command)
+                items
+                |> List.sortBy (fun (recipient, cmdId, _) -> AgentId.value recipient, CommandId.value cmdId)
 
-            for recipient, order in ordered do
+            for recipient, cmdId, body in ordered do
                 // Command intake already rejected an unknown recipient
                 // (UnknownAgent) against this same array, and no phase between
                 // adds or removes an agent, so the lookup always succeeds.
                 match Map.tryFind recipient indexOf with
-                | Some idx when agents.[idx].CommunicationAvailable ->
-                    agents.[idx] <- { agents.[idx] with Order = Some order; Disposition = None }
-                | Some _ -> emit (OrderUndelivered(order.Command, recipient, UnableToCommunicate)) s
                 | None -> ()
+                | Some idx when not agents.[idx].CommunicationAvailable ->
+                    emit (OrderUndelivered(cmdId, recipient, UnableToCommunicate)) s
+                | Some idx ->
+                    let a = agents.[idx]
+
+                    match body with
+                    | PendingOrder(order, Replace) ->
+                        agents.[idx] <-
+                            { a with
+                                Order = Some order
+                                Disposition = None
+                                OrderQueue = [] }
+                    | PendingOrder(order, Append) ->
+                        match a.Order with
+                        | None -> agents.[idx] <- { a with Order = Some order; Disposition = None }
+                        | Some _ ->
+                            agents.[idx] <- { a with OrderQueue = a.OrderQueue @ [ order ] }
+                            emit (OrderQueued(order.Command, recipient)) s
+                    | PendingCancel target ->
+                        match a.Order with
+                        | Some active when active.Command = target ->
+                            // Destination is cleared here regardless of
+                            // promotion: it belongs to the CANCELLED order
+                            // (a MoveTo target), and a promoted order has not
+                            // been appraised yet (Disposition = None) to
+                            // write its own — leaving the stale value would
+                            // have Navigation keep driving the agent toward
+                            // an order it no longer holds. The Appraisal
+                            // precedent for a superseding Replace order,
+                            // applied explicitly here since a Cancel-driven
+                            // promotion bypasses Appraisal this tick.
+                            match a.OrderQueue with
+                            | head :: tail ->
+                                agents.[idx] <-
+                                    { a with
+                                        Order = Some head
+                                        Disposition = None
+                                        Destination = None
+                                        OrderQueue = tail }
+                            | [] ->
+                                agents.[idx] <-
+                                    { a with
+                                        Order = None
+                                        Disposition = None
+                                        Destination = None }
+
+                            emit (OrderCancelled(target, recipient, true)) s
+                        | _ ->
+                            if a.OrderQueue |> List.exists (fun o -> o.Command = target) then
+                                agents.[idx] <-
+                                    { a with
+                                        OrderQueue = a.OrderQueue |> List.filter (fun o -> o.Command <> target) }
+
+                                emit (OrderCancelled(target, recipient, false)) s
+                            // else: superseded earlier this same tick by a
+                            // lower-CommandId command (see the phase comment
+                            // above) — nothing to cancel any more.
 
             s.Agents <- agents
 
-        s.PendingOrders <- []
+        s.PendingCommands <- []
 
     // --- Phase: perception -------------------------------------------------
     // Realised by TASK-026 (backlog B-015). The first phase consumer of the
@@ -727,8 +853,24 @@ module Simulation =
                 | MoveTo target ->
                     if a.Destination = None && a.Position = target then
                         // Fulfilled: relocated from the Appraisal phase's prior
-                        // housekeeping (TASK-028).
-                        agents.[i] <- { a with Order = None; Disposition = None }
+                        // housekeeping (TASK-028). TASK-044 (backlog B-051):
+                        // promote the queue head into Order instead of just
+                        // clearing it, when one is stacked behind this order.
+                        // The promoted order is judged by NEXT tick's
+                        // Appraisal, not this one — Appraisal already ran
+                        // earlier this tick, before commitmentAndLocalAction
+                        // — a deliberate one-tick gap before a chained
+                        // waypoint's next leg begins, not a new interrupt
+                        // mechanism duplicating Appraisal.appraise inline.
+                        match a.OrderQueue with
+                        | head :: tail ->
+                            agents.[i] <-
+                                { a with
+                                    Order = Some head
+                                    Disposition = None
+                                    OrderQueue = tail }
+                        | [] -> agents.[i] <- { a with Order = None; Disposition = None }
+
                         emit (CommitmentCompleted(a.Id, o.Command, a.Position)) s
                     elif Set.contains a.Id acceptedThisTick then
                         // Freshly accepted this tick: a commitment begins.
@@ -1269,7 +1411,7 @@ module Simulation =
               Bounds = state.Bounds
               Terrain = state.Terrain
               Agents = state.Agents
-              PendingOrders = []
+              PendingCommands = []
               TacticalKnowledge = state.TacticalKnowledge
               HostileTacticalKnowledge = state.HostileTacticalKnowledge
               Random = state.Random

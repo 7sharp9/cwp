@@ -76,7 +76,7 @@ dotnet build CommandoWar.Client.Godot.slnx -c Debug
 
 # headless smoke: replays DemoScenario tick 1..20, prints each tick's hash,
 # asserts the final hash vs the pinned golden
-"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x11B06E6EDE0C52E3, exit 0
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0xC68F993BC605313C, exit 0
 
 # committed evidence screenshot (windowed; headless has no viewport texture)
 "$GODOT" --path . scenes/SnapshotDemo.tscn -- --screenshot <abs-path>.png
@@ -117,7 +117,7 @@ dotnet build CommandoWar.Client.Godot.slnx -c Debug
 
 # headless smoke: scripted select-agent-0 + MoveTo(3,0), prints each tick's
 # hash, asserts the final hash vs the pinned golden
-"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck   # MATCH 0x649FA4D08E2931CA, exit 0
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck   # MATCH 0xD27E623504262CE9, exit 0
 
 # committed evidence screenshot (scripted selection/preview, since --screenshot
 # mode injects no real mouse input)
@@ -153,8 +153,8 @@ cd src/CommandoWar.Client.Godot
 dotnet build CommandoWar.Client.Godot.slnx -c Debug    # AND -c Release if exporting/measuring release
 
 # both existing scenes' --selfcheck hashes are unaffected (render-only)
-"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x11B06E6EDE0C52E3
-"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x649FA4D08E2931CA
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0xC68F993BC605313C
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0xD27E623504262CE9
 
 "$GODOT" --path . scenes/SnapshotDemo.tscn -- --screenshot <abs-path>.png
 "$GODOT" --path . scenes/CommandDemo.tscn -- --screenshot <abs-path>.png
@@ -192,8 +192,8 @@ cd src/CommandoWar.Client.Godot
 dotnet build CommandoWar.Client.Godot.slnx -c Debug
 
 # both existing scenes' --selfcheck hashes are unaffected (values-only)
-"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x11B06E6EDE0C52E3
-"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x649FA4D08E2931CA
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0xC68F993BC605313C
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0xD27E623504262CE9
 
 # windowed: select an agent, issue an order, watch the HUD's order= field
 "$GODOT" --path . scenes/CommandDemo.tscn
@@ -245,8 +245,8 @@ cd src/CommandoWar.Client.Godot
 dotnet build CommandoWar.Client.Godot.slnx -c Debug
 
 # both existing scenes' --selfcheck hashes are unaffected (render-only)
-"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x11B06E6EDE0C52E3
-"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x649FA4D08E2931CA
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0xC68F993BC605313C
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0xD27E623504262CE9
 
 # windowed: select an agent, press F1, hover cells to see the LOS ray
 "$GODOT" --path . scenes/CommandDemo.tscn

@@ -253,6 +253,17 @@ type Overlay =
     /// cross-referencing `WorldState.Agents`. Both `Diagnostics.frame` and
     /// `Diagnostics.frameOf` derive one per contact, ascending by contact id.
     | HostileKnownContact of cell: Cell * contact: AgentId * confidence: int * lastSeenTick: int64
+    /// The orders stacked behind an agent's active order (TASK-044, backlog
+    /// B-051; `AgentState.OrderQueue`): `agent` at `at` has `queued`, each
+    /// entry's own `CommandId` and `PlayerIntent`, in queue order (not
+    /// sorted — the `Canonical.fs` FormatVersion 9 precedent: the order is
+    /// the meaningful state). Emitted only for an agent with a non-empty
+    /// queue — the `AgentSuppression` / `AgentStress` sparse-overlay
+    /// precedent, not the unconditional `AgentCommitment` one, since an
+    /// empty queue is the overwhelmingly common case. Standing canonical
+    /// state (not a this-tick event), so both `Diagnostics.frame` and
+    /// `Diagnostics.frameOf` derive it.
+    | AgentOrderQueue of agent: AgentId * at: Cell * queued: (CommandId * PlayerIntent)[]
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -334,7 +345,14 @@ module Diagnostics =
         | CommandRejected(_, IssueTickOutOfRange _) -> { Kind = "command-rejected"; Cells = [||]; Agents = [||] }
         | CommandRejected(_, TargetOutOfBounds target) ->
             { Kind = "command-rejected"; Cells = [| target |]; Agents = [||] }
+        | CommandRejected(_, UnknownTargetCommand(recipient, _)) ->
+            { Kind = "command-rejected"; Cells = [||]; Agents = [| recipient |] }
         | OrderUndelivered(_, recipient, _) -> { Kind = "order-undelivered"; Cells = [||]; Agents = [| recipient |] }
+        | OrderQueued(_, recipient) -> { Kind = "order-queued"; Cells = [||]; Agents = [| recipient |] }
+        | OrderCancelled(_, agent, wasActive) ->
+            { Kind = (if wasActive then "order-cancelled-active" else "order-cancelled-queued")
+              Cells = [||]
+              Agents = [| agent |] }
         | OrderAppraised(agent, _, _) -> { Kind = "order-appraised"; Cells = [||]; Agents = [| agent |] }
         | CommitmentEstablished(agent, _, target) ->
             { Kind = "commitment-established"; Cells = [| target |]; Agents = [| agent |] }
@@ -435,6 +453,20 @@ module Diagnostics =
         |> Array.sortBy (fun a -> a.Id)
         |> Array.choose (fun a -> if a.Stress > 0 then Some(AgentStress(a.Id, a.Position, a.Stress)) else None)
 
+    /// An `AgentOrderQueue` overlay per agent with a non-empty `OrderQueue`
+    /// (TASK-044, backlog B-051), ascending by agent id — the
+    /// `AgentSuppression` / `AgentStress` sparse-overlay precedent. Standing
+    /// canonical `AgentState` state, so both `frame` and `frameOf` derive
+    /// this.
+    let private orderQueueOverlays (world: WorldState) : Overlay[] =
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.choose (fun a ->
+            if List.isEmpty a.OrderQueue then
+                None
+            else
+                Some(AgentOrderQueue(a.Id, a.Position, a.OrderQueue |> List.map (fun o -> o.Command, o.Intent) |> List.toArray)))
+
     /// A `HostileKnownContact` overlay per contact in the Hostile side's own
     /// shared tactical picture (TASK-034), ascending by contact id — the
     /// `knownContactOverlays` precedent, reading
@@ -464,7 +496,8 @@ module Diagnostics =
                commitmentOverlays world
                suppressionOverlays world
                stressOverlays world
-               hostileKnownContactOverlays world |]
+               hostileKnownContactOverlays world
+               orderQueueOverlays world |]
             |> Array.concat
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
@@ -496,6 +529,8 @@ module Diagnostics =
             | CommandAccepted _
             | CommandRejected _
             | OrderUndelivered _
+            | OrderQueued _
+            | OrderCancelled _
             | OrderAppraised _
             | CommitmentEstablished _
             | CommitmentCompleted _
@@ -522,6 +557,8 @@ module Diagnostics =
             | CommandAccepted _
             | CommandRejected _
             | OrderUndelivered _
+            | OrderQueued _
+            | OrderCancelled _
             | OrderAppraised _
             | CommitmentEstablished _
             | CommitmentCompleted _
@@ -549,6 +586,8 @@ module Diagnostics =
             | OrderUndelivered(command, recipient, _) -> Some(recipient, command)
             | CommandAccepted _
             | CommandRejected _
+            | OrderQueued _
+            | OrderCancelled _
             | OrderAppraised _
             | CommitmentEstablished _
             | CommitmentCompleted _
@@ -578,6 +617,8 @@ module Diagnostics =
             | CommandAccepted _
             | CommandRejected _
             | OrderUndelivered _
+            | OrderQueued _
+            | OrderCancelled _
             | OrderAppraised _
             | CommitmentEstablished _
             | CommitmentCompleted _
@@ -624,5 +665,6 @@ module Diagnostics =
                       fireLineOverlays result
                       suppressionOverlays result.State
                       stressOverlays result.State
-                      hostileKnownContactOverlays result.State ]
+                      hostileKnownContactOverlays result.State
+                      orderQueueOverlays result.State ]
             Hash = result.StateHash }

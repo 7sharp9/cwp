@@ -39,7 +39,7 @@ let ``the corpus includes the spike fixture and is not an independent re-pin of 
     | Ok cmds ->
         Assert.Single(cmds) |> ignore
         Assert.Equal(3, AgentId.value cmds.[0].Command.Agent)
-        Assert.Equal(MoveTo { X = 20; Y = 14 }, cmds.[0].Command.Intent)
+        Assert.Equal(Order(MoveTo { X = 20; Y = 14 }, Replace), cmds.[0].Command.Body)
         Assert.Equal(1L, cmds.[0].Tick)
 
     // The committed per-tick table is the same 40-value sequence Fixture.run ()
@@ -51,8 +51,8 @@ let ``the corpus includes the spike fixture and is not an independent re-pin of 
     | Error m, _ -> Assert.Fail(m)
     | _, Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok table, Ok outcome ->
-        Assert.Equal(0x68F435EF0364DC03UL, table.InitialHash)
-        Assert.Equal(0x06E4E1CD02EEA0C0UL, table.FinalHash)
+        Assert.Equal(0xA2726329BB740614UL, table.InitialHash)
+        Assert.Equal(0xC9694E97A7210117UL, table.FinalHash)
         // TASK-030: 34 -> 36 (+1 CommitmentEstablished, +1 CommitmentCompleted).
         Assert.Equal(36, table.EventCount)
 
@@ -71,12 +71,13 @@ let ``a perturbed command log is reported as a table mismatch at the first diver
         let perturbed =
             cmds
             |> Array.map (fun c ->
-                match c.Command.Intent with
-                | MoveTo _ ->
+                match c.Command.Body with
+                | Order(MoveTo _, _) ->
                     { c with
                         Command = Command.moveTo c.Command.Id c.Command.IssuedAtTick c.Command.Agent { X = 9; Y = 3 } }
-                // wall-detour issues only MoveTo orders; unreachable here.
-                | Suppress _ -> c)
+                // wall-detour issues only replace-mode MoveTo orders; unreachable here.
+                | Order(Suppress _, _)
+                | Cancel _ -> c)
 
         match Corpus.run entry cmds, Corpus.run entry perturbed with
         | Ok reference, Ok candidate ->

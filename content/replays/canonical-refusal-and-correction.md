@@ -16,25 +16,25 @@ See `content/replays/CORPUS.md`.
 | Command log | `canonical-refusal-and-correction.cwreplay` |
 | Initial state | Corpus canonical-refusal-and-correction scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile) |
 | Tick count | 14 |
-| Initial hash (tick 0) | `0xE7F3B652A91AC701` |
-| Final hash (tick 14) | `0xB27C590D411B590C` |
+| Initial hash (tick 0) | `0xFE5B4078273C6A2A` |
+| Final hash (tick 14) | `0x80E69B76B65847AB` |
 | Domain events | 70 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xBC4CA2AD7DFA39FF` |
-|    2 | `0x88E873D0090BC27B` |
-|    3 | `0x33E974BF1FA7EBED` |
-|    4 | `0xE2EC7A0EE270AB33` |
-|    5 | `0xFAB4A0AF4B0A76B9` |
-|    6 | `0xF03D3D17C593CC64` |
-|    7 | `0xC60F32B7ACDA9663` |
-|    8 | `0x0F2E324EAC127E43` |
-|    9 | `0xFBA473F1810078BD` |
-|   10 | `0x1477F7600EA9FA46` |
-|   11 | `0x98E33D3AF15D3CFF` |
-|   12 | `0x4961C5F0331CC006` |
-|   13 | `0xAC73A8B1436D73DF` |
-|   14 | `0xB27C590D411B590C` |
+|    1 | `0x8E9D50E5225E3256` |
+|    2 | `0x70A15C378B1E167A` |
+|    3 | `0xB748E852D38A61FC` |
+|    4 | `0xE3D6F07B6A6979E0` |
+|    5 | `0x9C5701DFA96D3D8E` |
+|    6 | `0x896D535EC3FE0E4B` |
+|    7 | `0xB72271B3243B3940` |
+|    8 | `0xB38A2392AD4EFD98` |
+|    9 | `0xAF18FCB13D79CAB6` |
+|   10 | `0xED165C0BD0724DE1` |
+|   11 | `0xAF8707907A4CDAF0` |
+|   12 | `0x8868DD86F5817C0D` |
+|   13 | `0x9B8F1D2367BC0EA4` |
+|   14 | `0x80E69B76B65847AB` |

@@ -1,0 +1,11 @@
+version 1
+seed 20260904
+ticks 9
+canonical 9
+build cwheadless
+scenario order-queue-stacking-and-cancellation
+command 1 0 1 1 routine standard corpus 0 move 3 0
+command 1 1 2 1 routine standard corpus 0 queue-move 7 0
+command 1 2 3 1 routine standard corpus 0 queue-move 10 0
+command 2 0 4 2 routine standard corpus 0 cancel 3
+command 7 0 5 7 routine standard corpus 0 cancel 2

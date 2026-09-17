@@ -38,4 +38,4 @@ overlays:
 
 events: command-accepted@(5,4); order-appraised
 
-tick 1 | hash 0xD241785870DC7E20 (format 8) | draws 0 | agents 1 | cover-edges 0 | events 2
+tick 1 | hash 0x67F0D90BCF57E077 (format 9) | draws 0 | agents 1 | cover-edges 0 | events 2

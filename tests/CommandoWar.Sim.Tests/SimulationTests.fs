@@ -1791,3 +1791,135 @@ let ``a Suppressing agent fires at its named target even when a nearer contact i
             | _ -> None)
 
     Assert.Equal<AgentId[]>([| agent 2 |], fromShooter0)
+
+// --- Order queue: stacking and cancellation (TASK-044, backlog B-051) ----
+
+let private queuedCmd (id: int) (recipient: AgentId) (dest: Cell) =
+    Command.queued (cmd id recipient dest)
+
+let private cancelCmd (id: int) (recipient: AgentId) (target: CommandId) =
+    Command.cancel (CommandId.ofInt id) 0L recipient target
+
+[<Fact>]
+let ``an appended order queues behind the active one, activates on fulfilment, and is judged the following tick`` () =
+    let a = agent 0 // starts at (0,0)
+
+    // Both issued the same tick: cmd 1 (Replace) becomes active; cmd 2
+    // (Append) queues behind it, since the recipient already holds an order
+    // by the time Communication processes cmd 2 (ascending command id).
+    let tick1 =
+        stepWith [| cmd 1 a { X = 2; Y = 0 }; queuedCmd 2 a { X = 5; Y = 0 } |] (world ())
+
+    Assert.Contains(OrderQueued(CommandId.ofInt 2, a), bodies tick1)
+    Assert.Equal(1, (agentOf a tick1.State).OrderQueue.Length)
+    Assert.Equal({ X = 1; Y = 0 }, (agentOf a tick1.State).Position)
+
+    let tick2 = stepIdle tick1.State
+    Assert.Equal({ X = 2; Y = 0 }, (agentOf a tick2.State).Position) // arrives
+
+    // Fulfilment tick: the queue head is promoted, but NOT judged this same
+    // tick (Appraisal already ran before commitmentAndLocalAction promotes
+    // it) -- position holds at (2,0), Destination stays None.
+    let tick3 = stepIdle tick2.State
+    let a3 = agentOf a tick3.State
+    Assert.Contains(CommitmentCompleted(a, CommandId.ofInt 1, { X = 2; Y = 0 }), bodies tick3)
+    Assert.Equal({ X = 2; Y = 0 }, a3.Position)
+    Assert.Equal(None, a3.Destination)
+    Assert.Equal(0, a3.OrderQueue.Length)
+    Assert.Equal(Some(CommandId.ofInt 2), a3.Order |> Option.map (fun o -> o.Command))
+    Assert.Equal(None, a3.Disposition)
+
+    // Next tick: the promoted order is finally appraised and takes effect.
+    let tick4 = stepIdle tick3.State
+    Assert.Contains(OrderAppraised(a, CommandId.ofInt 2, Accepted), bodies tick4)
+    Assert.Contains(CommitmentEstablished(a, CommandId.ofInt 2, { X = 5; Y = 0 }), bodies tick4)
+    Assert.Equal({ X = 3; Y = 0 }, (agentOf a tick4.State).Position)
+
+[<Fact>]
+let ``a Replace order clears both the active order and anything already queued`` () =
+    let a = agent 0
+
+    let tick1 = stepWith [| cmd 1 a { X = 2; Y = 0 } |] (world ())
+
+    let tick2 =
+        stepWith [| queuedCmd 2 a { X = 5; Y = 0 }; cmd 3 a { X = 7; Y = 0 } |] tick1.State
+
+    let a2 = agentOf a tick2.State
+    Assert.Equal(0, a2.OrderQueue.Length)
+    Assert.Equal(Some(CommandId.ofInt 3), a2.Order |> Option.map (fun o -> o.Command))
+    Assert.Equal(Some Accepted, a2.Disposition)
+    Assert.Equal(Some { X = 7; Y = 0 }, a2.Destination)
+
+[<Fact>]
+let ``cancelling the active order promotes the queue head, judged the same tick`` () =
+    let a = agent 0
+
+    let tick1 =
+        stepWith [| cmd 1 a { X = 2; Y = 0 }; queuedCmd 2 a { X = 5; Y = 0 } |] (world ())
+
+    Assert.Equal(1, (agentOf a tick1.State).OrderQueue.Length)
+
+    let tick2 = stepWith [| cancelCmd 3 a (CommandId.ofInt 1) |] tick1.State
+
+    Assert.Contains(OrderCancelled(CommandId.ofInt 1, a, true), bodies tick2)
+    // Unlike the fulfilment path, a Cancel-driven promotion happens in
+    // Communication, BEFORE this same tick's Appraisal runs, so the
+    // promoted order is judged (and, here, acted on) the same tick.
+    Assert.Contains(OrderAppraised(a, CommandId.ofInt 2, Accepted), bodies tick2)
+    let a2 = agentOf a tick2.State
+    Assert.Equal(0, a2.OrderQueue.Length)
+    Assert.Equal(Some(CommandId.ofInt 2), a2.Order |> Option.map (fun o -> o.Command))
+    Assert.Equal(Some { X = 5; Y = 0 }, a2.Destination)
+
+[<Fact>]
+let ``cancelling a queued order removes only that entry, leaving the active order and the rest of the queue untouched`` () =
+    let a = agent 0
+
+    // A longer active route (6 cells) than the other cancel test's, so the
+    // active order is still genuinely in flight -- not yet arrived and
+    // recognised as fulfilled -- by the tick the cancel is issued.
+    let tick1 = stepWith [| cmd 1 a { X = 6; Y = 0 } |] (world ())
+
+    let tick2 =
+        stepWith [| queuedCmd 2 a { X = 5; Y = 0 }; queuedCmd 3 a { X = 6; Y = 1 } |] tick1.State
+
+    Assert.Equal(2, (agentOf a tick2.State).OrderQueue.Length)
+    Assert.NotEqual(None, (agentOf a tick2.State).Destination) // still en route
+
+    let tick3 = stepWith [| cancelCmd 4 a (CommandId.ofInt 2) |] tick2.State
+
+    Assert.Contains(OrderCancelled(CommandId.ofInt 2, a, false), bodies tick3)
+    let a3 = agentOf a tick3.State
+    // The still-active order (cmd 1) and the remaining queued entry (cmd 3)
+    // are both untouched.
+    Assert.Equal(Some(CommandId.ofInt 1), a3.Order |> Option.map (fun o -> o.Command))
+    Assert.Equal<CommandId[]>([| CommandId.ofInt 3 |], a3.OrderQueue |> List.map (fun o -> o.Command) |> List.toArray)
+
+[<Fact>]
+let ``cancelling an unknown command id is rejected explicitly, not silently ignored`` () =
+    let a = agent 0
+    let tick1 = stepWith [| cmd 1 a { X = 2; Y = 0 } |] (world ())
+
+    let tick2 = stepWith [| cancelCmd 2 a (CommandId.ofInt 999) |] tick1.State
+
+    Assert.Contains(CommandRejected(CommandId.ofInt 2, UnknownTargetCommand(a, CommandId.ofInt 999)), bodies tick2)
+    // The genuinely active order is completely unaffected by the rejected cancel.
+    Assert.Equal(Some(CommandId.ofInt 1), (agentOf a tick2.State).Order |> Option.map (fun o -> o.Command))
+
+[<Fact>]
+let ``cancelling the active order with an empty queue clears its Destination too, so the agent actually stops`` () =
+    let a = agent 0
+    // A long route (7 cells), cancelled while genuinely mid-flight.
+    let tick1 = stepWith [| cmd 1 a { X = 7; Y = 0 } |] (world ())
+    let tick2 = stepIdle tick1.State
+    Assert.Equal({ X = 2; Y = 0 }, (agentOf a tick2.State).Position)
+
+    let tick3 = stepWith [| cancelCmd 2 a (CommandId.ofInt 1) |] tick2.State
+    let a3 = agentOf a tick3.State
+    Assert.Equal(None, a3.Order)
+    Assert.Equal(None, a3.Destination)
+
+    // Left alone, the agent genuinely stays put -- Destination does not
+    // silently survive the cancel and keep driving movement.
+    let tick4 = stepIdle tick3.State
+    Assert.Equal({ X = 2; Y = 0 }, (agentOf a tick4.State).Position)

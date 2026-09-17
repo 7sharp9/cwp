@@ -476,6 +476,59 @@ module Corpus =
           Extraction = { X = 0; Y = 9 }
           Orders = [] }
 
+    /// One friendly agent, no hostiles -- the world half of
+    /// `order-queue-stacking-and-cancellation` (TASK-044, backlog B-051).
+    /// `Orders = []`: this entry's commands are built directly as
+    /// `RecordedCommand[]` (`orderQueueCommands` below), not through
+    /// `commandsOfSpec` -- the `ScenarioSpec.Orders` / `ScenarioOrder`
+    /// authoring DSL has no `QueueMode` or `Cancel` concept, and this is the
+    /// one entry that needs both.
+    let private orderQueueSpec: ScenarioSpec =
+        { Id = "corpus-order-queue-stacking-and-cancellation"
+          Width = 12
+          Height = 3
+          Friendly = [ agent 0 { X = 0; Y = 0 } ]
+          Enemies = []
+          Terrain = []
+          Objective = { X = 11; Y = 0 }
+          Extraction = { X = 0; Y = 2 }
+          Orders = [] }
+
+    /// `order-queue-stacking-and-cancellation`'s command log, built directly
+    /// (TASK-044, backlog B-051) rather than through `commandsOfSpec`: three
+    /// waypoints stacked on tick 1 (one `Replace`, two `Append`), a tick-2
+    /// cancel of the still-queued third waypoint, and a tick-7 cancel of the
+    /// by-then-active second waypoint. See the entry's own `Description` for
+    /// the full trace this proves.
+    let private orderQueueCommands: RecordedCommand[] =
+        let a0 = AgentId.ofInt 0
+        let leg1 = CommandId.ofInt 1
+        let leg2 = CommandId.ofInt 2
+        let leg3 = CommandId.ofInt 3
+        let cancelLeg3 = CommandId.ofInt 4
+        let cancelLeg2 = CommandId.ofInt 5
+
+        [| { Tick = 1L
+             Sequence = 0
+             Command = Command.moveTo leg1 1L a0 { X = 3; Y = 0 }
+             Issuer = "corpus" }
+           { Tick = 1L
+             Sequence = 1
+             Command = Command.queued (Command.moveTo leg2 1L a0 { X = 7; Y = 0 })
+             Issuer = "corpus" }
+           { Tick = 1L
+             Sequence = 2
+             Command = Command.queued (Command.moveTo leg3 1L a0 { X = 10; Y = 0 })
+             Issuer = "corpus" }
+           { Tick = 2L
+             Sequence = 0
+             Command = Command.cancel cancelLeg3 2L a0 leg3
+             Issuer = "corpus" }
+           { Tick = 7L
+             Sequence = 0
+             Command = Command.cancel cancelLeg2 7L a0 leg2
+             Issuer = "corpus" } |]
+
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
         [| { Name = "spike-fixture"
@@ -640,7 +693,23 @@ module Corpus =
              InitialStateNote = "Corpus open-engagement scenario (10 x 10, seed 20260904, 1 friendly + 1 hostile)"
              InitialState = fun () -> worldOfSpec openEngagementSpec
              TickCount = 3L
-             Commands = Some(commandsOfSpec openEngagementSpec) } |]
+             Commands = Some(commandsOfSpec openEngagementSpec) }
+           { Name = "order-queue-stacking-and-cancellation"
+             Description =
+               "One friendly agent at (0,0) is issued three stacked MoveTo waypoints on tick 1: (3,0) Replace "
+               + "(active), then (7,0) and (10,0) both Append (queued behind it) -- backlog B-051's 'really "
+               + "stacked' waypoints. Tick 2 cancels the still-queued third waypoint by CommandId (OrderCancelled "
+               + "wasActive=false) before it ever activates. Tick 3 the first leg arrives; tick 4 "
+               + "commitmentAndLocalAction recognises the fulfilled order and promotes the queue head (the "
+               + "second waypoint) into Order, un-appraised until tick 5's Appraisal judges it Accepted and "
+               + "movement resumes -- TASK-044's one-tick promotion gap, distinct from a same-tick delivered "
+               + "order. Tick 7 cancels the now-ACTIVE second waypoint mid-route by CommandId (OrderCancelled "
+               + "wasActive=true): with an empty queue behind it the agent goes Holding and its Destination is "
+               + "cleared too, so it genuinely stops at (5,0) rather than drifting on with a stale target."
+             InitialStateNote = "Corpus order-queue-stacking-and-cancellation scenario (12 x 3, seed 20260904, 1 friendly)"
+             InitialState = fun () -> worldOfSpec orderQueueSpec
+             TickCount = 9L
+             Commands = Some orderQueueCommands } |]
 
     // --- entry paths and loading ----------------------------------------
 

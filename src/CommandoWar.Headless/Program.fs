@@ -193,9 +193,12 @@ let private cmdReplayFile (args: string list) : int =
                                     |> String.concat ","
 
                                 let intent =
-                                    match c.Command.Intent with
-                                    | MoveTo t -> sprintf "move (%d,%d)" t.X t.Y
-                                    | Suppress t -> sprintf "suppress agent-%d" (AgentId.value t)
+                                    match c.Command.Body with
+                                    | Order(MoveTo t, Replace) -> sprintf "move (%d,%d)" t.X t.Y
+                                    | Order(Suppress t, Replace) -> sprintf "suppress agent-%d" (AgentId.value t)
+                                    | Order(MoveTo t, Append) -> sprintf "queue move (%d,%d)" t.X t.Y
+                                    | Order(Suppress t, Append) -> sprintf "queue suppress agent-%d" (AgentId.value t)
+                                    | Cancel target -> sprintf "cancel command-%d" (CommandId.value target)
 
                                 printfn
                                     "    tick %d seq %d  id %d  issued@%d  %A/%A  -> [%s]  %s"

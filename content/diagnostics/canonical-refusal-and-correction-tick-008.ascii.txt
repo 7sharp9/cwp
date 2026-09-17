@@ -55,4 +55,4 @@ overlays:
 
 events: command-accepted@(11,3); order-appraised; commitment-established@(11,3); movement-stepped@(5,3),(6,3); shot-fired-hit; shot-fired-hit; shot-fired-hit
 
-tick 8 | hash 0x0F2E324EAC127E43 (format 8) | draws 20 | agents 3 | cover-edges 0 | events 7
+tick 8 | hash 0xB38A2392AD4EFD98 (format 9) | draws 20 | agents 3 | cover-edges 0 | events 7

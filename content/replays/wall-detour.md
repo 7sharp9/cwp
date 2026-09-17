@@ -16,35 +16,35 @@ See `content/replays/CORPUS.md`.
 | Command log | `wall-detour.cwreplay` |
 | Initial state | Corpus wall-detour scenario (12 x 9, seed 20260904) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0x173E0F94C0D31FE1` |
-| Final hash (tick 24) | `0xEC11F5CCEE317788` |
+| Initial hash (tick 0) | `0x1F5FD0A0A92FB7CA` |
+| Final hash (tick 24) | `0x963C71BAD5A35267` |
 | Domain events | 22 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xFBC6481D82944695` |
-|    2 | `0xFB64117F290A690B` |
-|    3 | `0x15B84E8743B0B67D` |
-|    4 | `0xB4E48BDC9D35144D` |
-|    5 | `0x46CFF9B5C244F9A9` |
-|    6 | `0x19E64467A03373C9` |
-|    7 | `0xB5DA90BDCB96E105` |
-|    8 | `0x4F90DEE1D1551AD7` |
-|    9 | `0xC88E41A0FEBF569D` |
-|   10 | `0x05E395628CCBC683` |
-|   11 | `0x70BD584555926429` |
-|   12 | `0x60081B62ABCD1ECB` |
-|   13 | `0x26FFE6447777C50D` |
-|   14 | `0xC2826077885A9953` |
-|   15 | `0xE22EF5C3D4406D25` |
-|   16 | `0x30B3E73862E74F27` |
-|   17 | `0xF160888F822ED445` |
-|   18 | `0x857DABF83E331842` |
-|   19 | `0x38DB0E8FE1AAE531` |
-|   20 | `0xB21676B6D8D5EF14` |
-|   21 | `0xCF364E9DA0FC6D43` |
-|   22 | `0x619237E1043D0DF6` |
-|   23 | `0xED5AF8F347635EB5` |
-|   24 | `0xEC11F5CCEE317788` |
+|    1 | `0x5208BDBEFEE1B49A` |
+|    2 | `0x839350892EF8DB88` |
+|    3 | `0xC3C4CF7142C438BA` |
+|    4 | `0xFB7913F26CA5275A` |
+|    5 | `0x5D2C9F3F58CB535E` |
+|    6 | `0xE214000FACBC33F6` |
+|    7 | `0x6E1662124B07D37A` |
+|    8 | `0x6F7370D7134030B4` |
+|    9 | `0x8887C1F933A4D182` |
+|   10 | `0xF3A538A54E4B4280` |
+|   11 | `0xE384B52A9C5B833E` |
+|   12 | `0x057469DAEEE5B988` |
+|   13 | `0x2499E96AAFB8682A` |
+|   14 | `0xD10660CA4C8DF438` |
+|   15 | `0x6264C1BF7F8747DA` |
+|   16 | `0x9B35EFA95D8066A4` |
+|   17 | `0xB9B0832D2E26B53A` |
+|   18 | `0xE1D1B32CF7AF76A1` |
+|   19 | `0x611B0BBBBB5B8942` |
+|   20 | `0x6797926C01BC9453` |
+|   21 | `0x1CB8C315E051C434` |
+|   22 | `0xAFFFE62EDC45BEE5` |
+|   23 | `0xB6A893A181323A36` |
+|   24 | `0x963C71BAD5A35267` |

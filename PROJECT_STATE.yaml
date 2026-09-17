@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-17 (TASK-043 accepted by Dave; B-029 done)
+  updated: 2026-09-17 (TASK-044 accepted by Dave; B-051 done)
 
 active_work:
   selected_task: none
@@ -15,7 +15,70 @@ active_work:
   blockers: []
   updated: 2026-09-17
   note: >-
-    2026-09-17: TASK-043 accepted by Dave ("i confirm the features work") --
+    2026-09-17 (later session): TASK-044 accepted by Dave ("no new UI to
+    review, just accept") -- status done. Sim-side only (Forbidden scope
+    excluded client-facing queue/cancel UI), so there was nothing
+    player-facing to check live; the self-verification evidence stood as the
+    acceptance basis. B-051 now done.
+    (docs/ledger/2026-09-17-TASK-044-order-queue-stacking-and-cancellation.md)
+
+    Prior: 2026-09-17 (later session): TASK-044 (order queue: multi-waypoint
+    stacking and cancellation, backlog B-051) implemented and self-verified
+    -- status review, awaiting Dave's acceptance. Selected via
+    `AskUserQuestion` over B-030 proper, B-031, and B-053; B-051's own design
+    fork (sim-side order queue vs. client-side sequencing) had already been
+    resolved earlier in the session via `AskUserQuestion` in favour of the
+    sim-side queue. Four further central decisions confirmed with Dave via
+    `AskUserQuestion` before drafting: any order type (not just `MoveTo`)
+    can be queued; a bare new command still replaces by default, append is
+    opt-in; cancellation targets a specific `CommandId`, queued or active;
+    the legacy `.cwlog` grammar is not extended (queue/cancel stays
+    `.cwreplay`/code).
+
+    Implemented 2026-09-17: `AgentState.OrderQueue: ReceivedOrder list` (new
+    canonical field, insertion order, not sorted). `PlayerCommand.Intent`
+    renamed `.Body: PlayerCommandBody` (`Order of intent * QueueMode |
+    Cancel of target`); `PlayerIntent`/`ReceivedOrder.Intent` themselves
+    unchanged, so `Appraisal.fs`/`Commitment.fs` needed zero changes, as
+    designed. `commandIntake`/`communication` extended for append/replace/
+    cancel-and-promote; `commitmentAndLocalAction` promotes the queue head
+    on `MoveTo` fulfilment, judged the *following* tick (a documented
+    one-tick gap, distinct from a same-tick `Cancel`-driven promotion). New
+    `OrderQueued`/`OrderCancelled` events, new sparse `AgentOrderQueue`
+    diagnostic overlay (all three renderers), a five-keyword `.cwreplay`
+    grammar extension, and a new corpus entry
+    (`order-queue-stacking-and-cancellation`) proving stacking, both cancel
+    outcomes, and the promotion-gap distinction end to end, plus its golden
+    diagnostic pair. `Canonical.FormatVersion` 8 -> 9; every pre-existing
+    corpus entry, the fixture, and `envelope-full` re-pinned byte-layout-only
+    (`--regenerate` twice byte-identical, tick/event counts unchanged).
+    `Simulation.step`'s public signature unchanged, as designed. Deviation
+    found during implementation: cancelling an active order with an empty
+    queue initially left `Destination` stale (agent kept walking toward the
+    cancelled target) -- fixed in the same `communication` branch, covered
+    by a new dedicated test. Both Godot scenes' `--selfcheck` hashes
+    re-pinned (`SnapshotDemo` `0xC68F993BC605313C`, `CommandDemo`
+    `0xD27E623504262CE9`) and reconfirmed `MATCH` through the real Godot
+    4.7.2 editor headless -- no hang this session (see the TASK-043
+    follow-up note below). `dotnet build` both `.slnx` (Debug/Release) and
+    the Mibo client 0/0; `dotnet test` 306/306; `dotnet list
+    CommandoWar.Sim` package FSharp.Core only. No new client-facing
+    queue/cancel UI (Forbidden scope) -- sim-side proof only, the
+    TASK-030/032/033 precedent.
+    (tasks/TASK-044-ORDER-QUEUE-STACKING-AND-CANCELLATION.md;
+    docs/ledger/2026-09-17-TASK-044-order-queue-stacking-and-cancellation.md)
+
+    Prior: 2026-09-17 (later session): headless Godot --selfcheck hang re-checked --
+    did not reproduce. Both `"$GODOT" --headless --path . <scene> --
+    --selfcheck` commands from TASK-043's Required verification section ran
+    clean (SnapshotDemo hash 0x11B06E6EDE0C52E3, CommandDemo hash
+    0x649FA4D08E2931CA, both matching, both under a minute). This
+    retroactively closes TASK-043 round 2's known non-blocking gap. Root
+    cause never identified -- treat as not-currently-reproducing, not fixed;
+    worth a quick re-check if it recurs.
+    (docs/ledger/2026-09-17-TASK-043-developer-overlay-rendering.md)
+
+    Prior: 2026-09-17: TASK-043 accepted by Dave ("i confirm the features work") --
     status done. Confirms the round 2 legend addition and the corrected
     flashing-line diagnosis (FireLine, not the LOS ray) in a normal windowed
     run: the [legend] HUD line appears with F1 on, the round 1 z-order/

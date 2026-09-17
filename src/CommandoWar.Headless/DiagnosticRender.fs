@@ -73,6 +73,14 @@ module DiagnosticRender =
         | Moving mc -> sprintf "moving to %s" (cellText mc.Target)
         | Suppressing sc -> sprintf "suppressing agent %d" (AgentId.value sc.Target)
 
+    /// Short text for a `PlayerIntent` (TASK-044, backlog B-051, for
+    /// `AgentOrderQueue` overlay entries) — the `Program.fs` `cwheadless
+    /// replay describe` print precedent.
+    let private intentText (i: PlayerIntent) : string =
+        match i with
+        | MoveTo target -> sprintf "move %s" (cellText target)
+        | Suppress target -> sprintf "suppress agent %d" (AgentId.value target)
+
     /// Steps `initial` through `log` for `tickCount` ticks and collects the
     /// diagnostic frame at every tick: index 0 is tick 0 (`Diagnostics.frame`
     /// of the initial state, no events), index `i` is tick `i`
@@ -133,7 +141,8 @@ module DiagnosticRender =
                 | FireLine _
                 | AgentSuppression _
                 | AgentStress _
-                | HostileKnownContact _ -> None)
+                | HostileKnownContact _
+                | AgentOrderQueue _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -164,7 +173,8 @@ module DiagnosticRender =
                 | FireLine _
                 | AgentSuppression _
                 | AgentStress _
-                | HostileKnownContact _ -> None)
+                | HostileKnownContact _
+                | AgentOrderQueue _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -416,6 +426,13 @@ module DiagnosticRender =
                             confidence
                             lastSeenTick
                     )
+                | AgentOrderQueue(agent, at, queued) ->
+                    let qs =
+                        queued
+                        |> Array.map (fun (cmd, intent) -> sprintf "#%d %s" (CommandId.value cmd) (intentText intent))
+                        |> String.concat ", "
+
+                    line (sprintf "  order queue %s: agent %d  [%s]" (cellText at) (AgentId.value agent) qs)
 
         line ""
 
@@ -828,6 +845,19 @@ module DiagnosticRender =
                         (cell.Y * s + s - 2)
                         (AgentId.value contact)
                 )
+            | AgentOrderQueue(_, at, queued) ->
+                // Orders stacked behind the active order (TASK-044, backlog
+                // B-051): a small "+N" badge centred on the cell's top edge
+                // — the four corners are already used (AgentCommitment
+                // top-left, AgentSuppression top-right, AgentStress
+                // bottom-left, OrderAppraisal bottom-right).
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"8\" fill=\"#2b6cb0\">+%d</text>"
+                        (at.X * s + mid - 4)
+                        (at.Y * s + 8)
+                        queued.Length
+                )
 
         // Footer.
         let footerText (dy: int) (str: string) =
@@ -866,6 +896,9 @@ module DiagnosticRender =
             else
                 "Order rejected."
         | "order-undelivered" -> sprintf "Agent %d: order undelivered (communication unavailable)." (a 0)
+        | "order-queued" -> sprintf "Agent %d: order queued behind its active order." (a 0)
+        | "order-cancelled-active" -> sprintf "Agent %d: active order cancelled." (a 0)
+        | "order-cancelled-queued" -> sprintf "Agent %d: queued order cancelled." (a 0)
         | "order-appraised" -> sprintf "Agent %d: order appraised." (a 0)
         | "commitment-established" -> sprintf "Agent %d: new commitment toward %s." (a 0) (c 0)
         | "commitment-completed" -> sprintf "Agent %d: commitment completed at %s." (a 0) (c 0)
@@ -893,6 +926,7 @@ module DiagnosticRender =
         (commitments: Map<AgentId, Commitment>)
         (suppressions: Map<AgentId, int>)
         (stresses: Map<AgentId, int>)
+        (queueDepths: Map<AgentId, int>)
         (a: AgentMarker)
         : string =
         let side =
@@ -917,9 +951,10 @@ module DiagnosticRender =
 
         let suppression = suppressions |> Map.tryFind a.Id |> Option.defaultValue 0
         let stress = stresses |> Map.tryFind a.Id |> Option.defaultValue 0
+        let queueDepth = queueDepths |> Map.tryFind a.Id |> Option.defaultValue 0
 
         sprintf
-            "<tr><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%d/%d</td><td>%d/%d</td></tr>"
+            "<tr><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%d/%d</td><td>%d/%d</td><td>%d</td></tr>"
             (AgentId.value a.Id)
             side
             (esc (cellText a.Cell))
@@ -931,6 +966,7 @@ module DiagnosticRender =
             SuppressionConfig.MaxSuppression
             stress
             StressConfig.MaxStress
+            queueDepth
 
     /// One entry of a shared tactical picture (`KnownContact` /
     /// `HostileKnownContact`), rendered the same way for both sides.
@@ -989,11 +1025,21 @@ module DiagnosticRender =
                 | _ -> None)
             |> Map.ofArray
 
+        // Queue depths (TASK-044, backlog B-051): AgentOrderQueue is sparse
+        // (non-empty queues only), the AgentSuppression/AgentStress
+        // precedent — a missing entry means an empty queue, rendered `0`.
+        let queueDepths =
+            frame.Overlays
+            |> Array.choose (function
+                | AgentOrderQueue(a, _, q) -> Some(a, q.Length)
+                | _ -> None)
+            |> Map.ofArray
+
         line "<table class=\"cw-agents\">"
-        line "<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th></tr></thead>"
+        line "<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>"
         line "<tbody>"
         for a in frame.Agents |> Array.sortBy (fun a -> a.Id) do
-            line (agentRow dispositions commitments suppressions stresses a)
+            line (agentRow dispositions commitments suppressions stresses queueDepths a)
         line "</tbody>"
         line "</table>"
 

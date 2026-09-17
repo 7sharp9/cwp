@@ -302,3 +302,25 @@ shots landing/missing, not the mouse. "I confirm the features work."
 
 - Reviewer: Dave
 - Accepted: yes (2026-09-17)
+
+### Follow-up (2026-09-17, later session) — headless `--selfcheck` hang re-check
+
+Re-ran the two commands named in this task's own Required verification
+section, unchanged, to check whether the round-2 headless hang (above) was
+since resolved:
+
+- `"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck`
+  → `MATCH expected final hash 0x11B06E6EDE0C52E3 at tick 20`, exit `0`.
+- `"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck`
+  → `MATCH expected final hash 0x649FA4D08E2931CA at tick 20`, exit `0`.
+
+Both ran to completion in well under a minute, no hang, both hashes
+unchanged from round 2. The round-2 gap (no independent hash re-check for
+the legend-line diff) is now retroactively closed — same hashes confirmed,
+just late. Root cause of the hang was not identified (still unknown whether
+it was transient machine/process state or something since changed outside
+this repo); it simply did not reproduce this time. `$GODOT` resolved to
+`C:\Users\Dave\Documents\GitHub\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe`
+(no `GODOT` env var was set in this session; earlier sessions likely had it
+exported). Treat the hang as not-currently-reproducing rather than fixed —
+worth a quick re-check if it recurs on a future task.
