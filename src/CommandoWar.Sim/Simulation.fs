@@ -1222,7 +1222,8 @@ module Simulation =
                       Side = a.Side
                       Position = a.Position
                       Progress = a.Progress
-                      Destination = a.Destination })
+                      Destination = a.Destination
+                      Disposition = a.Disposition })
                 |> Array.sortBy (fun a -> a.Id) }
 
     // Runs one phase against the accumulator and appends it to the trace.

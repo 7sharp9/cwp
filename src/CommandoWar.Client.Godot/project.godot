@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="CommandoWar Godot Spike"
-run/main_scene="res://scenes/AppraisalDemo.tscn"
+run/main_scene="res://scenes/CommandDemo.tscn"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 config/icon="res://icon.svg"
 

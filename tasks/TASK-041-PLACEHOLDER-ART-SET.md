@@ -1,12 +1,101 @@
 # TASK-041: Minimal coherent placeholder art set (Kenney, CC0)
 
-Status: ready (drafted 2026-09-17; not selected — TASK-040/B-026 is the
-active task. Queued next per Dave's request to get real placeholder art in
-soon, since the simulation now has enough tactical state worth seeing.)
+Status: done (accepted by Dave 2026-09-17, "seems to work")
 Owner: Dave
 Phase: P4
 Gate: G4 (vertical slice feature-complete)
 Size: M
+
+## Review
+
+Dave accepted the art as working. Two follow-ups raised, neither blocking
+this task's own acceptance criteria (both are new behaviour, not part of
+TASK-041's scope, which explicitly forbade animation/directional facings and
+didn't touch selection UI):
+
+- Agents don't always visually face the direction they last moved — expected
+  given TASK-041's single static idle pose (Forbidden scope explicitly
+  excluded directional facings). Recorded as new backlog row **B-052**, not
+  designed here.
+- Selection still feels fiddly; Dave suggested (hedged, "possibly") a hover
+  highlight on a selectable agent before clicking, so it's clear a click
+  will select it. Recorded as new backlog row **B-053**, not designed here.
+
+## Outcome (2026-09-17)
+
+Live-checked kenney.nl (not assumed from memory, per the task's own central
+decision): downloaded and inspected both `isometric-blocks` and
+`isometric-miniature-prototype`. Chose **Isometric Miniature Prototype**
+(v2.3, 2019-02-15, CC0) alone — its `Isometric/` subfolder (floor, block,
+crate, wall, stairs, doorway, fence, ...) and `Characters/Human/` subfolder
+are shipped together as one coherent family, so no second pack was needed
+(the task's fallback "two packs from the same family" didn't apply). Picked
+`floor_N.png` (open ground), `block_N.png` (a full 1x1 cube — impassable),
+`crate_N.png` (a windowed crate — passable-but-opaque cover), and
+`Human_0_Idle0.png` (one idle pose, both sides — no directional facings or
+animation, per Forbidden scope). Copied into new
+`src/CommandoWar.Client.Godot/art/` as `terrain_floor.png`,
+`terrain_block.png`, `terrain_crate.png`, `agent_human.png`, plus
+`LICENSE-THIRD-PARTY.md` naming the exact pack, version, source URL, and CC0
+text, with an explicit note that this is third-party placeholder dev art,
+not the original Commando IP.
+
+`DrawItem` (`Core/IClientScene.fs`) gained one new primitive field,
+`TextureId` (ADR-0004's interop idiom: primitives only). Meaningful only for
+`Kind = 0` (terrain): `0` = floor (still elevation-tinted via `R`/`G`/`B`,
+unchanged logic), `1` = block (impassable), `2` = crate (passable-but-opaque)
+— `RenderShared.buildTerrainItems` sets it from the same
+`Terrain.passable`/`Terrain.opaque` branches that already existed, no new
+terrain state. Block/crate now render at full colour (`R=G=B=1`) since their
+own Kenney art already reads distinctly; only the floor still needs a tint
+for elevation. `Kind = 1` items keep `TextureId = 0` (unused) — friendly/
+hostile is still read from `R`/`G`/`B` via `RenderShared.agentColor`,
+unchanged.
+
+`FSharpSceneHost.cs`: loads all four textures once via `static readonly`
+fields (`GD.Load<Texture2D>`), never per-frame. `_Draw`'s terrain branch
+(`DrawTerrainTile`) draws the whole padded Kenney canvas at a fixed on-screen
+width (`TileW`) with height derived from the texture's own aspect ratio,
+bottom-anchored at the same point the old `DrawDiamond` used — the flat floor
+tile still lands at exactly `TileW x TileH`; a block/crate's extra height
+rises above it, into the cell behind. The agent branch only replaces a real,
+full-opacity agent (`A >= 0.99`, `TryHitAgentCircle`'s own existing
+precedent for "this is a real agent, not an overlay marker"): the figure is
+cropped from its own padded canvas (`AgentSourceRect`, found from the PNG's
+own alpha bounds, not guessed) and drawn foot-anchored at the same point,
+scaled from `DrawItem.Radius` the same way the old circle's diameter was — so
+click hit-testing (`TryHitAgentCircle`, unchanged) still matches what is
+drawn. A translucent `Kind = 1` item (selection halo, hover/pending/committed
+route dots) still draws the original plain circle + white ring — it was
+never meant to look like an agent, and reskinning it wasn't asked for.
+
+Verified for real through the Godot 4.7.2 editor: re-imported the four new
+PNGs (`--editor --headless --quit --path .`); both `SnapshotDemo.tscn` and
+`CommandDemo.tscn` `--selfcheck` hashes unchanged (`0x11B06E6EDE0C52E3`,
+`0x649FA4D08E2931CA`) — confirms this is genuinely render-only. Windowed
+`--screenshot` evidence for both scenes shows a 3D-shaded block, a windowed
+crate, elevation-tinted floor, and blue/red human figures, all clearly
+distinct — committed as `docs/evidence/task-041-placeholder-art-snapshot.png`
+and `docs/evidence/task-041-placeholder-art-command.png`. One deviation found
+during implementation, not in the drafted plan: the first screenshot attempt
+used a stale `Debug`-config build (Godot's windowed/editor run uses `Debug`
+by default, not `Release`) and showed the old flat shapes — caught by
+inspecting the screenshot, fixed by also running `dotnet build ... -c Debug`
+before capturing (now in the README's run instructions for this task).
+
+`dotnet build CommandoWar.slnx -c Release`: unaffected, `0/0`. `dotnet build
+src/CommandoWar.Client.Godot/CommandoWar.Client.Godot.slnx` in both `-c
+Release` and `-c Debug`: `0/0`. `dotnet test CommandoWar.slnx -c Release`:
+unaffected, `297/297`. `git status --porcelain`: matches this task's allowed
+scope (new `art/` directory, the four `Core/`/`src/FSharpSceneHost.cs`
+render-side files, docs).
+
+`src/CommandoWar.Client.Godot/README.md` gains a new section and an updated
+file-layout table. `docs/11_BACKLOG.md` B-034 row moved to `review`
+(pending Dave's acceptance, the TASK-040 precedent for the review label while
+awaiting sign-off).
+
+Full detail: `docs/ledger/2026-09-17-TASK-041-placeholder-art-set.md`.
 
 ## Objective
 
@@ -132,20 +221,20 @@ This is an outcome checklist, not permission to invent missing architecture.
 
 ## Acceptance criteria
 
-- [ ] Terrain and agents render with real sprite art, not flat shapes, in
+- [x] Terrain and agents render with real sprite art, not flat shapes, in
       both `SnapshotDemo.tscn` and `CommandDemo.tscn` (or whichever exists
       at implementation time).
-- [ ] Passable/impassable/opaque terrain remain visually distinguishable
+- [x] Passable/impassable/opaque terrain remain visually distinguishable
       (docs/06 "status indicators that do not rely on colour alone" —
       texture shape, not colour alone, should carry this).
-- [ ] Friendly/hostile agents remain visually distinguishable.
-- [ ] Licence file names the exact pack(s), version, source, and licence
+- [x] Friendly/hostile agents remain visually distinguishable.
+- [x] Licence file names the exact pack(s), version, source, and licence
       text; confirms CC0 (or equivalent permissive) status.
-- [ ] `--selfcheck` hashes for existing scenes are unchanged (render-only
+- [x] `--selfcheck` hashes for existing scenes are unchanged (render-only
       change, no state change).
-- [ ] `--screenshot` evidence committed.
-- [ ] No `CommandoWar.Sim`/`CommandoWar.Headless` change.
-- [ ] Required documentation updated.
+- [x] `--screenshot` evidence committed.
+- [x] No `CommandoWar.Sim`/`CommandoWar.Headless` change.
+- [x] Required documentation updated.
 
 ## Required verification
 

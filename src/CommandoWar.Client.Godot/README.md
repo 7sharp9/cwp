@@ -126,6 +126,84 @@ dotnet build CommandoWar.Client.Godot.slnx -c Debug
 
 Committed screenshot: `docs/evidence/task-040-selection-and-preview.png`.
 
+## Placeholder art (TASK-041)
+
+`SnapshotDemo.tscn` and `CommandDemo.tscn` draw real sprite art instead of
+flat diamonds/circles: Kenney's "Isometric Miniature Prototype" pack (v2.3,
+CC0 — `art/LICENSE-THIRD-PARTY.md` names the exact files and licence).
+Backlog B-034. Render-only: no `CommandoWar.Sim`/`CommandoWar.Headless`
+change, no `--selfcheck` hash moved.
+
+`DrawItem` gained one new primitive field, `TextureId` (ADR-0004's
+primitives-only interop idiom): for a terrain item (`Kind = 0`) it selects
+`art/terrain_floor.png` (passable, elevation-tinted), `art/terrain_block.png`
+(impassable), or `art/terrain_crate.png` (passable-but-opaque cover) — shape,
+not colour alone, now carries that distinction. `FSharpSceneHost.cs` loads
+all four textures once (static fields) and keys the terrain draw on
+`TextureId`; a real, full-opacity agent (`Kind = 1`, `A >= 0.99`) draws
+`art/agent_human.png` cropped to its own figure and tinted per
+`DrawItem.R/G/B` (`RenderShared.agentColor`, unchanged); a translucent
+`Kind = 1` item (halo, route-preview dot) still draws the original plain
+circle — it was never meant to look like an agent.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+"$GODOT" --editor --headless --quit --path .          # re-import after adding art/
+dotnet build CommandoWar.Client.Godot.slnx -c Debug    # AND -c Release if exporting/measuring release
+
+# both existing scenes' --selfcheck hashes are unaffected (render-only)
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x11B06E6EDE0C52E3
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x649FA4D08E2931CA
+
+"$GODOT" --path . scenes/SnapshotDemo.tscn -- --screenshot <abs-path>.png
+"$GODOT" --path . scenes/CommandDemo.tscn -- --screenshot <abs-path>.png
+```
+
+Committed screenshots: `docs/evidence/task-041-placeholder-art-snapshot.png`,
+`docs/evidence/task-041-placeholder-art-command.png`.
+
+## Order acknowledgement, disposition, and reason (TASK-042)
+
+`CommandDemo.tscn`'s HUD now shows the selected agent's order status —
+docs/06 section 8/11's "order acknowledgement and disposition" / "concise
+explanations for refusal" requirements. Backlog B-028. `AgentSnapshot`
+gained one new values-only field, `Disposition: OrderDisposition option`
+(a copy of the already-canonical `AgentState.Disposition`, the
+`Destination`/`Progress` precedent); `RenderShared.dispositionText` maps it
+to player-facing text (e.g. `"refused: route too exposed (threat: agent
+3)"`), deliberately separate from `DiagnosticRender`'s private
+developer-facing text (docs/06 draws that distinction explicitly).
+`HudText()` appends `order=<text>` for the selected agent only, omitted when
+nothing is selected. No `FSharpSceneHost.cs`/`_Draw` change — text only.
+
+Review round 1: at the default 20 Hz sim rate, `DemoScenario`'s short routes
+complete in a handful of ticks (well under 200ms wall-clock), so the
+`order=` text could flash past unreadably before reverting to `order=no
+order` the instant an order was fulfilled. `CommandDemoScene` now holds a
+meaningful message on screen for `orderTextHoldSeconds` (1.5s) past when it
+would otherwise clear — a client-side, presentation-only fix tracked in
+`Update(deltaSeconds)`; a genuinely new message (a fresh order, a
+reappraisal flip, or a new selection) still overrides immediately.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+# both existing scenes' --selfcheck hashes are unaffected (values-only)
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x11B06E6EDE0C52E3
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x649FA4D08E2931CA
+
+# windowed: select an agent, issue an order, watch the HUD's order= field
+"$GODOT" --path . scenes/CommandDemo.tscn
+```
+
+Committed screenshot: `docs/evidence/task-042-reason-and-disposition.png`
+(the scripted `--screenshot` capture point is paused before delivery, so it
+shows `order=no order`; the `accepted`/`refused`/`unable` states are proven
+by a headless probe instead — see the task file's Outcome section).
+
 ## Pinned versions
 
 | Component | Version |
@@ -159,6 +237,7 @@ src/FSharpSceneHost.cs      TASK-039/040: the generic ADR-0004 C# host over Core
 Core/                       TASK-039/040: the ADR-0004 F# client-core library (CwClientCore.*)
 Core/RenderShared.fs        TASK-040: terrain-item + depth-sort helpers shared by every render scene
 Core/CommandDemoScene.fs    TASK-040: live selection, input-mapped MoveTo, route preview, pause
+art/                        TASK-041: Kenney CC0 placeholder terrain/agent textures + licence file
 ```
 
 In the TASK-004 spike, only `SimFacade.cs` calls `CommandoWar.Sim`, and

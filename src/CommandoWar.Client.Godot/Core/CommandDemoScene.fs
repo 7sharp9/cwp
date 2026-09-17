@@ -23,6 +23,18 @@ type CommandDemoScene() =
     let mutable selected: AgentId option = None
     let mutable previewPath: Cell[] option = None
 
+    // How long a meaningful order-disposition message stays on screen after
+    // its underlying state clears, so it can actually be read (Dave's
+    // feedback trying TASK-042 live: at the default 20 Hz sim rate,
+    // DemoScenario's short routes complete in a handful of ticks -- well
+    // under 200ms wall-clock -- so "accepted" flashed past unreadably before
+    // reverting to "no order" the instant the order was fulfilled). Purely
+    // presentational (AGENTS.md: "rendering ... are non-authoritative");
+    // does not affect `Simulation.step`, `Disposition`, or any hash.
+    let orderTextHoldSeconds = 1.5
+    let mutable heldOrderText = ""
+    let mutable orderTextHoldRemaining = 0.0
+
     // Player-issued orders awaiting delivery. `RecordedCommand` (the
     // `DemoDrive.commandsForTick` precedent) rather than a bespoke type --
     // its `Tick` is the delivery tick, independent of `PlayerCommand.
@@ -60,7 +72,16 @@ type CommandDemoScene() =
     let routeDots (cells: Cell[]) (r: float32, g: float32, b: float32) (a: float32) (radius: float32) : DrawItem[] =
         cells
         |> Array.skip (min 1 cells.Length)
-        |> Array.map (fun c -> { Kind = 1; Cx = float32 c.X; Cy = float32 c.Y; R = r; G = g; B = b; A = a; Radius = radius })
+        |> Array.map (fun c ->
+            { Kind = 1
+              TextureId = 0
+              Cx = float32 c.X
+              Cy = float32 c.Y
+              R = r
+              G = g
+              B = b
+              A = a
+              Radius = radius })
 
     interface IClientScene with
         member _.Ready() =
@@ -73,7 +94,8 @@ type CommandDemoScene() =
                       Side = a.Side
                       Position = a.Position
                       Progress = a.Progress
-                      Destination = a.Destination })
+                      Destination = a.Destination
+                      Disposition = a.Disposition })
             prevAgents <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Position) |> Map.ofArray
 
         member _.Update(deltaSeconds: float) =
@@ -89,6 +111,26 @@ type CommandDemoScene() =
 
             alpha <- System.Math.Clamp(accum * simHz, 0.0, 1.0)
 
+            // Hold a meaningful order-disposition message on screen for at
+            // least `orderTextHoldSeconds` after it appears, even once the
+            // underlying `Disposition` clears (order fulfilled) -- see the
+            // field comment above. A genuinely new message (a fresh order,
+            // or a reappraisal flipping the outcome) always overrides
+            // immediately; only the fall-back to "no order" is delayed.
+            let liveOrderText =
+                selected
+                |> Option.bind (fun id -> currAgents |> Array.tryFind (fun a -> a.Id = id))
+                |> Option.map (fun a -> RenderShared.dispositionText a.Disposition)
+                |> Option.defaultValue ""
+
+            if liveOrderText <> "" && liveOrderText <> "no order" then
+                heldOrderText <- liveOrderText
+                orderTextHoldRemaining <- orderTextHoldSeconds
+            elif orderTextHoldRemaining > 0.0 then
+                orderTextHoldRemaining <- max 0.0 (orderTextHoldRemaining - deltaSeconds)
+            else
+                heldOrderText <- liveOrderText
+
         member _.DrawList() =
             let lerp (a: int) (b: int) (t: float) = float32 a + (float32 (b - a)) * float32 t
 
@@ -99,6 +141,7 @@ type CommandDemoScene() =
                     let r, g, b = RenderShared.agentColor a.Side
 
                     { Kind = 1
+                      TextureId = 0
                       Cx = lerp from.X a.Position.X alpha
                       Cy = lerp from.Y a.Position.Y alpha
                       R = r
@@ -114,6 +157,7 @@ type CommandDemoScene() =
                 match selected |> Option.bind agentPosition with
                 | Some pos ->
                     [| { Kind = 1
+                         TextureId = 0
                          Cx = float32 pos.X
                          Cy = float32 pos.Y
                          R = 1.0f
@@ -171,22 +215,38 @@ type CommandDemoScene() =
                 | Some id -> sprintf "agent %d" (AgentId.value id)
                 | None -> "none"
 
+            // Order acknowledgement/disposition + a concise refusal reason
+            // for the selected agent (TASK-042, backlog B-028; docs/06
+            // section 8/11), read from the held (not live) text so it stays
+            // readable -- see `Update`. Omitted entirely when nothing is
+            // selected, the existing selText = "none" precedent.
+            let orderSuffix = if heldOrderText = "" then "" else sprintf "   order=%s" heldOrderText
+
             sprintf
-                "tick %d   hash 0x%016X   agents %d   %s   selected=%s"
+                "tick %d   hash 0x%016X   agents %d   %s   selected=%s%s"
                 state.Tick
                 hash
                 currAgents.Length
                 (if paused then "PAUSED" else "running")
                 selText
+                orderSuffix
 
         member _.OnClick(isLeftButton: bool, cellX: int, cellY: int) =
             if not isLeftButton then
                 selected <- None
+                heldOrderText <- ""
+                orderTextHoldRemaining <- 0.0
             else
                 let cell = { X = cellX; Y = cellY }
 
                 match friendlyAt cell with
-                | Some a -> selected <- Some a.Id
+                | Some a ->
+                    selected <- Some a.Id
+                    // A different agent's held message must not leak onto
+                    // the newly selected one (or the same one re-clicked) --
+                    // start from its own live state, not a stale hold.
+                    heldOrderText <- ""
+                    orderTextHoldRemaining <- 0.0
                 | None ->
                     match selected with
                     | Some agentId when GridBounds.contains cell state.Bounds && agentPosition agentId <> Some cell ->

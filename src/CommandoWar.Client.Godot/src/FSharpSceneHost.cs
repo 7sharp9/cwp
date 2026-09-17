@@ -29,6 +29,29 @@ public partial class FSharpSceneHost : Node2D
     private const float TileH = 22f;
     private static readonly Vector2 Origin = new(450f, 60f);
 
+    // Placeholder art (TASK-041, backlog B-034): Kenney "Isometric Miniature
+    // Prototype" (CC0, src/CommandoWar.Client.Godot/art/LICENSE-THIRD-PARTY.md).
+    // Loaded once and shared by every FSharpSceneHost instance -- never
+    // per-frame. Keyed by DrawItem.TextureId for terrain (0 = floor,
+    // 1 = block, 2 = crate); the agent texture is the same for both sides,
+    // tinted per DrawItem.R/G/B (RenderShared.agentColor).
+    private static readonly Texture2D[] TerrainTextures =
+    [
+        GD.Load<Texture2D>("res://art/terrain_floor.png"),
+        GD.Load<Texture2D>("res://art/terrain_block.png"),
+        GD.Load<Texture2D>("res://art/terrain_crate.png"),
+    ];
+
+    private static readonly Texture2D AgentTexture = GD.Load<Texture2D>("res://art/agent_human.png");
+
+    // The human figure's own pixel bounds within the 256x512 Kenney canvas
+    // (the rest is transparent padding sized for the tallest block in the
+    // set) -- found by inspecting the source PNG's alpha channel, not
+    // guessed. Cropped via DrawTextureRectRegion rather than drawing the
+    // whole padded canvas, or the figure would render illegibly small at
+    // terrain-tile scale.
+    private static readonly Rect2 AgentSourceRect = new(106, 324, 45, 133);
+
     private IClientScene _scene;
     private Label _hud;
 
@@ -229,28 +252,55 @@ public partial class FSharpSceneHost : Node2D
 
             if (item.Kind == 0)
             {
-                DrawDiamond(pos, color);
+                DrawTerrainTile(pos, item.TextureId, color);
             }
             else
             {
                 Vector2 agentPos = pos - new Vector2(0, TileH * 0.5f);
-                DrawCircle(agentPos, item.Radius, color);
-                DrawArc(agentPos, item.Radius, 0, Mathf.Tau, 20, Colors.White, 1.5f);
+
+                // A translucent item (A < 0.99) is a halo/route-preview
+                // marker, not a real agent (TryHitAgentCircle's own
+                // precedent) -- keep the plain circle for those; only a real,
+                // full-opacity agent gets the Kenney figure.
+                if (item.A >= 0.99f)
+                    DrawAgentFigure(agentPos, item.Radius, color);
+                else
+                {
+                    DrawCircle(agentPos, item.Radius, color);
+                    DrawArc(agentPos, item.Radius, 0, Mathf.Tau, 20, Colors.White, 1.5f);
+                }
             }
         }
     }
 
-    private void DrawDiamond(Vector2 center, Color color)
+    // A terrain tile's Kenney texture is a tall, bottom-anchored canvas (room
+    // above the ground plane for a block/crate's height); its own bottom
+    // edge is the tile's near/south corner, i.e. the same point DrawDiamond
+    // used to draw -- `pos.Y + TileH * 0.5f`, horizontally centred on `pos.X`.
+    // Drawn at a fixed on-screen width (TileW) with height derived from the
+    // texture's own aspect ratio, so the flat floor tile still lands at
+    // exactly TileW x TileH.
+    private void DrawTerrainTile(Vector2 pos, int textureId, Color color)
     {
-        Vector2[] pts =
-        [
-            center + new Vector2(0, -TileH * 0.5f),
-            center + new Vector2(TileW * 0.5f, 0),
-            center + new Vector2(0, TileH * 0.5f),
-            center + new Vector2(-TileW * 0.5f, 0),
-        ];
-        DrawColoredPolygon(pts, color);
-        DrawPolyline([.. pts, pts[0]], new Color(0, 0, 0, 0.25f), 1f);
+        Texture2D tex = TerrainTextures[Mathf.Clamp(textureId, 0, TerrainTextures.Length - 1)];
+        Vector2 size = tex.GetSize();
+        float w = TileW;
+        float h = w * (size.Y / size.X);
+        var rect = new Rect2(pos.X - w * 0.5f, pos.Y + TileH * 0.5f - h, w, h);
+        DrawTextureRect(tex, rect, false, color);
+    }
+
+    // An agent's Kenney figure is cropped from its own padded canvas
+    // (AgentSourceRect) and drawn foot-anchored at `agentPos`, the same point
+    // TryHitAgentCircle already treats as the agent's on-screen centre --
+    // `radius` scales the crop the same way the old circle's diameter did,
+    // so click hit-testing (unchanged) still matches what is drawn.
+    private void DrawAgentFigure(Vector2 agentPos, float radius, Color color)
+    {
+        float w = radius * 2f;
+        float h = w * (AgentSourceRect.Size.Y / AgentSourceRect.Size.X);
+        var rect = new Rect2(agentPos.X - w * 0.5f, agentPos.Y + radius - h, w, h);
+        DrawTextureRectRegion(AgentTexture, rect, AgentSourceRect, color);
     }
 
     // --- HUD / screenshot ---------------------------------------------------

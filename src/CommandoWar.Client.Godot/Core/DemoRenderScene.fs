@@ -72,7 +72,8 @@ type DemoRenderScene() =
                       Side = a.Side
                       Position = a.Position
                       Progress = a.Progress
-                      Destination = a.Destination })
+                      Destination = a.Destination
+                      Disposition = a.Disposition })
             prevAgents <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Position) |> Map.ofArray
 
         member _.Update(deltaSeconds: float) =
@@ -98,6 +99,7 @@ type DemoRenderScene() =
                     let r, g, b = RenderShared.agentColor a.Side
 
                     { Kind = 1
+                      TextureId = 0
                       Cx = lerp from.X a.Position.X alpha
                       Cy = lerp from.Y a.Position.Y alpha
                       R = r

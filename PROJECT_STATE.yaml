@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-17 (TASK-040 accepted; B-026 done; no task selected)
+  updated: 2026-09-17 (TASK-042 accepted; B-028 done; no task selected)
 
 active_work:
   selected_task: none
@@ -15,7 +15,102 @@ active_work:
   blockers: []
   updated: 2026-09-17
   note: >-
-    2026-09-17: TASK-040 accepted by Dave ("seems right") -- status done.
+    2026-09-17: TASK-042 accepted by Dave ("thats readable now") -- status
+    done. Confirms the round 1 hold-timer fix specifically; no further
+    issues raised against the underlying disposition/reason feature.
+    Re-verified: both scenes' --selfcheck hashes unchanged, dotnet build
+    both .slnx (Debug and Release) 0/0, dotnet test 297/297.
+    (docs/ledger/2026-09-17-TASK-042-reason-and-disposition-ui.md)
+
+    Prior: 2026-09-17: TASK-042 review round 1. Dave tried CommandDemo.tscn and
+    reported the HUD's order= text flashes by too fast to read, and
+    separately noted the game loop runs faster than expected -- explicitly
+    not a regression, just the first time he needed to read specific
+    transient text rather than glance at a persistent value. Real: at the
+    default 20 Hz sim rate, DemoScenario's short route completes in ~150ms
+    wall-clock, so order=accepted appeared and reverted before it could be
+    read. Fixed with a client-side, presentation-only hold timer
+    (orderTextHoldSeconds = 1.5) in CommandDemoScene, tracked in
+    Update(deltaSeconds); a genuinely new message still overrides
+    immediately, only the fall-back to "no order" is delayed; reset on any
+    selection change. No CommandoWar.Sim/hash change. Verified with a new
+    headless probe driving Update(dt) directly (StepTicksHeadless/
+    --selfcheck never call Update, so never exercised the hold timer):
+    order=accepted now stays visible ~1.6s longer than before. Both scenes'
+    --selfcheck hashes reconfirmed unchanged; dotnet build both .slnx
+    (Debug and Release) 0/0; dotnet test 297/297.
+    (docs/ledger/2026-09-17-TASK-042-reason-and-disposition-ui.md)
+
+    Prior: 2026-09-17: TASK-042 (Player-facing order acknowledgement, disposition,
+    and reason UI, backlog B-028) implemented and self-verified -- status
+    review, awaiting Dave. Selected via AskUserQuestion over B-030 proper and
+    B-031, continuing directly on from TASK-041 in the same session. Central
+    decision confirmed via AskUserQuestion: extend the existing corner
+    HudText() label with the selected agent's disposition/reason, not a new
+    floating label. AgentSnapshot gains a values-only Disposition:
+    OrderDisposition option field (a copy of the already-canonical
+    AgentState.Disposition); Simulation.output and both Godot scenes'
+    initial-snapshot construction updated to match. New
+    RenderShared.dispositionText, a player-facing text mapping deliberately
+    kept separate from DiagnosticRender's private developer-facing one
+    (docs/06 section 11 draws that distinction explicitly).
+    CommandDemoScene.HudText() appends order=<text> for the selected agent
+    only. No CommandoWar.Sim behaviour change, no FSharpSceneHost.cs/_Draw
+    change. Both scenes' --selfcheck hashes confirmed unchanged; a headless
+    dotnet fsi scratch probe (removed after use) drove the real scene and
+    printed HudText() at each tick, proving no order -> accepted -> no order
+    (cleared on arrival) against the exact pinned hash sequence, plus direct
+    checks of the Refused/Unable text branches. dotnet build both .slnx
+    (Debug and Release) 0/0; dotnet test 297/297 (unaffected); committed
+    screenshot docs/evidence/task-042-reason-and-disposition.png.
+    (docs/ledger/2026-09-17-TASK-042-reason-and-disposition-ui.md)
+
+    Prior: 2026-09-17: TASK-041 accepted by Dave ("seems to work") -- status done.
+    Two follow-ups raised on acceptance, neither blocking (both outside this
+    task's own scope, which explicitly excluded directional facings and
+    never touched selection UI): agents don't always visually face the
+    direction they last moved (new backlog row B-052, not designed);
+    selection still feels fiddly, Dave suggested -- hedged, "possibly" -- a
+    hover highlight on a selectable agent before clicking (new backlog row
+    B-053, not designed). Recorded per Dave's explicit instruction, not
+    implemented, before moving to the next task.
+    (docs/ledger/2026-09-17-TASK-041-placeholder-art-set.md)
+
+    Prior: 2026-09-17: TASK-041 (Minimal coherent placeholder art set, backlog
+    B-034) implemented and self-verified. Live-checked kenney.nl per the
+    task's own central decision: chose Kenney's "Isometric Miniature
+    Prototype" (v2.3, CC0) alone, since its Isometric/ (terrain) and
+    Characters/Human/ (agents) subfolders already ship together as one
+    coherent family. New src/CommandoWar.Client.Godot/art/
+    (terrain_floor/block/crate.png, agent_human.png,
+    LICENSE-THIRD-PARTY.md). DrawItem gains one new primitive field,
+    TextureId, selecting a terrain texture by the same passable/opaque
+    branches RenderShared.buildTerrainItems already computed -- texture
+    shape, not colour alone, now carries that distinction; a real
+    full-opacity agent draws a cropped, tinted Kenney figure, a translucent
+    halo/route-preview marker still draws a plain circle. FSharpSceneHost.cs
+    _Draw only -- no CommandoWar.Sim/CommandoWar.Headless change. Both
+    scenes' --selfcheck hashes confirmed unchanged (0x11B06E6EDE0C52E3,
+    0x649FA4D08E2931CA) -- genuinely render-only. dotnet build both .slnx
+    (Debug and Release) 0/0; dotnet test 297/297 (unaffected); committed
+    screenshots docs/evidence/task-041-placeholder-art-snapshot.png and
+    -command.png. One deviation found during implementation: the first
+    screenshot used a stale Debug-config build (Godot's windowed run
+    defaults to Debug, not Release) and still showed the old flat shapes --
+    caught by inspecting the screenshot, fixed by also building -c Debug.
+    (docs/ledger/2026-09-17-TASK-041-placeholder-art-set.md)
+
+    Also decided this session via AskUserQuestion, before TASK-041 was
+    selected: next P4 task after this one is B-028 (player-facing reason/
+    disposition UI), not B-030 proper or B-031; B-051's design fork
+    (multi-waypoint order stacking, raised during TASK-040 review) resolved
+    as an authoritative sim-side order queue, not client-side sequencing --
+    recorded in the B-051 backlog row, not yet scoped into a task file.
+    ADR-0004's review trigger 1 (interactive editor breakpoint hit) remains
+    open -- still needs Dave's own interactive editor session, not something
+    a headless agent session can discharge.
+
+    Prior: 2026-09-17: TASK-040 accepted by Dave ("seems right") -- status done.
     Re-verified before accepting: dotnet build CommandoWar.slnx -c Release
     0/0, dotnet test 297/297, dotnet build the Godot client .slnx 0/0, git
     status --porcelain matched the expected scope (only the pre-existing

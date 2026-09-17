@@ -4,8 +4,15 @@ namespace CwClientCore
 /// idiom: only primitives, `System.Nullable<T>`, and arrays of
 /// `[<CLIMutable>]` records cross the C#/F# boundary -- never a `Godot.*`
 /// type, an F# option/DU/list/tuple. `Kind`: `0` = a terrain cell (the host
-/// draws a fixed-size diamond), `1` = an agent (the host draws a circle of
-/// `Radius`). The array is pre-sorted back-to-front by the F# side (screen
+/// draws a Kenney tile texture keyed on `TextureId`), `1` = an agent or an
+/// overlay marker (a full-opacity item, `A >= 0.99`, is a real agent and
+/// draws the Kenney human texture; a translucent item is a halo/route-preview
+/// marker and still draws a plain circle of `Radius` -- TASK-041, backlog
+/// B-034). `TextureId` is meaningful only for `Kind = 0`: `0` = passable
+/// open ground (elevation-tinted via `R`/`G`/`B`), `1` = impassable, `2` =
+/// passable-but-opaque cover -- shape, not colour alone, carries this
+/// distinction (docs/06 "status indicators that do not rely on colour
+/// alone"). The array is pre-sorted back-to-front by the F# side (screen
 /// depth `(Cx + Cy)`, terrain before an agent occupying the same cell); the
 /// C# host only projects each item's cell coordinates to screen space and
 /// issues one `Draw*` call per item, in array order -- the "screen<->cell
@@ -13,6 +20,7 @@ namespace CwClientCore
 [<CLIMutable>]
 type DrawItem =
     { Kind: int
+      TextureId: int
       Cx: float32
       Cy: float32
       R: float32
