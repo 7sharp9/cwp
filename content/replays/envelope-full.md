@@ -26,8 +26,8 @@ See `content/replays/CORPUS.md`.
 | Command file | `envelope-full.cwreplay` |
 | Initial state | Shared spike fixture (`Setup.sixAgentWorld`, 32 x 32, seed 20260902) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0xA2726329BB740614` |
-| Final hash (tick 24) | `0x60DE16C440B25F5F` |
+| Initial hash (tick 0) | `0xD63C7909BA798617` |
+| Final hash (tick 24) | `0x68733B3C55995DAC` |
 | Domain events | 78 |
 
 _Re-pinned by TASK-028 (`Canonical.FormatVersion` 3 -> 4, `AgentState.Order` /
@@ -72,31 +72,37 @@ Replace-mode `MoveTo` with an always-empty `OrderQueue`, so the byte-layout
 change is the only difference: the tick count (24) and domain event count
 (78) are unchanged._
 
+_Re-pinned by TASK-045 (backlog B-031; `Canonical.FormatVersion` 9 -> 10,
+`AgentState.Vitals` added). This entry's one command has no combat anywhere
+near it, so every agent stays `Alive` at full health throughout: the
+byte-layout change is the only difference, the tick count (24) and domain
+event count (78) are unchanged._
+
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xF63F9CFCAB193C03` |
-|    2 | `0x56A62BB1E992B717` |
-|    3 | `0x9109BE33E753DA75` |
-|    4 | `0x9C716BCB0435B75F` |
-|    5 | `0xA08967EDF89F2C99` |
-|    6 | `0x81FB03556DE6CD3F` |
-|    7 | `0x6CD63FF530D320AD` |
-|    8 | `0x25F6B5AD6B2A00F7` |
-|    9 | `0xD319A3FEC369FDA9` |
-|   10 | `0xE3EEFC46D47B18A7` |
-|   11 | `0x831E9DF433ED0915` |
-|   12 | `0xE274D878A241733F` |
-|   13 | `0xCF812B98A3456D99` |
-|   14 | `0x58D33FAEB55ECF1F` |
-|   15 | `0x1AE3EA8CB1603FDD` |
-|   16 | `0xFFCAEA5DC5E53667` |
-|   17 | `0xF578F16C1C18C089` |
-|   18 | `0x07CC0957A2D252B7` |
-|   19 | `0x91A95DE6D93088B5` |
-|   20 | `0xE6A177250B4398BF` |
-|   21 | `0x3289EAEA86BB4AB9` |
-|   22 | `0xF5BCF6382CFFB543` |
-|   23 | `0x0D167CAABA5C3351` |
-|   24 | `0x60DE16C440B25F5F` |
+|    1 | `0x5B2918AF0F5886E0` |
+|    2 | `0x786DD5BAA13BDD70` |
+|    3 | `0x6CE8BBE167E2559A` |
+|    4 | `0x3A21D9B47635E38C` |
+|    5 | `0xF09F24ABE421C2D2` |
+|    6 | `0x09B6DC787CAC5B30` |
+|    7 | `0xB48C3242350B5D92` |
+|    8 | `0x70223514AFD9B9D4` |
+|    9 | `0x7A48DFB42DEC3D4A` |
+|   10 | `0xA5D20135F8BC6F50` |
+|   11 | `0xDA0DB344B251B36A` |
+|   12 | `0x88FB6E99DDA4F0EC` |
+|   13 | `0xBA76A4AD462199C2` |
+|   14 | `0xA8663EC0B0425990` |
+|   15 | `0x82491ACF07482C52` |
+|   16 | `0x9B2DF465678C3E04` |
+|   17 | `0x3359857CC1CE856A` |
+|   18 | `0xC48412FC9BC68710` |
+|   19 | `0x8BE281262650045A` |
+|   20 | `0xCCC1566EF6E2B98C` |
+|   21 | `0x46694DCA23F077B2` |
+|   22 | `0xFF99FFE82C7A0EE4` |
+|   23 | `0x5472C392CB697436` |
+|   24 | `0x68733B3C55995DAC` |

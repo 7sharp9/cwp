@@ -122,6 +122,40 @@ module Canonical =
     /// behaviour change, for every entry except the new order-queue corpus
     /// entry (TASK-044 ledger).
     ///
+    /// 10 (TASK-045): `writeAgent` gained a `Vitals` section
+    /// (`AgentState.Vitals: VitalStatus`, docs/04 sections 12.8/12.9,
+    /// backlog B-031) and a `RecentlyWounded` flag, and `writeReason` gained
+    /// a fourth `DecisionReason` case (`CriticallyWounded`, inside
+    /// `AgentState.Order`/`.Disposition`'s already-canonical encoding).
+    /// `RecentlyWounded` IS written despite being a one-shot flag consumed
+    /// the following tick: the `SuppressionBand` precedent — a single
+    /// `WorldState` snapshot cannot recompute whether a wound just landed
+    /// this tick from `Vitals` alone (health only records the *result*, not
+    /// *when* it last changed), and the flag genuinely affects future
+    /// behaviour (the wounded reappraisal trigger), so under the ADR-0002
+    /// amendment it must be in the canonical image — omitting it would let
+    /// two states hash identically while diverging on whether a reappraisal
+    /// fires next tick.
+    ///
+    /// **Not behaviour-neutral for every pre-existing entry with actual
+    /// close-range combat**, discovered during implementation (not
+    /// anticipated when this bump was first drafted): `exposed-approach`,
+    /// `perception-contact`, `suppress-relieves-exposure`, and
+    /// `canonical-refusal-and-correction` all bring opposing agents within
+    /// `CombatConfig.WeaponRange` at some point, so real hits now wound and
+    /// eventually incapacitate agents that previously took fire with no
+    /// consequence — each entry's own `.md` documents exactly what changed
+    /// and why the specific behaviour it was written to demonstrate is
+    /// unaffected (the divergence/contact/suppression/reissue moments all
+    /// happen at or before the tick combat starts mattering). Every entry
+    /// with no sustained close-range engagement (`open-engagement`'s own 3
+    /// ticks land no incapacitating hit; every other entry) re-pins as a
+    /// pure byte-layout change, plus the new `casualties-succession-and-
+    /// squad-failure` corpus entry (which gains genuine new `Vitals`/
+    /// leadership/squad-failure state by design, not incidentally). Tick
+    /// counts are unchanged everywhere; event counts drop for every
+    /// genuinely-affected entry (TASK-045 ledger).
+    ///
     /// 8 (TASK-037): `writeOrder` gained a second `PlayerIntent` case
     /// (`Suppress of target: AgentId`, a thin B-030 slice pulled forward as
     /// P3 decision-support) and `writeReason` gained a third `DecisionReason`
@@ -138,7 +172,7 @@ module Canonical =
     /// fire starts — real new state, not a byte-layout artefact). Tick counts
     /// and event counts are unchanged everywhere else (TASK-037 ledger).
     [<Literal>]
-    let FormatVersion = 9
+    let FormatVersion = 10
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -215,12 +249,20 @@ module Canonical =
     // on more than the current `Suppression` value, and a field that changes
     // every tick from gameplay events and cannot be recomputed from
     // `Position` alone.
+    //
+    // `AgentState.Vitals` and `.RecentlyWounded` (TASK-045) ARE written, the
+    // identical argument: `Vitals` changes every tick from gameplay events
+    // and cannot be recomputed from `Position` alone; `RecentlyWounded` is a
+    // one-shot flag but still genuinely affects future behaviour (the
+    // wounded reappraisal trigger) and cannot be recomputed from `Vitals`
+    // alone (see the FormatVersion 9 doc comment above).
 
     let private reasonCode (r: DecisionReason) : int =
         match r with
         | NoKnownRoute -> 0
         | RouteTooExposed _ -> 1
         | TargetNotKnown -> 2
+        | CriticallyWounded -> 3
 
     let private writeReason (w: Writer) (r: DecisionReason) =
         w.I32(reasonCode r)
@@ -234,6 +276,7 @@ module Canonical =
                 w.U8 1uy
                 w.I32(AgentId.value id)
         | TargetNotKnown -> ()
+        | CriticallyWounded -> ()
 
     let private writeDisposition (w: Writer) (d: OrderDisposition) =
         match d with
@@ -314,6 +357,20 @@ module Canonical =
         w.I32 a.Suppression
         w.U8(if a.SuppressionBand then 1uy else 0uy)
         w.I32 a.Stress
+
+        // AgentState.Vitals / .RecentlyWounded (TASK-045, backlog B-031) —
+        // see the FormatVersion 9 doc comment above for why RecentlyWounded
+        // is written despite being a one-shot flag.
+        match a.Vitals with
+        | Alive health ->
+            w.I32 0
+            w.I32 health
+        | Incapacitated remaining ->
+            w.I32 1
+            w.I32 remaining
+        | Dead -> w.I32 2
+
+        w.U8(if a.RecentlyWounded then 1uy else 0uy)
 
     // The friendly squad's shared tactical picture (TASK-026,
     // `WorldState.TacticalKnowledge`, docs/04 section 12.4). Genuine per-tick

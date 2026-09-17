@@ -78,15 +78,19 @@ let ``the frame carries every terrain layer, the cover edges, and the determinis
     Assert.Equal(Hashing.hash w, f.Hash)
     Assert.Equal(0UL, f.RandomDraws)
 
-    // No order has been appraised yet, so the only overlay is one Holding
-    // AgentCommitment per agent (TASK-030 — derived, not stored, so it is
-    // never actually empty).
-    Assert.Equal(w.Agents.Length, f.Overlays.Length)
+    // No order has been appraised yet, so every agent contributes one
+    // Holding AgentCommitment (TASK-030 — derived, not stored, so it is
+    // never actually empty) and one full-health AgentVitals (TASK-045,
+    // backlog B-031 — likewise unconditional per agent); plus one
+    // SquadLeadership fact for the whole frame.
+    Assert.Equal(2 * w.Agents.Length + 1, f.Overlays.Length)
     Assert.All(
         f.Overlays,
         (function
         | AgentCommitment(_, _, Holding) -> ()
-        | other -> Assert.Fail($"expected only Holding AgentCommitment overlays, got {other}"))
+        | AgentVitals(_, _, Alive health) -> Assert.Equal(Agent.MaxHealth, health)
+        | SquadLeadership _ -> ()
+        | other -> Assert.Fail($"expected only Holding AgentCommitment / full-health AgentVitals / SquadLeadership overlays, got {other}"))
     )
 
 [<Fact>]
@@ -107,7 +111,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0xA2726329BB740614UL, f.Hash.Value)
+    Assert.Equal(0xD63C7909BA798617UL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -176,8 +180,10 @@ let ``frameOf emits no OrderAppraisal overlay once every agent is at rest and it
     // relocated from the Appraisal phase, which runs before Navigation, so
     // fulfilment is only noticed next tick). From tick 32 on, no OrderAppraisal
     // overlay remains — but every agent still carries an AgentCommitment
-    // overlay every tick (TASK-030), Holding once at rest, so Overlays itself
-    // is never empty.
+    // overlay every tick (TASK-030), Holding once at rest, plus a full-health
+    // AgentVitals per agent and one SquadLeadership fact (TASK-045, backlog
+    // B-031 — both unconditional every tick), so Overlays itself is never
+    // empty.
     let isOrderAppraisal =
         function
         | OrderAppraisal _ -> true
@@ -192,7 +198,12 @@ let ``frameOf emits no OrderAppraisal overlay once every agent is at rest and it
         frames.[40].Overlays,
         (function
         | AgentCommitment(_, _, Holding) -> ()
-        | other -> Assert.Fail($"expected only Holding AgentCommitment overlays at rest, got {other}"))
+        | AgentVitals(_, _, Alive health) -> Assert.Equal(Agent.MaxHealth, health)
+        | SquadLeadership _ -> ()
+        | other ->
+            Assert.Fail(
+                $"expected only Holding AgentCommitment / full-health AgentVitals / SquadLeadership overlays at rest, got {other}"
+            ))
     )
 
 // --- renderers: distinct features and determinism ----------------------
@@ -420,7 +431,9 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | AgentSuppression _
         | AgentStress _
         | HostileKnownContact _
-        | AgentOrderQueue _ -> None) with
+        | AgentOrderQueue _
+        | AgentVitals _
+        | SquadLeadership _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -489,7 +502,9 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | AgentSuppression _
             | AgentStress _
             | HostileKnownContact _
-            | AgentOrderQueue _ -> None)
+            | AgentOrderQueue _
+            | AgentVitals _
+            | SquadLeadership _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -534,7 +549,9 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | AgentSuppression _
             | AgentStress _
             | HostileKnownContact _
-            | AgentOrderQueue _ -> None)
+            | AgentOrderQueue _
+            | AgentVitals _
+            | SquadLeadership _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -616,7 +633,9 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | AgentSuppression _
             | AgentStress _
             | HostileKnownContact _
-            | AgentOrderQueue _ -> None)
+            | AgentOrderQueue _
+            | AgentVitals _
+            | SquadLeadership _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)
@@ -855,6 +874,84 @@ let ``the order-queue entry proves both cancel outcomes and the fulfilment-drive
     Assert.Equal({ X = 5; Y = 0 }, frames.[8].Agents.[0].Cell)
     Assert.Equal({ X = 5; Y = 0 }, frames.[9].Agents.[0].Cell)
 
+// --- casualties, leadership succession, and squad failure (TASK-045, backlog B-031) --
+
+let private casualtiesFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "casualties-succession-and-squad-failure")
+
+    match Corpus.commandsOf corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``the casualties entry shows wound accumulation, incapacitation, leadership succession, and squad failure end to end`` () =
+    let frames = casualtiesFrames ()
+
+    let vitalsOf (f: DiagnosticFrame) (id: int) =
+        f.Overlays
+        |> Array.tryPick (function
+            | AgentVitals(a, _, v) when AgentId.value a = id -> Some v
+            | _ -> None)
+
+    let leaderOf (f: DiagnosticFrame) =
+        f.Overlays
+        |> Array.tryPick (function
+            | SquadLeadership l -> Some l
+            | _ -> None)
+        |> Option.flatten
+
+    // Tick 0: everyone full health, agent 0 (lowest id, Alive) leads.
+    Assert.Equal(Some(Alive Agent.MaxHealth), vitalsOf frames.[0] 0)
+    Assert.Equal(Some(AgentId.ofInt 0), leaderOf frames.[0])
+
+    // Wounds accumulate over repeated hits (no cover on this open terrain),
+    // well before either friendly is incapacitated.
+    match vitalsOf frames.[2] 1 with
+    | Some(Alive h) -> Assert.True(h < Agent.MaxHealth, "expected agent 1 wounded by tick 2")
+    | other -> Assert.Fail($"expected Alive with partial health, got {other}")
+
+    // Tick 4: agent 0 (the leader) is incapacitated, and since it was the
+    // lowest-id living friendly, leadership transfers to agent 1 the same
+    // tick -- a pure derived rule, no stored field, no rescue mechanic.
+    match vitalsOf frames.[4] 0 with
+    | Some(Incapacitated _) -> ()
+    | other -> Assert.Fail($"expected agent 0 Incapacitated by tick 4, got {other}")
+
+    Assert.Contains(frames.[4].Events, fun (e: EventMarker) -> e.Kind = "agent-incapacitated" && e.Agents = [| AgentId.ofInt 0 |])
+    Assert.Contains(frames.[4].Events, fun (e: EventMarker) -> e.Kind = "leadership-transferred")
+    Assert.Equal(Some(AgentId.ofInt 1), leaderOf frames.[4])
+
+    // Tick 5: agent 1 is incapacitated too -- leadership transfers again, to
+    // no one, and SquadFailure fires the same tick (a signal event only).
+    match vitalsOf frames.[5] 1 with
+    | Some(Incapacitated _) -> ()
+    | other -> Assert.Fail($"expected agent 1 Incapacitated by tick 5, got {other}")
+
+    Assert.Contains(frames.[5].Events, fun (e: EventMarker) -> e.Kind = "leadership-transferred")
+    Assert.Contains(frames.[5].Events, fun (e: EventMarker) -> e.Kind = "squad-failure")
+    Assert.Equal(None, leaderOf frames.[5])
+
+    // SquadFailure does not halt the run: the sim keeps stepping (all the
+    // way to the committed 65-tick count) and bleed-out keeps counting down.
+    Assert.Equal(66, frames.Length) // tick 0 (initial) through tick 65
+
+    // No rescue mechanic (Central decision 3): bleed-out is unavoidable once
+    // triggered. By the final committed tick every agent has reached Dead.
+    for id in 0..3 do
+        Assert.Equal(Some Dead, vitalsOf frames.[65] id)
+
+    Assert.Equal(
+        golden "casualties-succession-and-squad-failure-tick-005.ascii.txt",
+        DiagnosticRender.Ascii frames.[5]
+    )
+    Assert.Equal(golden "casualties-succession-and-squad-failure-tick-005.svg", DiagnosticRender.Svg frames.[5])
+
+    Assert.Equal(
+        golden "casualties-succession-and-squad-failure-tick-065.ascii.txt",
+        DiagnosticRender.Ascii frames.[65]
+    )
+    Assert.Equal(golden "casualties-succession-and-squad-failure-tick-065.svg", DiagnosticRender.Svg frames.[65])
+
 // --- canonical refusal-and-correction sequence, end to end (TASK-038, backlog B-023) --
 
 let private canonicalRefusalAndCorrectionFrames () =
@@ -1004,7 +1101,7 @@ let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` ()
 let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
     let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
     Assert.Equal(13, frames.Length)
-    Assert.Equal(0x5FDDED09EDC18826UL, frames.[1].Hash.Value)
+    Assert.Equal(0x066D3D38E3EB31BEUL, frames.[1].Hash.Value)
 
     let appraisals =
         frames.[1].Overlays
@@ -1046,7 +1143,12 @@ let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the
     // unhandled `HostileKnownContact` entries — eight total. Genuine new
     // behaviour, not a bug: this disposable demo only ever renders the
     // friendly squad's `KnownContact` picture.
-    Assert.Equal(8, view.UnhandledOverlays.Length)
+    //
+    // TASK-045: `AgentVitals` (one per agent, unconditional) and
+    // `SquadLeadership` (one per frame, unconditional) are likewise
+    // unrendered by this disposable demo — three agents plus one leadership
+    // fact, four more unhandled entries — twelve total.
+    Assert.Equal(12, view.UnhandledOverlays.Length)
 
     Assert.All(
         view.UnhandledOverlays,
@@ -1055,6 +1157,8 @@ let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the
                 o.StartsWith "commitment agent "
                 || o.StartsWith "stress agent "
                 || o.StartsWith "hostile known contact agent "
+                || o.StartsWith "vitals agent "
+                || o.StartsWith "squad leadership "
             ))
     )
 
@@ -1065,8 +1169,8 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0xA2726329BB740614UL, frames.[0].Hash.Value)
-    Assert.Equal(0xC9694E97A7210117UL, frames.[40].Hash.Value)
+    Assert.Equal(0xD63C7909BA798617UL, frames.[0].Hash.Value)
+    Assert.Equal(0xF0CEAD6CE48BA07EUL, frames.[40].Hash.Value)
     // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
     // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
     // since Commitment is derived, not canonical (Decision B).
@@ -1075,5 +1179,5 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0xC9694E97A7210117UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0xF0CEAD6CE48BA07EUL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(36, outcome.Events.Length)

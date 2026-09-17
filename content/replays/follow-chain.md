@@ -16,17 +16,17 @@ See `content/replays/CORPUS.md`.
 | Command log | `follow-chain.cwreplay` |
 | Initial state | Corpus follow-chain scenario (12 x 9, seed 20260904) |
 | Tick count | 6 |
-| Initial hash (tick 0) | `0xB6CA4ECAC822E8AA` |
-| Final hash (tick 6) | `0xF5FA36EB05EF783D` |
+| Initial hash (tick 0) | `0x16C3C457582FC726` |
+| Final hash (tick 6) | `0xF9B5FE30D6BE558D` |
 | Domain events | 27 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xC01A5C9A24BB2DF1` |
-|    2 | `0xD8F6D349CFFF4535` |
-|    3 | `0xD6DAB3B833B10B8D` |
-|    4 | `0x8A9563BFCA4AF171` |
-|    5 | `0xC7E8983B705E1311` |
-|    6 | `0xF5FA36EB05EF783D` |
+|    1 | `0x59DE6789729E0E13` |
+|    2 | `0x1263928AC695E48D` |
+|    3 | `0x5749A51C794D2B2B` |
+|    4 | `0xC4B09F34932D6621` |
+|    5 | `0xD32AB36B6F5ADFE3` |
+|    6 | `0xF9B5FE30D6BE558D` |

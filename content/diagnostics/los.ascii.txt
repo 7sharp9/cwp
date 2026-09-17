@@ -44,6 +44,9 @@ agents:
 overlays:
   commitment (0,0): agent 0  holding
   commitment (0,11): agent 1  holding
+  vitals (0,0): agent 0  alive 1000/1000
+  vitals (0,11): agent 1  alive 1000/1000
+  squad leader: agent 0
   sight (1,1) -> (10,1): clear
   sight (1,4) -> (10,4): blocked at (5,4)
   sight (7,2) -> (10,5): clear
@@ -52,4 +55,4 @@ overlays:
 
 events: none
 
-tick 0 | hash 0x29603BBAA1E43034 (format 9) | draws 0 | agents 2 | cover-edges 0 | events 0
+tick 0 | hash 0xE334A3C37EE075BB (format 10) | draws 0 | agents 2 | cover-edges 0 | events 0

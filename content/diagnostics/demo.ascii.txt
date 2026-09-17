@@ -38,7 +38,11 @@ overlays:
   commitment (0,0): agent 0  holding
   commitment (0,1): agent 1  holding
   commitment (11,7): agent 5  holding
+  vitals (0,0): agent 0  alive 1000/1000
+  vitals (0,1): agent 1  alive 1000/1000
+  vitals (11,7): agent 5  alive 1000/1000
+  squad leader: agent 0
 
 events: none
 
-tick 0 | hash 0x484A193CA07C1FA4 (format 9) | draws 0 | agents 3 | cover-edges 3 | events 0
+tick 0 | hash 0xA047EBCDA29BA500 (format 10) | draws 0 | agents 3 | cover-edges 3 | events 0

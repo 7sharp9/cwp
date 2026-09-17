@@ -257,6 +257,31 @@ dotnet build CommandoWar.Client.Godot.slnx -c Debug
 
 Committed screenshot: `docs/evidence/task-043-developer-overlay.png`.
 
+## Casualties, incapacitation, leadership succession, and squad failure (TASK-045)
+
+Sim-side only (backlog B-031; `CommandoWar.Sim`/`CommandoWar.Headless` gained
+`AgentState.Vitals`/`.RecentlyWounded`, `Casualty.fs`, two new diagnostic
+overlays, and `Canonical.FormatVersion` bumped 9 -> 10) -- no new client scene
+or input. `RenderShared.fs`'s two `DecisionReason` match expressions
+(`reasonText`, the player-facing vocabulary, and `devReasonText`, the
+developer-overlay one) needed the new `CriticallyWounded` case added to keep
+compiling (`"critically wounded"` / `"critically-wounded"`, the existing
+hyphenation convention each already follows) -- no other client-side change.
+
+Both existing scenes' `--selfcheck` hashes moved (byte-layout only, from the
+`FormatVersion` bump -- neither scene's own scripted drive touches combat, so
+every agent stays `Alive` at full health throughout and the tick/event counts
+are unchanged):
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x44B29B73E8F107EF
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0xF1027A36B36BC3DF
+```
+
 ## Pinned versions
 
 | Component | Version |

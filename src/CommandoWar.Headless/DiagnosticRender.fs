@@ -50,6 +50,7 @@ module DiagnosticRender =
         | RouteTooExposed None -> "route-too-exposed"
         | RouteTooExposed(Some id) -> sprintf "route-too-exposed threat-agent-%d" (AgentId.value id)
         | TargetNotKnown -> "target-not-known"
+        | CriticallyWounded -> "critically-wounded"
 
     /// Short text for an `OrderDisposition` (TASK-028).
     let private dispositionText (d: OrderDisposition) : string =
@@ -80,6 +81,13 @@ module DiagnosticRender =
         match i with
         | MoveTo target -> sprintf "move %s" (cellText target)
         | Suppress target -> sprintf "suppress agent %d" (AgentId.value target)
+
+    /// Short text for a `VitalStatus` (TASK-045, backlog B-031).
+    let private vitalsText (v: VitalStatus) : string =
+        match v with
+        | Alive health -> sprintf "alive %d/%d" health Agent.MaxHealth
+        | Incapacitated remaining -> sprintf "incapacitated (bleeding out, %d tick(s))" remaining
+        | Dead -> "dead"
 
     /// Steps `initial` through `log` for `tickCount` ticks and collects the
     /// diagnostic frame at every tick: index 0 is tick 0 (`Diagnostics.frame`
@@ -142,7 +150,9 @@ module DiagnosticRender =
                 | AgentSuppression _
                 | AgentStress _
                 | HostileKnownContact _
-                | AgentOrderQueue _ -> None)
+                | AgentOrderQueue _
+                | AgentVitals _
+                | SquadLeadership _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -174,7 +184,9 @@ module DiagnosticRender =
                 | AgentSuppression _
                 | AgentStress _
                 | HostileKnownContact _
-                | AgentOrderQueue _ -> None)
+                | AgentOrderQueue _
+                | AgentVitals _
+                | SquadLeadership _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -433,6 +445,15 @@ module DiagnosticRender =
                         |> String.concat ", "
 
                     line (sprintf "  order queue %s: agent %d  [%s]" (cellText at) (AgentId.value agent) qs)
+                | AgentVitals(agent, at, vitals) ->
+                    line (sprintf "  vitals %s: agent %d  %s" (cellText at) (AgentId.value agent) (vitalsText vitals))
+                | SquadLeadership leader ->
+                    let text =
+                        match leader with
+                        | Some id -> sprintf "agent %d" (AgentId.value id)
+                        | None -> "none (every friendly down)"
+
+                    line (sprintf "  squad leader: %s" text)
 
         line ""
 
@@ -858,6 +879,71 @@ module DiagnosticRender =
                         (at.Y * s + 8)
                         queued.Length
                 )
+            | AgentVitals(_, at, vitals) ->
+                // Casualty state (TASK-045, backlog B-031): the common case
+                // (full health) draws nothing, the CommunicationAvailable =
+                // true precedent — only a wounded/incapacitated/dead agent
+                // gets a marker. A wound is a small red dot centred on the
+                // cell's bottom edge (the one remaining unused edge
+                // midpoint, `AgentOrderQueue`'s own top-edge-center
+                // precedent); `Incapacitated`/`Dead` override with their own
+                // distinct marker instead, since both matter more than a
+                // wound-severity dot once the agent is down.
+                match vitals with
+                | Alive health when health >= Agent.MaxHealth -> ()
+                | Alive health ->
+                    let opacity = float (Agent.MaxHealth - health) / float Agent.MaxHealth
+
+                    line (
+                        sprintf
+                            "  <circle cx=\"%d\" cy=\"%d\" r=\"3\" fill=\"#e53e3e\" fill-opacity=\"%.2f\"/>"
+                            (at.X * s + mid)
+                            (at.Y * s + s - 4)
+                            opacity
+                    )
+                | Incapacitated remaining ->
+                    line (
+                        sprintf
+                            "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"8\" fill=\"#718096\">Z%d</text>"
+                            (at.X * s + mid - 4)
+                            (at.Y * s + s - 2)
+                            remaining
+                    )
+                | Dead ->
+                    // A black cross over the whole cell — the SightRay
+                    // blocked-cell cross precedent, reused here since both
+                    // mean "nothing more happens at this cell".
+                    line (
+                        sprintf
+                            "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#000000\" stroke-width=\"2\"/>"
+                            (at.X * s) (at.Y * s) (at.X * s + s) (at.Y * s + s)
+                    )
+
+                    line (
+                        sprintf
+                            "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#000000\" stroke-width=\"2\"/>"
+                            (at.X * s + s) (at.Y * s) (at.X * s) (at.Y * s + s)
+                    )
+            | SquadLeadership leader ->
+                // A solid gold ring around the leader's own agent marker
+                // (TASK-045, backlog B-031) — encircling the agent rather
+                // than adding another corner badge, since every corner and
+                // edge midpoint around the cell is already spoken for.
+                // Nothing drawn when no leader survives (every friendly
+                // down — `AgentVitals`'s per-agent `Dead` cross already
+                // shows that).
+                match leader with
+                | None -> ()
+                | Some id ->
+                    match frame.Agents |> Array.tryFind (fun a -> a.Id = id) with
+                    | None -> ()
+                    | Some a ->
+                        line (
+                            sprintf
+                                "  <circle cx=\"%d\" cy=\"%d\" r=\"8\" fill=\"none\" stroke=\"#d4af37\" stroke-width=\"2\"/>"
+                                (a.Cell.X * s + mid)
+                                (a.Cell.Y * s + mid)
+                        )
 
         // Footer.
         let footerText (dy: int) (str: string) =
@@ -912,6 +998,14 @@ module DiagnosticRender =
             sprintf "Agent %d obstructed at %s by agent %d (blocked cell %s)." (a 0) (c 0) (a 1) (c 1)
         | "contact-observed" -> sprintf "Agent %d observed agent %d at %s." (a 0) (a 1) (c 0)
         | "contact-expired" -> sprintf "Contact (agent %d) expired (last seen %s)." (a 0) (c 0)
+        | "agent-incapacitated" -> sprintf "Agent %d incapacitated at %s (bleeding out)." (a 0) (c 0)
+        | "agent-died" -> sprintf "Agent %d died at %s." (a 0) (c 0)
+        | "leadership-transferred" ->
+            if e.Agents.Length > 0 then
+                sprintf "Squad leadership transferred to agent %d." (a 0)
+            else
+                "Squad leadership lost (no friendly agent remains)."
+        | "squad-failure" -> "Squad failure: every friendly agent is down."
         | other -> other
 
     /// One `<tr>` of per-agent state for the HTML annotation panel: position,
@@ -927,6 +1021,7 @@ module DiagnosticRender =
         (suppressions: Map<AgentId, int>)
         (stresses: Map<AgentId, int>)
         (queueDepths: Map<AgentId, int>)
+        (vitals: Map<AgentId, VitalStatus>)
         (a: AgentMarker)
         : string =
         let side =
@@ -953,8 +1048,11 @@ module DiagnosticRender =
         let stress = stresses |> Map.tryFind a.Id |> Option.defaultValue 0
         let queueDepth = queueDepths |> Map.tryFind a.Id |> Option.defaultValue 0
 
+        let vitalsStr =
+            vitals |> Map.tryFind a.Id |> Option.map vitalsText |> Option.defaultValue "-"
+
         sprintf
-            "<tr><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%d/%d</td><td>%d/%d</td><td>%d</td></tr>"
+            "<tr><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%d/%d</td><td>%d/%d</td><td>%d</td><td>%s</td></tr>"
             (AgentId.value a.Id)
             side
             (esc (cellText a.Cell))
@@ -967,6 +1065,7 @@ module DiagnosticRender =
             stress
             StressConfig.MaxStress
             queueDepth
+            (esc vitalsStr)
 
     /// One entry of a shared tactical picture (`KnownContact` /
     /// `HostileKnownContact`), rendered the same way for both sides.
@@ -1035,13 +1134,34 @@ module DiagnosticRender =
                 | _ -> None)
             |> Map.ofArray
 
+        // Vitals (TASK-045, backlog B-031): AgentVitals is unconditional per
+        // agent, unlike the sparse overlays above, so this map always has
+        // every agent (agentRow's Option.defaultValue "-" fallback is
+        // unreachable in practice, kept only for the same defensive shape
+        // every other lookup here uses).
+        let vitals =
+            frame.Overlays
+            |> Array.choose (function
+                | AgentVitals(a, _, v) -> Some(a, v)
+                | _ -> None)
+            |> Map.ofArray
+
         line "<table class=\"cw-agents\">"
-        line "<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th></tr></thead>"
+        line "<thead><tr><th>Agent</th><th>Side</th><th>Cell</th><th>Move</th><th>Comms</th><th>Order</th><th>Commitment</th><th>Suppression</th><th>Stress</th><th>Queue</th><th>Vitals</th></tr></thead>"
         line "<tbody>"
         for a in frame.Agents |> Array.sortBy (fun a -> a.Id) do
-            line (agentRow dispositions commitments suppressions stresses queueDepths a)
+            line (agentRow dispositions commitments suppressions stresses queueDepths vitals a)
         line "</tbody>"
         line "</table>"
+
+        // Squad leader (TASK-045, backlog B-031): one line, not a table row
+        // — a squad-wide fact, not per-agent.
+        match frame.Overlays |> Array.tryPick (function
+            | SquadLeadership leader -> Some leader
+            | _ -> None) with
+        | Some(Some id) -> line (sprintf "<p>Squad leader: agent %d.</p>" (AgentId.value id))
+        | Some None -> line "<p>Squad leader: none (every friendly is down).</p>"
+        | None -> ()
 
         let knownContacts =
             frame.Overlays

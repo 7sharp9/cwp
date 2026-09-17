@@ -35,7 +35,9 @@ agents:
 overlays:
   order appraisal (1,4): agent 0  unable no-known-route
   commitment (1,4): agent 0  holding
+  vitals (1,4): agent 0  alive 1000/1000
+  squad leader: agent 0
 
 events: command-accepted@(5,4); order-appraised
 
-tick 1 | hash 0x67F0D90BCF57E077 (format 9) | draws 0 | agents 1 | cover-edges 0 | events 2
+tick 1 | hash 0x6E84986C1232FD87 (format 10) | draws 0 | agents 1 | cover-edges 0 | events 2

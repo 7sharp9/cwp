@@ -116,6 +116,7 @@ module RenderShared =
         | RouteTooExposed None -> "route too exposed"
         | RouteTooExposed(Some id) -> sprintf "route too exposed (threat: agent %d)" (AgentId.value id)
         | TargetNotKnown -> "target not known"
+        | CriticallyWounded -> "critically wounded"
 
     /// Player-facing text for an agent's current order disposition (TASK-042,
     /// backlog B-028; docs/06 section 11 "order acknowledgement and
@@ -143,6 +144,7 @@ module RenderShared =
         | RouteTooExposed None -> "route-too-exposed"
         | RouteTooExposed(Some id) -> sprintf "route-too-exposed threat-agent-%d" (AgentId.value id)
         | TargetNotKnown -> "target-not-known"
+        | CriticallyWounded -> "critically-wounded"
 
     /// Developer-facing text for a `Commitment` (TASK-043; `DiagnosticRender.
     /// commitmentText`'s wording).

@@ -16,15 +16,15 @@ See `content/replays/CORPUS.md`.
 | Command log | `swap-standoff.cwreplay` |
 | Initial state | Corpus swap-standoff scenario (8 x 8, seed 20260904) |
 | Tick count | 4 |
-| Initial hash (tick 0) | `0xF177CABFC3C4E560` |
-| Final hash (tick 4) | `0xF10832C041FA328B` |
+| Initial hash (tick 0) | `0x80BD9424CA4FD07F` |
+| Final hash (tick 4) | `0xC8CD45FCB9335FE2` |
 | Domain events | 14 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x7E58F5EFEB2A94B0` |
-|    2 | `0xD6DEF29860082AA5` |
-|    3 | `0x5FD631A63DB5EDFE` |
-|    4 | `0xF10832C041FA328B` |
+|    1 | `0xAAA74409809B75B9` |
+|    2 | `0xE746C7701A6011C0` |
+|    3 | `0x42491E65AC8BD84B` |
+|    4 | `0xC8CD45FCB9335FE2` |

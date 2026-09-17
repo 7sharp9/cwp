@@ -38,7 +38,9 @@ overlays:
   path (3,4) -> (14,8): reached, cost 15
   order appraisal (4,4): agent 0  accepted
   commitment (4,4): agent 0  moving to (14,8)
+  vitals (4,4): agent 0  alive 1000/1000
+  squad leader: agent 0
 
 events: command-accepted@(14,8); order-appraised; commitment-established@(14,8); movement-stepped@(3,4),(4,4)
 
-tick 3 | hash 0xEDD270D4DA90FAF6 (format 9) | draws 0 | agents 1 | cover-edges 0 | events 4
+tick 3 | hash 0xA38B88AD5F5A9994 (format 10) | draws 0 | agents 1 | cover-edges 0 | events 4

@@ -1,0 +1,69 @@
+# CommandoWar diagnostic frame
+tick 5
+
+              
+    0123456789
+  0 @....@....
+  1 ..........
+  2 ..........
+  3 X....X....
+  4 ..........
+  5 ..........
+  6 ..........
+  7 ..........
+  8 ..........
+  9 ..........
+
+cover edges (N/E/S/W per cell, * for more than one):
+    0123456789
+  0 ..........
+  1 ..........
+  2 ..........
+  3 ..........
+  4 ..........
+  5 ..........
+  6 ..........
+  7 ..........
+  8 ..........
+  9 ..........
+
+legend:
+  @ friendly agent   X hostile agent
+  # impassable        o opaque (passable)
+  1-9 elevation       . open flat ground
+movement-cost: uniform
+
+agents:
+  agent 0  friendly  (0,0)  at rest
+  agent 1  friendly  (5,0)  at rest
+  agent 2  hostile   (0,3)  at rest
+  agent 3  hostile   (5,3)  at rest
+
+overlays:
+  known contact (0,3): agent 2  confidence 1000  seen tick 5
+  known contact (5,3): agent 3  confidence 1000  seen tick 5
+  commitment (0,0): agent 0  holding
+  commitment (5,0): agent 1  holding
+  commitment (0,3): agent 2  holding
+  commitment (5,3): agent 3  holding
+  fire (5,0) -> (0,3): agent 1 -> agent 2  hit
+  fire (0,3) -> (5,0): agent 2 -> agent 1  hit
+  suppression (0,0): agent 0  900/1000
+  suppression (5,0): agent 1  950/1000
+  suppression (0,3): agent 2  950/1000
+  suppression (5,3): agent 3  850/1000
+  stress (0,0): agent 0  250/1000
+  stress (5,0): agent 1  250/1000
+  stress (0,3): agent 2  250/1000
+  stress (5,3): agent 3  250/1000
+  hostile known contact (0,0): agent 0  confidence 1000  seen tick 5
+  hostile known contact (5,0): agent 1  confidence 1000  seen tick 5
+  vitals (0,0): agent 0  incapacitated (bleeding out, 58 tick(s))
+  vitals (5,0): agent 1  incapacitated (bleeding out, 59 tick(s))
+  vitals (0,3): agent 2  incapacitated (bleeding out, 59 tick(s))
+  vitals (5,3): agent 3  incapacitated (bleeding out, 57 tick(s))
+  squad leader: none (every friendly down)
+
+events: shot-fired-hit; agent-incapacitated@(0,3); shot-fired-hit; agent-incapacitated@(5,0); leadership-transferred; squad-failure
+
+tick 5 | hash 0x17417A43235BF496 (format 10) | draws 17 | agents 4 | cover-edges 0 | events 6

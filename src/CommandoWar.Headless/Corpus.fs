@@ -529,6 +529,25 @@ module Corpus =
              Command = Command.cancel cancelLeg2 7L a0 leg2
              Issuer = "corpus" } |]
 
+    /// Two friendly-hostile pairs, no orders (the `open-engagement`
+    /// precedent: combat alone drives the trace) -- casualties, leadership
+    /// succession, and squad failure end to end (TASK-045, backlog B-031).
+    /// Friendly 0 (0,0) / hostile 2 (0,3) and friendly 1 (5,0) / hostile 3
+    /// (5,3) are each a Chebyshev distance of 3 apart (within
+    /// CombatConfig.WeaponRange) and 5 apart from the OTHER pair (outside
+    /// it), so `Combat.chooseTarget`'s "nearest candidate" rule pairs each
+    /// friendly with its own hostile from tick 1, not a shared free-for-all.
+    let private casualtiesSpec: ScenarioSpec =
+        { Id = "corpus-casualties-succession-and-squad-failure"
+          Width = 10
+          Height = 10
+          Friendly = [ agent 0 { X = 0; Y = 0 }; agent 1 { X = 5; Y = 0 } ]
+          Enemies = [ agent 2 { X = 0; Y = 3 }; agent 3 { X = 5; Y = 3 } ]
+          Terrain = []
+          Objective = { X = 9; Y = 9 }
+          Extraction = { X = 9; Y = 0 }
+          Orders = [] }
+
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
         [| { Name = "spike-fixture"
@@ -605,7 +624,15 @@ module Corpus =
                + "picture (WorldState.TacticalKnowledge). The first corpus entry with an "
                + "enemy deployment (TASK-026, backlog B-015; the 'Unknown threat' shape, docs/05 section 16). The "
                + "order is issued on tick 1, before the contact is known, so it is Accepted at appraisal and not "
-               + "re-judged when the contact appears (TASK-028; reappraisal on a knowledge change is B-021)."
+               + "re-judged when the contact appears (TASK-028; reappraisal on a knowledge change is B-021). "
+               + "Re-pinned by TASK-045 (backlog B-031; Canonical.FormatVersion 9 -> 10, AgentState.Vitals added): "
+               + "the same wall gap that opens line of sight for ContactObserved also brings both agents into "
+               + "CombatConfig.WeaponRange, so Combat (phase 8, after Perception) engages the same tick and both "
+               + "take real fire -- the friendly is Incapacitated by tick 8, and since it is the squad's only "
+               + "agent, leadership transfers to None the same tick (LeadershipTransferred). The entry's own "
+               + "subject, ContactObserved/KnownContact at tick 5, is unaffected (Perception always runs before "
+               + "Combat); the tick-5 golden simply gains the friendly's already-wounded AgentVitals entry "
+               + "alongside it, from that same tick's own combat."
              InitialStateNote = "Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile)"
              InitialState = fun () -> worldOfSpec perceptionContactSpec
              TickCount = 14L
@@ -631,7 +658,12 @@ module Corpus =
                + "threat at (10,4). The divergence is discipline alone: on tick 1 the Appraisal phase (12.5) "
                + "Refuses agent 0's order (RouteTooExposed, no Destination, it never moves) and Accepts agent 1's "
                + "(Destination written, it walks the approach). The G3 evidence scenario (docs/07 section 9 "
-               + "criterion 2; TASK-028, backlog B-017; Canonical.FormatVersion 4)."
+               + "criterion 2; TASK-028, backlog B-017; Canonical.FormatVersion 4). Re-pinned by TASK-045 (backlog "
+               + "B-031; Canonical.FormatVersion 9 -> 10, AgentState.Vitals added): not behaviour-neutral past "
+               + "tick 1 -- agent 1, walking its Accepted route, closes within combat range of the stationary "
+               + "hostile from tick 2 and both trade real fire, eventually incapacitating agent 1 (tick 5) and the "
+               + "hostile (tick 7); agent 0 (Refused, never moves, never in range) stays clear. The tick-1 "
+               + "divergence this entry exists to prove happens before any shot is fired and is unaffected."
              InitialStateNote =
                "Corpus exposed-approach scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / 6 + 1 hostile)"
              InitialState = fun () -> worldOfSpec exposedApproachSpec
@@ -647,7 +679,14 @@ module Corpus =
                + "trigger fires, Appraisal.routeExposure zeroes hostile 2's contribution, and friendly 0's order "
                + "reappraises Accepted and starts walking. Proves docs/07 section 8 steps 5-6 end to end (TASK-037, "
                + "a thin B-030 slice pulled forward as P3 decision-support; docs/07 section 9 criterion 4, 'a "
-               + "player action can predictably change an appraisal outcome'; Canonical.FormatVersion 8)."
+               + "player action can predictably change an appraisal outcome'; Canonical.FormatVersion 8). "
+               + "Re-pinned by TASK-045 (backlog B-031; Canonical.FormatVersion 9 -> 10, AgentState.Vitals added): "
+               + "friendly 1 and hostile 2 trade real fire at close range and both take genuine wound consequences "
+               + "-- the exposed-approach re-pin note's own analysis applies here identically (same geometry). The "
+               + "docs/07 section 8 steps 5-6 mechanic this entry proves is unaffected: hostile 2's own "
+               + "Suppression/SuppressionBand still latches from incoming fire regardless of which friendly lands "
+               + "it, still zeroes its route-exposure contribution, and friendly 0's order still reappraises "
+               + "Accepted."
              InitialStateNote =
                "Corpus suppress-relieves-exposure scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile)"
              InitialState = fun () -> worldOfSpec suppressRelievesExposureSpec
@@ -666,7 +705,13 @@ module Corpus =
                + "CommitmentEstablished and no event for the superseded commitment -- consistent with the automatic "
                + "reappraisal's earlier Accepted (the Adapted/stage-5 half of 'accepts or adapts' is out of scope, "
                + "no such disposition exists yet). G3's headline evidence item (docs/07 section 9; TASK-038, "
-               + "backlog B-023)."
+               + "backlog B-023). Re-pinned by TASK-045 (backlog B-031; Canonical.FormatVersion 9 -> 10, "
+               + "AgentState.Vitals added): the same friendly-1/hostile-2 close-range fire as "
+               + "suppress-relieves-exposure now wounds both -- friendly 1 is Incapacitated by tick 4 (its own "
+               + "Suppressing order then appraises Unable(CriticallyWounded)), hostile 2 follows at tick 5. Steps "
+               + "1-4 and 7-8 (the reissue, the fresh CommitmentEstablished, arrival at tick 13) are unaffected: "
+               + "hostile 2's Suppression/SuppressionBand still latches from either friendly's fire, still zeroes "
+               + "its contribution for friendly 0 (steps 5-6), and friendly 0 stays Alive and unwounded throughout."
              InitialStateNote =
                "Corpus canonical-refusal-and-correction scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile)"
              InitialState = fun () -> worldOfSpec canonicalRefusalAndCorrectionSpec
@@ -709,7 +754,25 @@ module Corpus =
              InitialStateNote = "Corpus order-queue-stacking-and-cancellation scenario (12 x 3, seed 20260904, 1 friendly)"
              InitialState = fun () -> worldOfSpec orderQueueSpec
              TickCount = 9L
-             Commands = Some orderQueueCommands } |]
+             Commands = Some orderQueueCommands }
+           { Name = "casualties-succession-and-squad-failure"
+             Description =
+               "Two friendly-hostile pairs, no orders (the open-engagement precedent -- combat alone drives the "
+               + "trace): friendly 0 (0,0) vs hostile 2 (0,3), friendly 1 (5,0) vs hostile 3 (5,3), each pair a "
+               + "Chebyshev distance of 3 apart (within weapon range) and paired by Combat.chooseTarget's nearest- "
+               + "candidate rule from tick 1 (backlog B-031). Wounds accumulate over repeated hits (Casualty.wound, "
+               + "no cover on this open terrain); friendly 0 is Incapacitated by tick 4, and since it was the "
+               + "derived squad leader (the lowest-id living friendly -- a pure rule, no stored field, backlog "
+               + "B-031/docs/05 section 17's 'simple replacement rule'), leadership transfers to friendly 1 the "
+               + "same tick (LeadershipTransferred). Friendly 1 is Incapacitated by tick 5 too: leadership "
+               + "transfers again, to None, and SquadFailure fires the same tick -- a signal event only, it does "
+               + "not halt the run. Every Incapacitated agent's bleed-out (CasualtyConfig.BleedOutTicks = 60, no "
+               + "rescue mechanic -- Central decision 3) then counts down with nothing to stop it: all four agents "
+               + "reach Dead by tick 64, AgentDied firing for each."
+             InitialStateNote = "Corpus casualties-succession-and-squad-failure scenario (10 x 10, seed 20260904, 2 friendlies + 2 hostiles)"
+             InitialState = fun () -> worldOfSpec casualtiesSpec
+             TickCount = 65L
+             Commands = Some [||] } |]
 
     // --- entry paths and loading ----------------------------------------
 

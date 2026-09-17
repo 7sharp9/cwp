@@ -35,7 +35,9 @@ agents:
 overlays:
   undelivered order (1,4): agent 0  command 1  (communication unavailable)
   commitment (1,4): agent 0  holding
+  vitals (1,4): agent 0  alive 1000/1000
+  squad leader: agent 0
 
 events: command-accepted@(6,4); order-undelivered
 
-tick 1 | hash 0xBD8636BD405E9DF7 (format 9) | draws 0 | agents 1 | cover-edges 0 | events 2
+tick 1 | hash 0x722E68A7A85CB23B (format 10) | draws 0 | agents 1 | cover-edges 0 | events 2

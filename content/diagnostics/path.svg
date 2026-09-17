@@ -201,6 +201,7 @@
   <circle cx="8" cy="184" r="5" fill="#2b6cb0" stroke="#ffffff" stroke-width="1"/>
   <circle cx="4" cy="4" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="4" cy="180" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
+  <circle cx="8" cy="8" r="8" fill="none" stroke="#d4af37" stroke-width="2"/>
   <polyline points="24,24 40,24 56,24 72,24" fill="none" stroke="#dd6b20" stroke-width="2"/>
   <circle cx="24" cy="24" r="4" fill="#2f855a" stroke="#ffffff" stroke-width="1"/>
   <rect x="64" y="16" width="16" height="16" fill="none" stroke="#dd6b20" stroke-width="3"/>
@@ -212,7 +213,7 @@
   <rect x="208" y="48" width="16" height="16" fill="none" stroke="#dd6b20" stroke-width="3"/>
   <circle cx="24" cy="168" r="4" fill="#2f855a" stroke="#ffffff" stroke-width="1"/>
   <rect x="224" y="144" width="16" height="16" fill="none" stroke="#dd6b20" stroke-width="3"/>
-  <text x="4" y="208" font-family="monospace" font-size="11" fill="#111111">tick 0  hash 0xFD82B2211601BFD8  draws 0</text>
+  <text x="4" y="208" font-family="monospace" font-size="11" fill="#111111">tick 0  hash 0xC10A8A63F97973AF  draws 0</text>
   <text x="4" y="222" font-family="monospace" font-size="11" fill="#111111">agents 2  cover-edges 0  events 0</text>
   <text x="4" y="236" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

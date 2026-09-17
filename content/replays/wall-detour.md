@@ -16,35 +16,35 @@ See `content/replays/CORPUS.md`.
 | Command log | `wall-detour.cwreplay` |
 | Initial state | Corpus wall-detour scenario (12 x 9, seed 20260904) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0x1F5FD0A0A92FB7CA` |
-| Final hash (tick 24) | `0x963C71BAD5A35267` |
+| Initial hash (tick 0) | `0x77593FB729C860DC` |
+| Final hash (tick 24) | `0xFDCF1B143A5D36BB` |
 | Domain events | 22 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x5208BDBEFEE1B49A` |
-|    2 | `0x839350892EF8DB88` |
-|    3 | `0xC3C4CF7142C438BA` |
-|    4 | `0xFB7913F26CA5275A` |
-|    5 | `0x5D2C9F3F58CB535E` |
-|    6 | `0xE214000FACBC33F6` |
-|    7 | `0x6E1662124B07D37A` |
-|    8 | `0x6F7370D7134030B4` |
-|    9 | `0x8887C1F933A4D182` |
-|   10 | `0xF3A538A54E4B4280` |
-|   11 | `0xE384B52A9C5B833E` |
-|   12 | `0x057469DAEEE5B988` |
-|   13 | `0x2499E96AAFB8682A` |
-|   14 | `0xD10660CA4C8DF438` |
-|   15 | `0x6264C1BF7F8747DA` |
-|   16 | `0x9B35EFA95D8066A4` |
-|   17 | `0xB9B0832D2E26B53A` |
-|   18 | `0xE1D1B32CF7AF76A1` |
-|   19 | `0x611B0BBBBB5B8942` |
-|   20 | `0x6797926C01BC9453` |
-|   21 | `0x1CB8C315E051C434` |
-|   22 | `0xAFFFE62EDC45BEE5` |
-|   23 | `0xB6A893A181323A36` |
-|   24 | `0x963C71BAD5A35267` |
+|    1 | `0x17F02119C62EB04C` |
+|    2 | `0x4F9C1DF24F7C205E` |
+|    3 | `0x5ABD2F66EDBB2E04` |
+|    4 | `0x0C8978AA41471D54` |
+|    5 | `0xB83E9A49E95D28B8` |
+|    6 | `0x8821ED4580C68D60` |
+|    7 | `0xF564CDB7BF22BBB4` |
+|    8 | `0x150F5F7929CBC44A` |
+|    9 | `0x615FAF99C32F2434` |
+|   10 | `0x35D8479A44FF20F6` |
+|   11 | `0x7AFC3849E3DF9990` |
+|   12 | `0x3DA9B851C3F9B976` |
+|   13 | `0xF209F6D5F5DD9A5C` |
+|   14 | `0xF97CA78C07CA7A4E` |
+|   15 | `0xA9625A34692684D4` |
+|   16 | `0x6379D0AC5A39B93A` |
+|   17 | `0x9324142D9A7DC71C` |
+|   18 | `0x20D6940717B891E9` |
+|   19 | `0xDC532BB3591A92B4` |
+|   20 | `0x293D4A1C111D4B2F` |
+|   21 | `0x6EE8EBDA2F35FCC2` |
+|   22 | `0x97FC6826D78E5C05` |
+|   23 | `0x17C8AE9F7DAD1080` |
+|   24 | `0xFDCF1B143A5D36BB` |

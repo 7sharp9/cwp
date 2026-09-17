@@ -41,7 +41,10 @@ overlays:
   order appraisal (2,3): agent 1  accepted
   commitment (3,3): agent 0  moving to (3,7)
   commitment (2,3): agent 1  moving to (7,3)
+  vitals (3,3): agent 0  alive 1000/1000
+  vitals (2,3): agent 1  alive 1000/1000
+  squad leader: agent 0
 
 events: movement-stepped@(3,2),(3,3); movement-yielded@(2,3),(3,3)
 
-tick 3 | hash 0x76B2F2E5D1120FFA (format 9) | draws 0 | agents 2 | cover-edges 0 | events 2
+tick 3 | hash 0x2A14626D674B5AC7 (format 10) | draws 0 | agents 2 | cover-edges 0 | events 2

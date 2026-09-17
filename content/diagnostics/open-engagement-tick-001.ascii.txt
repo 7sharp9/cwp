@@ -48,7 +48,10 @@ overlays:
   stress (2,2): agent 0  50/1000
   stress (7,2): agent 1  50/1000
   hostile known contact (2,2): agent 0  confidence 1000  seen tick 1
+  vitals (2,2): agent 0  alive 650/1000
+  vitals (7,2): agent 1  alive 1000/1000
+  squad leader: agent 0
 
 events: contact-observed@(7,2); contact-observed@(2,2); shot-fired-miss; shot-fired-hit
 
-tick 1 | hash 0xDF30EF9A0EB03BDB (format 9) | draws 2 | agents 2 | cover-edges 0 | events 4
+tick 1 | hash 0xC74B517DEA7D051C (format 10) | draws 2 | agents 2 | cover-edges 0 | events 4

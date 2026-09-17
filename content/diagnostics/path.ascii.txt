@@ -44,6 +44,9 @@ agents:
 overlays:
   commitment (0,0): agent 0  holding
   commitment (0,11): agent 1  holding
+  vitals (0,0): agent 0  alive 1000/1000
+  vitals (0,11): agent 1  alive 1000/1000
+  squad leader: agent 0
   path (1,1) -> (4,1): reached, cost 3
   path (2,6) -> (9,6): reached, cost 11
   path (9,3) -> (13,3): reached, cost 8
@@ -51,4 +54,4 @@ overlays:
 
 events: none
 
-tick 0 | hash 0xFD82B2211601BFD8 (format 9) | draws 0 | agents 2 | cover-edges 0 | events 0
+tick 0 | hash 0xC10A8A63F97973AF (format 10) | draws 0 | agents 2 | cover-edges 0 | events 0

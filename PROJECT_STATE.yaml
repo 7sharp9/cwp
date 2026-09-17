@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-17 (TASK-044 accepted by Dave; B-051 done)
+  updated: 2026-09-17 (TASK-045 accepted by Dave; B-031 done; B-057 filed)
 
 active_work:
   selected_task: none
@@ -15,7 +15,80 @@ active_work:
   blockers: []
   updated: 2026-09-17
   note: >-
-    2026-09-17 (later session): TASK-044 accepted by Dave ("no new UI to
+    2026-09-17 (later session): TASK-045 accepted by Dave ("seems to work") --
+    status done. One follow-up raised, not blocking: without the developer
+    overlay (F1) toggled on, there is no player-facing visual indicator that
+    a shot was fired or that an agent is wounded/incapacitated --
+    `CommandDemoScene.DrawList()`'s `fireLines` (and the equivalent for
+    `AgentVitals`) are computed only inside the `devOverlay` branch,
+    confirmed by inspection, not assumption. Dave also floated needing
+    "better graphics, maybe another free graphics pack" -- an open question,
+    not decided: whether this needs new art assets or can reuse existing
+    primitives is unresolved. Recorded as new backlog row B-057
+    (player-facing combat and casualty visual feedback), not implemented --
+    out of TASK-045's own Forbidden scope (Sim-side only, no new client UI).
+    B-031 now done.
+    (docs/ledger/2026-09-17-TASK-045-casualties-succession-and-squad-failure.md)
+
+    Prior: 2026-09-17 (later session): TASK-045 (casualties, incapacitation,
+    leadership succession, and squad failure, backlog B-031) implemented and
+    self-verified -- status review, awaiting Dave's acceptance. Selected via
+    `AskUserQuestion` over B-030 proper, B-053, and B-054, directly after
+    Dave accepted TASK-044 and authorised continuing to the next task the
+    same session. Three central decisions confirmed with Dave via
+    `AskUserQuestion` before drafting: leader identity is a pure derived
+    rule (lowest-id living friendly, no new stored field); wound state is
+    wired into `Appraisal` in this task (stage-2 `Unable(CriticallyWounded)`,
+    stage-4 resolve penalty, a new wounded reappraisal trigger), not
+    deferred; no rescue/stabilize mechanic -- bleed-out is deterministic
+    once triggered.
+
+    Implemented 2026-09-17: `AgentState.Vitals: VitalStatus` (`Alive of
+    health | Incapacitated of bleedOutRemaining | Dead`) and
+    `AgentState.RecentlyWounded: bool`, both genuine canonical state; new
+    `Casualty.fs` leaf (the `Suppression.fs`/`Stress.fs` precedent). `combat`
+    filters shooters/targets to `Alive` only and applies wounds on a hit;
+    `stateConsequences` ticks bleed-out, diffs derived leadership, and
+    latches `SquadFailure` (a signal event only); `appraisal` gains stage-2
+    `Unable(CriticallyWounded)`, a stage-4 wound resolve penalty, and a new
+    wounded reappraisal trigger; `navigationAndMovement` skips non-`Alive`
+    agents. Four new events, two new unconditional diagnostic overlays
+    (`AgentVitals`, `SquadLeadership`), one new corpus entry
+    (`casualties-succession-and-squad-failure`) proving the full lifecycle
+    end to end. `Canonical.FormatVersion` 9 -> 10; every pre-existing corpus
+    entry, the fixture, and `envelope-full` re-pinned byte-layout-only
+    (`--regenerate` twice byte-identical, tick counts unchanged).
+
+    **Production bug found and fixed during implementation**:
+    `stateConsequences`'s leadership/squad-failure diff originally compared
+    against a snapshot taken at its own phase entry -- already mutated by
+    Combat, which runs earlier the same tick -- so it could only ever catch
+    its own bleed-out transitions, never one Combat itself just caused,
+    silently dropping the event the tick it should have fired. Fixed by
+    adding `StepState.InitialLeader`/`.InitialFriendlyAlive`, the true
+    pre-tick baseline computed once before any phase runs; covered by a new
+    `SimulationTests` fact that drives real combat rather than injecting
+    state (injection cannot exercise this path). Re-pinning after the fix
+    changed four pre-existing corpus entries' exact event counts a second
+    time (`perception-contact`/`exposed-approach`/`suppress-relieves-exposure`/
+    `canonical-refusal-and-correction`; tick counts unchanged, documented in
+    each entry's `Corpus.fs` `Description`). A `SimulationTests`
+    infinite-loop test hang was also found and fixed (test-only -- a
+    perception test's world put the walking friendly within weapon range of
+    a hostile, and the new "an Incapacitated agent never moves" invariant
+    correctly stopped it forever mid-loop).
+
+    Godot's `RenderShared.fs` needed a `CriticallyWounded` match arm to keep
+    compiling (Sim-side task, no new scene/input); both scenes' `--selfcheck`
+    hashes re-pinned (`SnapshotDemo` `0x44B29B73E8F107EF`, `CommandDemo`
+    `0xF1027A36B36BC3DF`) and reconfirmed `MATCH` through the real Godot
+    4.7.2 editor headless. `dotnet build` all `.slnx` (main, Godot
+    Debug/Release, Mibo) 0/0; `dotnet test` `319/319`; `dotnet list
+    CommandoWar.Sim` package `FSharp.Core` only.
+    (tasks/TASK-045-CASUALTIES-SUCCESSION-AND-SQUAD-FAILURE.md;
+    docs/ledger/2026-09-17-TASK-045-casualties-succession-and-squad-failure.md)
+
+    Prior: 2026-09-17 (later session): TASK-044 accepted by Dave ("no new UI to
     review, just accept") -- status done. Sim-side only (Forbidden scope
     excluded client-facing queue/cancel UI), so there was nothing
     player-facing to check live; the self-verification evidence stood as the

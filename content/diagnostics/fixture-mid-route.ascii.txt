@@ -94,7 +94,14 @@ overlays:
   commitment (20,8): agent 3  moving to (20,14)
   commitment (0,4): agent 4  holding
   commitment (0,5): agent 5  holding
+  vitals (0,0): agent 0  alive 1000/1000
+  vitals (0,1): agent 1  alive 1000/1000
+  vitals (0,2): agent 2  alive 1000/1000
+  vitals (20,8): agent 3  alive 1000/1000
+  vitals (0,4): agent 4  alive 1000/1000
+  vitals (0,5): agent 5  alive 1000/1000
+  squad leader: agent 0
 
 events: movement-stepped@(20,7),(20,8)
 
-tick 25 | hash 0xE61EFC106A90BEA2 (format 9) | draws 0 | agents 6 | cover-edges 0 | events 1
+tick 25 | hash 0x14B7750A1E6A3F57 (format 10) | draws 0 | agents 6 | cover-edges 0 | events 1

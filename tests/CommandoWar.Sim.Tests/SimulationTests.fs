@@ -861,8 +861,14 @@ let ``two friendlies, only one with line of sight to a hostile, share the contac
 
 [<Fact>]
 let ``a contact seen then lost drops a confidence band after StaleAfter and expires with ContactExpired after ExpireAfter`` () =
-    let b: GridBounds = { Width = 40; Height = 6 }
-    let w0 = perceptionWorld b [ 0, { X = 2; Y = 1 } ] [ 1, { X = 6; Y = 3 } ] (Terrain.empty b)
+    // Height 11 / hostile at (6,9): a Y-offset of 8 keeps the Chebyshev
+    // distance to the hostile at a constant 8 while the friendly's X stays
+    // within 8 of the hostile's — above CombatConfig.WeaponRange (7), so
+    // TASK-045's real combat consequences never trigger and do not stall the
+    // friendly's walk, but within PerceptionConfig.SightRange (10), so
+    // perception (this test's actual subject) is unaffected.
+    let b: GridBounds = { Width = 40; Height = 11 }
+    let w0 = perceptionWorld b [ 0, { X = 2; Y = 1 } ] [ 1, { X = 6; Y = 9 } ] (Terrain.empty b)
 
     // The eastward order runs the friendly past the observed hostile, which
     // the Appraisal phase (TASK-028) treats as exposure. This test is about
@@ -885,8 +891,17 @@ let ``a contact seen then lost drops a confidence band after StaleAfter and expi
 
     Assert.True(seenThisTick st, "the hostile should be seen on the command tick")
 
-    while seenThisTick st do
+    // Safety cap (the "an agent routes around an impassable wall" precedent,
+    // line 211 above): the geometry keeps agent 0 out of combat range
+    // entirely, but this still fails loudly instead of hanging if that
+    // reasoning is ever wrong.
+    let mutable ticks = 0
+
+    while seenThisTick st && ticks < 40 do
         st <- (stepIdle st).State
+        ticks <- ticks + 1
+
+    Assert.True(ticks < 40, "the friendly never walked out of the hostile's sight range")
 
     let lastSeen = (contactOf (agent 1) st).Value.LastSeenTick
     Assert.True(lastSeen >= 1L)
@@ -915,7 +930,7 @@ let ``a contact seen then lost drops a confidence band after StaleAfter and expi
 
         st <- r.State
 
-    Assert.Equal(Some(lastSeen + int64 PerceptionConfig.ExpireAfter, { X = 6; Y = 3 }), expired)
+    Assert.Equal(Some(lastSeen + int64 PerceptionConfig.ExpireAfter, { X = 6; Y = 9 }), expired)
     Assert.Equal(None, contactOf (agent 1) st)
 
 // --- Communication constraints and order delivery (TASK-027) ----------
@@ -1570,21 +1585,30 @@ let ``Stress.decay drops by DecayPerTick, floored at 0`` () =
 [<Fact>]
 let ``resolveThreshold drops by exactly SuppressionBandPenalty when suppressed, all else equal`` () =
     let o = testOrder Standard Routine
-    let unsuppressed = Appraisal.resolveThreshold 3 0 false o
-    let suppressed = Appraisal.resolveThreshold 3 0 true o
+    let full = Alive Agent.MaxHealth
+    let unsuppressed = Appraisal.resolveThreshold 3 0 false full o
+    let suppressed = Appraisal.resolveThreshold 3 0 true full o
     Assert.Equal(AppraisalConfig.SuppressionBandPenalty, unsuppressed - suppressed)
 
 [<Fact>]
 let ``resolveThreshold drops by MaxStress / StressDivisor at full stress`` () =
     let o = testOrder Standard Routine
-    let noStress = Appraisal.resolveThreshold 3 0 false o
-    let maxStress = Appraisal.resolveThreshold 3 StressConfig.MaxStress false o
+    let full = Alive Agent.MaxHealth
+    let noStress = Appraisal.resolveThreshold 3 0 false full o
+    let maxStress = Appraisal.resolveThreshold 3 StressConfig.MaxStress false full o
     Assert.Equal(StressConfig.MaxStress / AppraisalConfig.StressDivisor, noStress - maxStress)
 
 [<Fact>]
 let ``resolveThreshold is floored at 0 even at minimum discipline, cautious risk, full stress, and suppressed`` () =
     let o = testOrder Cautious Routine
-    Assert.Equal(0, Appraisal.resolveThreshold 0 StressConfig.MaxStress true o)
+    Assert.Equal(0, Appraisal.resolveThreshold 0 StressConfig.MaxStress true (Alive Agent.MaxHealth) o)
+
+[<Fact>]
+let ``resolveThreshold drops by exactly MaxHealth / WoundDivisor at near-death, all else equal`` () =
+    let o = testOrder Standard Routine
+    let full = Appraisal.resolveThreshold 3 0 false (Alive Agent.MaxHealth) o
+    let nearDeath = Appraisal.resolveThreshold 3 0 false (Alive 1) o
+    Assert.Equal((Agent.MaxHealth - 1) / AppraisalConfig.WoundDivisor, full - nearDeath)
 
 [<Fact>]
 let ``an agent with a visible contact gains net Stress this tick; one with none stays at 0`` () =
@@ -1923,3 +1947,184 @@ let ``cancelling the active order with an empty queue clears its Destination too
     // silently survive the cancel and keep driving movement.
     let tick4 = stepIdle tick3.State
     Assert.Equal({ X = 2; Y = 0 }, (agentOf a tick4.State).Position)
+
+// --- Casualties, incapacitation, leadership succession, and squad failure
+// (TASK-045, backlog B-031) --------------------------------------------
+
+[<Fact>]
+let ``Casualty.wound reduces health by WoundPerHit and transitions to Incapacitated at or below zero`` () =
+    Assert.Equal(Alive(Agent.MaxHealth - CasualtyConfig.WoundPerHit), Casualty.wound (Alive Agent.MaxHealth))
+    Assert.Equal(Incapacitated CasualtyConfig.BleedOutTicks, Casualty.wound (Alive CasualtyConfig.WoundPerHit))
+    Assert.Equal(Incapacitated CasualtyConfig.BleedOutTicks, Casualty.wound (Alive 1))
+    // Never actually reached in practice (Combat only ever targets an Alive
+    // agent), but the leaf itself stays total rather than crashing.
+    Assert.Equal(Incapacitated 5, Casualty.wound (Incapacitated 5))
+    Assert.Equal(Dead, Casualty.wound Dead)
+
+[<Fact>]
+let ``Casualty.tickBleedOut counts down to Dead at exactly one tick remaining, and is a no-op on Alive or Dead`` () =
+    Assert.Equal(Incapacitated 2, Casualty.tickBleedOut (Incapacitated 3))
+    Assert.Equal(Dead, Casualty.tickBleedOut (Incapacitated 1))
+    Assert.Equal(Alive 500, Casualty.tickBleedOut (Alive 500))
+    Assert.Equal(Dead, Casualty.tickBleedOut Dead)
+
+[<Fact>]
+let ``Casualty.currentLeader is the lowest-id Alive friendly, None once every friendly is down, and ignores hostiles`` () =
+    let friendly i vitals = { Agent.create (agent i) Friendly { X = i; Y = 0 } with Vitals = vitals }
+    let hostileAt i = Agent.create (agent i) Hostile { X = i; Y = 1 }
+
+    Assert.Equal(
+        Some(agent 1),
+        Casualty.currentLeader [| friendly 3 (Alive 1000); friendly 1 (Alive 1000); hostileAt 0 |]
+    )
+    Assert.Equal(Some(agent 3), Casualty.currentLeader [| friendly 3 (Alive 1000); friendly 1 (Incapacitated 10) |])
+    Assert.Equal(None, Casualty.currentLeader [| friendly 1 (Incapacitated 10); friendly 3 Dead |])
+
+let private worldOf (agents: AgentState list) : WorldState =
+    match World.create { Width = 10; Height = 10 } 1UL agents with
+    | Ok w -> w
+    | Error e -> failwith $"unexpected {e}"
+
+[<Fact>]
+let ``an Incapacitated or Dead agent never fires and is never targeted by an in-range hostile`` () =
+    for downVitals in [ Incapacitated 10; Dead ] do
+        let b: GridBounds = { Width = 10; Height = 10 }
+        let w = perceptionWorld b [ 0, { X = 2; Y = 2 } ] [ 1, { X = 4; Y = 2 } ] (Terrain.empty b)
+
+        let downed =
+            { w with
+                Agents = w.Agents |> Array.map (fun a -> if a.Id = agent 0 then { a with Vitals = downVitals } else a) }
+
+        let r = stepIdle downed
+        Assert.Empty(shotsFiredIn r)
+        Assert.Equal(0UL, r.State.Random.Draws)
+
+[<Fact>]
+let ``an Incapacitated agent with a live Destination never moves, and its Destination is left inert, not cleared`` () =
+    let a = agent 0 // starts at (0,0) in world ()
+    let w = world ()
+
+    let downed =
+        { w with
+            Agents =
+                w.Agents
+                |> Array.map (fun ag ->
+                    if ag.Id = a then
+                        { ag with Vitals = Incapacitated 10; Destination = Some { X = 5; Y = 0 } }
+                    else
+                        ag) }
+
+    let r = stepIdle downed
+    Assert.Equal({ X = 0; Y = 0 }, (agentOf a r.State).Position)
+    Assert.Equal(Some { X = 5; Y = 0 }, (agentOf a r.State).Destination)
+    Assert.DoesNotContain(MovementCompleted(a, { X = 5; Y = 0 }), bodies r)
+
+[<Fact>]
+let ``an order addressed to a Dead or Incapacitated agent appraises Unable CriticallyWounded, writing no Destination`` () =
+    for downVitals in [ Incapacitated 10; Dead ] do
+        let w = appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] []
+
+        let downed =
+            { w with
+                Agents = w.Agents |> Array.map (fun a -> if a.Id = agent 0 then { a with Vitals = downVitals } else a) }
+
+        let r = stepWith [| cmd 1 (agent 0) { X = 6; Y = 5 } |] downed
+        Assert.Equal(Some(Unable(CriticallyWounded, [||])), dispositionOf (agent 0) r)
+        Assert.Equal(None, (agentOf (agent 0) r.State).Destination)
+
+[<Fact>]
+let ``a wound taken this tick triggers a fresh appraisal on the very next tick, and the flag is spent`` () =
+    let mutable st = appraisalWorld [ 0, { X = 1; Y = 5 }, 3 ] []
+    let tick1 = stepWith [| cmd 1 (agent 0) { X = 10; Y = 5 } |] st
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) tick1)
+    st <- tick1.State
+
+    // Baseline: an ordinary idle tick, with none of the other reappraisal
+    // triggers firing, does NOT reappraise (the existing "no re-appraisal on
+    // a later idle tick" precedent) -- confirms the fresh appraisal below is
+    // caused by RecentlyWounded, not by something incidental to idling.
+    Assert.Empty(appraisedIn (stepIdle st))
+
+    // Simulate a wound Combat took this tick (RecentlyWounded latched true,
+    // exactly as Simulation.combat sets it on a qualifying hit) without
+    // otherwise touching anything else appraisal-relevant.
+    let wounded =
+        { st with
+            Agents = st.Agents |> Array.map (fun a -> if a.Id = agent 0 then { a with RecentlyWounded = true } else a) }
+
+    let r = stepIdle wounded
+    Assert.Equal<(AgentId * CommandId * OrderDisposition)[]>([| (agent 0, CommandId.ofInt 1, Accepted) |], appraisedIn r)
+    Assert.False((agentOf (agent 0) r.State).RecentlyWounded)
+
+[<Fact>]
+let ``leadership transfers the same tick Combat incapacitates the current leader, not the tick after`` () =
+    // Regression proof for the TASK-045 stateConsequences bug: diffing
+    // leadership against a snapshot taken at THIS phase's own entry (after
+    // Combat, which runs earlier, has already mutated s.Agents) can only ever
+    // see stateConsequences's own bleed-out-to-Dead transitions, never one
+    // Combat itself just caused. stateConsequences instead diffs against
+    // StepState.InitialLeader, the true start-of-tick snapshot taken before
+    // any phase runs.
+    let leader = { Agent.create (agent 0) Friendly { X = 2; Y = 2 } with Vitals = Alive 1 }
+    let wingman = Agent.create (agent 1) Friendly { X = 0; Y = 0 }
+    let hostile = Agent.create (agent 2) Hostile { X = 4; Y = 2 }
+    let mutable st = worldOf [ leader; wingman; hostile ]
+    let mutable transferred = false
+    let mutable ticks = 0
+
+    while not transferred && ticks < 40 do
+        let r = stepIdle st
+
+        if Array.contains (AgentIncapacitated(agent 0, { X = 2; Y = 2 })) (bodies r) then
+            Assert.Contains(LeadershipTransferred(Some(agent 0), Some(agent 1)), bodies r)
+            transferred <- true
+
+        st <- r.State
+        ticks <- ticks + 1
+
+    Assert.True(transferred, "agent 0 (Alive 1) was never incapacitated within 40 ticks of hostile fire")
+
+[<Fact>]
+let ``SquadFailure fires exactly once, the tick every friendly becomes non-Alive, and does not halt stepping`` () =
+    // s.InitialFriendlyAlive is the TRUE start-of-tick baseline, so the only
+    // way to genuinely exercise "the tick it first becomes true" is to drive
+    // both friendlies down through real Combat, the leadership test's own
+    // precedent -- directly injecting a pre-Incapacitated friendly would
+    // already read as non-Alive before the tick starts and never trip the
+    // latch at all.
+    // Heavy directional cover on the hostile's own West edge (facing both
+    // friendlies) keeps their return fire near CombatConfig.MinHitChance
+    // without touching the hostile's own, uncovered shots at them -- so the
+    // one-hit-down friendlies (Alive 1) reliably go down well before the
+    // hostile's 1000 health does, keeping this bounded and not a coin flip.
+    let hostilePos = { X = 5; Y = 2 }
+    let a0 = { Agent.create (agent 0) Friendly { X = 2; Y = 2 } with Vitals = Alive 1 }
+    let a1 = { Agent.create (agent 1) Friendly { X = 3; Y = 2 } with Vitals = Alive 1 }
+    let hostile = Agent.create (agent 2) Hostile hostilePos
+    let cover: AuthoredCover[] = [| { Cell = hostilePos; Direction = West; Level = 3 } |]
+
+    let mutable st =
+        { worldOf [ a0; a1; hostile ] with Terrain = Terrain.build { Width = 10; Height = 10 } [||] cover }
+
+    let mutable failures = 0
+    let mutable ticks = 0
+
+    let bothDown (w: WorldState) =
+        not (Casualty.isAlive (agentOf (agent 0) w).Vitals) && not (Casualty.isAlive (agentOf (agent 1) w).Vitals)
+
+    while not (bothDown st) && ticks < 200 do
+        let r = stepIdle st
+
+        if Array.contains SquadFailure (bodies r) then
+            failures <- failures + 1
+            Assert.True(bothDown r.State, "SquadFailure fired before every friendly was actually non-Alive")
+
+        st <- r.State
+        ticks <- ticks + 1
+
+    Assert.True(bothDown st, "both friendlies were never brought down within 200 ticks")
+    Assert.Equal(1, failures)
+
+    // A signal event only: stepping continues normally afterwards.
+    let after = stepIdle st
+    Assert.DoesNotContain(SquadFailure, bodies after)

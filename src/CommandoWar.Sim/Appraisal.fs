@@ -151,6 +151,18 @@ module AppraisalConfig =
     [<Literal>]
     let SuppressionBandPenalty = 30
 
+    /// Divides an `Alive` agent's lost health (`Agent.MaxHealth - health`)
+    /// into a continuous resolve penalty (TASK-045, backlog B-031) — the
+    /// `StressDivisor` precedent exactly: up to `Agent.MaxHealth /
+    /// WoundDivisor = 40` at near-death, comparable in scale to
+    /// `RiskAggressive` / `UrgencyImmediate` / `StressDivisor`'s own ceiling,
+    /// never dominant on its own. Reads `Agent.MaxHealth` (`Domain.fs`)
+    /// directly rather than `CasualtyConfig.MaxHealth` (`Casualty.fs`) — the
+    /// same module-ordering reason `Agent.MaxHealth` exists at all (this
+    /// file compiles before `Casualty.fs`).
+    [<Literal>]
+    let WoundDivisor = 25
+
 [<RequireQualifiedAccess>]
 module Appraisal =
 
@@ -241,11 +253,23 @@ module Appraisal =
     /// `stress` and `suppressed` (TASK-033, backlog B-021) are the agent's
     /// `AgentState.Stress` and `AgentState.SuppressionBand` at the top of the
     /// tick — a continuous drag and a discrete banded penalty respectively.
+    /// `vitals` (TASK-045, backlog B-031) adds a third continuous drag while
+    /// `Alive` but wounded — `(Agent.MaxHealth - health) /
+    /// AppraisalConfig.WoundDivisor`, the `StressDivisor` precedent exactly;
+    /// `0` while at full health, and this function is never called with a
+    /// non-`Alive` `vitals` in practice (`appraise` below short-circuits to
+    /// `Unable(CriticallyWounded)` at stage 2 before stage 4 is reached).
     /// Floored at 0 so a completely unexposed route (`exposure = 0`) is
-    /// always `Accepted` regardless of how stressed or suppressed the agent
-    /// is: both terms only ever make an already-exposed route *more* likely
-    /// to be refused, never refuse a safe one outright.
-    let resolveThreshold (discipline: int) (stress: int) (suppressed: bool) (order: ReceivedOrder) : int =
+    /// always `Accepted` regardless of how stressed, suppressed, or wounded
+    /// the agent is: every term only ever makes an already-exposed route
+    /// *more* likely to be refused, never refuses a safe one outright.
+    let resolveThreshold
+        (discipline: int)
+        (stress: int)
+        (suppressed: bool)
+        (vitals: VitalStatus)
+        (order: ReceivedOrder)
+        : int =
         let riskMod =
             match order.RiskTolerance with
             | Cautious -> AppraisalConfig.RiskCautious
@@ -263,12 +287,19 @@ module Appraisal =
             else
                 0
 
+        let woundMod =
+            match vitals with
+            | Alive health -> (Agent.MaxHealth - health) / AppraisalConfig.WoundDivisor
+            | Incapacitated _
+            | Dead -> 0
+
         AppraisalConfig.BaseResolve
         + AppraisalConfig.DisciplineResolveWeight * discipline
         + riskMod
         + urgencyMod
         - stress / AppraisalConfig.StressDivisor
         - suppressionMod
+        - woundMod
         |> max 0
 
     /// The whole staged pipeline for one order. Returns the outcome and the
@@ -279,6 +310,13 @@ module Appraisal =
     /// / `exposedCells` for a `MoveTo` order's stage 3; a `Suppress` order
     /// (Decision C) has no route to expose — stages 3/4 are trivial and it
     /// appraises purely on stage 2 (is the named contact known at all).
+    /// `vitals` (TASK-045, backlog B-031) is checked first, ahead of either
+    /// intent's own stage-2 logic: a non-`Alive` agent is `Unable
+    /// (CriticallyWounded)` regardless of what the order asks — `docs/05`
+    /// section 4 stage 2's "is the agent alive, conscious, and mobile?",
+    /// section 16's own "a critically wounded agent reports unable rather
+    /// than refused" example — so stages 3/4 (and `resolveThreshold`'s own
+    /// wound term) are only ever reached by an `Alive` agent.
     let appraise
         (terrain: Terrain)
         (threats: Contact[])
@@ -286,30 +324,35 @@ module Appraisal =
         (discipline: int)
         (stress: int)
         (suppressed: bool)
+        (vitals: VitalStatus)
         (order: ReceivedOrder)
         (fromCell: Cell)
         (budget: int)
         : OrderDisposition * Cell[] =
-        match order.Intent with
-        | MoveTo target ->
-            if fromCell = target then
-                Accepted, [||]
-            else
-                match Pathfinding.findWithin terrain fromCell target budget with
-                | Found(cells, _) when cells.Length >= 2 ->
-                    let exposure, topThreat = routeExposure terrain threats suppressedThreats cells
-                    let exposed = exposedCells terrain threats suppressedThreats cells
+        match vitals with
+        | Incapacitated _
+        | Dead -> Unable(CriticallyWounded, [||]), [||]
+        | Alive _ ->
+            match order.Intent with
+            | MoveTo target ->
+                if fromCell = target then
+                    Accepted, [||]
+                else
+                    match Pathfinding.findWithin terrain fromCell target budget with
+                    | Found(cells, _) when cells.Length >= 2 ->
+                        let exposure, topThreat = routeExposure terrain threats suppressedThreats cells
+                        let exposed = exposedCells terrain threats suppressedThreats cells
 
-                    if exposure <= resolveThreshold discipline stress suppressed order then
-                        Accepted, exposed
-                    else
-                        Refused(RouteTooExposed topThreat, [||]), exposed
-                | Found _
-                | NoPath
-                | BudgetExhausted _
-                | InvalidEndpoint _ -> Unable(NoKnownRoute, [||]), [||]
-        | Suppress target ->
-            if threats |> Array.exists (fun t -> t.Contact = target) then
-                Accepted, [||]
-            else
-                Unable(TargetNotKnown, [||]), [||]
+                        if exposure <= resolveThreshold discipline stress suppressed vitals order then
+                            Accepted, exposed
+                        else
+                            Refused(RouteTooExposed topThreat, [||]), exposed
+                    | Found _
+                    | NoPath
+                    | BudgetExhausted _
+                    | InvalidEndpoint _ -> Unable(NoKnownRoute, [||]), [||]
+            | Suppress target ->
+                if threats |> Array.exists (fun t -> t.Contact = target) then
+                    Accepted, [||]
+                else
+                    Unable(TargetNotKnown, [||]), [||]

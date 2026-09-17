@@ -134,6 +134,35 @@ type EventBody =
     /// `AgentState.OrderQueue` alone, leaving the active order and every
     /// other queued entry untouched.
     | OrderCancelled of command: CommandId * agent: AgentId * wasActive: bool
+    /// `agent`, at `at`, was reduced to zero health by a qualifying hit this
+    /// tick (TASK-045, backlog B-031; `docs/04` section 12.8/12.9) — moved
+    /// from `Alive` straight to `Incapacitated`, never to `Dead` directly.
+    /// Emitted by the Combat phase, once, the tick this transition happens
+    /// (not every tick the agent stays down).
+    | AgentIncapacitated of agent: AgentId * at: Cell
+    /// `agent`, at `at`, finished bleeding out this tick (TASK-045, backlog
+    /// B-031) — `Incapacitated`'s countdown reached zero with no rescue.
+    /// Emitted by the State-consequences phase, once, the tick `Dead` is
+    /// reached.
+    | AgentDied of agent: AgentId * at: Cell
+    /// Squad leadership changed this tick (TASK-045, backlog B-031; `docs/05`
+    /// section 17's "a simple replacement rule"): the lowest-`AgentId`
+    /// `Alive` `Friendly` agent (`Casualty.currentLeader`) is no longer
+    /// `previous` but `current`. Emitted by the State-consequences phase
+    /// only when the derived value actually changes this tick — the
+    /// `CommitmentEstablished` precedent for reporting a transition in
+    /// derived-not-stored state. `None` on either side covers "no leader
+    /// left" (every friendly already down).
+    | LeadershipTransferred of previous: AgentId option * current: AgentId option
+    /// Every `Friendly` agent became non-`Alive` this tick (TASK-045,
+    /// backlog B-031; `docs/04` section 12.9's "update command succession").
+    /// Emitted by the State-consequences phase exactly once, the tick this
+    /// first becomes true (health never regenerates, so it cannot become
+    /// false again) — a **signal event only**: it does not itself halt
+    /// `Simulation.step`, reject further commands, or write any new
+    /// `WorldState` field. Consuming it into a mission-failure outcome is
+    /// B-032's job.
+    | SquadFailure
 
 /// An immutable domain event tagged with the tick it occurred on. Within a
 /// single step, events are emitted in a stable order:
@@ -154,16 +183,25 @@ type EventBody =
 ///      requires `Order = Some`; from `commitmentAndLocalAction` — TASK-030;
 ///      runs after Appraisal, before movement);
 ///   6. movement outcomes, ascending agent id;
-///   7. combat outcomes, ascending shooter agent id (`ShotFired`, from the
-///      Combat phase — TASK-031; runs after movement, resolving against
-///      post-movement positions).
+///   7. combat outcomes, ascending shooter agent id (`ShotFired` then, for a
+///      qualifying hit that reaches zero health, `AgentIncapacitated` for
+///      the same shot — TASK-031/TASK-045; from the Combat phase, runs
+///      after movement, resolving against post-movement positions);
+///   8. state-consequences outcomes (TASK-045, backlog B-031; from the
+///      State-consequences phase, runs after Combat): every `AgentDied`
+///      (an `Incapacitated` agent's bleed-out reaching zero), ascending
+///      agent id, then at most one `LeadershipTransferred` (a squad-wide
+///      fact, not per-agent — no ordering to pick), then at most one
+///      `SquadFailure`.
 /// The order follows `Phases.order` (Command intake, Communication,
 /// Perception, Tactical knowledge, Appraisal, Commitment and local action,
-/// Navigation and movement, Combat), so a contact is observed at its
-/// start-of-tick position, an order is appraised against this tick's
-/// tactical picture, a commitment begins or ends the same tick its order is
-/// appraised, a delivered-and-accepted order takes effect the same tick, and
-/// a shot is resolved against this tick's post-movement positions.
+/// Navigation and movement, Combat, State consequences), so a contact is
+/// observed at its start-of-tick position, an order is appraised against
+/// this tick's tactical picture, a commitment begins or ends the same tick
+/// its order is appraised, a delivered-and-accepted order takes effect the
+/// same tick, a shot is resolved against this tick's post-movement
+/// positions, and casualty/leadership/squad-failure consequences are
+/// resolved last, after that shot's own `Suppression` gain and decay.
 type DomainEvent =
     { Tick: int64
       Body: EventBody }

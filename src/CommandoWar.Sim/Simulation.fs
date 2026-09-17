@@ -194,7 +194,28 @@ module Simulation =
           mutable Random: RandomState
           mutable EventsRev: DomainEvent list
           mutable Snapshot: RenderSnapshot
-          mutable TraceRev: Phase list }
+          mutable TraceRev: Phase list
+          /// The derived squad leader (TASK-045, backlog B-031;
+          /// `Casualty.currentLeader`) as it stood at the very START of this
+          /// tick, before ANY phase ran — captured once, immutable for the
+          /// rest of the tick. `stateConsequences` needs this, not its own
+          /// `s.Agents` read at its own entry: Combat (phase 8) runs
+          /// *before* StateConsequences (phase 9) and already applies a
+          /// wound that can incapacitate the leader, so by the time
+          /// StateConsequences starts, `s.Agents` already reflects that
+          /// transition — comparing "before StateConsequences" against
+          /// "after StateConsequences" would silently miss any leadership
+          /// change Combat itself caused, only ever catching one
+          /// StateConsequences's own bleed-out-to-Dead transitions. This
+          /// field is the fix: the TRUE start-of-tick baseline, spanning
+          /// every phase's mutations, not just StateConsequences's own.
+          InitialLeader: AgentId option
+          /// Whether at least one Friendly agent was `Alive` at the very
+          /// START of this tick (TASK-045, backlog B-031) — the identical
+          /// "must span every phase, not just StateConsequences's own"
+          /// reasoning as `InitialLeader` above, for the `SquadFailure`
+          /// latch.
+          InitialFriendlyAlive: bool }
 
     let private emit (body: EventBody) (s: StepState) =
         s.EventsRev <- { Tick = s.Tick; Body = body } :: s.EventsRev
@@ -715,7 +736,7 @@ module Simulation =
             let newBand = newBands.[i]
 
             match a.Order with
-            | None -> agents.[i] <- { a with SuppressionBand = newBand }
+            | None -> agents.[i] <- { a with SuppressionBand = newBand; RecentlyWounded = false }
             | Some o ->
                 // A fulfilled MoveTo order (Accepted, arrived, Destination
                 // already cleared to None) must NOT be reset here:
@@ -733,10 +754,20 @@ module Simulation =
                     | MoveTo target -> a.Disposition = Some Accepted && a.Destination = None && a.Position = target
                     | Suppress _ -> false
 
+                // TASK-045 (backlog B-031): "the agent is wounded" (docs/05
+                // section 14) — a.RecentlyWounded is the SuppressionBand-latch
+                // precedent's own trick applied to a one-shot signal instead of
+                // a hysteresis band (see AgentState.RecentlyWounded's own doc
+                // comment for why a persisted flag is needed at all: Combat
+                // runs after Appraisal, so a wound taken this tick cannot be
+                // seen by this tick's Appraisal the way knowledge-change can).
                 let triggered =
                     a.Disposition.IsSome
                     && not fulfilled
-                    && (knowledgeChanged || newBand <> a.SuppressionBand || threatSuppressionChanged)
+                    && (knowledgeChanged
+                        || newBand <> a.SuppressionBand
+                        || threatSuppressionChanged
+                        || a.RecentlyWounded)
 
                 match (if triggered then None else a.Disposition) with
                 | Some _ ->
@@ -745,8 +776,11 @@ module Simulation =
                     // Destination = None, Position = target) — its housekeeping
                     // clear moved to commitmentAndLocalAction (TASK-030, backlog
                     // B-018): a commitment ending is a 12.6 concern, not a 12.5
-                    // one.
-                    agents.[i] <- { a with SuppressionBand = newBand }
+                    // one. RecentlyWounded is still consumed here even though it
+                    // did not (or could not, for a fulfilled order) trigger a
+                    // fresh appraisal — "reappraise only on material triggers"
+                    // governs the OUTCOME, not whether the one-shot flag is spent.
+                    agents.[i] <- { a with SuppressionBand = newBand; RecentlyWounded = false }
                 | None ->
                     let disposition, _ =
                         Appraisal.appraise
@@ -756,6 +790,7 @@ module Simulation =
                             a.Discipline
                             a.Stress
                             newBand
+                            a.Vitals
                             o
                             a.Position
                             budget
@@ -780,7 +815,8 @@ module Simulation =
                         { a with
                             Disposition = Some disposition
                             Destination = destination
-                            SuppressionBand = newBand }
+                            SuppressionBand = newBand
+                            RecentlyWounded = false }
 
                     emit (OrderAppraised(a.Id, o.Command, disposition)) s
 
@@ -1039,39 +1075,48 @@ module Simulation =
         let intents =
             agents
             |> Array.map (fun a ->
-                match a.Destination with
-                | None -> Idle
-                | Some dest when a.Position = dest -> Arrived a.Position
-                | Some dest ->
-                    let cached =
-                        match a.Route with
-                        | Some r when
-                            r.Cursor >= 0
-                            && r.Cursor + 1 < r.Cells.Length
-                            && r.Cells.[r.Cursor] = a.Position
-                            && r.Cells.[r.Cells.Length - 1] = dest
-                            && Terrain.passable terrain r.Cells.[r.Cursor + 1]
-                            ->
-                            Some r
-                        | _ -> None
+                // TASK-045 (backlog B-031): a non-Alive agent never starts a
+                // new action (docs/04 section 20) — Idle unconditionally,
+                // regardless of a stale Destination it can no longer act on
+                // (left as-is, not cleared: nothing reads it while non-Alive,
+                // the "an undelivered order does not clear a Destination it
+                // didn't produce" idiom).
+                if not (Casualty.isAlive a.Vitals) then
+                    Idle
+                else
+                    match a.Destination with
+                    | None -> Idle
+                    | Some dest when a.Position = dest -> Arrived a.Position
+                    | Some dest ->
+                        let cached =
+                            match a.Route with
+                            | Some r when
+                                r.Cursor >= 0
+                                && r.Cursor + 1 < r.Cells.Length
+                                && r.Cells.[r.Cursor] = a.Position
+                                && r.Cells.[r.Cells.Length - 1] = dest
+                                && Terrain.passable terrain r.Cells.[r.Cursor + 1]
+                                ->
+                                Some r
+                            | _ -> None
 
-                    let route =
-                        match cached with
-                        | Some r -> Some r
-                        | None ->
-                            match Pathfinding.findWithin terrain a.Position dest budget with
-                            | Found(cells, cost) when cells.Length >= 2 ->
-                                Some { Cells = cells; Cursor = 0; Cost = cost }
-                            | Found _
-                            | NoPath
-                            | BudgetExhausted _
-                            | InvalidEndpoint _ -> None
+                        let route =
+                            match cached with
+                            | Some r -> Some r
+                            | None ->
+                                match Pathfinding.findWithin terrain a.Position dest budget with
+                                | Found(cells, cost) when cells.Length >= 2 ->
+                                    Some { Cells = cells; Cursor = 0; Cost = cost }
+                                | Found _
+                                | NoPath
+                                | BudgetExhausted _
+                                | InvalidEndpoint _ -> None
 
-                    match route with
-                    | None -> Blocked(a.Position, dest)
-                    | Some r ->
-                        let startProgress = if cached.IsSome then a.Progress else 0
-                        Advancing(r, r.Cells.[r.Cursor + 1], dest, startProgress))
+                        match route with
+                        | None -> Blocked(a.Position, dest)
+                        | Some r ->
+                            let startProgress = if cached.IsSome then a.Progress else 0
+                            Advancing(r, r.Cells.[r.Cursor + 1], dest, startProgress))
 
         // An `Advancing` agent whose progress reaches the next cell's
         // threshold this tick — the only agents that can contend for a cell,
@@ -1272,6 +1317,22 @@ module Simulation =
     //      Suppression (TASK-032, backlog B-020) via Suppression.gain — no
     //      wound, death, or other consequence yet (B-031, deliberately out of
     //      scope).
+    //
+    // TASK-045 (backlog B-031) adds wounds: a non-Alive agent never shoots
+    // (excluded from the shooter loop entirely) and is never a valid
+    // candidate (docs/04 section 20: "dead or incapacitated agents do not
+    // start new actions" — extended here to "and are not shot at again");
+    // Combat.chooseTarget itself is unchanged, still re-verifying range/
+    // line-of-fire fresh, just over an already-Alive-filtered candidate set.
+    // On a qualifying HIT only (not a miss — a wound is physical, unlike
+    // Suppression.gain, which docs/04 section 12.8 explicitly wants
+    // independent of a hit), Casualty.wound is applied to the target's
+    // Vitals and RecentlyWounded is set true (the "agent is wounded"
+    // reappraisal trigger, read and cleared by the following tick's
+    // Appraisal phase). The tick health first reaches zero emits
+    // AgentIncapacitated — a genuine state transition, the
+    // CommitmentEstablished precedent (emitted once, not every tick the
+    // agent stays down).
     let private combat (s: StepState) =
         let terrain = s.Terrain
         let candidateSource = s.Agents // ascending by id; candidate lookup only, never mutated
@@ -1279,36 +1340,52 @@ module Simulation =
         let mutable random = s.Random
 
         for shooter in candidateSource do
-            let candidates =
-                // A Suppressing agent (TASK-037, backlog B-030 thin slice)
-                // pins its named contact as the only candidate — a
-                // deliberate Suppress order does not silently retarget onto
-                // whatever else wanders into view — still gated by this
-                // tick's actual VisibleContacts, range, and line of fire via
-                // the unchanged Combat.chooseTarget below (Decision E).
-                match Commitment.ofAgent shooter.Order shooter.Disposition shooter.Destination with
-                | Suppressing sc ->
-                    shooter.VisibleContacts
-                    |> Array.filter (fun id -> id = sc.Target)
-                    |> Array.choose (fun id -> candidateSource |> Array.tryFind (fun a -> a.Id = id))
-                | Holding
-                | Moving _ ->
-                    shooter.VisibleContacts
-                    |> Array.choose (fun id -> candidateSource |> Array.tryFind (fun a -> a.Id = id))
+            if Casualty.isAlive shooter.Vitals then
+                let candidates =
+                    // A Suppressing agent (TASK-037, backlog B-030 thin slice)
+                    // pins its named contact as the only candidate — a
+                    // deliberate Suppress order does not silently retarget onto
+                    // whatever else wanders into view — still gated by this
+                    // tick's actual VisibleContacts, range, and line of fire via
+                    // the unchanged Combat.chooseTarget below (Decision E).
+                    match Commitment.ofAgent shooter.Order shooter.Disposition shooter.Destination with
+                    | Suppressing sc ->
+                        shooter.VisibleContacts
+                        |> Array.filter (fun id -> id = sc.Target)
+                        |> Array.choose (fun id ->
+                            candidateSource |> Array.tryFind (fun a -> a.Id = id && Casualty.isAlive a.Vitals))
+                    | Holding
+                    | Moving _ ->
+                        shooter.VisibleContacts
+                        |> Array.choose (fun id ->
+                            candidateSource |> Array.tryFind (fun a -> a.Id = id && Casualty.isAlive a.Vitals))
 
-            match Combat.chooseTarget terrain shooter candidates with
-            | None -> ()
-            | Some target ->
-                let chance = Combat.hitChance terrain shooter.Position target.Position
-                let struct (draw, next) = RandomStream.next random
-                random <- next
-                let hit = (draw % 1000UL) < uint64 chance
-                emit (ShotFired(shooter.Id, target.Id, hit)) s
+                match Combat.chooseTarget terrain shooter candidates with
+                | None -> ()
+                | Some target ->
+                    let chance = Combat.hitChance terrain shooter.Position target.Position
+                    let struct (draw, next) = RandomStream.next random
+                    random <- next
+                    let hit = (draw % 1000UL) < uint64 chance
+                    emit (ShotFired(shooter.Id, target.Id, hit)) s
 
-                let gain = Suppression.gain terrain shooter.Position target.Position hit
-                let idx = agents |> Array.findIndex (fun a -> a.Id = target.Id)
-                let t = agents.[idx]
-                agents.[idx] <- { t with Suppression = Suppression.raise t.Suppression gain }
+                    let gain = Suppression.gain terrain shooter.Position target.Position hit
+                    let idx = agents |> Array.findIndex (fun a -> a.Id = target.Id)
+                    let t = agents.[idx]
+
+                    let vitals, recentlyWounded =
+                        if hit then Casualty.wound t.Vitals, true else t.Vitals, t.RecentlyWounded
+
+                    agents.[idx] <-
+                        { t with
+                            Suppression = Suppression.raise t.Suppression gain
+                            Vitals = vitals
+                            RecentlyWounded = recentlyWounded }
+
+                    if hit then
+                        match t.Vitals, vitals with
+                        | Alive _, Incapacitated _ -> emit (AgentIncapacitated(target.Id, target.Position)) s
+                        | _ -> ()
 
         s.Agents <- agents
         s.Random <- random
@@ -1326,8 +1403,35 @@ module Simulation =
     // non-empty (Stress.gain), then always decays by
     // StressConfig.DecayPerTick, floored at 0 (Stress.decay) — gain then
     // decay, the Suppression precedent, both steps here since nothing else
-    // produces stress yet. "Apply deaths and incapacitation" and "update
-    // command succession" remain unrealised (B-031).
+    // produces stress yet.
+    //
+    // "Apply deaths and incapacitation" and "update command succession"
+    // realised by TASK-045 (backlog B-031):
+    //   * every Incapacitated agent's bleed-out countdown ticks down
+    //     (Casualty.tickBleedOut); reaching Dead emits AgentDied — no rescue
+    //     mechanic, the countdown always runs to completion (Central
+    //     decision 3);
+    //   * leadership is a pure derived rule (the lowest-id living Friendly
+    //     agent, Domain.Agent's own AgentId ordering — no stored field, the
+    //     Commitment.ofAgent precedent), computed once from the agents array
+    //     as it stands after this phase's own bleed-out mutations and
+    //     compared against s.InitialLeader — the TRUE start-of-tick
+    //     baseline, captured once in Simulation.step before any phase ran
+    //     (StepState's own doc comment explains why: Combat runs before this
+    //     phase and can already have incapacitated the leader, so a
+    //     before/after pair taken from THIS phase's own entry state would
+    //     silently miss that transition, only ever catching this phase's own
+    //     bleed-out-to-Dead one). A difference emits LeadershipTransferred;
+    //   * squad failure — s.InitialFriendlyAlive true but no Friendly agent
+    //     Alive after this phase's mutations — emits SquadFailure exactly
+    //     once, the tick it first becomes true (health never regenerates, so
+    //     this is a one-way latch, not a hysteresis band). A **signal event
+    //     only**: it does not halt Simulation.step, reject further commands,
+    //     or write any new WorldState field — consuming it into an actual
+    //     mission-failure outcome is B-032's job (docs/04 section 12.10's
+    //     Mission phase, still a no-op). Scoped to Friendly only (docs/04
+    //     section 10: "every Friendly agent is the one squad" — no
+    //     equivalent mission concept exists for Hostile).
     let private stateConsequences (s: StepState) =
         let agents = Array.copy s.Agents
 
@@ -1345,8 +1449,30 @@ module Simulation =
                 |> Stress.raise a.Stress
                 |> Stress.decay
 
-            if suppression <> a.Suppression || stress <> a.Stress then
-                agents.[i] <- { a with Suppression = suppression; Stress = stress }
+            let vitals = Casualty.tickBleedOut a.Vitals
+
+            if suppression <> a.Suppression || stress <> a.Stress || vitals <> a.Vitals then
+                agents.[i] <- { a with Suppression = suppression; Stress = stress; Vitals = vitals }
+
+            match a.Vitals, vitals with
+            | Incapacitated _, Dead -> emit (AgentDied(a.Id, a.Position)) s
+            | _ -> ()
+
+        // Compared against s.InitialLeader / .InitialFriendlyAlive — the
+        // TRUE start-of-tick baseline, not this phase's own entry state —
+        // see StepState's own doc comment for why (Combat, which runs
+        // first, can already have caused the transition this phase would
+        // otherwise miss).
+        let newLeader = Casualty.currentLeader agents
+
+        if newLeader <> s.InitialLeader then
+            emit (LeadershipTransferred(s.InitialLeader, newLeader)) s
+
+        let friendlyAliveAfter =
+            agents |> Array.exists (fun a -> a.Side = Friendly && Casualty.isAlive a.Vitals)
+
+        if s.InitialFriendlyAlive && not friendlyAliveAfter then
+            emit SquadFailure s
 
         s.Agents <- agents
 
@@ -1417,7 +1543,14 @@ module Simulation =
               Random = state.Random
               EventsRev = []
               Snapshot = { Tick = nextTick; Agents = [||] }
-              TraceRev = [] }
+              TraceRev = []
+              // TASK-045 (backlog B-031): captured from `state.Agents` — the
+              // pristine, pre-tick input — before any phase runs. See
+              // StepState's own doc comments for why `stateConsequences`
+              // needs this instead of its own entry-state snapshot.
+              InitialLeader = Casualty.currentLeader state.Agents
+              InitialFriendlyAlive =
+                state.Agents |> Array.exists (fun a -> a.Side = Friendly && Casualty.isAlive a.Vitals) }
 
         for phase in Phases.order do
             runPhase ordered acc phase

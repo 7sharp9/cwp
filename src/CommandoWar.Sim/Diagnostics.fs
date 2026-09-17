@@ -264,6 +264,18 @@ type Overlay =
     /// state (not a this-tick event), so both `Diagnostics.frame` and
     /// `Diagnostics.frameOf` derive it.
     | AgentOrderQueue of agent: AgentId * at: Cell * queued: (CommandId * PlayerIntent)[]
+    /// An agent's casualty state (TASK-045, backlog B-031): `agent` at `at`
+    /// currently holds `vitals`. Unconditional per agent, the
+    /// `AgentCommitment` precedent — `Alive` is itself meaningful, not
+    /// sparse. Standing canonical state (not a this-tick event), so both
+    /// `Diagnostics.frame` and `Diagnostics.frameOf` derive it.
+    | AgentVitals of agent: AgentId * at: Cell * vitals: VitalStatus
+    /// The current squad leader (TASK-045, backlog B-031;
+    /// `Casualty.currentLeader` — the lowest-`AgentId` `Alive` `Friendly`
+    /// agent, or `None` if every friendly is down). One entry per frame, no
+    /// cell: a squad-wide fact, not per-agent. Standing canonical state, so
+    /// both `Diagnostics.frame` and `Diagnostics.frameOf` derive it.
+    | SquadLeadership of leader: AgentId option
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -375,6 +387,13 @@ module Diagnostics =
             { Kind = "contact-observed"; Cells = [| at |]; Agents = [| observer; contact |] }
         | ContactExpired(contact, lastKnownCell) ->
             { Kind = "contact-expired"; Cells = [| lastKnownCell |]; Agents = [| contact |] }
+        | AgentIncapacitated(agent, at) -> { Kind = "agent-incapacitated"; Cells = [| at |]; Agents = [| agent |] }
+        | AgentDied(agent, at) -> { Kind = "agent-died"; Cells = [| at |]; Agents = [| agent |] }
+        | LeadershipTransferred(_, current) ->
+            { Kind = "leadership-transferred"
+              Cells = [||]
+              Agents = current |> Option.map Array.singleton |> Option.defaultValue [||] }
+        | SquadFailure -> { Kind = "squad-failure"; Cells = [||]; Agents = [||] }
 
     /// A `KnownContact` overlay per contact in the friendly squad's shared
     /// tactical picture (TASK-026), ascending by contact id. Reads
@@ -417,6 +436,7 @@ module Diagnostics =
                         a.Discipline
                         a.Stress
                         a.SuppressionBand
+                        a.Vitals
                         o
                         a.Position
                         budget
@@ -476,6 +496,19 @@ module Diagnostics =
         |> Array.sortBy (fun c -> c.Contact)
         |> Array.map (fun c -> HostileKnownContact(c.LastKnownCell, c.Contact, c.Confidence, c.LastSeenTick))
 
+    /// An `AgentVitals` overlay per agent (TASK-045, backlog B-031),
+    /// ascending by agent id — the `AgentCommitment` unconditional-per-agent
+    /// precedent.
+    let private agentVitalsOverlays (world: WorldState) : Overlay[] =
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.map (fun a -> AgentVitals(a.Id, a.Position, a.Vitals))
+
+    /// One `SquadLeadership` overlay naming the current derived leader
+    /// (TASK-045, backlog B-031; `Casualty.currentLeader`).
+    let private squadLeadershipOverlay (world: WorldState) : Overlay[] =
+        [| SquadLeadership(Casualty.currentLeader world.Agents) |]
+
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
     /// (a bare `WorldState` carries no per-tick event history); use
@@ -497,7 +530,9 @@ module Diagnostics =
                suppressionOverlays world
                stressOverlays world
                hostileKnownContactOverlays world
-               orderQueueOverlays world |]
+               orderQueueOverlays world
+               agentVitalsOverlays world
+               squadLeadershipOverlay world |]
             |> Array.concat
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
@@ -540,7 +575,11 @@ module Diagnostics =
             | MovementBlocked _
             | MovementObstructed _
             | ContactObserved _
-            | ContactExpired _ -> None)
+            | ContactExpired _
+            | AgentIncapacitated _
+            | AgentDied _
+            | LeadershipTransferred _
+            | SquadFailure -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, winner) -> Reserved(cell, winner, result.State.Tick))
 
@@ -568,7 +607,11 @@ module Diagnostics =
             | MovementBlocked _
             | MovementYielded _
             | ContactObserved _
-            | ContactExpired _ -> None)
+            | ContactExpired _
+            | AgentIncapacitated _
+            | AgentDied _
+            | LeadershipTransferred _
+            | SquadFailure -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, occupant) -> Obstructed(cell, occupant))
 
@@ -598,7 +641,11 @@ module Diagnostics =
             | MovementYielded _
             | MovementObstructed _
             | ContactObserved _
-            | ContactExpired _ -> None)
+            | ContactExpired _
+            | AgentIncapacitated _
+            | AgentDied _
+            | LeadershipTransferred _
+            | SquadFailure -> None)
         |> Array.distinctBy fst
         |> Array.choose (fun (recipient, command) ->
             result.State.Agents
@@ -628,7 +675,11 @@ module Diagnostics =
             | MovementYielded _
             | MovementObstructed _
             | ContactObserved _
-            | ContactExpired _ -> None)
+            | ContactExpired _
+            | AgentIncapacitated _
+            | AgentDied _
+            | LeadershipTransferred _
+            | SquadFailure -> None)
         |> Array.choose (fun (shooter, target, hit) ->
             match
                 result.State.Agents |> Array.tryFind (fun a -> a.Id = shooter),
@@ -666,5 +717,7 @@ module Diagnostics =
                       suppressionOverlays result.State
                       stressOverlays result.State
                       hostileKnownContactOverlays result.State
-                      orderQueueOverlays result.State ]
+                      orderQueueOverlays result.State
+                      agentVitalsOverlays result.State
+                      squadLeadershipOverlay result.State ]
             Hash = result.StateHash }

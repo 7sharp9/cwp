@@ -137,6 +137,13 @@ type DecisionReason =
     /// `WorldState.TacticalKnowledge` / `HostileTacticalKnowledge`, not
     /// `WorldState.Agents`.
     | TargetNotKnown
+    /// Stage 2 (TASK-045, backlog B-031): the recipient's own
+    /// `AgentState.Vitals` is not `Alive` — `docs/05` section 4 stage 2's "is
+    /// the agent alive, conscious, and mobile?", and section 16's own
+    /// example: "a critically wounded agent reports unable rather than
+    /// refused." A whole-order short-circuit ahead of every other stage-2
+    /// check, for any `PlayerIntent`.
+    | CriticallyWounded
 
 /// The agent's appraisal of its current `Order` (TASK-028; `docs/05` section
 /// 6). TASK-028 subset: `Adapted` (stage 5 safer adaptation) is B-018 and
@@ -153,6 +160,23 @@ type OrderDisposition =
     | Accepted
     | Refused of primary: DecisionReason * supporting: DecisionReason[]
     | Unable of primary: DecisionReason * supporting: DecisionReason[]
+
+/// An agent's casualty state (TASK-045, backlog B-031; `docs/04` sections
+/// 12.8/12.9, `docs/05` section 8). `Alive health` carries the remaining
+/// health on the `0..CasualtyConfig.MaxHealth` scale (the `Suppression`/
+/// `Stress` precedent); reaching 0 moves to `Incapacitated`, never straight
+/// to `Dead` — `docs/04` section 12.8's own direction, "death as a critical/
+/// bleed-out timer rather than a binary kill". `Incapacitated
+/// bleedOutRemaining` counts down every tick (`Casualty.tickBleedOut`) to
+/// `Dead` with nothing a player command can do about it (no rescue/stabilize
+/// mechanic — TASK-045 Central decision 3). A single field rather than a
+/// separate `Health: int` alongside a status flag, so "wounded but not
+/// alive" or "dead with remaining health" cannot be constructed
+/// (`AGENTS.md` "make invalid states hard to construct").
+type VitalStatus =
+    | Alive of health: int
+    | Incapacitated of bleedOutRemaining: int
+    | Dead
 
 /// Minimal authoritative agent state for the simulation skeleton: identity,
 /// side, logical position, movement progress within the current edge, an
@@ -329,7 +353,41 @@ type AgentState =
       /// unstressed. Casualty-, wound-, explosion-, and isolation-driven
       /// stress are not realised by any system yet (B-031 and unassigned
       /// future work); this is the contact-driven component only.
-      Stress: int }
+      Stress: int
+      /// This agent's casualty state (TASK-045, backlog B-031). The Combat
+      /// phase applies `Casualty.wound` to a qualifying hit's target
+      /// (`Alive health -> Alive (health - WoundPerHit)`, or straight to
+      /// `Incapacitated BleedOutTicks` at zero — never a binary kill); the
+      /// State-consequences phase ticks `Incapacitated`'s countdown to
+      /// `Dead`. Read by Appraisal's stage 2 (`Unable(CriticallyWounded)`
+      /// when not `Alive`) and stage 4 (a continuous resolve penalty while
+      /// `Alive` but wounded); read by Combat and Navigation-and-movement to
+      /// exclude a non-`Alive` agent from firing, being targeted, or moving
+      /// (`docs/04` section 20: "dead or incapacitated agents do not start
+      /// new actions").
+      ///
+      /// **Genuine canonical per-tick state** (the `Suppression` precedent):
+      /// it changes from gameplay events and cannot be recomputed from
+      /// `Position` alone. Defaults to `Alive CasualtyConfig.MaxHealth` —
+      /// every agent starts at full health.
+      Vitals: VitalStatus
+      /// One-shot dirty flag: `true` for exactly one tick after a qualifying
+      /// hit strictly reduced this agent's health while `Alive` (TASK-045,
+      /// backlog B-031) — the "the agent is wounded" reappraisal trigger
+      /// (`docs/05` section 14). Exists because `Combat` (phase 8) runs
+      /// *after* `Appraisal` (phase 5) within a tick, so a wound taken this
+      /// tick cannot be seen by this tick's Appraisal the way `Perception`'s
+      /// same-tick `ContactObserved` can; this flag bridges that gap exactly
+      /// as `SuppressionBand`'s persisted latch does for the
+      /// suppression-band trigger, minus the hysteresis (any wound
+      /// qualifies, there is no band). Set by `stateConsequences` when a
+      /// wound is applied; read and cleared back to `false` by the
+      /// *following* tick's `appraisal` phase — its own consumption.
+      ///
+      /// **Genuine canonical per-tick state**: real per-tick memory no other
+      /// field reproduces. Defaults to `false` — every agent starts
+      /// unwounded.
+      RecentlyWounded: bool }
 
 /// Minimal authoritative world state: an integer tick, the logical grid
 /// bounds, the authoritative terrain grid, the agents ordered by ascending
@@ -398,14 +456,26 @@ module Agent =
     [<Literal>]
     let DisciplineDefault = 3
 
+    /// Full health for a freshly created agent (TASK-045, backlog B-031).
+    /// The `DisciplineDefault` precedent exactly: kept as a literal here to
+    /// avoid a module-ordering dependency on `Casualty.fs` (which depends on
+    /// `Domain.fs` for `VitalStatus`, not the other way around);
+    /// `CasualtyConfig.MaxHealth` carries the same value and documents the
+    /// scale.
+    [<Literal>]
+    let MaxHealth = 1000
+
     /// Creates an agent at rest (no destination, no route, no progress, no
     /// visible contacts, no order, communication available, default
-    /// discipline, unsuppressed) at the given position. `World.ofScenario`
-    /// overrides `CommunicationAvailable` and `Discipline` from the authored
-    /// deployment; every other construction path takes the defaults.
-    /// `Suppression` has no authored override anywhere (the `Progress`
-    /// precedent) — every agent always starts at `0`. `SuppressionBand` and
-    /// `Stress` (TASK-033) follow the identical rule: `false` / `0` always.
+    /// discipline, unsuppressed, full health) at the given position.
+    /// `World.ofScenario` overrides `CommunicationAvailable` and
+    /// `Discipline` from the authored deployment; every other construction
+    /// path takes the defaults. `Suppression` has no authored override
+    /// anywhere (the `Progress` precedent) — every agent always starts at
+    /// `0`. `SuppressionBand` and `Stress` (TASK-033) follow the identical
+    /// rule: `false` / `0` always. `Vitals`/`RecentlyWounded` (TASK-045)
+    /// follow it too: every agent always starts `Alive MaxHealth` /
+    /// unwounded, no authored override.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -421,4 +491,6 @@ module Agent =
           CommunicationAvailable = true
           Suppression = 0
           SuppressionBand = false
-          Stress = 0 }
+          Stress = 0
+          Vitals = Alive MaxHealth
+          RecentlyWounded = false }

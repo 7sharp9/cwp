@@ -609,7 +609,8 @@ let ``every appraisal outcome is consistent with a fresh recompute`` () =
                                 && reachable st a.Position target
                             | Refused(RouteTooExposed _, _) -> a.Destination = None
                             | Refused(NoKnownRoute, _)
-                            | Refused(TargetNotKnown, _) -> false
+                            | Refused(TargetNotKnown, _)
+                            | Refused(CriticallyWounded, _) -> false
                             | Unable(NoKnownRoute, _) ->
                                 a.Destination = None && not (reachable st a.Position target)
                             | Unable _ -> a.Destination = None
@@ -845,6 +846,57 @@ let ``every agent's post-tick Stress and SuppressionBand are reproducible from a
                     if post.Stress <> expectedStress || post.SuppressionBand <> expectedBand then
                         ok <- false
                 | None -> ok <- false
+
+            prev <- r.State
+
+        ok)
+
+// --- property 13: wounds and bleed-out are pure functions of this tick's
+// --- shots -------------------------------------------------------------
+// TASK-045 (backlog B-031). The property 11 Suppression precedent, folded
+// instead of summed: Simulation.combat mutates its working `agents` array in
+// place as it iterates shooters in ascending id order, so a target hit by
+// more than one shooter the same tick accumulates each `Casualty.wound` in
+// that same order (never a single combined delta) -- reproduced here by
+// folding one `Casualty.wound` per qualifying `ShotFired(_, target, true)`
+// this tick over the agent's pre-tick `Vitals`, then applying one
+// `Casualty.tickBleedOut` (State consequences, unconditional every tick,
+// a no-op on `Alive`). A pre-tick non-`Alive` agent is never a valid Combat
+// target at all (Simulation.combat's own Alive-only candidate filter), so
+// it never has a qualifying hit to fold in this property either -- this
+// also indirectly re-proves that invariant across every generated case.
+
+[<Property(MaxTest = 200)>]
+let ``every agent's post-tick Vitals is reproducible from a fresh recompute`` () =
+    Prop.forAll (Arb.fromGen appraisalCaseGen) (fun case ->
+        let mutable prev = case.World
+        let mutable ok = true
+
+        for tick in 1L .. case.TickCount do
+            let cmds =
+                case.Commands
+                |> Array.filter (fun c -> c.Tick = tick)
+                |> Array.map (fun c -> c.Command)
+
+            let r = Simulation.step SimConfig.standard cmds prev
+
+            // Qualifying hits against a target this tick, in the same
+            // ascending-shooter-id order Simulation.combat's own loop applies
+            // them (ShotFired events are emitted in that same order).
+            let hitsAgainst (id: AgentId) =
+                r.Events
+                |> Array.filter (fun e ->
+                    match e.Body with
+                    | ShotFired(_, target, true) -> target = id
+                    | _ -> false)
+
+            for a in prev.Agents do
+                let afterCombat = hitsAgainst a.Id |> Array.fold (fun v _ -> Casualty.wound v) a.Vitals
+                let expected = Casualty.tickBleedOut afterCombat
+
+                match r.State.Agents |> Array.tryFind (fun x -> x.Id = a.Id) with
+                | Some post when post.Vitals = expected -> ()
+                | _ -> ok <- false
 
             prev <- r.State
 

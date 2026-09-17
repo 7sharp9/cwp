@@ -50,6 +50,10 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `canonical-refusal-and-correction-tick-008.svg` | SVG of the same frame: agent 0's `PlannedPath` polyline resuming toward `(11,3)`, the hollow teal `AgentCommitment` marker at agent 0's cell, the solid `AgentCommitment` marker at friendly 1's `Suppressing` cell, and the ongoing fire/suppression state between friendly 1 and hostile 2. |
 | `order-queue-stacking-and-cancellation-tick-001.ascii.txt` | The `content/replays/order-queue-stacking-and-cancellation` corpus entry (TASK-044, backlog B-051) at tick 1: one friendly agent is issued three stacked waypoints in a single tick — `(3,0)` `Replace` (active) then `(7,0)` and `(10,0)` both `Append` (queued behind it). The overlays section carries `order queue (1,0): agent 0  [#2 move (7,0), #3 move (10,0)]` and the events line two `order-queued` markers. |
 | `order-queue-stacking-and-cancellation-tick-001.svg` | SVG of the same frame: agent 0's `PlannedPath` polyline toward the active `(3,0)` leg, plus a small `+2` badge on the cell's top edge for the two-entry `AgentOrderQueue` overlay — the one remaining unused position, since `AgentCommitment` (top-left), `AgentSuppression` (top-right), `AgentStress` (bottom-left), and `OrderAppraisal` (bottom-right) already occupy the four corners. |
+| `casualties-succession-and-squad-failure-tick-005.ascii.txt` | The `content/replays/casualties-succession-and-squad-failure` corpus entry (TASK-045, backlog B-031) at tick 5: all four agents are `Incapacitated` (bleeding out), the second `LeadershipTransferred` (to `None`, every friendly down) and `SquadFailure` both fire this tick, and the overlays section carries one `vitals` line per agent plus `squad leader: none (every friendly down)`. |
+| `casualties-succession-and-squad-failure-tick-005.svg` | SVG of the same frame: each agent's `AgentVitals` `Z<n>` bleed-out-countdown badge (bottom edge), no `SquadLeadership` gold ring (no leader survives). |
+| `casualties-succession-and-squad-failure-tick-065.ascii.txt` | The same corpus entry at tick 65, the full lifecycle's endpoint: every agent has finished bleeding out and reads `vitals ...: agent N  dead`, rendered as a black cross over each agent's cell in the SVG. |
+| `casualties-succession-and-squad-failure-tick-065.svg` | SVG of the same frame: four black crosses, no agent circles, no `SquadLeadership` ring. |
 
 ## Regeneration
 
@@ -81,8 +85,10 @@ $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 `swap-standoff-tick-001.*`, `perception-contact-tick-005.*`,
 `lost-comms-tick-001.*`, `exposed-approach-tick-001.*`,
 `blocked-goal-tick-001.*`, `reissued-order-tick-003.*`,
-`canonical-refusal-and-correction-tick-008.*`, and
-`order-queue-stacking-and-cancellation-tick-001.*` are not produced by the
+`canonical-refusal-and-correction-tick-008.*`,
+`order-queue-stacking-and-cancellation-tick-001.*`, and
+`casualties-succession-and-squad-failure-tick-005.*` /
+`-tick-065.*` are not produced by the
 `render` verb: each entry's initial state is corpus-owned (`Corpus.all`),
 not the shared fixture or demo scenario `render` knows about. All are
 regenerated the same way — `DiagnosticRender.runFrames` over the named
@@ -91,7 +97,8 @@ and `spike-fixture`), at the tick named in the file — using the exact helper
 (`convergingRoutesFrames ()` / `slowTerrainFrames ()` /
 `swapStandoffFrames ()` / `perceptionContactFrames ()` / `lostCommsFrames ()`
 / `exposedApproachFrames ()` / `reissuedOrderFrames ()` /
-`canonicalRefusalAndCorrectionFrames ()` / `orderQueueFrames ()`, and an
+`canonicalRefusalAndCorrectionFrames ()` / `orderQueueFrames ()` /
+`casualtiesFrames ()`, and an
 inline `runFrames` for `blocked-goal`) the corresponding `DiagnosticsTests.fs`
 fact uses to compare against these files, so a regeneration and its test
 cannot silently disagree.
