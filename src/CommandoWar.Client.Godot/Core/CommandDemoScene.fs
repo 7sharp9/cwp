@@ -23,6 +23,24 @@ type CommandDemoScene() =
     let mutable selected: AgentId option = None
     let mutable previewPath: Cell[] option = None
 
+    // Developer overlay (TASK-043, backlog B-029 proper): the same
+    // `Diagnostics.DiagnosticFrame` every other developer renderer
+    // (`DiagnosticRender.Ascii`/`.Svg`/`.Html`) consumes, built from this
+    // scene's own live `Simulation.step` output instead of a replayed corpus
+    // entry (TASK-029's read-only `AppraisalDemoScene`). Toggled by `F1`,
+    // independent of tactical pause; off by default.
+    let mutable devOverlay = false
+    let mutable devFrame = Unchecked.defaultof<DiagnosticFrame>
+
+    // The selected agent's traced line of sight to the currently hovered
+    // cell (TASK-043: "line-of-sight rays and occluders"), recomputed on
+    // every `OnHover` -- `Sight.trace` is a pure function over `Terrain` plus
+    // two cells, already freely readable client-side (the `Pathfinding.find`
+    // precedent; `Terrain` is static scenario geometry, not per-agent
+    // authoritative state, so docs/03 section 12's `RenderSnapshot`-only rule
+    // does not apply to it). `None` when nothing is selected.
+    let mutable losRay: (Cell * Cell * bool) option = None
+
     // How long a meaningful order-disposition message stays on screen after
     // its underlying state clears, so it can actually be read (Dave's
     // feedback trying TASK-042 live: at the default 20 Hz sim rate,
@@ -57,6 +75,7 @@ type CommandDemoScene() =
         state <- r.State
         currAgents <- r.Snapshot.Agents
         hash <- r.StateHash.Value
+        devFrame <- Diagnostics.frameOf r
 
     let friendlyAt (cell: Cell) : AgentSnapshot option =
         currAgents |> Array.tryFind (fun a -> a.Side = Friendly && a.Position = cell)
@@ -77,6 +96,9 @@ type CommandDemoScene() =
               TextureId = 0
               Cx = float32 c.X
               Cy = float32 c.Y
+              Cx2 = 0.0f
+              Cy2 = 0.0f
+              Text = ""
               R = r
               G = g
               B = b
@@ -87,6 +109,7 @@ type CommandDemoScene() =
         member _.Ready() =
             state <- DemoScenario.initialState ()
             terrainItems <- RenderShared.buildTerrainItems state.Terrain
+            devFrame <- Diagnostics.frame state
             currAgents <-
                 state.Agents
                 |> Array.map (fun a ->
@@ -144,6 +167,9 @@ type CommandDemoScene() =
                       TextureId = 0
                       Cx = lerp from.X a.Position.X alpha
                       Cy = lerp from.Y a.Position.Y alpha
+                      Cx2 = 0.0f
+                      Cy2 = 0.0f
+                      Text = ""
                       R = r
                       G = g
                       B = b
@@ -160,6 +186,9 @@ type CommandDemoScene() =
                          TextureId = 0
                          Cx = float32 pos.X
                          Cy = float32 pos.Y
+                         Cx2 = 0.0f
+                         Cy2 = 0.0f
+                         Text = ""
                          R = 1.0f
                          G = 0.95f
                          B = 0.30f
@@ -206,8 +235,93 @@ type CommandDemoScene() =
                         | _ -> None))
                 |> Array.concat
 
-            Array.concat [ terrainItems; haloItems; agentItems; previewItems; pendingItems; committedItems ]
-            |> Array.sortBy RenderShared.depthKey
+            // Developer overlay (TASK-043, backlog B-029 proper): renders
+            // `devFrame.Overlays` -- the identical `Diagnostics` data every
+            // other developer renderer consumes -- plus a coordinate grid and
+            // a hover-driven line-of-sight ray, entirely additive and gated
+            // behind the `F1` toggle (off by default, matching the "with the
+            // overlay off, behaviour is unchanged from TASK-042" acceptance
+            // criterion).
+            let devItems =
+                if not devOverlay then
+                    [||]
+                else
+                    let coordLabels =
+                        [| for y in 0 .. state.Bounds.Height - 1 do
+                             for x in 0 .. state.Bounds.Width - 1 do
+                                 yield
+                                     RenderShared.cellLabel
+                                         { X = x; Y = y }
+                                         (sprintf "%d,%d" x y)
+                                         (0.8f, 0.8f, 0.8f)
+                                         0.6f
+                                         8.0f |]
+
+                    let reservedAndObstructed =
+                        devFrame.Overlays
+                        |> Array.choose (function
+                            | Reserved(cell, _, _) -> Some(RenderShared.cellMarker cell (0.2f, 0.9f, 0.9f) 0.45f 14.0f)
+                            | Obstructed(cell, _) -> Some(RenderShared.cellMarker cell (1.0f, 0.2f, 0.2f) 0.45f 14.0f)
+                            | _ -> None)
+
+                    // Known-versus-authoritative (docs/06 section 11): a
+                    // ghost marker at the friendly squad's last-known cell for
+                    // each hostile contact, distinct from the real agent
+                    // marker (`agentItems` above draws every agent, including
+                    // hostiles, at its true position unconditionally -- this
+                    // demo has no fog-of-war -- so the two markers visibly
+                    // diverge once a contact's knowledge goes stale).
+                    let knownContacts =
+                        devFrame.Overlays
+                        |> Array.choose (function
+                            | KnownContact(cell, _, _, _) ->
+                                Some(RenderShared.cellMarker cell (1.0f, 1.0f, 0.4f) 0.4f 12.0f)
+                            | _ -> None)
+
+                    // Last appraisal factors (docs/06 section 11): the
+                    // selected agent's current exposed-route cells.
+                    let exposedCells =
+                        match selected with
+                        | None -> [||]
+                        | Some id ->
+                            devFrame.Overlays
+                            |> Array.choose (function
+                                | OrderAppraisal(a, _, _, exposed) when a = id -> Some exposed
+                                | _ -> None)
+                            |> Array.concat
+                            |> Array.map (fun cell -> RenderShared.cellMarker cell (1.0f, 0.55f, 0.0f) 0.4f 9.0f)
+
+                    let fireLines =
+                        devFrame.Overlays
+                        |> Array.choose (function
+                            | FireLine(_, from, _, at, hit) ->
+                                let color = if hit then (0.2f, 1.0f, 0.2f) else (0.6f, 0.6f, 0.6f)
+                                Some(RenderShared.lineMarker from at color 0.8f 2.0f)
+                            | _ -> None)
+
+                    let losItems =
+                        match losRay with
+                        | Some(from, target, visible) ->
+                            let color = if visible then (0.2f, 1.0f, 0.4f) else (1.0f, 0.3f, 0.2f)
+                            [| RenderShared.lineMarker from target color 0.85f 1.5f |]
+                        | None -> [||]
+
+                    Array.concat
+                        [ coordLabels; reservedAndObstructed; knownContacts; exposedCells; fireLines; losItems ]
+
+            // `devItems` is deliberately appended *after* the depth sort, not
+            // folded into it: `RenderShared.depthKey` derives a line's depth
+            // from its origin cell alone, which is meaningless for an item
+            // that spans two cells (a LOS ray, a fire line) -- sorted in, it
+            // could land behind terrain partway along its own length. A
+            // developer overlay exists to reveal information that might
+            // otherwise be hidden, so every dev item always draws on top,
+            // unsorted among themselves.
+            let sorted =
+                Array.concat [ terrainItems; haloItems; agentItems; previewItems; pendingItems; committedItems ]
+                |> Array.sortBy RenderShared.depthKey
+
+            Array.append sorted devItems
 
         member _.HudText() =
             let selText =
@@ -222,20 +336,33 @@ type CommandDemoScene() =
             // selected, the existing selText = "none" precedent.
             let orderSuffix = if heldOrderText = "" then "" else sprintf "   order=%s" heldOrderText
 
-            sprintf
-                "tick %d   hash 0x%016X   agents %d   %s   selected=%s%s"
-                state.Tick
-                hash
-                currAgents.Length
-                (if paused then "PAUSED" else "running")
-                selText
-                orderSuffix
+            let line1 =
+                sprintf
+                    "tick %d   hash 0x%016X   draws %d   agents %d   %s   selected=%s%s"
+                    state.Tick
+                    hash
+                    state.Random.Draws
+                    currAgents.Length
+                    (if paused then "PAUSED" else "running")
+                    selText
+                    orderSuffix
+
+            // Developer-facing commitment/suppression/stress/reason line
+            // (TASK-043, backlog B-029, docs/06 section 11), gated behind the
+            // `F1` overlay toggle and shown only for the selected agent (the
+            // TASK-042 single-selection precedent).
+            match devOverlay, selected with
+            | true, Some id ->
+                sprintf "%s\n[dev] %s\n%s" line1 (RenderShared.devAgentText devFrame.Overlays id) RenderShared.devLegendText
+            | true, None -> sprintf "%s\n[dev] no agent selected\n%s" line1 RenderShared.devLegendText
+            | false, _ -> line1
 
         member _.OnClick(isLeftButton: bool, cellX: int, cellY: int) =
             if not isLeftButton then
                 selected <- None
                 heldOrderText <- ""
                 orderTextHoldRemaining <- 0.0
+                losRay <- None
             else
                 let cell = { X = cellX; Y = cellY }
 
@@ -247,6 +374,10 @@ type CommandDemoScene() =
                     // start from its own live state, not a stale hold.
                     heldOrderText <- ""
                     orderTextHoldRemaining <- 0.0
+                    // Same precedent for the developer-overlay LOS ray: a
+                    // stale ray from the previously selected agent must not
+                    // linger until the next `OnHover`.
+                    losRay <- None
                 | None ->
                     match selected with
                     | Some agentId when GridBounds.contains cell state.Bounds && agentPosition agentId <> Some cell ->
@@ -282,7 +413,31 @@ type CommandDemoScene() =
                     | BudgetExhausted _
                     | InvalidEndpoint _ -> None)
 
+            // Developer-overlay line of sight and occluders (TASK-043):
+            // traced from the selected agent to the hovered cell regardless
+            // of whether the overlay is currently shown -- cheap, and keeps
+            // `losRay` correct the instant `F1` is pressed rather than one
+            // hover-move stale. A blocked trace ends at its own `Blocker`
+            // cell, not the hovered cell, so the ray visibly stops at the
+            // occluder rather than passing through it in red. Gated on
+            // `GridBounds.contains` (the `OnClick` precedent): `Sight.trace`
+            // treats an out-of-bounds endpoint as simply not visible with no
+            // `Blocker`, which without this check drew a ray chasing the
+            // mouse arbitrarily far off the map the moment the cursor left
+            // the grid (Dave's review feedback).
+            losRay <-
+                if not (GridBounds.contains cell state.Bounds) then
+                    None
+                else
+                    selected
+                    |> Option.bind agentPosition
+                    |> Option.map (fun pos ->
+                        let los = Sight.trace state.Terrain pos cell
+                        let endCell = if los.Visible then cell else los.Blocker |> Option.defaultValue cell
+                        pos, endCell, los.Visible)
+
         member _.OnTogglePause() = paused <- not paused
+        member _.OnToggleDevOverlay() = devOverlay <- not devOverlay
 
         member _.Dispose() = ()
 

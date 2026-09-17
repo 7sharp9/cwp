@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-17 (TASK-042 accepted; B-028 done; no task selected)
+  updated: 2026-09-17 (TASK-043 accepted by Dave; B-029 done)
 
 active_work:
   selected_task: none
@@ -15,7 +15,64 @@ active_work:
   blockers: []
   updated: 2026-09-17
   note: >-
-    2026-09-17: TASK-042 accepted by Dave ("thats readable now") -- status
+    2026-09-17: TASK-043 accepted by Dave ("i confirm the features work") --
+    status done. Confirms the round 2 legend addition and the corrected
+    flashing-line diagnosis (FireLine, not the LOS ray) in a normal windowed
+    run: the [legend] HUD line appears with F1 on, the round 1 z-order/
+    off-grid LOS fixes hold, and the flashing green/grey line reads as
+    combat shots landing/missing, not the mouse. The --selfcheck hash
+    re-check for round 2's diff remains an open, non-blocking gap -- headless
+    Godot launches hung on this machine for reasons unrelated to the change
+    (see the ledger detail file); the diff itself is one string-literal HUD
+    line, unreachable from the self-check driver, and dotnet build/test both
+    passed clean (0/0, 297/297).
+    (docs/ledger/2026-09-17-TASK-043-developer-overlay-rendering.md)
+
+    Prior: 2026-09-17: TASK-043 review round 2. Dave's live re-check
+    surfaced: the "flashing green line" is FireLine (a this-tick-only
+    overlay, green on hit / grey on miss), not the LOS ray as round 1
+    guessed -- working as designed; no legend for overlay colours, fixed
+    with a new RenderShared.devLegendText HUD line; agent facing and sim
+    speed confirmed out of scope (B-052, pre-existing TASK-040 constant).
+    dotnet build both .slnx (Debug/Release) 0/0; dotnet test 297/297.
+    --selfcheck not independently re-run -- headless launches hung
+    indefinitely on this machine (ruled out: stray build-server process,
+    stale .godot cache); flagged as non-blocking given the diff's scope.
+    (docs/ledger/2026-09-17-TASK-043-developer-overlay-rendering.md)
+
+    Prior: 2026-09-17: TASK-043 review round 1. Dave tried CommandDemo.tscn windowed
+    and reported the LOS ray (red line) drew underneath other layers and
+    pointed toward the mouse even off the map. Two real bugs fixed,
+    rendering-only: devItems were sorted into the same depthKey pass as
+    terrain/agents (meaningless depth for a two-cell line) -- fixed by
+    appending devItems after the depth sort so the dev overlay always draws
+    on top; OnHover traced Sight.trace with no bounds check, so an
+    off-grid hover drew a ray chasing the cursor into empty space -- fixed
+    by clearing losRay when the hovered cell fails GridBounds.contains.
+    Verified via a new headless probe (in-bounds hover -> 1 line, drawn
+    last; out-of-bounds hover -> 0 lines) and both scenes' --selfcheck
+    hashes unchanged. A separately-reported "flashing green line" is likely
+    the same ray behaving as designed near an occlusion boundary --
+    flagged for Dave to re-check live.
+    (docs/ledger/2026-09-17-TASK-043-developer-overlay-rendering.md)
+
+    Prior: 2026-09-17: TASK-043 (B-029 proper, developer overlay rendering)
+    implemented, awaiting Dave's review. Selected via AskUserQuestion over
+    B-030/B-031/B-051/B-052/B-053; a second AskUserQuestion confirmed the
+    "full set now" scope (adding Kind=2 line / Kind=3 label DrawItem
+    primitives) over a narrower cut reusing only existing primitives.
+    CommandDemoScene now keeps the latest Diagnostics.DiagnosticFrame
+    (frame/frameOf, already part of CommandoWar.Sim, no Sim/Headless change)
+    and renders it as an F1-toggled overlay: coordinate labels,
+    Reserved/Obstructed markers, KnownContact ghost markers, the selected
+    agent's exposed-route cells + [dev] commitment/suppression/stress/reason
+    HUD line, a hover-driven Sight.trace LOS ray with occluder, and an
+    always-visible random-draw counter. Discipline/trust excluded (see task
+    file). Both scenes' --selfcheck hashes unchanged; dotnet build both
+    .slnx (Debug/Release) 0/0; dotnet test 297/297.
+    (docs/ledger/2026-09-17-TASK-043-developer-overlay-rendering.md)
+
+    Prior: 2026-09-17: TASK-042 accepted by Dave ("thats readable now") -- status
     done. Confirms the round 1 hold-timer fix specifically; no further
     issues raised against the underlying disposition/reason feature.
     Re-verified: both scenes' --selfcheck hashes unchanged, dotnet build

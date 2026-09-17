@@ -102,6 +102,9 @@ type DemoRenderScene() =
                       TextureId = 0
                       Cx = lerp from.X a.Position.X alpha
                       Cy = lerp from.Y a.Position.Y alpha
+                      Cx2 = 0.0f
+                      Cy2 = 0.0f
+                      Text = ""
                       R = r
                       G = g
                       B = b
@@ -123,5 +126,6 @@ type DemoRenderScene() =
         member _.OnClick(_isLeftButton: bool, _cellX: int, _cellY: int) = ()
         member _.OnHover(_cellX: int, _cellY: int) = ()
         member _.OnTogglePause() = ()
+        member _.OnToggleDevOverlay() = ()
 
         member _.Dispose() = ()

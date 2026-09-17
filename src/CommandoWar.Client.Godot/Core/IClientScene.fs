@@ -8,21 +8,29 @@ namespace CwClientCore
 /// overlay marker (a full-opacity item, `A >= 0.99`, is a real agent and
 /// draws the Kenney human texture; a translucent item is a halo/route-preview
 /// marker and still draws a plain circle of `Radius` -- TASK-041, backlog
-/// B-034). `TextureId` is meaningful only for `Kind = 0`: `0` = passable
-/// open ground (elevation-tinted via `R`/`G`/`B`), `1` = impassable, `2` =
-/// passable-but-opaque cover -- shape, not colour alone, carries this
-/// distinction (docs/06 "status indicators that do not rely on colour
-/// alone"). The array is pre-sorted back-to-front by the F# side (screen
-/// depth `(Cx + Cy)`, terrain before an agent occupying the same cell); the
-/// C# host only projects each item's cell coordinates to screen space and
-/// issues one `Draw*` call per item, in array order -- the "screen<->cell
-/// projection arithmetic" ADR-0004 explicitly allows in the C# shim.
+/// B-034), `2` = a line segment from `(Cx,Cy)` to `(Cx2,Cy2)` with `Radius`
+/// as line width (TASK-043, backlog B-029: line-of-sight rays, fire lines),
+/// `3` = a text label drawn at `(Cx,Cy)` with `Radius` as font size
+/// (TASK-043: grid coordinates). `TextureId` is meaningful only for
+/// `Kind = 0`: `0` = passable open ground (elevation-tinted via `R`/`G`/`B`),
+/// `1` = impassable, `2` = passable-but-opaque cover -- shape, not colour
+/// alone, carries this distinction (docs/06 "status indicators that do not
+/// rely on colour alone"). `Cx2`/`Cy2` are meaningful only for `Kind = 2`;
+/// `Text` only for `Kind = 3` (empty string otherwise). The array is
+/// pre-sorted back-to-front by the F# side (screen depth `(Cx + Cy)`,
+/// terrain before an agent occupying the same cell); the C# host only
+/// projects each item's cell coordinates to screen space and issues one
+/// `Draw*` call per item, in array order -- the "screen<->cell projection
+/// arithmetic" ADR-0004 explicitly allows in the C# shim.
 [<CLIMutable>]
 type DrawItem =
     { Kind: int
       TextureId: int
       Cx: float32
       Cy: float32
+      Cx2: float32
+      Cy2: float32
+      Text: string
       R: float32
       G: float32
       B: float32
@@ -62,4 +70,8 @@ type IClientScene =
     /// The tactical-pause key was pressed. A scene that has nothing to pause
     /// (like `DemoRenderScene`) may no-op.
     abstract OnTogglePause: unit -> unit
+    /// The developer-overlay key was pressed (TASK-043, backlog B-029). A
+    /// scene with no live input to overlay (like `DemoRenderScene`) may
+    /// no-op -- the `OnTogglePause` precedent.
+    abstract OnToggleDevOverlay: unit -> unit
     abstract Dispose: unit -> unit

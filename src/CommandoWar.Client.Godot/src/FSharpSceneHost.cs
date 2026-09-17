@@ -55,7 +55,7 @@ public partial class FSharpSceneHost : Node2D
     private IClientScene _scene;
     private Label _hud;
 
-    private bool _selfCheck, _screenshotMode;
+    private bool _selfCheck, _screenshotMode, _devOverlayMode;
     private string _screenshotPath;
     private int? _headlessExit;
     private int _screenshotFrameCount;
@@ -101,6 +101,12 @@ public partial class FSharpSceneHost : Node2D
             _scene.OnHover(3, 0);
             _scene.OnClick(true, 3, 0);
         }
+
+        // `--dev-overlay` (TASK-043, backlog B-029): a separate opt-in flag,
+        // not folded into the priming above, so a plain `--screenshot`
+        // capture keeps producing TASK-042's existing evidence unchanged.
+        if (_devOverlayMode)
+            _scene.OnToggleDevOverlay();
 
         BuildHud();
 
@@ -238,6 +244,10 @@ public partial class FSharpSceneHost : Node2D
         {
             _scene.OnTogglePause();
         }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F1 })
+        {
+            _scene.OnToggleDevOverlay();
+        }
     }
 
     public override void _Draw()
@@ -250,24 +260,49 @@ public partial class FSharpSceneHost : Node2D
             Vector2 pos = CellToScreen(item.Cx, item.Cy);
             var color = new Color(item.R, item.G, item.B, item.A);
 
-            if (item.Kind == 0)
+            switch (item.Kind)
             {
-                DrawTerrainTile(pos, item.TextureId, color);
-            }
-            else
-            {
-                Vector2 agentPos = pos - new Vector2(0, TileH * 0.5f);
-
-                // A translucent item (A < 0.99) is a halo/route-preview
-                // marker, not a real agent (TryHitAgentCircle's own
-                // precedent) -- keep the plain circle for those; only a real,
-                // full-opacity agent gets the Kenney figure.
-                if (item.A >= 0.99f)
-                    DrawAgentFigure(agentPos, item.Radius, color);
-                else
+                case 0:
+                    DrawTerrainTile(pos, item.TextureId, color);
+                    break;
+                case 2:
+                    // Developer overlay (TASK-043, backlog B-029): a line
+                    // segment between two cells (line-of-sight rays, fire
+                    // lines), both endpoints projected through the same
+                    // isometric transform as every other item.
+                    DrawLine(pos, CellToScreen(item.Cx2, item.Cy2), color, item.Radius);
+                    break;
+                case 3:
+                    // Developer overlay: a text label at a cell (grid
+                    // coordinates). `ThemeDB.FallbackFont` -- this host draws
+                    // no other text itself (the HUD is a `Label` node, not a
+                    // `_Draw` call), so there is no existing font to reuse.
+                    DrawString(
+                        ThemeDB.FallbackFont,
+                        pos,
+                        item.Text,
+                        HorizontalAlignment.Center,
+                        -1,
+                        (int)item.Radius,
+                        color);
+                    break;
+                default:
                 {
-                    DrawCircle(agentPos, item.Radius, color);
-                    DrawArc(agentPos, item.Radius, 0, Mathf.Tau, 20, Colors.White, 1.5f);
+                    Vector2 agentPos = pos - new Vector2(0, TileH * 0.5f);
+
+                    // A translucent item (A < 0.99) is a halo/route-preview
+                    // marker, not a real agent (TryHitAgentCircle's own
+                    // precedent) -- keep the plain circle for those; only a
+                    // real, full-opacity agent gets the Kenney figure.
+                    if (item.A >= 0.99f)
+                        DrawAgentFigure(agentPos, item.Radius, color);
+                    else
+                    {
+                        DrawCircle(agentPos, item.Radius, color);
+                        DrawArc(agentPos, item.Radius, 0, Mathf.Tau, 20, Colors.White, 1.5f);
+                    }
+
+                    break;
                 }
             }
         }
@@ -356,6 +391,9 @@ public partial class FSharpSceneHost : Node2D
                     _screenshotMode = true;
                     if (i + 1 < args.Length)
                         _screenshotPath = args[++i];
+                    break;
+                case "--dev-overlay":
+                    _devOverlayMode = true;
                     break;
             }
         }

@@ -33,11 +33,64 @@ module RenderShared =
                        TextureId = textureId
                        Cx = float32 x
                        Cy = float32 y
+                       Cx2 = 0.0f
+                       Cy2 = 0.0f
+                       Text = ""
                        R = r
                        G = g
                        B = b
                        A = 1.0f
                        Radius = 0.0f } |]
+
+    /// A translucent `Kind = 1` circle marker at a cell centre -- the
+    /// selection-halo/route-dot shape (TASK-040/041), reused for TASK-043's
+    /// developer-overlay cell highlights (reserved/obstructed/known-contact/
+    /// exposed-route cells) so no new draw primitive is needed for a
+    /// point-shaped marker.
+    let cellMarker (cell: Cell) (r: float32, g: float32, b: float32) (a: float32) (radius: float32) : DrawItem =
+        { Kind = 1
+          TextureId = 0
+          Cx = float32 cell.X
+          Cy = float32 cell.Y
+          Cx2 = 0.0f
+          Cy2 = 0.0f
+          Text = ""
+          R = r
+          G = g
+          B = b
+          A = a
+          Radius = radius }
+
+    /// A `Kind = 2` line segment between two cells (TASK-043: line-of-sight
+    /// rays, fire lines).
+    let lineMarker (from: Cell) (target: Cell) (r: float32, g: float32, b: float32) (a: float32) (width: float32) : DrawItem =
+        { Kind = 2
+          TextureId = 0
+          Cx = float32 from.X
+          Cy = float32 from.Y
+          Cx2 = float32 target.X
+          Cy2 = float32 target.Y
+          Text = ""
+          R = r
+          G = g
+          B = b
+          A = a
+          Radius = width }
+
+    /// A `Kind = 3` text label at a cell (TASK-043: grid coordinates).
+    let cellLabel (cell: Cell) (text: string) (r: float32, g: float32, b: float32) (a: float32) (fontSize: float32) : DrawItem =
+        { Kind = 3
+          TextureId = 0
+          Cx = float32 cell.X
+          Cy = float32 cell.Y
+          Cx2 = 0.0f
+          Cy2 = 0.0f
+          Text = text
+          R = r
+          G = g
+          B = b
+          A = a
+          Radius = fontSize }
 
     let agentColor (side: Side) : float32 * float32 * float32 =
         match side with
@@ -76,3 +129,88 @@ module RenderShared =
         | Some Accepted -> "accepted"
         | Some(Refused(primary, _)) -> sprintf "refused: %s" (reasonText primary)
         | Some(Unable(primary, _)) -> sprintf "unable: %s" (reasonText primary)
+
+    /// Developer-facing text for a `DecisionReason` (TASK-043, backlog
+    /// B-029, docs/06 section 11 "last appraisal factors and selected
+    /// reason"). Deliberately mirrors `DiagnosticRender.reasonText`'s exact
+    /// hyphenated wording (a separate `private` function there, not directly
+    /// reusable across the assembly boundary as written) rather than
+    /// inventing a second developer vocabulary -- kept visibly distinct from
+    /// `reasonText` above's player-facing punctuation.
+    let private devReasonText (r: DecisionReason) : string =
+        match r with
+        | NoKnownRoute -> "no-known-route"
+        | RouteTooExposed None -> "route-too-exposed"
+        | RouteTooExposed(Some id) -> sprintf "route-too-exposed threat-agent-%d" (AgentId.value id)
+        | TargetNotKnown -> "target-not-known"
+
+    /// Developer-facing text for a `Commitment` (TASK-043; `DiagnosticRender.
+    /// commitmentText`'s wording).
+    let private devCommitmentText (c: Commitment) : string =
+        match c with
+        | Holding -> "holding"
+        | Moving mc -> sprintf "moving-to-(%d,%d)" mc.Target.X mc.Target.Y
+        | Suppressing sc -> sprintf "suppressing-agent-%d" (AgentId.value sc.Target)
+
+    /// The developer-overlay HUD line for one agent (TASK-043, backlog
+    /// B-029): commitment, suppression, stress, and the appraisal reason plus
+    /// exposed-cell count, read from the same `Diagnostics.Overlay[]` every
+    /// other developer renderer (`DiagnosticRender.Ascii`/`.Svg`/`.Html`)
+    /// consumes -- no bespoke per-agent state is added to the client. Every
+    /// overlay case below is sparse or agent-scoped (`AgentCommitment` is the
+    /// only one guaranteed present for every agent -- `AgentSuppression`/
+    /// `AgentStress`/`OrderAppraisal` are absent when zero / not appraised),
+    /// so each falls back to its own zero/absent value rather than the whole
+    /// line disappearing.
+    let devAgentText (overlays: Overlay[]) (agent: AgentId) : string =
+        let commitment =
+            overlays
+            |> Array.tryPick (function
+                | AgentCommitment(a, _, c) when a = agent -> Some(devCommitmentText c)
+                | _ -> None)
+            |> Option.defaultValue "holding"
+
+        let suppression =
+            overlays
+            |> Array.tryPick (function
+                | AgentSuppression(a, _, s) when a = agent -> Some s
+                | _ -> None)
+            |> Option.defaultValue 0
+
+        let stress =
+            overlays
+            |> Array.tryPick (function
+                | AgentStress(a, _, s) when a = agent -> Some s
+                | _ -> None)
+            |> Option.defaultValue 0
+
+        let reason, exposedCount =
+            overlays
+            |> Array.tryPick (function
+                | OrderAppraisal(a, _, d, exposed) when a = agent ->
+                    let text =
+                        match d with
+                        | Accepted -> "accepted"
+                        | Refused(primary, _) -> sprintf "refused %s" (devReasonText primary)
+                        | Unable(primary, _) -> sprintf "unable %s" (devReasonText primary)
+
+                    Some(text, exposed.Length)
+                | _ -> None)
+            |> Option.defaultValue ("no-order", 0)
+
+        sprintf
+            "commitment=%s suppression=%d stress=%d reason=%s exposed=%dcells"
+            commitment
+            suppression
+            stress
+            reason
+            exposedCount
+
+    /// The developer-overlay legend (TASK-043 review round 2, Dave's live
+    /// feedback: the overlay has no legend, and green/red are each reused
+    /// for two different meanings -- LOS-visible vs FireLine-hit both green,
+    /// Obstructed vs LOS-blocked both red). Static text, grouped by draw
+    /// shape (cell marker vs line) since that is what actually disambiguates
+    /// the reused hues on screen.
+    let devLegendText: string =
+        "[legend] cells: cyan=reserved red=obstructed yellow=known-contact orange=exposed-route | lines: green=visible/hit red=blocked grey=miss"

@@ -204,6 +204,59 @@ Committed screenshot: `docs/evidence/task-042-reason-and-disposition.png`
 shows `order=no order`; the `accepted`/`refused`/`unable` states are proven
 by a headless probe instead — see the task file's Outcome section).
 
+## Developer overlay (TASK-043)
+
+`CommandDemo.tscn`'s `F1` key toggles a developer overlay, independent of
+tactical pause (`Space`) -- backlog B-029 proper, the full docs/06 section 11
+developer-facing list realised over **live** input for the first time (vs.
+TASK-029's read-only, corpus-scoped `AppraisalDemoScene`). The overlay is a
+fourth renderer of the exact same `Diagnostics.DiagnosticFrame` every other
+developer renderer (`DiagnosticRender.Ascii`/`.Svg`/`.Html`) already consumes
+-- `CommandDemoScene` calls `Diagnostics.frame`/`.frameOf` after every step and
+draws its `Overlay[]` directly; no `CommandoWar.Sim`/`CommandoWar.Headless`
+change of any kind.
+
+With the overlay on: every terrain cell gets a small coordinate label; a
+this-tick `Reserved` (cyan) or `Obstructed` (red) cell is marked; each
+`TacticalKnowledge` contact's last-known cell gets a pale-yellow "ghost"
+marker, distinct from the real (always-rendered, no fog-of-war) agent marker
+it may now diverge from; the selected agent's exposed-route cells (orange)
+and a `[dev]` HUD line (`commitment=`/`suppression=`/`stress=`/`reason=`,
+`DiagnosticRender`'s own developer vocabulary, not the player-facing `order=`
+text) appear; hovering a cell with an agent selected draws a line-of-sight
+ray (`Sight.trace`) from the agent to that cell, green if visible or red up
+to the blocking cell (the occluder) if not. The HUD's first line always shows
+the random-draw counter (`draws=`) alongside tick and hash, overlay or not.
+
+`DrawItem` gained two new `Kind`s for this: `2` (a line segment, `Cx2`/`Cy2`,
+`Radius` as width -- line-of-sight rays, fire lines) and `3` (a text label,
+`Text`, `Radius` as font size -- coordinate labels). `IClientScene` gained
+`OnToggleDevOverlay` (`DemoRenderScene`, which has no live input to overlay,
+implements it as a no-op -- the `OnTogglePause` precedent).
+
+Discipline and trust are not shown: trust has no backing state anywhere in
+`CommandoWar.Sim`; discipline exists but has no `Diagnostics.Overlay` case,
+and adding one would require a `CommandoWar.Sim`/`CommandoWar.Headless`
+change and a golden regeneration -- left as a follow-up, not built here.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+# both existing scenes' --selfcheck hashes are unaffected (render-only)
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x11B06E6EDE0C52E3
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x649FA4D08E2931CA
+
+# windowed: select an agent, press F1, hover cells to see the LOS ray
+"$GODOT" --path . scenes/CommandDemo.tscn
+
+# committed evidence screenshot with the overlay pre-toggled on
+"$GODOT" --path . scenes/CommandDemo.tscn -- --dev-overlay --screenshot <abs-path>.png
+```
+
+Committed screenshot: `docs/evidence/task-043-developer-overlay.png`.
+
 ## Pinned versions
 
 | Component | Version |
@@ -236,7 +289,8 @@ src/FSharpSceneHost.cs      TASK-039/040: the generic ADR-0004 C# host over Core
                             production scene's `.tscn` uses this, not a new per-scene C# file
 Core/                       TASK-039/040: the ADR-0004 F# client-core library (CwClientCore.*)
 Core/RenderShared.fs        TASK-040: terrain-item + depth-sort helpers shared by every render scene
-Core/CommandDemoScene.fs    TASK-040: live selection, input-mapped MoveTo, route preview, pause
+Core/CommandDemoScene.fs    TASK-040: live selection, input-mapped MoveTo, route preview, pause;
+                            TASK-043: F1 developer overlay over live Diagnostics.DiagnosticFrame
 art/                        TASK-041: Kenney CC0 placeholder terrain/agent textures + licence file
 ```
 
