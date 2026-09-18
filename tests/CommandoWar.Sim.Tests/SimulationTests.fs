@@ -426,6 +426,35 @@ let ``a completing agent's frozen progress on a lost contest resumes correctly n
     Assert.Equal({ X = 3; Y = 3 }, (agentOf b r4.State).Position)
     Assert.Equal(0, (agentOf b r4.State).Progress)
 
+// --- Per-agent movement speed (TASK-049, backlog B-058) -----------------
+
+[<Fact>]
+let ``a half-speed agent takes twice as many ticks to cross an ordinary cell as a default-speed agent`` () =
+    let a = agent 0 // Agent.MoveSpeedDefault
+    let b = agent 1 // half that
+
+    let w =
+        match
+            World.create
+                bounds
+                1UL
+                [ Agent.create a Friendly { X = 0; Y = 0 }
+                  { Agent.create b Friendly { X = 0; Y = 1 } with
+                      MoveSpeed = Agent.MoveSpeedDefault / 2 } ]
+        with
+        | Ok w -> w
+        | Error e -> failwith $"unexpected {e}"
+
+    let r1 = stepWith [| cmd 1 a { X = 1; Y = 0 }; cmd 2 b { X = 1; Y = 1 } |] w
+    Assert.Contains(MovementCompleted(a, { X = 1; Y = 0 }), bodies r1)
+    Assert.Equal({ X = 1; Y = 0 }, (agentOf a r1.State).Position)
+    Assert.Equal({ X = 0; Y = 1 }, (agentOf b r1.State).Position) // still mid-edge
+    Assert.DoesNotContain(bodies r1, (function MovementCompleted(id, _) when id = b -> true | _ -> false))
+
+    let r2 = stepIdle r1.State
+    Assert.Contains(MovementCompleted(b, { X = 1; Y = 1 }), bodies r2)
+    Assert.Equal({ X = 1; Y = 1 }, (agentOf b r2.State).Position)
+
 // --- Command validation and multi-recipient addressing (TASK-020) --------
 
 /// A world with agents 0 and 1 Friendly and agent 2 Hostile, for the

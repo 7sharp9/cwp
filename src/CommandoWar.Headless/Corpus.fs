@@ -102,7 +102,13 @@ module Corpus =
         { Id: int
           Cell: Cell
           Discipline: int
-          CommunicationAvailable: bool }
+          CommunicationAvailable: bool
+          /// References `StandardUnitType` (TASK-049, backlog B-058) for
+          /// every entry here: none of the 16 committed corpus entries needs
+          /// a non-default movement speed, so this builder authors one
+          /// implicit unit type and never varies it (the `DemoScenario`
+          /// precedent is where a slower speed actually matters).
+          UnitType: string }
 
     /// One authored order's intent (TASK-036's single-recipient-move
     /// precedent, extended by TASK-037 for a `Suppress` order — the smallest
@@ -143,11 +149,17 @@ module Corpus =
           Resupply: Cell option
           Orders: ScenarioOrder list }
 
+    /// The sole unit type every builder-authored corpus entry's agents use
+    /// (TASK-049, backlog B-058) — full `Agent.MoveSpeedDefault` pace.
+    [<Literal>]
+    let private StandardUnitType = "standard"
+
     let private agent (id: int) (cell: Cell) : ScenarioAgent =
         { Id = id
           Cell = cell
           Discipline = AppraisalConfig.DisciplineDefault
-          CommunicationAvailable = true }
+          CommunicationAvailable = true
+          UnitType = StandardUnitType }
 
     /// An agent with a non-default `Discipline` (`exposed-approach`).
     let private agentWith (id: int) (cell: Cell) (discipline: int) : ScenarioAgent =
@@ -184,7 +196,8 @@ module Corpus =
             { AgentId = a.Id
               Cell = a.Cell
               CommunicationAvailable = a.CommunicationAvailable
-              Discipline = a.Discipline }
+              Discipline = a.Discipline
+              UnitType = a.UnitType }
 
         { ContentVersion = ScenarioContent.Version
           Id = spec.Id
@@ -216,6 +229,7 @@ module Corpus =
                       Height = spec.Height
                       Cells = List.toArray cs
                       Cover = [||] }
+          UnitTypes = [| { Id = StandardUnitType; MoveSpeed = Agent.MoveSpeedDefault } |]
           FailOnFriendlyForceEliminated = true }
 
     /// Validates and instantiates a corpus scenario's initial `WorldState`.

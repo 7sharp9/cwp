@@ -330,6 +330,33 @@ before apply:
   guard so the one-agent-per-cell base case (section 20) holds from tick 0 by
   construction on the direct path too, not only through `Scenario.validate`.
 
+Realised by TASK-049 (backlog B-058): **per-agent movement speed**. A new
+authored, per-agent `AgentState.MoveSpeed`, resolved from an authored
+`RawScenario.UnitTypes` table (`RawDeployment.UnitType` references one entry
+by id — no silent default, `Scenario.validate` rejects an unknown reference).
+The per-tick increment stays the universal `Terrain.BaseMoveCost` for every
+agent (so `AgentState.Progress`'s stored trajectory is still exactly the
+elapsed real-tick sequence 0, 1, 2, ... it always has been); only the
+edge-completion *comparison* scales, cross-multiplied against
+`Agent.MoveSpeedDefault`: `(startProgress + Terrain.BaseMoveCost) * MoveSpeed
+>= Terrain.moveCost next * Agent.MoveSpeedDefault`. An agent whose `MoveSpeed`
+equals `Agent.MoveSpeedDefault` reproduces the pre-TASK-049 comparison
+byte-for-byte (multiplying both sides of an inequality by the same positive
+constant does not change it) — every one of the 16 committed corpus/fixture
+entries stays behaviour-neutral, confirmed by `cwheadless corpus` and
+`corpus --regenerate` (byte-identical). A smaller `MoveSpeed` genuinely needs
+proportionally more ticks to cross the same cell; `Pathfinding`'s route cost
+is unaffected (it measures `Terrain.moveCost` only, never real-time ticks).
+`MoveSpeed` is **static authored data**, the `Discipline`/`CommunicationAvailable`
+precedent: excluded from `Canonical.encode`, no `Canonical.FormatVersion`
+bump. `ScenarioContent.Version` bumps **3 -> 4** (the new authored
+`UnitTypes` table and `RawDeployment.UnitType` field). Resolves the "movement
+feels twice as fast as expected" gap raised on TASK-046 review (backlog
+B-058): `content/diagnostics/demo.html`'s `DemoScenario` now authors a
+`"trooper"` unit type at half `Agent.MoveSpeedDefault`, a genuine per-agent
+slowdown with no change to the shared `Terrain.BaseMoveCost` constant or any
+other content.
+
 ## 9. Line of sight and cover
 
 - Line of sight operates on logical cells and elevation.
@@ -1198,17 +1225,24 @@ At minimum:
 ## 21. Authored scenario and content version
 
 An authored scenario is framework-neutral typed data: a scenario id, map
-dimensions, friendly and enemy deployments (agent id, side, cell), an objective
-algebra, objective, extraction, and resupply areas, static targets,
-scenario-wide rules, and an optional authored terrain layer (TASK-010;
-elevation, passability and movement cost, opacity, directional low cover).
-Line of sight and pathfinding are still not part of it (sections 8 to 9;
-backlog B-009, B-010), and objective evaluation and mission success/failure
-are deferred (backlog B-032) so the objective algebra is a data-only type at
-this stage; the terrain grid the layer produces is likewise not consumed by
-any tick phase. `ResupplyAreas` (TASK-047, backlog B-030 proper;
-`ScenarioContent.Version` 2 -> 3) is the first authored area type an actual
-phase consumes: `Simulation.stateConsequences`'s ammo-resupply check (12.9).
+dimensions, friendly and enemy deployments (agent id, side, cell,
+communication availability, discipline, and a unit-type reference), an
+objective algebra, objective, extraction, and resupply areas, static
+targets, an authored unit-type table, scenario-wide rules, and an optional
+authored terrain layer (TASK-010; elevation, passability and movement cost,
+opacity, directional low cover). Line of sight and pathfinding are still not
+part of it (sections 8 to 9; backlog B-009, B-010), and objective evaluation
+and mission success/failure are deferred (backlog B-032) so the objective
+algebra is a data-only type at this stage; the terrain grid the layer
+produces is likewise not consumed by any tick phase. `ResupplyAreas`
+(TASK-047, backlog B-030 proper; `ScenarioContent.Version` 2 -> 3) is the
+first authored area type an actual phase consumes:
+`Simulation.stateConsequences`'s ammo-resupply check (12.9). `UnitTypes`
+(TASK-049, backlog B-058; `ScenarioContent.Version` 3 -> 4) is a small table
+of `{ Id; MoveSpeed }`, referenced by each deployment's `UnitType`; every
+deployment must reference a defined entry (no silent default). Only
+`Deployment.MoveSpeed` (a baked scalar, the `RawTerrainCell.Class` /
+`Terrain` precedent) survives validation — the table itself does not.
 
 The authored input is versioned by a content-format version that is independent
 of the canonical-state format version (section 17) and the replay container
@@ -1225,11 +1259,13 @@ cell-sharing deployment; a duplicate or blank area or target id; an area or
 target marker outside the map; a duplicate or negative objective id; an unknown
 objective class; an objective referencing a missing area or target; an
 extraction selecting an unknown agent; a missing required marker (no
-friendly deployment, no objective, no extraction area); and, for the terrain
-layer, a layer whose dimensions disagree with the map, an out-of-map terrain
-cell or cover feature, a duplicate terrain cell or cover feature, an unknown
-terrain or cover class, a negative elevation, move cost, or cover level, and a
-deployment on an authored impassable cell.
+friendly deployment, no objective, no extraction area); a blank or duplicate
+unit-type id, a non-positive unit-type move speed, or a deployment
+referencing an unknown unit type (TASK-049, backlog B-058); and, for the
+terrain layer, a layer whose dimensions disagree with the map, an out-of-map
+terrain cell or cover feature, a duplicate terrain cell or cover feature, an
+unknown terrain or cover class, a negative elevation, move cost, or cover
+level, and a deployment on an authored impassable cell.
 
 An absent terrain layer is legal and means empty terrain (flat, fully
 passable, transparent, uncovered).
@@ -1238,12 +1274,14 @@ A validated scenario builds the authoritative world by deploying its agents
 (friendly then enemy, ordered ascending by id) through the same construction
 path as any other world.
 
-Realised by TASK-008 and extended by TASK-010: `src/CommandoWar.Sim/Scenario.fs`.
-`ScenarioContent.Version` = 2 (TASK-010 bumped it from 1 for the authored
-terrain layer; version 1 is rejected, not migrated), independent of
-`Canonical.FormatVersion` and `Replay.FormatVersion`. `Scenario.validate :
-RawScenario -> Result<Scenario, ScenarioError list>` collects every fault in
-one pass (`ScenarioError`, 30 explicit cases in the `ReplayError` style). The
+Realised by TASK-008 and extended by TASK-010, TASK-047, and TASK-049:
+`src/CommandoWar.Sim/Scenario.fs`. `ScenarioContent.Version` = 4 (TASK-010
+bumped it from 1 for the authored terrain layer, TASK-047 to 3 for
+`ResupplyAreas`, TASK-049 to 4 for `UnitTypes`; an earlier version is
+rejected, not migrated), independent of `Canonical.FormatVersion` and
+`Replay.FormatVersion`. `Scenario.validate : RawScenario ->
+Result<Scenario, ScenarioError list>` collects every fault in one pass
+(`ScenarioError`, the `ReplayError` style). The
 `Objective` algebra is `ReachArea` / `HoldArea` / `DestroyTarget` /
 `ExtractAgents` / `AllOf` / `Optional`, data only, with evaluation deferred.
 `RawScenario.TerrainLayer : RawTerrainLayer option` carries the optional

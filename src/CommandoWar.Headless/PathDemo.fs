@@ -83,8 +83,8 @@ module PathDemo =
           Width = bounds.Width
           Height = bounds.Height
           FriendlyDeployments =
-            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault }
-               { AgentId = 1; Cell = { X = 0; Y = 11 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
+            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" }
+               { AgentId = 1; Cell = { X = 0; Y = 11 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |]
           EnemyDeployments = [||]
           ObjectiveAreas = [| { AreaId = "crossing"; Cell = { X = 15; Y = 0 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 15; Y = 11 } } |]
@@ -99,6 +99,7 @@ module PathDemo =
                  ExtractAgentIds = [||]
                  IsOptional = false } |]
           TerrainLayer = Some terrainLayer
+          UnitTypes = [| { Id = "standard"; MoveSpeed = Agent.MoveSpeedDefault } |]
           FailOnFriendlyForceEliminated = true }
 
     /// The validated scenario. Fails hard: this is a fixed test vector, not

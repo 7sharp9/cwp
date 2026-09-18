@@ -5,20 +5,75 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-18 (TASK-048 accepted; B-059 done)
+  updated: 2026-09-18 (TASK-049 implemented and self-verified; status review)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-049
+  task_file: tasks/TASK-049-AGENT-MOVEMENT-SPEED.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-18
   note: >-
-    2026-09-18: TASK-048 accepted by Dave -- status done. No further review
+    2026-09-18: TASK-049 (real per-agent movement speed, backlog B-058)
+    implemented and self-verified -- status review, awaiting Dave. Selected
+    over B-053/B-054 (small client-polish rows) and a not-yet-filed
+    Suppress-order UI slice via AskUserQuestion ("what could make the most
+    difference, do that"): B-058 had been deferred twice, has no
+    dependencies, and affects every scene's pacing, not one screen. Three
+    further AskUserQuestion rounds before drafting, all Dave choosing the
+    recommended default: a per-unit-type stat table (not a bare
+    AgentState field); static and non-canonical (the Discipline/
+    CommunicationAvailable precedent); default reproduces today's pace
+    exactly, only DemoScenario gets slower.
+
+    New AgentState.MoveSpeed (static, excluded from Canonical.encode),
+    authored via a new RawScenario.UnitTypes table ({ Id; MoveSpeed })
+    referenced by RawDeployment.UnitType -- no silent default, an
+    unresolved reference is a validation error; ScenarioContent.Version
+    3 -> 4. Simulation.navigationAndMovement's edge-completion check
+    cross-multiplies MoveSpeed against a new Agent.MoveSpeedDefault (= 2)
+    rather than scaling the per-tick increment directly -- a design
+    correction found mid-implementation: the first attempt scaled the
+    increment itself, which kept tick-completion counts identical for a
+    default-speed agent but changed the stored intermediate
+    AgentState.Progress values, caught by a slow-terrain corpus mismatch
+    and two SimulationTests failures. The cross-multiplied form keeps the
+    increment universally Terrain.BaseMoveCost, so a default-speed agent's
+    comparison is algebraically identical to before; confirmed
+    byte-identical against all 16 corpus/fixture entries (cwheadless
+    corpus 16/16, --regenerate byte-identical, --replay-file envelope-full
+    unaffected). DemoScenario (the scenario both SnapshotDemo.tscn and
+    CommandDemo.tscn live-step) now authors a "trooper" unit type at half
+    speed for its three agents, resolving Dave's "movement feels twice as
+    fast as I thought it would" complaint (TASK-046 review) without the
+    simHz/BaseMoveCost workarounds already tried and reverted twice.
+    content/diagnostics/demo.html regenerated. Five new ScenarioTests
+    facts plus one new SimulationTests fact proving the genuine
+    half-speed behaviour. dotnet build both .slnx (main Release; Godot
+    client Debug) 0/0; dotnet test 342/342 (+6); dotnet list
+    CommandoWar.Sim package FSharp.Core only.
+
+    SnapshotDemo.tscn's --selfcheck hash re-pinned (0xF422ACB8D5A86FF0),
+    originally computed via dotnet fsi against the built Core assembly,
+    then independently confirmed MATCH through the real Godot 4.7.2
+    editor (Dave has it installed at
+    C:\Users\Dave\Documents\GitHub\Godot_v4.7.2-stable_mono_win64).
+    CommandDemo.tscn's hash is unchanged (0x00D3D471EF7354BC, MATCH
+    reconfirmed -- its scripted orders complete within a handful of ticks
+    even at half speed); AppraisalDemo.tscn (0x194805888CBE240D) also
+    reconfirmed MATCH, unaffected (steps exposed-approach, not
+    DemoScenario). One unrelated pre-existing
+    discrepancy noted, not fixed: DemoScenario's agent 0 does not actually
+    reach its authored MoveTo (10,6) destination within the demo's 20-tick
+    window at either speed (gets blocked partway at (10,2)) -- confirmed
+    unrelated to this task (MoveSpeed cannot affect route validity).
+    (docs/ledger/2026-09-18-TASK-049-agent-movement-speed.md)
+
+    Prior: 2026-09-18: TASK-048 accepted by Dave -- status done. No further review
     round; the icon bar, armed-mode highlight, order dispatch to
     Command.hold/.assault/.withdraw, and the Hold-area outline all confirmed
-    working as designed. B-059 now done. No new task selected yet.
+    working as designed. B-059 now done.
     (docs/ledger/2026-09-18-TASK-048-order-mode-hud-for-hold-assault-withdraw.md)
 
     Prior: 2026-09-18: TASK-048 (XCOM-style order-mode HUD icons for

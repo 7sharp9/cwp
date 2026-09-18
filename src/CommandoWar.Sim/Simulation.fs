@@ -119,7 +119,8 @@ module World =
             |> Array.map (fun d ->
                 { Agent.create d.Agent d.Side d.Cell with
                     CommunicationAvailable = d.CommunicationAvailable
-                    Discipline = d.Discipline })
+                    Discipline = d.Discipline
+                    MoveSpeed = d.MoveSpeed })
             |> Array.toList
 
         build scenario.Map scenario.Terrain seed agents (scenario.ResupplyAreas |> Array.map (fun a -> a.Cell))
@@ -1169,12 +1170,19 @@ module Simulation =
     // the threshold"): the threshold for entering a cell is
     // `Terrain.moveCost` of that cell — the same value `Pathfinding` already
     // uses as its A* edge weight, not a new concept — and the per-tick
-    // increment is `Terrain.BaseMoveCost`. Progress is scoped to the current
-    // edge only: it resets to 0 whenever that edge changes (a fresh route is
-    // computed, the agent enters a cell, arrives, or is blocked), and is
-    // genuinely new canonical state (`AgentState.Progress`,
-    // `Canonical.FormatVersion` 2) because — unlike `Route` — it cannot be
-    // recomputed from `Position` alone.
+    // increment is the universal `Terrain.BaseMoveCost`, exactly as before
+    // TASK-049. TASK-049 (backlog B-058) adds a per-agent `AgentState.
+    // MoveSpeed`: the completion *comparison* alone is cross-multiplied by
+    // it against `Agent.MoveSpeedDefault` (`wouldComplete`, below), so a
+    // mover at that default speed reproduces the pre-TASK-049 comparison
+    // byte-for-byte (multiplying both sides of an inequality by the same
+    // constant does not change it) while a smaller `MoveSpeed` genuinely
+    // needs proportionally more ticks to cross the same cell. Progress is
+    // scoped to the current edge only: it resets to 0 whenever that edge
+    // changes (a fresh route is computed, the agent enters a cell, arrives,
+    // or is blocked), and is genuinely new canonical state
+    // (`AgentState.Progress`, `Canonical.FormatVersion` 2) because — unlike
+    // `Route` — it cannot be recomputed from `Position` alone.
     //
     // Formation slots are B-011d (split from B-011c by TASK-018, which lands
     // sub-cell progress only). `AgentState.Route` is still a non-canonical
@@ -1194,10 +1202,11 @@ module Simulation =
         /// already accumulated (0 when this tick started a fresh edge — a
         /// new route, or a replan — regardless of the agent's prior
         /// `Progress`, which belonged to a different edge). Pending
-        /// resolution: an agent whose `startProgress + Terrain.BaseMoveCost`
-        /// reaches the next cell's `Terrain.moveCost` threshold this tick is
-        /// a claimant in Pass 2; one that does not simply accumulates
-        /// progress in Pass 3 with no contention possible.
+        /// resolution: an agent whose `startProgress + Terrain.BaseMoveCost`,
+        /// cross-multiplied by its own `AgentState.MoveSpeed` (TASK-049),
+        /// reaches the next cell's threshold this tick is a claimant in Pass
+        /// 2; one that does not simply accumulates progress in Pass 3 with
+        /// no contention possible.
         | Advancing of route: MovementPath * next: Cell * destination: Cell * startProgress: int
 
     let private navigationAndMovement (s: StepState) =
@@ -1263,9 +1272,20 @@ module Simulation =
 
         // An `Advancing` agent whose progress reaches the next cell's
         // threshold this tick — the only agents that can contend for a cell,
-        // since only they are actually entering one.
-        let wouldComplete (next: Cell) (startProgress: int) =
-            startProgress + Terrain.BaseMoveCost >= Terrain.moveCost terrain next
+        // since only they are actually entering one. The per-tick increment
+        // stays the universal `Terrain.BaseMoveCost` for every agent (so
+        // `AgentState.Progress`'s stored trajectory is exactly the elapsed
+        // real-tick sequence 0, 1, 2, ... it always has been); only the
+        // *comparison* scales per-agent via cross-multiplication against
+        // `moveSpeed` (TASK-049, backlog B-058), so a mover at
+        // `Agent.MoveSpeedDefault` reproduces the pre-TASK-049 threshold
+        // check byte-for-byte (multiplying both sides of the old inequality
+        // by the same constant does not change it), while a smaller
+        // `moveSpeed` genuinely needs proportionally more ticks to cross the
+        // same cell.
+        let wouldComplete (next: Cell) (startProgress: int) (moveSpeed: int) =
+            (startProgress + Terrain.BaseMoveCost) * moveSpeed
+            >= Terrain.moveCost terrain next * Agent.MoveSpeedDefault
 
         // Pass 2: reservation, over completing agents only. Group by
         // contested next cell; the mover with the fewest remaining route
@@ -1279,7 +1299,7 @@ module Simulation =
             |> Array.indexed
             |> Array.choose (fun (idx, intent) ->
                 match intent with
-                | Advancing(r, next, _, startProgress) when wouldComplete next startProgress ->
+                | Advancing(r, next, _, startProgress) when wouldComplete next startProgress agents.[idx].MoveSpeed ->
                     Some(idx, agents.[idx].Id, r, next)
                 | Advancing _
                 | Idle
@@ -1311,7 +1331,8 @@ module Simulation =
             |> Array.choose (fun (idx, intent) ->
                 match intent with
                 | Advancing(_, next, _, startProgress) when
-                    wouldComplete next startProgress && not (Map.containsKey idx yieldedTo)
+                    wouldComplete next startProgress agents.[idx].MoveSpeed
+                    && not (Map.containsKey idx yieldedTo)
                     ->
                     Some(idx, next)
                 | Advancing _
@@ -1368,13 +1389,15 @@ module Simulation =
             | Blocked(at, target) ->
                 agents.[idx] <- { a with Progress = 0; Destination = None; Route = None }
                 emit (MovementBlocked(a.Id, at, target)) s
-            | Advancing(r, next, _, startProgress) when not (wouldComplete next startProgress) ->
+            | Advancing(r, next, _, startProgress) when not (wouldComplete next startProgress a.MoveSpeed) ->
                 // Still mid-edge: accumulate progress, no cell change, no
                 // event (a continuous fact fully recoverable from the
                 // resulting `AgentState.Progress`, like an idle agent's tick).
                 // `Route = Some r` must still be written back — otherwise
                 // next tick's cache check finds no route, recomputes one,
-                // and `startProgress` resets to 0 every tick forever.
+                // and `startProgress` resets to 0 every tick forever. The
+                // increment is always `Terrain.BaseMoveCost` (TASK-049): only
+                // `wouldComplete`'s threshold check scales with `MoveSpeed`.
                 agents.[idx] <- { a with Progress = startProgress + Terrain.BaseMoveCost; Route = Some r }
             | Advancing(r, next, dest, startProgress) ->
                 match yieldedTo.TryFind idx with

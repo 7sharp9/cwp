@@ -255,6 +255,12 @@ module Canonical =
     // the canonical image (corrects this comment's earlier "B-021 makes
     // discipline dynamic" claim).
     //
+    // `AgentState.MoveSpeed` (TASK-049, backlog B-058) is likewise NOT
+    // written — static authored scenario data (`Deployment.MoveSpeed`,
+    // resolved from the authored unit-type table), the same argument as
+    // `Discipline`. A speed-driven behaviour difference surfaces in the hash
+    // within one tick via `Position` / `Progress`.
+    //
     // `AgentState.Order` and `AgentState.Disposition` (TASK-028) ARE written:
     // they carry per-tick memory no other field reproduces (an order's
     // `IssuedAtTick`; a persisting `Refused` outcome and its reasons), so

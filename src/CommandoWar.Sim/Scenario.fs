@@ -105,14 +105,17 @@ module TargetId =
 /// validation. Version 3 (TASK-047, backlog B-030 proper) added
 /// `ResupplyAreas` — the first authored area type an actual phase consumes
 /// (`Simulation.stateConsequences`'s ammo-resupply check), unlike
-/// `ObjectiveAreas`/`ExtractionAreas`, still unread (B-032). A
-/// version-1-or-2 scenario is rejected, not migrated (`docs/04` section 16:
-/// "does not guess migrations").
+/// `ObjectiveAreas`/`ExtractionAreas`, still unread (B-032). Version 4
+/// (TASK-049, backlog B-058) added the authored unit-type table
+/// (`RawScenario.UnitTypes`) and each deployment's `UnitType` reference,
+/// the source of `Deployment.MoveSpeed` / `AgentState.MoveSpeed`. A
+/// version-1-2-or-3 scenario is rejected, not migrated (`docs/04` section
+/// 16: "does not guess migrations").
 [<RequireQualifiedAccess>]
 module ScenarioContent =
 
     [<Literal>]
-    let Version = 3
+    let Version = 4
 
 // --- validated model ---------------------------------------------------
 
@@ -134,7 +137,21 @@ type Deployment =
       /// `AgentState.Discipline` by `World.ofScenario` and never mutated
       /// during a run. `Scenario.validate` rejects a negative value
       /// (`NegativeDiscipline`).
-      Discipline: int }
+      Discipline: int
+      /// This agent's movement speed (TASK-049, backlog B-058): a value
+      /// `Simulation.navigationAndMovement` cross-multiplies against
+      /// `Agent.MoveSpeedDefault` in its edge-completion comparison (the
+      /// per-tick progress increment itself stays the universal
+      /// `Terrain.BaseMoveCost` for every agent) — a value equal to
+      /// `Agent.MoveSpeedDefault` reproduces the pre-TASK-049 comparison
+      /// byte-for-byte; a smaller value genuinely needs proportionally more
+      /// ticks to cross the same cell. Resolved from the authored
+      /// `RawDeployment.UnitType` reference against `RawScenario.UnitTypes`
+      /// at validation time — the `RawTerrainCell.Class` precedent: the raw
+      /// string reference does not survive past `Scenario.validate`, only
+      /// this baked scalar does. Static — carried onto `AgentState.MoveSpeed`
+      /// by `World.ofScenario` and never mutated during a run.
+      MoveSpeed: int }
 
 /// A named point of interest: an objective area or an extraction area. The
 /// slice needs a single cell per area; a rectangular region is a later
@@ -206,14 +223,17 @@ type Scenario =
 
 /// Unvalidated authored deployment: an agent id, a cell, whether the agent
 /// can receive orders (`CommunicationAvailable`, TASK-027 — `true` for an
-/// ordinary deployment, `false` for an authored comms blackout), and the
+/// ordinary deployment, `false` for an authored comms blackout), the
 /// agent's `Discipline` (TASK-028 — a non-negative integer; the Appraisal
-/// phase's stage-4 resolve input).
+/// phase's stage-4 resolve input), and the agent's `UnitType` (TASK-049,
+/// backlog B-058 — an id referencing one of `RawScenario.UnitTypes`, the
+/// source of `Deployment.MoveSpeed`).
 type RawDeployment =
     { AgentId: int
       Cell: Cell
       CommunicationAvailable: bool
-      Discipline: int }
+      Discipline: int
+      UnitType: string }
 
 /// Unvalidated authored area marker.
 type RawArea = { AreaId: string; Cell: Cell }
@@ -273,6 +293,15 @@ type RawTerrainLayer =
       Cells: RawTerrainCell[]
       Cover: RawCoverFeature[] }
 
+/// One authored unit type (TASK-049, backlog B-058): `Id` is the token a
+/// `RawDeployment.UnitType` references; `MoveSpeed` must be a positive
+/// integer, carried forward as `Deployment.MoveSpeed` / `AgentState.
+/// MoveSpeed` (`Agent.MoveSpeedDefault` reproduces the pre-TASK-049 pace
+/// exactly; a smaller value is genuinely slower). Like `RawTerrainCell.
+/// Class`, this table does not survive past `Scenario.validate` — only the
+/// resolved `Deployment.MoveSpeed` scalar does.
+type RawUnitType = { Id: string; MoveSpeed: int }
+
 /// The whole unvalidated authored scenario, as a content reader (a Godot
 /// `.tscn` reader, a Tiled importer, or a test) produces it. Every field is a
 /// primitive, an array of primitives, or the optional terrain layer, so the
@@ -292,6 +321,10 @@ type RawScenario =
       Objectives: RawObjective[]
       /// The authored terrain layer, or `None` for empty terrain.
       TerrainLayer: RawTerrainLayer option
+      /// Authored unit types (TASK-049, backlog B-058), referenced by each
+      /// `RawDeployment.UnitType`. Every deployment must reference a defined
+      /// entry here — no silent default (`DeploymentReferencesUnknownUnitType`).
+      UnitTypes: RawUnitType[]
       FailOnFriendlyForceEliminated: bool }
 
 /// Why a raw scenario is invalid (docs/03 section 17, docs/06 section 7).
@@ -340,6 +373,16 @@ type ScenarioError =
     | MoveCostOutOfRange of cell: Cell * cost: int * min: int * max: int
     | NegativeCoverLevel of cell: Cell * level: int
     | DeploymentOnImpassableCell of agent: int * cell: Cell
+    // --- unit types (ScenarioContent.Version 4, TASK-049, backlog B-058) ---
+    | BlankUnitTypeId
+    | DuplicateUnitTypeId of unitType: string
+    /// An authored `RawUnitType.MoveSpeed` at or below 0. A non-positive
+    /// speed would never let an agent's `Progress` reach any cell's
+    /// completion threshold — a permanently frozen agent has no meaning.
+    | NonPositiveUnitTypeMoveSpeed of unitType: string * value: int
+    /// A `RawDeployment.UnitType` naming no entry in `RawScenario.UnitTypes`
+    /// — no silent default is supplied.
+    | DeploymentReferencesUnknownUnitType of agent: int * unitType: string
 
 [<RequireQualifiedAccess>]
 module Scenario =
@@ -398,6 +441,26 @@ module Scenario =
         if not mapOk then
             report (NonPositiveMapDimensions(raw.Width, raw.Height))
 
+        // --- unit types (ScenarioContent.Version 4, TASK-049, backlog B-058) ---
+        // Validated ahead of deployments so the deployment loop below can
+        // check each `UnitType` reference against a known-good id set.
+        for u in raw.UnitTypes do
+            if System.String.IsNullOrWhiteSpace u.Id then
+                report BlankUnitTypeId
+
+        for dup in repeated (raw.UnitTypes |> Array.map (fun u -> u.Id) |> Array.filter (fun id -> not (System.String.IsNullOrWhiteSpace id))) do
+            report (DuplicateUnitTypeId dup)
+
+        for u in raw.UnitTypes do
+            if not (System.String.IsNullOrWhiteSpace u.Id) && u.MoveSpeed <= 0 then
+                report (NonPositiveUnitTypeMoveSpeed(u.Id, u.MoveSpeed))
+
+        let unitTypesById =
+            raw.UnitTypes
+            |> Array.filter (fun u -> not (System.String.IsNullOrWhiteSpace u.Id) && u.MoveSpeed > 0)
+            |> Array.map (fun u -> u.Id, u.MoveSpeed)
+            |> Map.ofArray
+
         // --- deployments (friendly then enemy) ---------------------------
         let deployments =
             Array.append
@@ -415,6 +478,9 @@ module Scenario =
         for d, _ in deployments |> Array.sortBy (fun (d, _) -> d.AgentId) do
             if d.Discipline < 0 then
                 report (NegativeDiscipline(d.AgentId, d.Discipline))
+
+            if not (Map.containsKey d.UnitType unitTypesById) then
+                report (DeploymentReferencesUnknownUnitType(d.AgentId, d.UnitType))
 
         if mapOk then
             for d, _ in deployments do
@@ -647,7 +713,10 @@ module Scenario =
                       Side = side
                       Cell = d.Cell
                       CommunicationAvailable = d.CommunicationAvailable
-                      Discipline = d.Discipline })
+                      Discipline = d.Discipline
+                      // `errors.Count = 0` here guarantees `d.UnitType` was
+                      // validated against `unitTypesById` above.
+                      MoveSpeed = Map.find d.UnitType unitTypesById })
 
             Ok
                 { Id = ScenarioId.ofString raw.Id

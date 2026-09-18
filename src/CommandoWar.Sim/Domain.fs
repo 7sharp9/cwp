@@ -436,7 +436,32 @@ type AgentState =
       /// (AmmoConfig.MagazineSize, AmmoConfig.ReserveStart)` — every agent
       /// starts fully armed, no scenario-authored override (the
       /// `Suppression` precedent).
-      Ammo: AmmoState }
+      Ammo: AmmoState
+      /// This agent's movement speed (TASK-049, backlog B-058). The per-tick
+      /// progress increment `Simulation.navigationAndMovement` applies stays
+      /// the universal `Terrain.BaseMoveCost` for every agent (so
+      /// `AgentState.Progress`'s stored trajectory is exactly the elapsed
+      /// real-tick sequence 0, 1, 2, ... it always has been); only the
+      /// completion *comparison* scales, cross-multiplied against
+      /// `Agent.MoveSpeedDefault`: an agent whose `MoveSpeed` equals that
+      /// constant reproduces the pre-TASK-049 comparison byte-for-byte
+      /// (multiplying both sides of an inequality by the same constant does
+      /// not change it), while a smaller value genuinely needs
+      /// proportionally more ticks to cross the same cell. Read only by
+      /// `Simulation.navigationAndMovement`; `Pathfinding`'s route cost is
+      /// unaffected (it measures `Terrain.moveCost` only, never real-time
+      /// ticks).
+      ///
+      /// **Static authoritative data at this stage**, the `Discipline`
+      /// precedent exactly: set once from the authored scenario
+      /// (`Deployment.MoveSpeed`, resolved from `Scenario.validate`'s
+      /// unit-type table; default `Agent.MoveSpeedDefault`) and never
+      /// mutated during a run. Therefore **excluded** from `Canonical.encode`
+      /// (the ADR-0002 amendment): both runs load the identical value at
+      /// tick 0 and it cannot diverge. A speed-driven behaviour difference
+      /// still surfaces in the hash within one tick through the agent's
+      /// `Position`/`Progress`.
+      MoveSpeed: int }
 
 /// Minimal authoritative world state: an integer tick, the logical grid
 /// bounds, the authoritative terrain grid, the agents ordered by ascending
@@ -538,18 +563,36 @@ module Agent =
     [<Literal>]
     let ReserveStart = 90
 
+    /// The movement-speed reference (TASK-049, backlog B-058).
+    /// `Simulation.navigationAndMovement` checks an edge complete via
+    /// `(startProgress + Terrain.BaseMoveCost) * moveSpeed >= Terrain.moveCost
+    /// next * MoveSpeedDefault` — cross-multiplication, not a shared rescale
+    /// of the per-tick increment (which stays the universal
+    /// `Terrain.BaseMoveCost` for every agent). An agent whose
+    /// `AgentState.MoveSpeed` equals this constant therefore reproduces the
+    /// pre-TASK-049 comparison exactly (multiplying both sides of the old
+    /// inequality by the same constant does not change it) — every existing
+    /// corpus/fixture entry's agents use this default and are byte-identical.
+    /// A smaller `MoveSpeed` (e.g. half this value) genuinely needs
+    /// proportionally more ticks to cross the same cell. The
+    /// `DisciplineDefault`/`MaxHealth` precedent: kept as a literal here to
+    /// avoid a module-ordering dependency on `Simulation.fs`.
+    [<Literal>]
+    let MoveSpeedDefault = 2
+
     /// Creates an agent at rest (no destination, no route, no progress, no
     /// visible contacts, no order, communication available, default
-    /// discipline, unsuppressed, full health, full ammunition) at the given
-    /// position. `World.ofScenario` overrides `CommunicationAvailable` and
-    /// `Discipline` from the authored deployment; every other construction
-    /// path takes the defaults. `Suppression` has no authored override
-    /// anywhere (the `Progress` precedent) — every agent always starts at
-    /// `0`. `SuppressionBand` and `Stress` (TASK-033) follow the identical
-    /// rule: `false` / `0` always. `Vitals`/`RecentlyWounded` (TASK-045)
-    /// follow it too: every agent always starts `Alive MaxHealth` /
-    /// unwounded, no authored override. `Ammo` (TASK-047) follows it as
-    /// well: every agent always starts `Ready (MagazineSize, ReserveStart)`.
+    /// discipline, unsuppressed, full health, full ammunition, default
+    /// movement speed) at the given position. `World.ofScenario` overrides
+    /// `CommunicationAvailable`, `Discipline`, and `MoveSpeed` from the
+    /// authored deployment; every other construction path takes the
+    /// defaults. `Suppression` has no authored override anywhere (the
+    /// `Progress` precedent) — every agent always starts at `0`.
+    /// `SuppressionBand` and `Stress` (TASK-033) follow the identical rule:
+    /// `false` / `0` always. `Vitals`/`RecentlyWounded` (TASK-045) follow it
+    /// too: every agent always starts `Alive MaxHealth` / unwounded, no
+    /// authored override. `Ammo` (TASK-047) follows it as well: every agent
+    /// always starts `Ready (MagazineSize, ReserveStart)`.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -568,4 +611,5 @@ module Agent =
           Stress = 0
           Vitals = Alive MaxHealth
           RecentlyWounded = false
-          Ammo = Ready(MagazineSize, ReserveStart) }
+          Ammo = Ready(MagazineSize, ReserveStart)
+          MoveSpeed = MoveSpeedDefault }

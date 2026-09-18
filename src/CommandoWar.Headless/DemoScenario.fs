@@ -33,6 +33,20 @@ module DemoScenario =
     [<Literal>]
     let private Issuer = "demo:terrain"
 
+    /// This demo's sole unit type (TASK-049, backlog B-058).
+    [<Literal>]
+    let private TrooperUnitType = "trooper"
+
+    /// Half `Agent.MoveSpeedDefault` — a real per-agent movement speed
+    /// resolving Dave's "twice as fast as I thought it would" complaint
+    /// about this demo's pace (raised on TASK-046 review), rather than the
+    /// client-only `simHz` halving and the global `Terrain.BaseMoveCost`
+    /// bump both tried and reverted (the latter would have rippled every
+    /// corpus entry's tick counts; this demo-local unit type touches none of
+    /// them).
+    [<Literal>]
+    let private TrooperMoveSpeed = Agent.MoveSpeedDefault / 2
+
     /// One authored terrain cell.
     let private cell x y className elevation moveCost opaque : RawTerrainCell =
         { Cell = { X = x; Y = y }
@@ -81,9 +95,9 @@ module DemoScenario =
           Width = bounds.Width
           Height = bounds.Height
           FriendlyDeployments =
-            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault }
-               { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
-          EnemyDeployments = [| { AgentId = 5; Cell = { X = 11; Y = 7 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
+            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = TrooperUnitType }
+               { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = TrooperUnitType } |]
+          EnemyDeployments = [| { AgentId = 5; Cell = { X = 11; Y = 7 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = TrooperUnitType } |]
           ObjectiveAreas = [| { AreaId = "ridge-top"; Cell = { X = 4; Y = 4 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 0; Y = 7 } } |]
           ResupplyAreas = [||]
@@ -97,6 +111,7 @@ module DemoScenario =
                  ExtractAgentIds = [||]
                  IsOptional = false } |]
           TerrainLayer = Some terrainLayer
+          UnitTypes = [| { Id = TrooperUnitType; MoveSpeed = TrooperMoveSpeed } |]
           FailOnFriendlyForceEliminated = true }
 
     /// The validated scenario. Fails hard (this is a fixed test vector, not

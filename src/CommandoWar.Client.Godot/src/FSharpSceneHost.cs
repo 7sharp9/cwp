@@ -202,12 +202,12 @@ public partial class FSharpSceneHost : Node2D
             case "CwClientCore.DemoRenderScene":
                 label = "demo-render-scene self-check (DemoScenario, terrain-demo)";
                 sequence = DemoDrive.runFullSequence();
-                expected = 0x8E93B48D07AE9CBDUL; // DemoScenario tick 20 (TASK-047 re-pin: Canonical.FormatVersion 10 -> 11, AgentState.Ammo added)
+                expected = 0xF422ACB8D5A86FF0UL; // DemoScenario tick 20 (TASK-049 re-pin: DemoScenario's agents now move at half Agent.MoveSpeedDefault)
                 break;
             case "CwClientCore.CommandDemoScene":
                 label = "command-demo-scene self-check (scripted MoveTo(3,0) + Hold(2,1) via order-mode icon)";
                 sequence = CommandDemoDrive.runScriptedSelfCheck();
-                expected = 0x00D3D471EF7354BCUL; // CommandDemoScene tick 20 (TASK-048 re-pin: runScriptedSelfCheck now also issues a Hold order via OnOrderModeClick)
+                expected = 0x00D3D471EF7354BCUL; // CommandDemoScene tick 20 (unchanged by TASK-049: both scripted orders complete within a handful of ticks even at half speed, well inside the 20-tick window, so the tick-20 rest state is unaffected)
                 break;
             default:
                 GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");

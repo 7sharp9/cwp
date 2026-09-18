@@ -18,10 +18,10 @@ let private goodRaw () : RawScenario =
       Width = 16
       Height = 16
       FriendlyDeployments =
-        [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault }
-           { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault }
-           { AgentId = 2; Cell = { X = 0; Y = 2 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
-      EnemyDeployments = [| { AgentId = 10; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
+        [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" }
+           { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" }
+           { AgentId = 2; Cell = { X = 0; Y = 2 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |]
+      EnemyDeployments = [| { AgentId = 10; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |]
       ObjectiveAreas = [| { AreaId = "observation"; Cell = { X = 8; Y = 8 } } |]
       ExtractionAreas = [| { AreaId = "exfil"; Cell = { X = 1; Y = 15 } } |]
       ResupplyAreas = [||]
@@ -56,6 +56,7 @@ let private goodRaw () : RawScenario =
              ExtractAgentIds = [| 0; 1 |]
              IsOptional = false } |]
       TerrainLayer = None
+      UnitTypes = [| { Id = "standard"; MoveSpeed = Agent.MoveSpeedDefault } |]
       FailOnFriendlyForceEliminated = true }
 
 /// A well-formed authored terrain layer for the 16x16 `goodRaw` map: one
@@ -101,12 +102,13 @@ let private errorsOf (raw: RawScenario) : ScenarioError list =
 [<Fact>]
 let ``the content version is independent of the canonical and replay versions`` () =
     // The three version constants move independently: ScenarioContent.Version
-    // is 3 (TASK-010 authored terrain layer; TASK-047 ResupplyAreas),
-    // Canonical.FormatVersion is 11 (TASK-018 / TASK-026 / TASK-028 /
-    // TASK-032 / TASK-033 / TASK-034 / TASK-037 / TASK-044 / TASK-045 /
-    // TASK-047), Replay.FormatVersion is 1. This test documents the intent,
-    // not an inequality.
-    Assert.Equal(3, ScenarioContent.Version)
+    // is 4 (TASK-010 authored terrain layer; TASK-047 ResupplyAreas;
+    // TASK-049 unit types), Canonical.FormatVersion is 11 (TASK-018 /
+    // TASK-026 / TASK-028 / TASK-032 / TASK-033 / TASK-034 / TASK-037 /
+    // TASK-044 / TASK-045 / TASK-047 -- TASK-049's MoveSpeed is static,
+    // excluded, so it does not move this one), Replay.FormatVersion is 1.
+    // This test documents the intent, not an inequality.
+    Assert.Equal(4, ScenarioContent.Version)
     Assert.Equal(11, Canonical.FormatVersion)
     Assert.Equal(1, Replay.FormatVersion)
 
@@ -181,13 +183,13 @@ let ``an extraction with no listed agents validates to AllFriendlyAgents`` () =
 
 [<Fact>]
 let ``an unsupported content version is a typed error`` () =
-    Assert.Contains(UnsupportedContentVersion(99, 3), errorsOf { goodRaw () with ContentVersion = 99 })
+    Assert.Contains(UnsupportedContentVersion(99, 4), errorsOf { goodRaw () with ContentVersion = 99 })
 
 [<Fact>]
 let ``a version-1 scenario is rejected, not migrated`` () =
     // ScenarioContent.Version 1 predates the authored terrain layer. The
     // validator does not migrate it (docs/04 section 16).
-    Assert.Contains(UnsupportedContentVersion(1, 3), errorsOf { goodRaw () with ContentVersion = 1 })
+    Assert.Contains(UnsupportedContentVersion(1, 4), errorsOf { goodRaw () with ContentVersion = 1 })
 
 [<Fact>]
 let ``a blank scenario id is reported`` () =
@@ -200,7 +202,7 @@ let ``non-positive map dimensions are reported`` () =
 [<Fact>]
 let ``a duplicate deployment agent id is reported once`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = 1; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = 1; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |] }
 
     let es = errorsOf raw
     Assert.Contains(DuplicateDeploymentId 1, es)
@@ -209,14 +211,14 @@ let ``a duplicate deployment agent id is reported once`` () =
 [<Fact>]
 let ``a negative deployment agent id is reported`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = -3; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = -3; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |] }
 
     Assert.Contains(NegativeDeploymentId -3, errorsOf raw)
 
 [<Fact>]
 let ``a deployment outside the map is reported with its cell and the bounds`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 99; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 99; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |] }
 
     Assert.Contains(
         DeploymentOutOfMap(10, { X = 99; Y = 0 }, { Width = 16; Height = 16 }),
@@ -226,7 +228,7 @@ let ``a deployment outside the map is reported with its cell and the bounds`` ()
 [<Fact>]
 let ``two deployments sharing a cell are reported with both agent ids`` () =
     let raw =
-        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |] }
+        { goodRaw () with EnemyDeployments = [| { AgentId = 10; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |] }
 
     Assert.Contains(DeploymentCellShared({ X = 0; Y = 0 }, [ 0; 10 ]), errorsOf raw)
 
@@ -324,8 +326,8 @@ let ``a missing required marker is reported for each of the three kinds`` () =
 let ``validation reports every fault in one pass`` () =
     let raw =
         { goodRaw () with
-            ContentVersion = 4
-            EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
+            ContentVersion = 5
+            EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |]
             Objectives = [| objective 2 "orbit" |]
             TerrainLayer =
                 Some
@@ -333,7 +335,7 @@ let ``validation reports every fault in one pass`` () =
                         Cover = [| { Cell = { X = 40; Y = 40 }; Direction = "up"; Level = -1 } |] } }
 
     let es = errorsOf raw
-    Assert.Contains(UnsupportedContentVersion(4, 3), es)
+    Assert.Contains(UnsupportedContentVersion(5, 4), es)
     Assert.Contains(DuplicateDeploymentId 1, es)
     Assert.Contains(DeploymentOutOfMap(1, { X = 99; Y = 99 }, { Width = 16; Height = 16 }), es)
     Assert.Contains(UnknownObjectiveKind(2, "orbit"), es)
@@ -636,6 +638,68 @@ let ``a deployment on an authored impassable cell is reported`` () =
 
     Assert.Contains(DeploymentOnImpassableCell(0, { X = 0; Y = 0 }), errorsOf raw)
 
+// --- unit types (ScenarioContent.Version 4, TASK-049, backlog B-058) ---
+
+[<Fact>]
+let ``a blank unit type id is reported`` () =
+    let raw =
+        { goodRaw () with UnitTypes = [| { Id = "   "; MoveSpeed = Agent.MoveSpeedDefault } |] }
+
+    Assert.Contains(BlankUnitTypeId, errorsOf raw)
+
+[<Fact>]
+let ``a duplicate unit type id is reported once`` () =
+    let raw =
+        { goodRaw () with
+            UnitTypes =
+                [| { Id = "standard"; MoveSpeed = Agent.MoveSpeedDefault }
+                   { Id = "standard"; MoveSpeed = 1 } |] }
+
+    let es = errorsOf raw
+    Assert.Contains(DuplicateUnitTypeId "standard", es)
+    Assert.Equal(1, es |> List.filter ((=) (DuplicateUnitTypeId "standard")) |> List.length)
+
+[<Fact>]
+let ``a non-positive unit type move speed is reported`` () =
+    let raw =
+        { goodRaw () with UnitTypes = [| { Id = "standard"; MoveSpeed = 0 } |] }
+
+    Assert.Contains(NonPositiveUnitTypeMoveSpeed("standard", 0), errorsOf raw)
+
+[<Fact>]
+let ``a deployment referencing an unknown unit type is reported`` () =
+    let raw =
+        { goodRaw () with
+            EnemyDeployments =
+                [| { AgentId = 10
+                     Cell = { X = 15; Y = 15 }
+                     CommunicationAvailable = true
+                     Discipline = AppraisalConfig.DisciplineDefault
+                     UnitType = "ghost" } |] }
+
+    Assert.Contains(DeploymentReferencesUnknownUnitType(10, "ghost"), errorsOf raw)
+
+[<Fact>]
+let ``a deployment's UnitType resolves to Deployment.MoveSpeed`` () =
+    let raw =
+        { goodRaw () with
+            UnitTypes = [| { Id = "standard"; MoveSpeed = Agent.MoveSpeedDefault }; { Id = "slow"; MoveSpeed = 1 } |]
+            EnemyDeployments =
+                [| { AgentId = 10
+                     Cell = { X = 15; Y = 15 }
+                     CommunicationAvailable = true
+                     Discipline = AppraisalConfig.DisciplineDefault
+                     UnitType = "slow" } |] }
+
+    let s = validated raw
+    let enemy = s.EnemyDeployments |> Array.find (fun d -> AgentId.value d.Agent = 10)
+    Assert.Equal(1, enemy.MoveSpeed)
+
+    Assert.All(
+        s.FriendlyDeployments,
+        fun d -> Assert.Equal(Agent.MoveSpeedDefault, d.MoveSpeed)
+    )
+
 // --- pinning: the six-agent fixture as a Scenario ---------------
 
 /// The shared spike fixture (src/CommandoWar.Headless/Fixture.fs,
@@ -647,7 +711,7 @@ let private fixtureScenario () : Scenario =
       Id = "spike-fixture"
       Width = Fixture.bounds.Width
       Height = Fixture.bounds.Height
-      FriendlyDeployments = [| for i in 0..5 -> { AgentId = i; Cell = { X = 0; Y = i }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
+      FriendlyDeployments = [| for i in 0..5 -> { AgentId = i; Cell = { X = 0; Y = i }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |]
       EnemyDeployments = [||]
       ObjectiveAreas = [| { AreaId = "observation"; Cell = { X = 20; Y = 14 } } |]
       ExtractionAreas = [| { AreaId = "exfil"; Cell = { X = 0; Y = 0 } } |]
@@ -655,6 +719,7 @@ let private fixtureScenario () : Scenario =
       StaticTargets = [||]
       Objectives = [| { objective 1 "reach" with AreaRef = "observation" } |]
       TerrainLayer = None
+      UnitTypes = [| { Id = "standard"; MoveSpeed = Agent.MoveSpeedDefault } |]
       FailOnFriendlyForceEliminated = true }
     |> validated
 

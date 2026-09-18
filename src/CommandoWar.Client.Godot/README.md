@@ -366,6 +366,48 @@ above); a windowed `--screenshot` (`docs/evidence/task-048-order-mode-hud.png`,
 committed) shows the icon bar with `Hold` armed (gold highlight border),
 `mode=hold` in the HUD text, and the hover-preview outline.
 
+## Per-agent movement speed (TASK-049, backlog B-058)
+
+`CommandoWar.Sim` gains a real per-agent `AgentState.MoveSpeed` (an authored
+unit-type stat, `ScenarioContent.Version` 3 -> 4). `DemoScenario`'s three
+agents (the scenario both `SnapshotDemo.tscn` and `CommandDemo.tscn` live-step)
+now author a `"trooper"` unit type at half `Agent.MoveSpeedDefault` -- a real
+per-agent slowdown, not a client-side `simHz` scale or a shared
+`Terrain.BaseMoveCost` bump (both tried and reverted on TASK-046 review) --
+resolving Dave's "movement feels twice as fast as I thought it would"
+complaint. No `CommandoWar.Sim` behaviour change for any agent at
+`Agent.MoveSpeedDefault`: the edge-completion comparison is cross-multiplied
+so a default-speed agent's tick-by-tick `Progress`/`Position` trajectory is
+byte-for-byte identical to before -- confirmed by all 16 committed corpus/
+fixture entries passing unchanged (`cwheadless corpus`, `--regenerate`
+byte-identical).
+
+`DemoRenderScene`'s (`SnapshotDemo.tscn`) `--selfcheck` hash moves, since its
+tick-20 snapshot now catches the (slower) friendlies still mid-route rather
+than past the point they'd have reached at the old pace:
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0xF422ACB8D5A86FF0
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x00D3D471EF7354BC (unchanged)
+```
+
+`CommandDemoScene`'s (`CommandDemo.tscn`) hash is unchanged: its scripted
+`MoveTo(3,0)`/`Hold(2,1)` both complete within a handful of ticks even at
+half speed, well inside the 20-tick self-check window, so the tick-20 rest
+state it produces is identical either way. `AppraisalDemoScene` is
+unaffected (it steps the committed `exposed-approach` corpus entry, not
+`DemoScenario`).
+
+The `0xF422ACB8D5A86FF0` pin was originally computed by calling
+`DemoDrive.runFullSequence()` directly from `dotnet fsi` against the built
+`CommandoWar.Client.Godot.Core.dll`, then independently confirmed `MATCH`
+through the real Godot 4.7.2 editor (all three scenes, `--headless --path .
+<scene> -- --selfcheck`, all exit 0).
+
 ## Pinned versions
 
 | Component | Version |
