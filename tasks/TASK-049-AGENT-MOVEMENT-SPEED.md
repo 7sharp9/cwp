@@ -1,8 +1,8 @@
 # TASK-049: Per-agent movement speed
 
-Status: review (implemented and self-verified 2026-09-18; re-pinned Godot
+Status: done (implemented and self-verified 2026-09-18; re-pinned Godot
 `--selfcheck` hash independently confirmed `MATCH` through the real editor
-2026-09-18; awaiting Dave's final acceptance)
+2026-09-18; accepted by Dave 2026-09-18)
 Owner: Dave
 Phase: P4
 Gate: G4 (vertical slice feature-complete); realises backlog B-058
@@ -282,4 +282,6 @@ task.
 ## Review
 
 - Reviewer: Dave
-- Accepted: pending (Godot `--selfcheck` re-run outstanding).
+- Accepted: yes (2026-09-18). Godot `--selfcheck` re-run through the real
+  editor confirmed `MATCH` before this acceptance; no further changes
+  requested.

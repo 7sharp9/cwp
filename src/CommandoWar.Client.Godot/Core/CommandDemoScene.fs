@@ -12,6 +12,18 @@ type CommandDemoScene() =
     let simHz = 20.0
     let maxCatchUpStepsPerFrame = 5
 
+    // The on-screen radius (pixels) a real agent figure draws at (TASK-052,
+    // backlog B-054: doubled from the original `10.0f` alongside
+    // `FSharpSceneHost.cs`'s isometric tile scale, so the figure still fills
+    // its tile at the larger fixed scale). Named and shared, rather than
+    // repeated as a literal, because the fog-of-war ghost ring (TASK-051)
+    // and the new hover-highlight ring (TASK-052, backlog B-053) both have
+    // to line up with exactly the same footprint a real figure draws at --
+    // drifting independently would visibly misalign them. `haloRadius`
+    // keeps the halo's original ratio to the figure (1.7x).
+    let agentRadius = 20.0f
+    let haloRadius = 34.0f
+
     let mutable state = Unchecked.defaultof<WorldState>
     let mutable prevAgents: Map<int, Cell> = Map.empty
     let mutable currAgents: AgentSnapshot[] = [||]
@@ -111,6 +123,36 @@ type CommandDemoScene() =
     let agentPosition (id: AgentId) : Cell option =
         currAgents |> Array.tryFind (fun a -> a.Id = id) |> Option.map (fun a -> a.Position)
 
+    /// An agent's current `VitalStatus`, read from `devFrame`'s always-on
+    /// `AgentVitals` overlay (TASK-053, backlog B-061) -- `AgentSnapshot`
+    /// itself carries no vitals field (docs/03 section 12: values only), so
+    /// this is the same lookup `renderVitals` (`DrawList`) already performs
+    /// inline, shared here so the selection/order-mode gating below reads
+    /// the identical source rather than duplicating the lookup. Defaults to
+    /// full-health `Alive` if not found, the `renderVitals` precedent.
+    let vitalsOf (id: AgentId) : VitalStatus =
+        devFrame.Overlays
+        |> Array.tryPick (function
+            | AgentVitals(aid, _, v) when aid = id -> Some v
+            | _ -> None)
+        |> Option.defaultValue (Alive Agent.MaxHealth)
+
+    /// Auto-disarms the HUD order mode back to `0` the instant the selected
+    /// agent is no longer `Alive` (TASK-053, backlog B-061; Dave's own
+    /// words on accepting TASK-052: "the cursor which has move active or
+    /// whatever should be deactivated" when the selected agent is removed
+    /// by death). Deliberately does NOT clear `selected` itself -- Dave's
+    /// follow-up clarified viewing a dead/incapacitated agent's status
+    /// stays allowed, only issuing it new orders does not; see `OnClick`'s
+    /// order-issuing guard and `OnHover`'s `previewPath` gating for where
+    /// that is actually enforced. Called after every tick (vitals only ever
+    /// change from `stepOnce`) and after a selection change (selecting an
+    /// already-non-`Alive` friendly directly must disarm just as promptly).
+    let syncOrderModeToSelection () =
+        match selected with
+        | Some id when orderMode <> 0 && not (Casualty.isAlive (vitalsOf id)) -> orderMode <- 0
+        | _ -> ()
+
     /// A route's cells excluding the traveller's own starting cell, drawn as
     /// small `Kind = 1` dots in the given colour/alpha/radius -- the shared
     /// shape behind the hover preview, the pending-order marker, and the
@@ -160,6 +202,12 @@ type CommandDemoScene() =
                     accum <- accum - simStep
                     steps <- steps + 1
 
+                // The selected agent's vitals can only change from a
+                // `stepOnce` (TASK-053, backlog B-061) -- disarm any order
+                // mode it invalidated as soon as it happens, not on the
+                // next click.
+                syncOrderModeToSelection ()
+
             alpha <- System.Math.Clamp(accum * simHz, 0.0, 1.0)
 
             // Decrement every held fire effect by real wall-clock time
@@ -195,6 +243,24 @@ type CommandDemoScene() =
         member _.DrawList() =
             let lerp (a: int) (b: int) (t: float) = float32 a + (float32 (b - a)) * float32 t
 
+            // Player-facing fog of war (TASK-051, backlog B-055): a hostile
+            // this squad has never made contact with (or whose contact has
+            // fully expired, `PerceptionConfig.ExpireAfter` ticks after it
+            // was last seen) is hidden entirely; one known but not currently
+            // visible this tick draws only a last-known-position marker,
+            // never its true live position or vitals. `devFrame` already
+            // carries `WorldState.TacticalKnowledge` as a `KnownContact`
+            // overlay per contact regardless of the F1 dev-overlay toggle
+            // (the `AgentVitals` precedent just below), so no
+            // `CommandoWar.Sim` change is needed to read it here.
+            let hostileKnownContacts =
+                devFrame.Overlays
+                |> Array.choose (function
+                    | KnownContact(cell, contact, confidence, lastSeenTick) ->
+                        Some(AgentId.value contact, (cell, confidence, lastSeenTick))
+                    | _ -> None)
+                |> Map.ofArray
+
             // Player-facing casualty markers (TASK-046, backlog B-057):
             // promotes `AgentVitals` from developer-only to always-on --
             // `devFrame` is recomputed every tick regardless of the F1
@@ -203,101 +269,132 @@ type CommandDemoScene() =
             // vocabulary (a wound dot, a status badge, a dead cross) rather
             // than a colour-only recolour of the agent figure (docs/06
             // "status indicators that do not rely on colour alone").
+            let renderVitals (a: AgentSnapshot) : DrawItem[] =
+                let vitals = vitalsOf a.Id
+
+                match vitals with
+                | Dead ->
+                    // A small black cross where the figure would be --
+                    // shape, not colour, carries "no longer active" (the
+                    // `DiagnosticRender.Svg` dead-cross precedent). No
+                    // figure at all: a corpse is not a coloured variant
+                    // of a living agent.
+                    let cx, cy = float32 a.Position.X, float32 a.Position.Y
+                    let d = 0.28f
+
+                    [| { Kind = 2
+                         TextureId = 0
+                         Cx = cx - d
+                         Cy = cy - d
+                         Cx2 = cx + d
+                         Cy2 = cy + d
+                         Text = ""
+                         R = 0.05f
+                         G = 0.05f
+                         B = 0.05f
+                         A = 0.9f
+                         Radius = 2.5f }
+                       { Kind = 2
+                         TextureId = 0
+                         Cx = cx - d
+                         Cy = cy + d
+                         Cx2 = cx + d
+                         Cy2 = cy - d
+                         Text = ""
+                         R = 0.05f
+                         G = 0.05f
+                         B = 0.05f
+                         A = 0.9f
+                         Radius = 2.5f } |]
+                | Incapacitated _ ->
+                    // Darkened figure plus a plain-language text badge
+                    // (the `RenderShared.reasonText` player-vocabulary
+                    // precedent -- no bleed-out tick count, that is
+                    // developer detail, `devReasonText`'s own distinction)
+                    // -- the badge, not just the tint, is the signal.
+                    let r, g, b = RenderShared.agentColor a.Side
+
+                    [| { Kind = 1
+                         TextureId = 0
+                         Cx = float32 a.Position.X
+                         Cy = float32 a.Position.Y
+                         Cx2 = 0.0f
+                         Cy2 = 0.0f
+                         Text = ""
+                         R = r * 0.5f
+                         G = g * 0.5f
+                         B = b * 0.5f
+                         A = 1.0f
+                         Radius = agentRadius }
+                       RenderShared.cellLabel a.Position "down" (0.9f, 0.9f, 0.9f) 0.9f 9.0f |]
+                | Alive health ->
+                    let from = prevAgents |> Map.tryFind (AgentId.value a.Id) |> Option.defaultValue a.Position
+                    let r, g, b = RenderShared.agentColor a.Side
+
+                    let figure =
+                        { Kind = 1
+                          TextureId = 0
+                          Cx = lerp from.X a.Position.X alpha
+                          Cy = lerp from.Y a.Position.Y alpha
+                          Cx2 = 0.0f
+                          Cy2 = 0.0f
+                          Text = ""
+                          R = r
+                          G = g
+                          B = b
+                          A = 1.0f
+                          Radius = agentRadius }
+
+                    if health >= Agent.MaxHealth then
+                        [| figure |]
+                    else
+                        // A small red wound dot -- its presence is the
+                        // signal, not a colour-only tint on the agent
+                        // itself (the `Dead`-cross reasoning above);
+                        // opacity scales with severity, the
+                        // `DiagnosticRender.Svg` wound-dot precedent.
+                        let severity = float32 (Agent.MaxHealth - health) / float32 Agent.MaxHealth
+
+                        [| figure
+                           RenderShared.cellMarker a.Position (0.9f, 0.15f, 0.1f) (0.4f + severity * 0.5f) 4.0f |]
+
+            // Fog of war (TASK-051, backlog B-055) applies only to the
+            // normal player view. The `F1` developer overlay keeps its
+            // TASK-043 ground-truth behaviour unchanged: every agent
+            // renders via `renderVitals` at its true position regardless of
+            // contact, so `devItems`'s own separate known-contact marker
+            // below still visibly diverges from it for comparison -- the
+            // reason that overlay exists in the first place.
             let agentItems =
                 currAgents
                 |> Array.collect (fun a ->
-                    let vitals =
-                        devFrame.Overlays
-                        |> Array.tryPick (function
-                            | AgentVitals(id, _, v) when id = a.Id -> Some v
-                            | _ -> None)
-                        |> Option.defaultValue (Alive Agent.MaxHealth)
+                    if devOverlay then
+                        renderVitals a
+                    else
+                        match a.Side, Map.tryFind (AgentId.value a.Id) hostileKnownContacts with
+                        | Hostile, None ->
+                            // Never contacted, or fully expired -- fog of
+                            // war hides it entirely.
+                            [||]
+                        | Hostile, Some(lastKnownCell, confidence, lastSeenTick) when lastSeenTick < devFrame.Tick ->
+                            // Known, but not currently visible this tick: a
+                            // hollow ring at its last-known position, not
+                            // its true live position -- a distinct outline
+                            // shape, not a translucent fill, so it reads as
+                            // stale intel rather than a dim real agent (the
+                            // "status indicators that do not rely on colour
+                            // alone" principle `renderVitals`'s `Dead`/
+                            // `Incapacitated` branches also follow). Opacity
+                            // follows `Contact.Confidence`'s own band drop
+                            // (`PerceptionConfig.ConfidenceBandDrop`), the
+                            // wound-dot-severity-scales-opacity precedent in
+                            // `renderVitals`'s `Alive` branch above.
+                            let r, g, b = RenderShared.agentColor a.Side
+                            let alpha = 0.9f * float32 confidence / float32 PerceptionConfig.ConfidenceFull
 
-                    match vitals with
-                    | Dead ->
-                        // A small black cross where the figure would be --
-                        // shape, not colour, carries "no longer active" (the
-                        // `DiagnosticRender.Svg` dead-cross precedent). No
-                        // figure at all: a corpse is not a coloured variant
-                        // of a living agent.
-                        let cx, cy = float32 a.Position.X, float32 a.Position.Y
-                        let d = 0.28f
-
-                        [| { Kind = 2
-                             TextureId = 0
-                             Cx = cx - d
-                             Cy = cy - d
-                             Cx2 = cx + d
-                             Cy2 = cy + d
-                             Text = ""
-                             R = 0.05f
-                             G = 0.05f
-                             B = 0.05f
-                             A = 0.9f
-                             Radius = 2.5f }
-                           { Kind = 2
-                             TextureId = 0
-                             Cx = cx - d
-                             Cy = cy + d
-                             Cx2 = cx + d
-                             Cy2 = cy - d
-                             Text = ""
-                             R = 0.05f
-                             G = 0.05f
-                             B = 0.05f
-                             A = 0.9f
-                             Radius = 2.5f } |]
-                    | Incapacitated _ ->
-                        // Darkened figure plus a plain-language text badge
-                        // (the `RenderShared.reasonText` player-vocabulary
-                        // precedent -- no bleed-out tick count, that is
-                        // developer detail, `devReasonText`'s own distinction)
-                        // -- the badge, not just the tint, is the signal.
-                        let r, g, b = RenderShared.agentColor a.Side
-
-                        [| { Kind = 1
-                             TextureId = 0
-                             Cx = float32 a.Position.X
-                             Cy = float32 a.Position.Y
-                             Cx2 = 0.0f
-                             Cy2 = 0.0f
-                             Text = ""
-                             R = r * 0.5f
-                             G = g * 0.5f
-                             B = b * 0.5f
-                             A = 1.0f
-                             Radius = 10.0f }
-                           RenderShared.cellLabel a.Position "down" (0.9f, 0.9f, 0.9f) 0.9f 9.0f |]
-                    | Alive health ->
-                        let from = prevAgents |> Map.tryFind (AgentId.value a.Id) |> Option.defaultValue a.Position
-                        let r, g, b = RenderShared.agentColor a.Side
-
-                        let figure =
-                            { Kind = 1
-                              TextureId = 0
-                              Cx = lerp from.X a.Position.X alpha
-                              Cy = lerp from.Y a.Position.Y alpha
-                              Cx2 = 0.0f
-                              Cy2 = 0.0f
-                              Text = ""
-                              R = r
-                              G = g
-                              B = b
-                              A = 1.0f
-                              Radius = 10.0f }
-
-                        if health >= Agent.MaxHealth then
-                            [| figure |]
-                        else
-                            // A small red wound dot -- its presence is the
-                            // signal, not a colour-only tint on the agent
-                            // itself (the `Dead`-cross reasoning above);
-                            // opacity scales with severity, the
-                            // `DiagnosticRender.Svg` wound-dot precedent.
-                            let severity = float32 (Agent.MaxHealth - health) / float32 Agent.MaxHealth
-
-                            [| figure
-                               RenderShared.cellMarker a.Position (0.9f, 0.15f, 0.1f) (0.4f + severity * 0.5f) 4.0f |])
+                            [| RenderShared.cellRing lastKnownCell (r, g, b) alpha agentRadius
+                               RenderShared.cellLabel lastKnownCell "?" (r, g, b) alpha (agentRadius * 0.45f) |]
+                        | _ -> renderVitals a)
 
             // Selection halo: a larger, translucent Kind = 1 item at the
             // selected agent's own cell, inserted before its real circle so
@@ -316,8 +413,27 @@ type CommandDemoScene() =
                          G = 0.95f
                          B = 0.30f
                          A = 0.35f
-                         Radius = 17.0f } |]
+                         Radius = haloRadius } |]
                 | None -> [||]
+
+            // Hover highlight for a selectable agent (TASK-052, backlog
+            // B-053): a thin ring around a friendly agent's own figure when
+            // the mouse is over it but has not clicked, so the player knows
+            // a click there will select it -- mirroring the hover-preview
+            // pattern this scene already uses for routes (Dave's own
+            // wording), but a shape distinct from both the bigger
+            // translucent selection halo above and the fog-of-war ghost
+            // ring (TASK-051), so none of the three is mistaken for another.
+            // Uses `agentRadius` (not a literal) for the same reason the
+            // fog-of-war ghost ring does: it must hug exactly the footprint
+            // the real figure draws at.
+            let hoverHighlightItems =
+                hoveredCell
+                |> Option.bind friendlyAt
+                |> Option.map (fun a ->
+                    RenderShared.cellRing a.Position (0.95f, 0.95f, 1.0f) 0.8f (agentRadius + 3.0f))
+                |> Option.map (fun item -> [| item |])
+                |> Option.defaultValue [||]
 
             // Three distinct route states, each its own colour (Dave's review
             // feedback: a hover is not a queued order is not a confirmed
@@ -431,12 +547,16 @@ type CommandDemoScene() =
                             | _ -> None)
 
                     // Known-versus-authoritative (docs/06 section 11): a
-                    // ghost marker at the friendly squad's last-known cell for
-                    // each hostile contact, distinct from the real agent
-                    // marker (`agentItems` above draws every agent, including
-                    // hostiles, at its true position unconditionally -- this
-                    // demo has no fog-of-war -- so the two markers visibly
-                    // diverge once a contact's knowledge goes stale).
+                    // ghost marker at the friendly squad's last-known cell
+                    // for each hostile contact, distinct from the real
+                    // agent marker. While this `F1` overlay is on,
+                    // `agentItems` deliberately bypasses the TASK-051
+                    // fog-of-war gating and draws every agent at its true
+                    // position unconditionally (see `agentItems`'s own
+                    // comment), so this marker still visibly diverges from
+                    // it once a contact's knowledge goes stale -- the
+                    // ground-truth-versus-known comparison this overlay is
+                    // for.
                     let knownContacts =
                         devFrame.Overlays
                         |> Array.choose (function
@@ -508,7 +628,9 @@ type CommandDemoScene() =
             // unsorted among themselves. `fireEffects` follows the identical
             // reasoning for the same underlying overlay, now player-facing.
             let sorted =
-                Array.concat [ terrainItems; haloItems; agentItems; previewItems; pendingItems; committedItems ]
+                Array.concat
+                    [ terrainItems; haloItems; agentItems; hoverHighlightItems; previewItems; pendingItems
+                      committedItems ]
                 |> Array.sortBy RenderShared.depthKey
 
             Array.concat [ sorted; fireEffects; holdOutlineItems; devItems ]
@@ -580,9 +702,18 @@ type CommandDemoScene() =
                     // stale ray from the previously selected agent must not
                     // linger until the next `OnHover`.
                     losRay <- None
+                    // Selecting a Dead/Incapacitated friendly directly is
+                    // allowed (status-view mode, TASK-053/B-061), but an
+                    // armed order-mode icon carried over from a previous,
+                    // still-`Alive` selection must not survive onto it.
+                    syncOrderModeToSelection ()
                 | None ->
                     match selected with
-                    | Some agentId when GridBounds.contains cell state.Bounds && agentPosition agentId <> Some cell ->
+                    | Some agentId when
+                        GridBounds.contains cell state.Bounds
+                        && agentPosition agentId <> Some cell
+                        && Casualty.isAlive (vitalsOf agentId)
+                        ->
                         // Dispatch on the armed HUD order mode (TASK-048,
                         // backlog B-059) -- `0 = MoveTo` is both the default
                         // unarmed state and an explicit icon, so a plain
@@ -621,15 +752,22 @@ type CommandDemoScene() =
             let cell = { X = cellX; Y = cellY }
             hoveredCell <- if GridBounds.contains cell state.Bounds then Some cell else None
 
+            // Suppressed while the selected agent is not `Alive` (TASK-053,
+            // backlog B-061): previewing a route implies a click there
+            // would move it, which is no longer true once it is
+            // Dead/Incapacitated -- see `OnClick`'s matching order-issue
+            // guard.
             previewPath <-
-                selected
-                |> Option.bind agentPosition
-                |> Option.bind (fun pos ->
-                    match Pathfinding.find state.Terrain pos cell with
-                    | Found(cells, _) -> Some cells
-                    | NoPath
-                    | BudgetExhausted _
-                    | InvalidEndpoint _ -> None)
+                match selected with
+                | Some id when Casualty.isAlive (vitalsOf id) ->
+                    agentPosition id
+                    |> Option.bind (fun pos ->
+                        match Pathfinding.find state.Terrain pos cell with
+                        | Found(cells, _) -> Some cells
+                        | NoPath
+                        | BudgetExhausted _
+                        | InvalidEndpoint _ -> None)
+                | _ -> None
 
             // Developer-overlay line of sight and occluders (TASK-043):
             // traced from the selected agent to the hovered cell regardless

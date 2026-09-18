@@ -61,6 +61,26 @@ module RenderShared =
           A = a
           Radius = radius }
 
+    /// A `Kind = 5` hollow (unfilled) ring at a cell centre -- a hostile's
+    /// last-known position once contact is lost (TASK-051, backlog B-055): a
+    /// distinct outline shape, not a translucent fill, so it reads as stale
+    /// intel rather than a dim real agent (docs/06 "status indicators that
+    /// do not rely on colour alone" -- the same reasoning `CommandDemoScene`
+    /// already applies to the `Dead`/`Incapacitated` vitals markers).
+    let cellRing (cell: Cell) (r: float32, g: float32, b: float32) (a: float32) (radius: float32) : DrawItem =
+        { Kind = 5
+          TextureId = 0
+          Cx = float32 cell.X
+          Cy = float32 cell.Y
+          Cx2 = 0.0f
+          Cy2 = 0.0f
+          Text = ""
+          R = r
+          G = g
+          B = b
+          A = a
+          Radius = radius }
+
     /// A `Kind = 2` line segment between two cells (TASK-043: line-of-sight
     /// rays, fire lines).
     let lineMarker (from: Cell) (target: Cell) (r: float32, g: float32, b: float32) (a: float32) (width: float32) : DrawItem =

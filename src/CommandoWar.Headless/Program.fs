@@ -598,6 +598,30 @@ let private cmdRender (args: string list) : int =
                             emit text
                             Exit.ok
 
+/// TASK-050 spike: runs `TurnDemo`'s full tick count with its queued
+/// `MoveTo`/`Suppress` orders and prints every resulting `DiagnosticFrame`
+/// in tick order -- a console harness for watching a "turn" resolve
+/// incrementally over the existing continuous-tick simulation, read-only
+/// against `CommandoWar.Sim` (identical mechanism to `render demo`/`render
+/// los`/`render path`, just looped over every tick instead of one).
+let private cmdTurn (args: string list) : int =
+    match args with
+    | [] ->
+        let w = TurnDemo.initialState ()
+        let cmds = TurnDemo.commandLog ()
+        let frames = DiagnosticRender.runFrames w cmds TurnDemo.TickCount
+        printfn "# TASK-050 turn-resolution spike: %d agent(s), %d tick(s), %d queued order(s)"
+            w.Agents.Length TurnDemo.TickCount cmds.Length
+        printfn ""
+        for f in frames do
+            printfn "==================== tick %d ====================" f.Tick
+            printf "%s" (DiagnosticRender.Ascii f)
+            printfn ""
+        Exit.ok
+    | _ ->
+        eprintfn "usage: cwheadless turn"
+        Exit.usage
+
 let private usage () =
     printfn "cwheadless - framework-neutral headless reference for CommandoWar.Sim"
     printfn ""
@@ -610,6 +634,7 @@ let private usage () =
     printfn "  cwheadless render <target> [opts]                render diagnostic frames (target: fixture | demo | los | path | <command-log>)"
     printfn "        [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--path AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
     printfn "  cwheadless corpus [--regenerate] [--dir PATH]    check (or regenerate) the committed replay corpus (content/replays/)"
+    printfn "  cwheadless turn                                  TASK-050 spike: run the TurnDemo scenario's full tick count and print every per-tick diagnostic frame"
     printfn ""
     printfn "exit codes: %d ok, %d usage/IO, %d replay error, %d divergence detected"
         Exit.ok Exit.usage Exit.replayError Exit.diverged
@@ -636,6 +661,7 @@ let main argv =
     | [ "fixture" ] -> cmdFixture ()
     | "render" :: rest -> cmdRender rest
     | "corpus" :: rest -> cmdCorpus rest
+    | "turn" :: rest -> cmdTurn rest
     | other :: _ ->
         eprintfn "error: unknown subcommand '%s'" other
         usage ()

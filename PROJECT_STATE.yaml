@@ -5,17 +5,284 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-18 (TASK-049 implemented and self-verified; status review)
+  updated: 2026-09-18 (TASK-053 accepted by Dave, realises B-061)
 
 active_work:
-  selected_task: TASK-049
-  task_file: tasks/TASK-049-AGENT-MOVEMENT-SPEED.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-18
   note: >-
-    2026-09-18: TASK-049 (real per-agent movement speed, backlog B-058)
+    2026-09-18: TASK-053 accepted by Dave (realises B-061). No changes
+    requested. `active_work.selected_task -> none`; next task not yet
+    chosen.
+
+    Prior: 2026-09-18: TASK-053 (selection/order-mode deactivation on casualty,
+    backlog B-061) implemented and self-verified -- status review, awaiting
+    Dave's acceptance. Selected directly per Dave's instruction, scoping
+    the nit he raised on accepting TASK-052. Two `AskUserQuestion` rounds
+    before drafting: round 1's third question (should `friendlyAt`/
+    `OnClick` refuse to re-select a non-`Alive` agent) got a free-text
+    answer that did not match either offered option -- Dave's own words:
+    "you should be able to select to view status when that is an option,
+    but all action commands would be disabled, e.g. you could only view
+    status." That answer implicitly contradicted round 1's own first
+    question ("clear `selected` on Dead/Incapacitated"), so a second round
+    confirmed the reconciled design rather than guessing past the
+    conflict: `selected` never auto-clears from a vitals change at all
+    (superseding round 1's first answer); both `Dead` and `Incapacitated`
+    disable action; `orderMode` auto-disarms to `0` the instant the
+    selected agent is not `Alive`; the hover route preview is suppressed
+    while a non-`Alive` agent is selected. `friendlyAt`'s existing
+    vitals-blind selection filter needed no change -- the resolved design
+    confirmed it as the intended status-view mechanism, not the "second
+    gap" the backlog row had originally described it as.
+
+    New `CommandDemoScene.fs` `vitalsOf` helper (extracted from
+    `renderVitals`'s existing `AgentVitals`-overlay lookup, `AgentSnapshot`
+    itself carrying no vitals field) shared by a new
+    `syncOrderModeToSelection`, called from `Update` (right after each
+    `stepOnce`, since vitals only change there) and from `OnClick`'s
+    selection branch (selecting an already-non-`Alive` friendly directly
+    must not carry over a stale armed icon). `OnClick`'s order-issuing
+    guard and `OnHover`'s `previewPath` both gated on
+    `Casualty.isAlive (vitalsOf id)`. No `CommandoWar.Sim`/
+    `CommandoWar.Headless` change (the TASK-046/051/052 precedent held).
+
+    Verified with two temporary `dotnet fsi` scratch probes (removed
+    after use) driving real, unscripted combat in `DemoScenario` (agent 0
+    moved into the hostile's weapon range and line of sight, so Combat's
+    automatic symmetric engagement produced a genuine wound sequence with
+    no scripted involvement) until the selected agent went `Incapacitated`
+    (tick 24) then `Dead` (tick 83, exactly `CasualtyConfig.BleedOutTicks`
+    later, the deterministic bleed-out countdown): `orderMode` armed
+    *before* the transition (mid-route, while `Alive`) disarmed in the
+    identical tick the agent went `Incapacitated`, not one tick late; a
+    click attempting to issue the still-armed order while non-`Alive`
+    left `orderMode` unconsumed, proving the order-issuing branch was
+    never entered; hover preview absent at both `Incapacitated` and
+    `Dead` (an initial probe draft's looser colour-only detection
+    false-positived on the structurally similar-coloured but much larger
+    selection halo -- caught by dumping the actual matching `DrawItem`s
+    before trusting the result, then fixed); `selected` still read
+    `agent 0` at `Dead`; re-selecting a different, `Alive` friendly
+    immediately restored normal order-issuing and hover-preview
+    behaviour.
+
+    `dotnet build` both `.slnx` (main Release; Godot client Debug) `0/0`;
+    `dotnet test` `342/342` (unaffected). All three scenes' `--selfcheck`
+    hashes reconfirmed `MATCH` through the real Godot 4.7.2 editor,
+    unchanged from TASK-052's pins (`SnapshotDemo.tscn`
+    `0xF422ACB8D5A86FF0`, `CommandDemo.tscn` `0x00D3D471EF7354BC`,
+    `AppraisalDemo.tscn` `0x194805888CBE240D`) -- expected, since this is
+    presentation-only and the scripted `--selfcheck` sequence itself never
+    reaches a casualty.
+    (tasks/TASK-053-SELECTION-DEACTIVATION-ON-CASUALTY.md;
+    docs/ledger/2026-09-18-TASK-053-selection-deactivation-on-casualty.md)
+
+    Prior: 2026-09-18: TASK-052 accepted by Dave (realises B-053 and B-054). No
+    changes requested. A separate nit raised on acceptance: `CommandDemoScene.
+    fs`'s `selected`/`orderMode` UI state never deactivates when the
+    selected agent dies ("the cursor which has move active or whatever
+    should be deactivated") -- recorded as new backlog row B-061
+    (`friendlyAt` also does not filter by vitals, so a corpse can still be
+    re-selected), not designed or fixed yet. `active_work.selected_task ->
+    none`; next task not yet chosen.
+
+    Prior: 2026-09-18: TASK-052 (hover highlight and a larger fixed scale,
+    backlog B-053 and B-054) implemented and self-verified -- status
+    review, awaiting Dave. Named directly by Dave ("pick B-053/B-054")
+    right after accepting TASK-051 -- bundled into one task, the TASK-037
+    precedent for merging two small rows that unblock more together. One
+    `AskUserQuestion` round resolved B-054's own undecided fork ("camera
+    zoom/pan or a larger fixed scale"): Dave chose the recommended larger
+    fixed scale, not interactive zoom/pan.
+
+    A real correctness gap found while implementing B-053:
+    `FSharpSceneHost.cs`'s mouse-motion handler called `ScreenToCell`
+    directly, never adopting the click handler's own
+    `TryHitAgentCircle`-first fallback (TASK-040's own fix for the
+    identical top-of-circle projection mismatch, just never carried over
+    to hover) -- fixed so hover resolution now exactly matches click
+    resolution. A new `hoverHighlightItems` then highlights a friendly
+    agent's own cell on hover with a `Kind = 5` ring (TASK-051's
+    primitive, a light-neutral tint distinct from the fog-of-war ghost's
+    hostile-coloured one) -- never a hostile, fogged or not, since only
+    `friendlyAt` matches.
+
+    For B-054: `FSharpSceneHost.cs`'s isometric tile pitch doubled
+    (`TileW`/`TileH` `44x22 -> 88x44`; play area now roughly 62%/50% of
+    the 1280x800 window's width/height, up from ~34%/~28%); `Origin` moved
+    `(450,60) -> (552,110)`, recentred for the new scale and raised on
+    `Y` past the HUD label's worst-case three-line height (`F1` on, an
+    agent selected) with real margin -- fixing both halves of Dave's
+    original TASK-043 review complaint ("the isometric play area occupies
+    a small fraction of the window, and the corner HUD Label overlaps the
+    tick counter and agent sprites") with the one change. `DrawTerrainTile`
+    already scales terrain tiles directly from `TileW`/`TileH`; introduced
+    named `agentRadius` (`10.0f -> 20.0f`) and `haloRadius` (`17.0f ->
+    34.0f`, keeping the halo's original 1.7x ratio) constants replacing
+    independent literals, so the agent figure, halo, TASK-051's fog-of-war
+    ghost ring, and the new hover ring all size themselves consistently
+    off one source of truth rather than three drifting literals.
+
+    Verified with a temporary `dotnet fsi` scratch probe (the TASK-042/051
+    precedent, removed after use): the hover ring appears only over a
+    friendly's own cell (radius 23.0 = agentRadius+3, alpha 0.80), never
+    empty terrain and never a hostile's cell; re-ran the TASK-051
+    fog-of-war probe unchanged and confirmed the identical tick-by-tick
+    sequence (hidden through tick 20; live from tick 21; ghost alpha=0.90
+    from tick 63; alpha=0.68 at tick 82; expired at tick 122), proving the
+    shared-constant refactor changed no observable behaviour.
+
+    `dotnet build` both `.slnx` (main Release; Godot client Debug) `0/0`;
+    `dotnet test` `342/342` (unaffected). Both scenes' `--selfcheck`
+    hashes confirmed `MATCH` through the real Godot 4.7.2 editor
+    (`SnapshotDemo.tscn` `0xF422ACB8D5A86FF0`, `CommandDemo.tscn`
+    `0x00D3D471EF7354BC`, `AppraisalDemo.tscn` `0x194805888CBE240D`, all
+    unaffected -- a render-only change, as expected). Committed screenshot
+    `docs/evidence/task-052-scale-and-hover.png`, captured with
+    `--dev-overlay` on specifically to show the HUD's worst-case
+    three-line height alongside the new scale -- no overlap, and the play
+    area now fills most of the window.
+    (tasks/TASK-052-HOVER-HIGHLIGHT-AND-SCALE-POLISH.md;
+    docs/ledger/2026-09-18-TASK-052-hover-highlight-and-scale-polish.md)
+
+    Prior: 2026-09-18: TASK-051 (player-facing fog of war, backlog B-055)
+    implemented and self-verified -- status review, awaiting Dave. Selected
+    via `AskUserQuestion` over B-053/B-054 and continuing straight into an
+    AP-budget layer, as the largest ready item, flagged by Dave multiple
+    times on TASK-043 review. Three `AskUserQuestion` rounds confirmed the
+    design, all recommended defaults: `CommandDemoScene` only (not the
+    passive `SnapshotDemo.tscn`); a hollow outlined ring plus a text label,
+    not a translucent recolour; opacity following `Contact.Confidence`'s
+    band drop.
+
+    Turned out smaller than the backlog row anticipated: no
+    `CommandoWar.Sim` change was needed at all. `CommandDemoScene.fs`
+    already builds a `Diagnostics.frameOf` frame every tick regardless of
+    the `F1` dev-overlay toggle (the TASK-046 `AgentVitals` precedent), and
+    that frame's existing `KnownContact` overlay already carries
+    `WorldState.TacticalKnowledge` in full -- read directly instead of
+    adding a new `RenderSnapshot` field. `agentItems` now branches per
+    hostile: no known-contact entry (never contacted, or expired past
+    `PerceptionConfig.ExpireAfter`, 60 ticks unseen) draws nothing; an
+    entry seen this exact tick renders exactly as before (true position,
+    full vitals); a stale entry (known, not currently visible) draws a new
+    `Kind = 5` hollow ring (`RenderShared.cellRing`, a new
+    `FSharpSceneHost.cs` `_Draw` case) plus a `"?"` label at `Contact.
+    LastKnownCell`, never the true position, opacity `0.9 * Confidence /
+    ConfidenceFull`. Friendlies are never fogged.
+
+    A real regression found and fixed before it shipped: the first draft
+    applied fog inside the `F1` developer overlay too, breaking TASK-043's
+    own ground-truth-vs-known comparison tool (docs/06 section 11) -- fixed
+    by bypassing fog whenever `devOverlay` is on, via a new shared
+    `renderVitals` helper both branches call, so the overlay's own separate
+    known-contact marker still visibly diverges from the real position for
+    comparison exactly as before.
+
+    Verified with a temporary `dotnet fsi` scratch probe (the TASK-042
+    precedent, two files, both removed after use) driving `CommandDemoScene`
+    directly as a plain `IClientScene` -- no Godot process needed, since the
+    type carries no `Godot.*` reference. Confirmed the exact tick-by-tick
+    sequence: hidden through tick 20 (never contacted); a live figure from
+    tick 21 (agent moved within `Perception.SightRange` but outside
+    `CombatConfig.WeaponRange`, so contact without combat); a ghost ring at
+    `alpha = 0.90` once it retreated out of sight; `alpha = 0.68` exactly
+    `PerceptionConfig.StaleAfter` (20) ticks after last seen; the ghost
+    disappears entirely exactly `PerceptionConfig.ExpireAfter` (60) ticks
+    after last seen -- every transition landing on the exact tick its
+    `PerceptionConfig` constant predicts. A second probe confirmed the `F1`
+    bypass (never-contacted hostile still draws live with the overlay on).
+
+    No `CommandoWar.Sim`/`CommandoWar.Headless` change; `dotnet build` both
+    `.slnx` (main Release; Godot client Debug) `0/0`; `dotnet test`
+    `342/342` (unaffected); both scenes' `--selfcheck` hashes confirmed
+    `MATCH` through the real Godot 4.7.2 editor (`SnapshotDemo.tscn`
+    `0xF422ACB8D5A86FF0`, `CommandDemo.tscn` `0x00D3D471EF7354BC`,
+    `AppraisalDemo.tscn` `0x194805888CBE240D`, all unaffected -- a
+    render-only change, as expected). Committed screenshot
+    `docs/evidence/task-051-fog-of-war.png`: the existing scripted
+    screenshot-priming sequence (which never approaches the hostile) now
+    shows only the two friendly agents, no red hostile figure anywhere in
+    frame, unlike every prior task's screenshot of the same scene.
+    (tasks/TASK-051-PLAYER-FACING-FOG-OF-WAR.md;
+    docs/ledger/2026-09-18-TASK-051-player-facing-fog-of-war.md)
+
+    Prior: 2026-09-18: TASK-049 and TASK-050 both accepted by Dave in one batch,
+    asked for directly after a follow-up question about whether the
+    continuous-tick sim could support an XCOM-style AP-budget turn (answered:
+    partly -- per-soldier AP switching is close to free on top of the
+    existing queue-then-step mechanism; alternating enemy turns is not, since
+    `Combat`'s automatic engagement is symmetric and continuous every tick
+    regardless of "whose turn" it conceptually is, and would need a new
+    side-based gate, not just AP bookkeeping). Dave chose "accept TASK-049/050
+    first, then pick" over three other next-work options (B-055 fog of war;
+    B-053/054 smaller client polish; continuing straight into an AP-budget
+    layer) via `AskUserQuestion`. No changes requested on either task.
+    `active_work.selected_task -> none`; next task not yet chosen.
+    (tasks/TASK-049-AGENT-MOVEMENT-SPEED.md, tasks/TASK-050-TURN-RESOLUTION-SPIKE.md;
+    docs/ledger/2026-09-18-TASK-049-agent-movement-speed.md,
+    docs/ledger/2026-09-18-TASK-050-turn-resolution-spike.md)
+
+    Prior: 2026-09-18: TASK-050 (disposable turn-resolution harness spike, new
+    backlog B-060) implemented and self-verified, read-only against
+    `Simulation.step` -- requested directly by Dave, in full detail, while
+    TASK-049 (B-058) was still `review` awaiting his acceptance. Selected
+    anyway: an explicit override of the project's usual accept-then-select-
+    next task ordering, per Dave's own fully-specified instruction this
+    session, not a silent departure from it -- flagged in the task file and
+    ledger detail. TASK-049 itself is untouched by this task and still needs
+    Dave's acceptance separately (see the prior note below).
+
+    New `src/CommandoWar.Headless/TurnDemo.fs` (the `DemoScenario`/
+    `PathDemo`/`LosDemo` hand-built-fixture precedent: five agents on an
+    open 16x10 grid, no authored terrain, a hand-typed five-order `MoveTo`/
+    `Suppress` command log across ticks 1/12/25, `TickCount = 45`) plus a
+    new `cwheadless turn` subcommand that prints every tick's
+    `DiagnosticRender.Ascii` frame in sequence via the existing
+    `DiagnosticRender.runFrames` -- the same read-only mechanism `render
+    demo`/`render los`/`render path` already use, just looped over the full
+    run instead of one `--tick`. No `CommandoWar.Sim`/`CommandoWar.Client.
+    Godot` change, no ADR, no `Canonical.FormatVersion`/`ScenarioContent.
+    Version` bump.
+
+    The first agent placement (a suppressing agent outside `CombatConfig.
+    WeaponRange` of the hostile) produced a dead-end static run -- fixed by
+    moving it within range, confirmed by inspecting the actual 46-frame
+    output rather than assumed. The corrected run demonstrates the full
+    intended narrative end to end: `Suppress` accepted immediately (target
+    already a known contact); real symmetric engagement from tick 1; two
+    casualties (`Incapacitated`, not `Dead`) by tick 6; a suppression-band-
+    flip reappraisal trigger (the TASK-037/038 mechanism) flipping two
+    `Refused RouteTooExposed` `MoveTo` orders to `Accepted` with no new
+    order, at tick 4; genuine tick-by-tick sub-cell movement to arrival
+    (`AgentState.Progress`, TASK-018); a stable, legible tick-45 end state.
+    One open question surfaced and recorded for Dave, not fixed (read-only
+    scope): an `Incapacitated` known contact still fully counts as a live
+    threat for `Appraisal`'s route-exposure model, so agent 0's tick-25
+    reissued order stays refused for the rest of the run even after the
+    hostile is down and its suppression has decayed to near zero --
+    `Appraisal` does not currently distinguish `Incapacitated` from `Alive`
+    for exposure purposes. Also recorded: the resolved-turn feel Dave asked
+    about already exists in the unmodified simulation with no real-time
+    pacing concept required; action-point budgeting and an Overwatch
+    commitment state remain explicitly unscoped follow-on work, only worth
+    pursuing if Dave wants to act on this spike's findings.
+
+    `dotnet build CommandoWar.slnx -c Release` 0/0; `dotnet test` 342/342
+    (unaffected); `cwheadless corpus` 16/16 (unaffected); `dotnet list
+    CommandoWar.Sim package` FSharp.Core only; `git status --porcelain`
+    matches scope exactly (`CommandoWar.Headless.fsproj`/`Program.fs`
+    modified, `TurnDemo.fs` new -- nothing under `CommandoWar.Sim` or the
+    Godot client touched).
+    (tasks/TASK-050-TURN-RESOLUTION-SPIKE.md;
+    docs/ledger/2026-09-18-TASK-050-turn-resolution-spike.md)
+
+    Prior: 2026-09-18: TASK-049 (real per-agent movement speed, backlog B-058)
     implemented and self-verified -- status review, awaiting Dave. Selected
     over B-053/B-054 (small client-polish rows) and a not-yet-filed
     Suppress-order UI slice via AskUserQuestion ("what could make the most

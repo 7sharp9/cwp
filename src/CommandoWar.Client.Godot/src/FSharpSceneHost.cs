@@ -23,11 +23,25 @@ public partial class FSharpSceneHost : Node2D
     [Export] public string SceneType { get; set; }
 
     // Isometric projection -- the MainNode.cs disposable-spike precedent,
-    // scaled up (44x22, vs. the spike's 22x11) for legibility at DemoScenario's
-    // 12x8 grid size.
-    private const float TileW = 44f;
-    private const float TileH = 22f;
-    private static readonly Vector2 Origin = new(450f, 60f);
+    // scaled up (88x44, TASK-052/backlog B-054: doubled again from
+    // TASK-039's original 44x22) so the play area fills much more of the
+    // 1280x800 window (previously ~34% of its width, ~28% of its height;
+    // now ~62%/~50%) -- Dave's "general dev experience needs a bit of love"
+    // feedback on TASK-043 review, confirmed via `AskUserQuestion` as a
+    // larger fixed scale rather than interactive zoom/pan (a materially
+    // bigger feature this task deliberately does not add). `Origin` is
+    // recentred for the new scale and its `Y` raised from `60` to `110`,
+    // clearing the HUD label's own worst case (three lines, `F1` on with an
+    // agent selected, extending to roughly `y=62`) with real margin -- the
+    // other half of Dave's complaint ("the corner HUD Label overlaps the
+    // tick counter and agent sprites"). `CommandDemoScene.fs`'s own
+    // `agentRadius`/`haloRadius` are doubled to match, so figures and
+    // markers scale with the tile grid, not just the terrain tiles
+    // (`DrawTerrainTile` already scales from `TileW`/`TileH` directly, only
+    // the figure/marker radii needed a matching bump).
+    private const float TileW = 88f;
+    private const float TileH = 44f;
+    private static readonly Vector2 Origin = new(552f, 110f);
 
     // Placeholder art (TASK-041, backlog B-034): Kenney "Isometric Miniature
     // Prototype" (CC0, src/CommandoWar.Client.Godot/art/LICENSE-THIRD-PARTY.md).
@@ -310,7 +324,13 @@ public partial class FSharpSceneHost : Node2D
         }
         else if (@event is InputEventMouseMotion mm)
         {
-            Vector2I cell = ScreenToCell(mm.Position);
+            // TASK-052, backlog B-053: the same `TryHitAgentCircle`-first
+            // fallback the click handler above already uses (`OnClick`),
+            // so hovering directly over a rendered agent circle resolves to
+            // that agent's cell -- otherwise the hover highlight this task
+            // adds would fail to arm near the top of a visible agent, the
+            // identical projection mismatch TASK-040 fixed for clicks.
+            Vector2I cell = TryHitAgentCircle(mm.Position, out Vector2I hit) ? hit : ScreenToCell(mm.Position);
             _scene.OnHover(cell.X, cell.Y);
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Space })
@@ -364,6 +384,16 @@ public partial class FSharpSceneHost : Node2D
                     // backlog B-057): muzzle flash or bullet impact, tinted
                     // per DrawItem.R/G/B/A.
                     DrawEffectSprite(pos, item.TextureId, item.Radius, color);
+                    break;
+                case 5:
+                    // A hollow ring at the same vertical offset an agent
+                    // figure draws at: a fog-of-war last-known-position
+                    // marker (TASK-051, backlog B-055) or a hover-highlight
+                    // around a selectable agent (TASK-052, backlog B-053).
+                    // Stroke width bumped from `2.5f` to `3.5f` alongside
+                    // TASK-052's doubled tile scale, for the same legibility
+                    // reason the tile scale changed at all.
+                    DrawArc(pos - new Vector2(0, TileH * 0.5f), item.Radius, 0, Mathf.Tau, 24, color, 3.5f);
                     break;
                 default:
                 {

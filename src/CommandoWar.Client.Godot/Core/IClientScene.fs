@@ -14,7 +14,11 @@ namespace CwClientCore
 /// (TASK-043: grid coordinates), `4` = a one-shot effect sprite centred at
 /// `(Cx,Cy)` with `Radius` as on-screen size and `R`/`G`/`B`/`A` as a tint
 /// (TASK-046, backlog B-057: a muzzle flash or bullet-impact effect, keyed
-/// on `TextureId` the same way terrain is). `TextureId` is meaningful for
+/// on `TextureId` the same way terrain is), `5` = a hollow (unfilled) ring
+/// at `(Cx,Cy)` with `Radius` as the ring's radius (TASK-051, backlog
+/// B-055: a hostile's last-known position once contact is lost -- a
+/// distinct outline shape, not a translucent `Kind = 1` fill, so it never
+/// reads as a dim real agent). `TextureId` is meaningful for
 /// `Kind = 0` (`0` = passable open ground, elevation-tinted via `R`/`G`/`B`,
 /// `1` = impassable, `2` = passable-but-opaque cover -- shape, not colour
 /// alone, carries this distinction, docs/06 "status indicators that do not

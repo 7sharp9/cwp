@@ -408,6 +408,92 @@ The `0xF422ACB8D5A86FF0` pin was originally computed by calling
 through the real Godot 4.7.2 editor (all three scenes, `--headless --path .
 <scene> -- --selfcheck`, all exit 0).
 
+## Player-facing fog of war (TASK-051, backlog B-055)
+
+`CommandDemoScene` no longer draws a hostile agent unconditionally at its
+true position. `Diagnostics.frameOf`'s `KnownContact` overlay -- built every
+tick from `WorldState.TacticalKnowledge` regardless of the `F1` dev-overlay
+toggle, the `AgentVitals` precedent TASK-046 already relies on for
+player-facing rendering -- is now read for fog-of-war gating too, so **no
+`CommandoWar.Sim` change was needed**. A hostile never contacted (or whose
+contact has fully expired, `PerceptionConfig.ExpireAfter` ticks after it was
+last seen) is hidden entirely; one seen this exact tick renders exactly as
+before, at its true live position with full vitals; one known but not
+currently visible this tick draws only a hollow "last-known position" ring
+(a new `DrawItem.Kind = 5`, `FSharpSceneHost.cs`) plus a small `?` label at
+`Contact.LastKnownCell` -- never the true position -- with opacity following
+`Contact.Confidence`'s own two-step band drop (`PerceptionConfig.
+ConfidenceBandDrop`, the wound-dot-severity-scales-opacity precedent).
+
+The `F1` developer overlay is a deliberate exception: it keeps TASK-043's
+original ground-truth behaviour unchanged (every agent renders at its true
+position regardless of contact), so its own separate yellow known-contact
+marker still visibly diverges from the real position for comparison -- the
+reason that overlay exists. Fog of war only gates the normal player view.
+
+Verified with a temporary `dotnet fsi` scratch probe (the TASK-042
+precedent) driving `CommandDemoScene` directly outside Godot -- `Ready()`,
+then `Update(1/20.0)` once per tick, inspecting `DrawList()`'s returned
+`DrawItem[]` -- since `IClientScene` carries no `Godot.*` type. Sent a
+friendly toward the hostile at `(11,7)` (to `(3,7)`: within `Perception.
+SightRange` (10) but outside `CombatConfig.WeaponRange` (7), so it makes
+contact without drawing fire) and back, and confirmed the full sequence: 20
+ticks fully hidden (never contacted) -> a live figure at `(11,7)` once in
+range -> a ghost ring at `(11,7)`, `alpha=0.90`, once it moves back out of
+sight -> `alpha=0.68` exactly `PerceptionConfig.StaleAfter` (20) ticks after
+last seen -> the ghost disappears entirely exactly `PerceptionConfig.
+ExpireAfter` (60) ticks after last seen, fully hidden again. A second probe
+confirmed the `F1` bypass: with the dev overlay toggled on, the same
+never-contacted hostile still draws live from tick 1.
+
+Both scenes' `--selfcheck` hashes are unaffected (render-only; confirmed
+`MATCH` through the real Godot 4.7.2 editor): `SnapshotDemo.tscn`
+`0xF422ACB8D5A86FF0`, `CommandDemo.tscn` `0x00D3D471EF7354BC`,
+`AppraisalDemo.tscn` `0x194805888CBE240D`.
+
+## Hover highlight, and a larger fixed scale (TASK-052, backlog B-053/B-054)
+
+Two small, presentation-only client-polish items Dave asked to pick up
+together.
+
+**Hover highlight (B-053)**: hovering a friendly agent's own rendered
+circle -- without clicking -- now draws a thin hollow ring around it (the
+new `Kind = 5` primitive TASK-051 introduced for the fog-of-war ghost
+marker, reused here with a light neutral tint instead of the ghost's
+hostile-coloured one), so the player can see a click there will select it.
+`FSharpSceneHost.cs`'s mouse-motion handler now tries `TryHitAgentCircle`
+first, the same fallback `OnClick` already uses, before falling back to
+`ScreenToCell` -- otherwise hovering near the top of a visible agent (the
+same projection mismatch TASK-040 fixed for clicks) would fail to arm the
+highlight.
+
+**Larger fixed scale (B-054)**: the isometric tile pitch doubled again
+(`TileW`/`TileH`: `44x22` -> `88x44`, `FSharpSceneHost.cs`), so the play
+area now fills roughly 62% of the window's width and 50% of its height
+(previously ~34%/~28%). `Origin` moved from `(450,60)` to `(552,110)`: both
+recentred for the new scale and, on `Y`, raised enough to clear the HUD
+label's worst case (three lines, `F1` on with an agent selected, extending
+to roughly `y=62`) with real margin -- the other half of Dave's TASK-043
+review complaint ("the corner HUD Label overlaps the tick counter and agent
+sprites"). `DrawTerrainTile` already scales terrain tiles directly from
+`TileW`/`TileH`, so only the figure/marker radii needed a matching bump:
+`CommandDemoScene.fs` gained named `agentRadius` (`10.0f -> 20.0f`) and
+`haloRadius` (`17.0f -> 34.0f`) constants, replacing what had been
+independent literals -- the fog-of-war ghost ring and the new hover ring
+both now size themselves from `agentRadius` too, so all three stay visually
+consistent with wherever a real figure actually draws. Confirmed via
+`AskUserQuestion`: a larger fixed scale, not interactive zoom/pan (a
+materially bigger feature this task deliberately does not add).
+
+Both are purely client-side and change no authoritative state: verified
+with a temporary `dotnet fsi` scratch probe (the TASK-042/051 precedent)
+confirming the hover ring appears only over a friendly agent (never a
+hostile, fogged or not) and disappears the instant the mouse leaves it, and
+both scenes' `--selfcheck` hashes reconfirmed `MATCH` unchanged through the
+real Godot 4.7.2 editor. Committed screenshot
+`docs/evidence/task-052-scale-and-hover.png` (captured with `--dev-overlay`
+to show the HUD's worst-case three-line height alongside the new scale).
+
 ## Pinned versions
 
 | Component | Version |
