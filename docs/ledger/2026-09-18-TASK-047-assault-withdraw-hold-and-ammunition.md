@@ -193,9 +193,10 @@ off-by-one in the reload fact's loop bound, not the `Ammo.tick` leaf
 (confirmed correct against the `Casualty.tickBleedOut` precedent it
 copies). No new corpus entry — see the task file's "Considered and
 rejected" list for the reasoning. Godot's three pinned `--selfcheck`
-hashes were computed via `dotnet fsi` against the built Core assembly, not
-independently re-run through the real Godot 4.7.2 editor (no Godot install
-in the implementing environment) — flagged for Dave, not a blocker.
+hashes were originally computed via `dotnet fsi` against the built Core
+assembly (no Godot install in the implementing environment); re-run
+through the real Godot 4.7.2 editor before acceptance and confirmed
+`MATCH` (see Review below).
 
 ### Documents updated
 
@@ -212,6 +213,8 @@ in the implementing environment) — flagged for Dave, not a blocker.
 ### Review
 
 - Reviewer: Dave
-- Accepted: pending. Godot's `--selfcheck` pinned hashes still need
-  independent confirmation on Dave's machine (no Godot install in the
-  implementing environment) — flagged, not a blocker for acceptance.
+- Accepted: yes (2026-09-18). Godot's three pinned `--selfcheck` hashes
+  re-run through the real Godot 4.7.2 editor headless before acceptance:
+  `SnapshotDemo.tscn` `MATCH 0x8E93B48D07AE9CBD`, `CommandDemo.tscn` `MATCH
+  0xE661187DE95E92E6`, `AppraisalDemo.tscn` exposed-approach `MATCH
+  0x194805888CBE240D` (format 11) — all three exit 0.

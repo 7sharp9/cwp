@@ -5,17 +5,30 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-18 (TASK-047 implemented and self-verified, awaiting Dave's acceptance; B-030 review)
+  updated: 2026-09-18 (TASK-047 accepted; B-030 done)
 
 active_work:
-  selected_task: TASK-047
-  task_file: tasks/TASK-047-ASSAULT-WITHDRAW-HOLD-AND-AMMUNITION.md
+  selected_task: none
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-18
   note: >-
-    2026-09-18: TASK-047 (Assault/Withdraw/Hold order executors and an
+    2026-09-18: TASK-047 accepted by Dave -- status done. Both existing
+    Godot scenes' `--selfcheck` hashes, originally computed via `dotnet fsi`
+    against the built assembly (no Godot install in the implementing
+    environment), were re-run through the real Godot 4.7.2 editor headless
+    on Dave's instruction before accepting: SnapshotDemo `MATCH
+    0x8E93B48D07AE9CBD`, CommandDemo `MATCH 0xE661187DE95E92E6`, and
+    `AppraisalDemoScene`'s exposed-approach pin `MATCH 0x194805888CBE240D`
+    (format 11) -- all three exit 0. B-030 now done (the minimal
+    `Suppress`-order slice from TASK-037 plus this task's `Hold`/`Assault`/
+    `Withdraw` executors and ammunition model). No new task selected yet --
+    next task to be chosen via `AskUserQuestion`.
+    (docs/ledger/2026-09-18-TASK-047-assault-withdraw-hold-and-ammunition.md)
+
+    Prior: 2026-09-18: TASK-047 (Assault/Withdraw/Hold order executors and an
     ammunition/reload/resupply model, backlog B-030 proper) implemented and
     self-verified -- status review, awaiting Dave. Selected via
     `AskUserQuestion` over B-058 (agent movement speed). Three further

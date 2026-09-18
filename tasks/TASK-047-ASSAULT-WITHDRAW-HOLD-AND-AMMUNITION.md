@@ -1,8 +1,10 @@
 # TASK-047: Assault, Withdraw, Hold order executors and an ammunition/reload/resupply model
 
-Status: review (drafted 2026-09-18; central decisions A-P confirmed with
+Status: done (drafted 2026-09-18; central decisions A-P confirmed with
 Dave 2026-09-18, three `AskUserQuestion` rounds, before the phase bodies;
-implemented and self-verified 2026-09-18)
+implemented and self-verified 2026-09-18; accepted by Dave 2026-09-18 after
+the three pinned Godot `--selfcheck` hashes were re-run through the real
+Godot 4.7.2 editor and confirmed `MATCH`)
 Owner: Dave
 Phase: P4
 Gate: G4 (vertical slice feature-complete); realises B-030 proper (the
@@ -512,8 +514,8 @@ task.
 ## Review
 
 - Reviewer: Dave
-- Accepted: pending. Godot's `--selfcheck` pinned hashes (SnapshotDemo
-  `0x8E93B48D07AE9CBD`, CommandDemo `0xE661187DE95E92E6`,
-  `AppraisalDemoScene`'s exposed-approach `0x194805888CBE240D`) still need
-  independent confirmation on Dave's machine (no Godot install in the
-  implementing environment) — flagged, not a blocker for acceptance.
+- Accepted: yes (2026-09-18). Godot's three pinned `--selfcheck` hashes
+  (SnapshotDemo `0x8E93B48D07AE9CBD`, CommandDemo `0xE661187DE95E92E6`,
+  `AppraisalDemoScene`'s exposed-approach `0x194805888CBE240D`, format 11)
+  re-run through the real Godot 4.7.2 editor headless before acceptance —
+  all three `MATCH`, exit 0.

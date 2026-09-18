@@ -306,12 +306,12 @@ dotnet build CommandoWar.Client.Godot.slnx -c Debug
 "$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0xE661187DE95E92E6
 ```
 
-Both hashes were computed by calling `DemoDrive.runFullSequence()` /
+Both hashes were originally computed by calling `DemoDrive.runFullSequence()` /
 `CommandDemoDrive.runScriptedSelfCheck()` directly from `dotnet fsi` against
 the built `CommandoWar.Client.Godot.Core.dll` (no Godot install in the
-implementing environment) -- not independently re-run through the real Godot
-4.7.2 editor this session. Flagged for Dave to re-check before accepting, the
-TASK-034/037 precedent.
+implementing environment). Re-run through the real Godot 4.7.2 editor and
+confirmed on acceptance, along with the `AppraisalDemoScene` exposed-approach
+pin (`0x194805888CBE240D`, format 11) -- all three `MATCH`, exit 0.
 
 ## Pinned versions
 
