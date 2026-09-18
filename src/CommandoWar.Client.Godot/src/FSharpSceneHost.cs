@@ -56,6 +56,34 @@ public partial class FSharpSceneHost : Node2D
         GD.Load<Texture2D>("res://art/effect_impact_miss.png"),
     ];
 
+    // XCOM-style HUD order-mode icons (TASK-048, backlog B-059): Kenney
+    // "Board Game Icons" (CC0, art/LICENSE-THIRD-PARTY.md). Indexed the same
+    // 0 = MoveTo / 1 = Hold / 2 = Assault / 3 = Withdraw vocabulary as
+    // IClientScene.OnOrderModeClick/OrderMode. Fixed screen-space layout, not
+    // world-grid content, so this bar is owned entirely by this C# host (a
+    // HUD-chrome layout concern -- ADR-0004's "Raw input capture | C#" /
+    // "Render loop | C#" rows -- not routed through the world-space DrawItem
+    // list): OrderModeIconRects below are computed once from these same
+    // texture sizes, never duplicated as magic numbers.
+    private static readonly Texture2D[] OrderModeTextures =
+    [
+        GD.Load<Texture2D>("res://art/hud_move.png"),
+        GD.Load<Texture2D>("res://art/hud_hold.png"),
+        GD.Load<Texture2D>("res://art/hud_assault.png"),
+        GD.Load<Texture2D>("res://art/hud_withdraw.png"),
+    ];
+
+    private const float OrderModeIconSize = 48f;
+    private const float OrderModeIconGap = 8f;
+    private static readonly Vector2 OrderModeBarOrigin = new(12f, 720f);
+
+    private static Rect2 OrderModeIconRect(int index) =>
+        new(
+            OrderModeBarOrigin.X + index * (OrderModeIconSize + OrderModeIconGap),
+            OrderModeBarOrigin.Y,
+            OrderModeIconSize,
+            OrderModeIconSize);
+
     // The human figure's own pixel bounds within the 256x512 Kenney canvas
     // (the rest is transparent padding sized for the tallest block in the
     // set) -- found by inspecting the source PNG's alpha channel, not
@@ -105,13 +133,20 @@ public partial class FSharpSceneHost : Node2D
         // immediately after issuing so the order stays queued/undelivered
         // (the orange "pending" route) for the whole capture window, rather
         // than completing before frame 45 -- the state Dave's review asked
-        // to actually see.
+        // to actually see. Also selects agent 1 and arms the Hold HUD icon
+        // without clicking a target (TASK-048, backlog B-059), so the
+        // captured frame also shows the armed-icon highlight and the
+        // hover-preview Hold-area outline -- this task's two new visible
+        // pieces of evidence, alongside the pre-existing pending-route proof.
         if (_screenshotMode && SceneType == "CwClientCore.CommandDemoScene")
         {
             _scene.OnClick(true, 0, 0);
             _scene.OnTogglePause();
             _scene.OnHover(3, 0);
             _scene.OnClick(true, 3, 0);
+            _scene.OnClick(true, 0, 1);
+            _scene.OnOrderModeClick(1);
+            _scene.OnHover(2, 1);
         }
 
         // `--dev-overlay` (TASK-043, backlog B-029): a separate opt-in flag,
@@ -170,9 +205,9 @@ public partial class FSharpSceneHost : Node2D
                 expected = 0x8E93B48D07AE9CBDUL; // DemoScenario tick 20 (TASK-047 re-pin: Canonical.FormatVersion 10 -> 11, AgentState.Ammo added)
                 break;
             case "CwClientCore.CommandDemoScene":
-                label = "command-demo-scene self-check (scripted select + MoveTo(3,0))";
+                label = "command-demo-scene self-check (scripted MoveTo(3,0) + Hold(2,1) via order-mode icon)";
                 sequence = CommandDemoDrive.runScriptedSelfCheck();
-                expected = 0xE661187DE95E92E6UL; // CommandDemoScene tick 20 (TASK-047 re-pin, Canonical.FormatVersion 10 -> 11)
+                expected = 0x00D3D471EF7354BCUL; // CommandDemoScene tick 20 (TASK-048 re-pin: runScriptedSelfCheck now also issues a Hold order via OnOrderModeClick)
                 break;
             default:
                 GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");
@@ -236,12 +271,38 @@ public partial class FSharpSceneHost : Node2D
         return false;
     }
 
+    // A HUD order-mode icon hit test (TASK-048, backlog B-059): the fixed
+    // screen-space rects above, checked ahead of every other click handling
+    // -- a miss falls through to the existing world-cell OnClick unchanged
+    // (Dave's confirmed design: "FSharpSceneHost checks click position
+    // against the known HUD icon rects first ... a miss falls through to the
+    // existing world-cell OnClick unchanged").
+    private static bool TryHitOrderModeIcon(Vector2 screenPos, out int index)
+    {
+        for (int i = 0; i < OrderModeTextures.Length; i++)
+        {
+            if (OrderModeIconRect(i).HasPoint(screenPos))
+            {
+                index = i;
+                return true;
+            }
+        }
+
+        index = default;
+        return false;
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
         if (_scene == null || _selfCheck || _screenshotMode)
             return;
 
-        if (@event is InputEventMouseButton { Pressed: true } mb
+        if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mbIcon
+            && TryHitOrderModeIcon(mbIcon.Position, out int iconIndex))
+        {
+            _scene.OnOrderModeClick(iconIndex);
+        }
+        else if (@event is InputEventMouseButton { Pressed: true } mb
             && (mb.ButtonIndex == MouseButton.Left || mb.ButtonIndex == MouseButton.Right))
         {
             Vector2I cell = TryHitAgentCircle(mb.Position, out Vector2I hit) ? hit : ScreenToCell(mb.Position);
@@ -323,6 +384,29 @@ public partial class FSharpSceneHost : Node2D
                     break;
                 }
             }
+        }
+
+        DrawOrderModeBar();
+    }
+
+    // XCOM-style HUD order-mode icon bar (TASK-048, backlog B-059): fixed
+    // screen-space rects (OrderModeIconRect), drawn last so it always sits
+    // on top of the world-space scene -- the devItems/fireEffects
+    // "always draws on top" precedent, extended to genuine screen-space UI
+    // chrome. A dark backing square behind every icon for legibility over
+    // any terrain colour; a bright border around the currently armed mode
+    // (`_scene.OrderMode()`, the `_hud.Text` "read once per frame" precedent)
+    // so the player can see which order the next click will issue.
+    private void DrawOrderModeBar()
+    {
+        int armed = _scene.OrderMode();
+
+        for (int i = 0; i < OrderModeTextures.Length; i++)
+        {
+            Rect2 rect = OrderModeIconRect(i);
+            DrawRect(rect, new Color(0f, 0f, 0f, 0.55f));
+            DrawTextureRect(OrderModeTextures[i], rect.Grow(-6f), false, Colors.White);
+            DrawRect(rect, i == armed ? new Color(1f, 0.85f, 0.2f) : new Color(1f, 1f, 1f, 0.25f), false, i == armed ? 3f : 1f);
         }
     }
 

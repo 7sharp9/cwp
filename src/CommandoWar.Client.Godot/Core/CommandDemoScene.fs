@@ -22,6 +22,18 @@ type CommandDemoScene() =
     let mutable paused = false
     let mutable selected: AgentId option = None
     let mutable previewPath: Cell[] option = None
+    let mutable hoveredCell: Cell option = None
+
+    // XCOM-style HUD order-mode icons (TASK-048, backlog B-059): which order
+    // type the next non-agent left-click issues -- `0 = MoveTo` (the
+    // default, unarmed state), `1 = Hold`, `2 = Assault`, `3 = Withdraw`.
+    // Armed by `OnOrderModeClick` (a HUD-icon click, resolved by the C#
+    // host's fixed icon rects, the `OnClick`/`ScreenToCell` "primitives
+    // only" precedent); consumed and reset back to `0` the instant an order
+    // is actually issued (an XCOM ability-consumed-on-use idiom), so the
+    // player re-arms explicitly for each non-default order rather than it
+    // silently staying armed across multiple orders.
+    let mutable orderMode = 0
 
     // Developer overlay (TASK-043, backlog B-029 proper): the same
     // `Diagnostics.DiagnosticFrame` every other developer renderer
@@ -324,8 +336,16 @@ type CommandDemoScene() =
             let pendingItems =
                 pending
                 |> Seq.choose (fun c ->
+                    // `Hold`/`Assault`/`Withdraw` (TASK-048, backlog B-059)
+                    // all carry a bare `Cell` target the identical shape as
+                    // `MoveTo`'s (`Domain.fs`'s own "`MoveTo` precedent"
+                    // doc comment) -- the client previews a route to the
+                    // literal clicked cell for all four; it has no way to
+                    // anticipate a `Hold` order's possible server-side
+                    // `bestCoverNear` redirect before Appraisal actually
+                    // runs (see `holdOutlineItems` below for that case).
                     match c.Command.Body, agentPosition c.Command.Agent with
-                    | Order(MoveTo target, _), Some pos ->
+                    | Order((MoveTo target | Hold target | Assault target | Withdraw target), _), Some pos ->
                         match Pathfinding.find state.Terrain pos target with
                         | Found(cells, _) -> Some(routeDots cells (1.0f, 0.65f, 0.15f) 0.5f 6.0f)
                         | _ -> None
@@ -336,6 +356,12 @@ type CommandDemoScene() =
             //     Appraisal accepted it -- `AgentSnapshot.Destination` is
             //     populated (TASK-028's existing mechanism). The full route,
             //     not just the endpoint, so "set" reads as a path, not a dot.
+            //     (this already covers `Hold`/`Assault`/`Withdraw` too, with
+            //     zero change: every one of the four writes `Destination`
+            //     the same way, `Commitment.fs`'s own "`Destination` exactly
+            //     as `MoveTo` does" precedent -- `Assault`'s `AwaitingSupport`
+            //     stage freezes it back to `None` mid-assault, which simply
+            //     stops drawing a route while frozen, the correct reading.)
             let committedItems =
                 currAgents
                 |> Array.choose (fun a ->
@@ -345,6 +371,35 @@ type CommandDemoScene() =
                         | Found(cells, _) -> Some(routeDots cells (0.35f, 1.0f, 0.45f) 0.6f 7.0f)
                         | _ -> None))
                 |> Array.concat
+
+            // Hold-area outline (TASK-048, backlog B-059; Dave's design
+            // choice: "an outline of the hold area is shown in the UI"):
+            // while `Hold` is armed and an in-bounds cell is hovered with an
+            // agent selected, trace the perimeter of the exact
+            // `AppraisalConfig.HoldCoverSearchRadius` (2) Chebyshev square
+            // `Appraisal.bestCoverNear` will actually search -- an honest
+            // preview of the candidate region, not the (unknowable
+            // client-side, pre-Appraisal) resolved cell itself. Four
+            // `Kind = 2` line segments, the `losRay`/`FireLine` precedent for
+            // a multi-cell shape with no single meaningful depth (see
+            // `devItems`'s own reasoning) -- drawn unsorted after the depth
+            // sort alongside `devItems`/`fireEffects` below, not folded into
+            // `sorted`.
+            let holdOutlineItems =
+                match orderMode, selected, hoveredCell with
+                | 1, Some _, Some c ->
+                    let r = AppraisalConfig.HoldCoverSearchRadius
+                    let nw = { X = c.X - r; Y = c.Y - r }
+                    let ne = { X = c.X + r; Y = c.Y - r }
+                    let se = { X = c.X + r; Y = c.Y + r }
+                    let sw = { X = c.X - r; Y = c.Y + r }
+                    let color = (1.0f, 0.85f, 0.2f)
+
+                    [| RenderShared.lineMarker nw ne color 0.7f 1.5f
+                       RenderShared.lineMarker ne se color 0.7f 1.5f
+                       RenderShared.lineMarker se sw color 0.7f 1.5f
+                       RenderShared.lineMarker sw nw color 0.7f 1.5f |]
+                | _ -> [||]
 
             // Developer overlay (TASK-043, backlog B-029 proper): renders
             // `devFrame.Overlays` -- the identical `Diagnostics` data every
@@ -456,7 +511,7 @@ type CommandDemoScene() =
                 Array.concat [ terrainItems; haloItems; agentItems; previewItems; pendingItems; committedItems ]
                 |> Array.sortBy RenderShared.depthKey
 
-            Array.concat [ sorted; fireEffects; devItems ]
+            Array.concat [ sorted; fireEffects; holdOutlineItems; devItems ]
 
         member _.HudText() =
             let selText =
@@ -471,9 +526,20 @@ type CommandDemoScene() =
             // selected, the existing selText = "none" precedent.
             let orderSuffix = if heldOrderText = "" then "" else sprintf "   order=%s" heldOrderText
 
+            // Armed HUD order mode (TASK-048, backlog B-059): omitted
+            // entirely at the default `0` (`MoveTo`), the `orderSuffix`
+            // precedent -- a plain click keeps reading exactly as before
+            // this task unless the player has actually armed something.
+            let modeSuffix =
+                match orderMode with
+                | 1 -> "   mode=hold"
+                | 2 -> "   mode=assault"
+                | 3 -> "   mode=withdraw"
+                | _ -> ""
+
             let line1 =
                 sprintf
-                    "tick %d   hash 0x%016X   draws %d   agents %d   %s   selected=%s%s"
+                    "tick %d   hash 0x%016X   draws %d   agents %d   %s   selected=%s%s%s"
                     state.Tick
                     hash
                     state.Random.Draws
@@ -481,6 +547,7 @@ type CommandDemoScene() =
                     (if paused then "PAUSED" else "running")
                     selText
                     orderSuffix
+                    modeSuffix
 
             // Developer-facing commitment/suppression/stress/reason line
             // (TASK-043, backlog B-029, docs/06 section 11), gated behind the
@@ -516,7 +583,18 @@ type CommandDemoScene() =
                 | None ->
                     match selected with
                     | Some agentId when GridBounds.contains cell state.Bounds && agentPosition agentId <> Some cell ->
-                        let cmd = Command.moveTo (CommandId.ofInt nextCommandId) state.Tick agentId cell
+                        // Dispatch on the armed HUD order mode (TASK-048,
+                        // backlog B-059) -- `0 = MoveTo` is both the default
+                        // unarmed state and an explicit icon, so a plain
+                        // click with nothing armed keeps issuing `MoveTo`
+                        // exactly as before this task.
+                        let cmd =
+                            match orderMode with
+                            | 1 -> Command.hold (CommandId.ofInt nextCommandId) state.Tick agentId cell
+                            | 2 -> Command.assault (CommandId.ofInt nextCommandId) state.Tick agentId cell
+                            | 3 -> Command.withdraw (CommandId.ofInt nextCommandId) state.Tick agentId cell
+                            | _ -> Command.moveTo (CommandId.ofInt nextCommandId) state.Tick agentId cell
+
                         nextCommandId <- nextCommandId + 1
 
                         // Replace, not stack: an agent has at most one
@@ -533,10 +611,15 @@ type CommandDemoScene() =
                               Sequence = pending.Count
                               Command = cmd
                               Issuer = "player" }
+
+                        // An armed non-default mode is consumed by issuing
+                        // one order (see the field comment on `orderMode`).
+                        orderMode <- 0
                     | _ -> ()
 
         member _.OnHover(cellX: int, cellY: int) =
             let cell = { X = cellX; Y = cellY }
+            hoveredCell <- if GridBounds.contains cell state.Bounds then Some cell else None
 
             previewPath <-
                 selected
@@ -574,6 +657,13 @@ type CommandDemoScene() =
         member _.OnTogglePause() = paused <- not paused
         member _.OnToggleDevOverlay() = devOverlay <- not devOverlay
 
+        // A HUD order-mode icon click (TASK-048, backlog B-059): clicking
+        // the already-armed icon disarms back to `0` (`MoveTo`) -- an
+        // explicit way to cancel an armed order without issuing one, the
+        // XCOM "click the ability again to cancel" idiom.
+        member _.OnOrderModeClick(index: int) = orderMode <- (if orderMode = index then 0 else index)
+        member _.OrderMode() = orderMode
+
         member _.Dispose() = ()
 
     /// Steps exactly `count` ticks with no wall clock involved -- the
@@ -592,8 +682,15 @@ type CommandDemoScene() =
 module CommandDemoDrive =
 
     /// Selects friendly agent 0 (at (0,0)), previews and issues a short
-    /// `MoveTo(3,0)` clear of the ridge and the impassable block, then steps
-    /// the full `DemoScenario` run.
+    /// `MoveTo(3,0)` clear of the ridge and the impassable block; then
+    /// selects friendly agent 1 (at (0,1)), arms the `Hold` HUD order mode
+    /// (TASK-048, backlog B-059, the same `OnOrderModeClick` an icon click
+    /// resolves to) and issues `Hold(2,1)` -- proving the order-mode icon
+    /// dispatch reaches a real, non-`MoveTo` `Command.hold` through the
+    /// identical click path a player uses, not just a direct sim-side call
+    /// (the TASK-037/047 `SimulationTests`-only precedent already proves the
+    /// sim side; this proves the click wiring on top of it). Then steps the
+    /// full `DemoScenario` run.
     let runScriptedSelfCheck () : TickHash[] =
         let scene = CommandDemoScene()
         let asScene = scene :> IClientScene
@@ -601,4 +698,8 @@ module CommandDemoDrive =
         asScene.OnClick(true, 0, 0)
         asScene.OnHover(3, 0)
         asScene.OnClick(true, 3, 0)
+        asScene.OnClick(true, 0, 1)
+        asScene.OnOrderModeClick(1)
+        asScene.OnHover(2, 1)
+        asScene.OnClick(true, 2, 1)
         scene.StepTicksHeadless(DemoScenario.TickCount)

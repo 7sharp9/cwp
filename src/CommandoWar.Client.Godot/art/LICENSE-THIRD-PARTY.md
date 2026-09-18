@@ -34,3 +34,23 @@ display scale) and stripped of metadata, otherwise unmodified.
 | `effect_muzzle_flash.png`      | `flare_01.png`                      | Shooter-side flash for a fired shot (`DrawItem.Kind = 4`, `TextureId = 0`) |
 | `effect_impact_hit.png`        | `spark_02.png`                      | Target-side effect for a shot that hit (`TextureId = 1`) |
 | `effect_impact_miss.png`       | `smoke_03.png`                      | Target-side effect for a shot that missed (`TextureId = 2`) — a distinct shape, not a colour-only hit/miss tint |
+
+## Kenney "Board Game Icons" (1.1, 2024-07-22)
+
+Source: https://kenney.nl/assets/board-game-icons
+License: Creative Commons Zero (CC0) — https://creativecommons.org/publicdomain/zero/1.0/
+No attribution required; credited here anyway per Kenney's request.
+
+Checked live against kenney.nl (downloaded and unzipped, not assumed from
+memory) for TASK-048's XCOM-style order-mode HUD icons (backlog B-059).
+Neither existing pack has command-vocabulary icons (the Isometric Miniature
+Prototype pack is terrain/character art; the Particle Pack is fire effects
+only), so a third pack was needed. Used at its native 64x64 (`PNG/Default
+(64px)/`), unmodified.
+
+| File in this directory   | Source file       | Used for |
+|----------------------------|--------------------|----------|
+| `hud_move.png`      | `arrow_right.png`         | `MoveTo` order-mode icon (the default mode) |
+| `hud_hold.png`      | `shield.png`               | `Hold` order-mode icon |
+| `hud_assault.png`   | `sword.png`                | `Assault` order-mode icon |
+| `hud_withdraw.png`  | `arrow_counterclockwise.png` | `Withdraw` order-mode icon |

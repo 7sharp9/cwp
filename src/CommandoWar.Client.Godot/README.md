@@ -313,6 +313,59 @@ implementing environment). Re-run through the real Godot 4.7.2 editor and
 confirmed on acceptance, along with the `AppraisalDemoScene` exposed-approach
 pin (`0x194805888CBE240D`, format 11) -- all three `MATCH`, exit 0.
 
+## Client UI for Hold, Assault, and Withdraw orders (TASK-048)
+
+`CommandDemoScene` gains an XCOM-style order-mode HUD icon bar (backlog
+B-059): four fixed screen-space icons, bottom-left -- move (arrow), hold
+(shield), assault (sword), withdraw (counter-clockwise arrow). Clicking one
+arms that order type (clicking the armed icon again disarms back to the
+default `MoveTo`); the next left-click on a cell with an agent selected
+issues the armed order (`Command.hold`/`.assault`/`.withdraw`, all
+already-existing sim-side constructors, the `Command.moveTo` precedent) and
+the arming resets to `MoveTo` (an XCOM ability-consumed-on-use idiom).
+`IClientScene` gains `OnOrderModeClick(index)`/`OrderMode()` (the `OnClick`/
+`OnTogglePause` "primitives only" precedent); the C# host owns the icon
+bar's fixed rects, hit-testing, and drawing entirely (HUD chrome, not
+world-grid content -- ADR-0004's "Raw input capture | C#" / "Render loop |
+C#" rows), checked ahead of every other click so a miss falls through to the
+existing world-cell `OnClick` unchanged.
+
+While `Hold` is armed and a cell is hovered with an agent selected, the
+scene also draws an outline of the exact `AppraisalConfig.
+HoldCoverSearchRadius` (2) Chebyshev square `Appraisal.bestCoverNear` will
+search when the order is appraised -- an honest preview of the candidate
+region, not a guess at which cell the order will actually resolve to (that
+depends on live threat pressure, known only at Appraisal time). Icon art:
+Kenney "Board Game Icons" (CC0, `art/LICENSE-THIRD-PARTY.md`), checked live
+against kenney.nl, downloaded, and unzipped (not assumed from memory) --
+neither existing pack (Isometric Miniature Prototype, Particle Pack) has
+command-vocabulary icons.
+
+No `CommandoWar.Sim`/`CommandoWar.Headless` change. `CommandDemoDrive.
+runScriptedSelfCheck` extended to also select a second agent, arm `Hold` via
+`OnOrderModeClick`, and issue `Hold(2,1)` -- proving the icon-click dispatch
+reaches a real, non-`MoveTo` command through the same path a player uses,
+not just a direct sim-side call (`SimulationTests` already proves the sim
+side). This is a genuine new tick-by-tick trace, so `CommandDemo.tscn`'s
+`--selfcheck` hash moved; `SnapshotDemo.tscn` and `AppraisalDemo.tscn` are
+unaffected (confirmed unchanged above), since arming a HUD icon has no
+effect unless an order is actually issued through it.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x00D3D471EF7354BC
+```
+
+Verified through the real Godot 4.7.2 editor: the re-pinned `CommandDemo.
+tscn --selfcheck` MATCH above; `SnapshotDemo.tscn`/`AppraisalDemo.tscn`
+`--selfcheck` unchanged (both re-confirmed at their existing pins, see
+above); a windowed `--screenshot` (`docs/evidence/task-048-order-mode-hud.png`,
+committed) shows the icon bar with `Hold` armed (gold highlight border),
+`mode=hold` in the HUD text, and the hover-preview outline.
+
 ## Pinned versions
 
 | Component | Version |

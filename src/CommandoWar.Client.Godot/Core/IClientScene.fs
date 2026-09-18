@@ -76,6 +76,19 @@ type IClientScene =
     /// The tactical-pause key was pressed. A scene that has nothing to pause
     /// (like `DemoRenderScene`) may no-op.
     abstract OnTogglePause: unit -> unit
+    /// An XCOM-style HUD order-mode icon was clicked (TASK-048, backlog
+    /// B-059): `index` is `0 = MoveTo`, `1 = Hold`, `2 = Assault`,
+    /// `3 = Withdraw` -- the C# host owns the fixed on-screen icon rects and
+    /// their hit-testing (a HUD-chrome layout concern, not a world-grid
+    /// projection); this call only ever carries the resolved index, the
+    /// `OnClick`/`ScreenToCell` precedent of primitives-only across the
+    /// boundary. A scene with no order-mode concept (like `DemoRenderScene`)
+    /// may no-op.
+    abstract OnOrderModeClick: index: int -> unit
+    /// The currently armed order mode (the same `0..3` vocabulary as
+    /// `OnOrderModeClick`), read once per frame so the host can highlight the
+    /// active icon. `0` (`MoveTo`) for a scene with no order-mode concept.
+    abstract OrderMode: unit -> int
     /// The developer-overlay key was pressed (TASK-043, backlog B-029). A
     /// scene with no live input to overlay (like `DemoRenderScene`) may
     /// no-op -- the `OnTogglePause` precedent.

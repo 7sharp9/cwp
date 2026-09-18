@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-18 (TASK-047 accepted; B-030 done)
+  updated: 2026-09-18 (TASK-048 accepted; B-059 done)
 
 active_work:
   selected_task: none
@@ -15,7 +15,51 @@ active_work:
   blockers: []
   updated: 2026-09-18
   note: >-
-    2026-09-18: TASK-047 accepted by Dave -- status done. Both existing
+    2026-09-18: TASK-048 accepted by Dave -- status done. No further review
+    round; the icon bar, armed-mode highlight, order dispatch to
+    Command.hold/.assault/.withdraw, and the Hold-area outline all confirmed
+    working as designed. B-059 now done. No new task selected yet.
+    (docs/ledger/2026-09-18-TASK-048-order-mode-hud-for-hold-assault-withdraw.md)
+
+    Prior: 2026-09-18: TASK-048 (XCOM-style order-mode HUD icons for
+    Hold/Assault/Withdraw, new backlog B-059) implemented and self-verified
+    -- status review, awaiting Dave. Chosen directly by Dave over B-032/B-058
+    (no `AskUserQuestion` needed -- he named it explicitly), following up on
+    TASK-047's own flagged client-UI gap. Two `AskUserQuestion` rounds before
+    drafting, Dave choosing the more ambitious option each time: XCOM-style
+    HUD icons (not keyboard chords); `Hold` clicks a cell *and* shows an
+    outline of the hold area (his own addition); real Kenney icon art (a
+    live kenney.nl check), not drawn glyphs; a new `OnOrderModeClick`/
+    `OrderMode` pair on `IClientScene` with C# owning the fixed icon rects
+    and hit-testing.
+
+    Live-checked kenney.nl (downloaded and unzipped "Board Game Icons" v1.1,
+    CC0, not assumed from memory): `shield`/`sword`/`arrow_right`/
+    `arrow_counterclockwise` for Hold/Assault/Move/Withdraw.
+    `CommandDemoScene.fs` gained `orderMode` state (armed by an icon click,
+    consumed on issuing an order) dispatching to `Command.hold`/`.assault`/
+    `.withdraw` (already-existing TASK-047 constructors, zero
+    `CommandoWar.Sim` change); a new `holdOutlineItems` traces the exact
+    `AppraisalConfig.HoldCoverSearchRadius` (2) Chebyshev square
+    `Appraisal.bestCoverNear` will search, shown on hover while `Hold` is
+    armed. `committedItems` needed zero change (every order type already
+    writes `Destination` identically). `FSharpSceneHost.cs` owns the icon
+    bar entirely (fixed screen-space rects, hit-tested first in
+    `_UnhandledInput`, drawn last in `_Draw`) -- HUD chrome, not world-grid
+    content, per ADR-0004. `CommandDemoDrive.runScriptedSelfCheck` extended
+    to also arm `Hold` via the icon-click path and issue a real `Hold(2,1)`
+    for a second agent, proving the click dispatch itself (the sim side was
+    already proven by TASK-047's `SimulationTests`) -- a genuine new trace,
+    so `CommandDemo.tscn`'s `--selfcheck` hash moved (re-pinned
+    `0x00D3D471EF7354BC`, confirmed `MATCH` through the real Godot 4.7.2
+    editor); `SnapshotDemo.tscn`/`AppraisalDemo.tscn` reconfirmed unchanged.
+    No `CommandoWar.Sim`/`CommandoWar.Headless` change; `dotnet build` both
+    `.slnx` (main Release; Godot client Debug) `0/0`; `dotnet test`
+    `336/336` (unaffected); `-- corpus` `16/16` (unaffected); committed
+    screenshot `docs/evidence/task-048-order-mode-hud.png`.
+    (docs/ledger/2026-09-18-TASK-048-order-mode-hud-for-hold-assault-withdraw.md)
+
+    Prior: 2026-09-18: TASK-047 accepted by Dave -- status done. Both existing
     Godot scenes' `--selfcheck` hashes, originally computed via `dotnet fsi`
     against the built assembly (no Godot install in the implementing
     environment), were re-run through the real Godot 4.7.2 editor headless
