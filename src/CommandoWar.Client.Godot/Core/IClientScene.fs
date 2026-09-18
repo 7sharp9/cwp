@@ -11,12 +11,18 @@ namespace CwClientCore
 /// B-034), `2` = a line segment from `(Cx,Cy)` to `(Cx2,Cy2)` with `Radius`
 /// as line width (TASK-043, backlog B-029: line-of-sight rays, fire lines),
 /// `3` = a text label drawn at `(Cx,Cy)` with `Radius` as font size
-/// (TASK-043: grid coordinates). `TextureId` is meaningful only for
-/// `Kind = 0`: `0` = passable open ground (elevation-tinted via `R`/`G`/`B`),
+/// (TASK-043: grid coordinates), `4` = a one-shot effect sprite centred at
+/// `(Cx,Cy)` with `Radius` as on-screen size and `R`/`G`/`B`/`A` as a tint
+/// (TASK-046, backlog B-057: a muzzle flash or bullet-impact effect, keyed
+/// on `TextureId` the same way terrain is). `TextureId` is meaningful for
+/// `Kind = 0` (`0` = passable open ground, elevation-tinted via `R`/`G`/`B`,
 /// `1` = impassable, `2` = passable-but-opaque cover -- shape, not colour
-/// alone, carries this distinction (docs/06 "status indicators that do not
-/// rely on colour alone"). `Cx2`/`Cy2` are meaningful only for `Kind = 2`;
-/// `Text` only for `Kind = 3` (empty string otherwise). The array is
+/// alone, carries this distinction, docs/06 "status indicators that do not
+/// rely on colour alone") and for `Kind = 4` (`0` = muzzle flash, `1` =
+/// bullet impact/hit, `2` = a miss puff -- again a distinct shape per
+/// outcome, not a colour-only hit/miss tint). `Cx2`/`Cy2` are meaningful
+/// only for `Kind = 2`; `Text` only for `Kind = 3` (empty string
+/// otherwise). The array is
 /// pre-sorted back-to-front by the F# side (screen depth `(Cx + Cy)`,
 /// terrain before an agent occupying the same cell); the C# host only
 /// projects each item's cell coordinates to screen space and issues one

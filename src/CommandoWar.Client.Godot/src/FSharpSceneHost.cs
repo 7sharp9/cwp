@@ -44,6 +44,18 @@ public partial class FSharpSceneHost : Node2D
 
     private static readonly Texture2D AgentTexture = GD.Load<Texture2D>("res://art/agent_human.png");
 
+    // Fire-feedback effect sprites (TASK-046, backlog B-057): Kenney
+    // "Particle Pack" (CC0, art/LICENSE-THIRD-PARTY.md). Keyed by
+    // DrawItem.TextureId for a Kind = 4 item: 0 = muzzle flash (shooter),
+    // 1 = impact hit (target), 2 = impact miss (target) -- a distinct shape
+    // per outcome, not a colour-only hit/miss tint.
+    private static readonly Texture2D[] EffectTextures =
+    [
+        GD.Load<Texture2D>("res://art/effect_muzzle_flash.png"),
+        GD.Load<Texture2D>("res://art/effect_impact_hit.png"),
+        GD.Load<Texture2D>("res://art/effect_impact_miss.png"),
+    ];
+
     // The human figure's own pixel bounds within the 256x512 Kenney canvas
     // (the rest is transparent padding sized for the tallest block in the
     // set) -- found by inspecting the source PNG's alpha channel, not
@@ -155,7 +167,7 @@ public partial class FSharpSceneHost : Node2D
             case "CwClientCore.DemoRenderScene":
                 label = "demo-render-scene self-check (DemoScenario, terrain-demo)";
                 sequence = DemoDrive.runFullSequence();
-                expected = 0x44B29B73E8F107EFUL; // DemoScenario tick 20 (TASK-045 re-pin, Canonical.FormatVersion 9 -> 10)
+                expected = 0x0DDADF2AD356E674UL; // DemoScenario tick 20 (TASK-046 re-pin: block cells now Opaque=true, B-057)
                 break;
             case "CwClientCore.CommandDemoScene":
                 label = "command-demo-scene self-check (scripted select + MoveTo(3,0))";
@@ -286,6 +298,12 @@ public partial class FSharpSceneHost : Node2D
                         (int)item.Radius,
                         color);
                     break;
+                case 4:
+                    // A one-shot fire-feedback effect sprite (TASK-046,
+                    // backlog B-057): muzzle flash or bullet impact, tinted
+                    // per DrawItem.R/G/B/A.
+                    DrawEffectSprite(pos, item.TextureId, item.Radius, color);
+                    break;
                 default:
                 {
                     Vector2 agentPos = pos - new Vector2(0, TileH * 0.5f);
@@ -336,6 +354,20 @@ public partial class FSharpSceneHost : Node2D
         float h = w * (AgentSourceRect.Size.Y / AgentSourceRect.Size.X);
         var rect = new Rect2(agentPos.X - w * 0.5f, agentPos.Y + radius - h, w, h);
         DrawTextureRectRegion(AgentTexture, rect, AgentSourceRect, color);
+    }
+
+    // A fire-feedback effect sprite (TASK-046, backlog B-057) is centred, not
+    // foot-anchored -- it marks a point (the shooter's or target's cell), not
+    // a standing figure. Uses the same `pos - TileH/2` anchor as an agent/
+    // cell-marker item (`cellMarker`'s own precedent) so it lines up with
+    // whatever agent or marker occupies that cell.
+    private void DrawEffectSprite(Vector2 pos, int textureId, float radius, Color color)
+    {
+        Vector2 center = pos - new Vector2(0, TileH * 0.5f);
+        Texture2D tex = EffectTextures[Mathf.Clamp(textureId, 0, EffectTextures.Length - 1)];
+        float size = radius * 2f;
+        var rect = new Rect2(center.X - size * 0.5f, center.Y - size * 0.5f, size, size);
+        DrawTextureRect(tex, rect, false, color);
     }
 
     // --- HUD / screenshot ---------------------------------------------------

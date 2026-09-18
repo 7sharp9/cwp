@@ -37,8 +37,8 @@
   <rect x="80" y="32" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
   <rect x="96" y="32" width="16" height="16" fill="rgb(238,238,238)" stroke="#333333" stroke-width="2"/>
   <rect x="112" y="32" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
-  <rect x="128" y="32" width="16" height="16" fill="url(#cw-hatch)" stroke="#cccccc" stroke-width="1"/>
-  <rect x="144" y="32" width="16" height="16" fill="url(#cw-hatch)" stroke="#cccccc" stroke-width="1"/>
+  <rect x="128" y="32" width="16" height="16" fill="url(#cw-hatch)" stroke="#333333" stroke-width="2"/>
+  <rect x="144" y="32" width="16" height="16" fill="url(#cw-hatch)" stroke="#333333" stroke-width="2"/>
   <rect x="160" y="32" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
   <rect x="176" y="32" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
   <rect x="0" y="48" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
@@ -49,8 +49,8 @@
   <rect x="80" y="48" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
   <rect x="96" y="48" width="16" height="16" fill="rgb(238,238,238)" stroke="#333333" stroke-width="2"/>
   <rect x="112" y="48" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
-  <rect x="128" y="48" width="16" height="16" fill="url(#cw-hatch)" stroke="#cccccc" stroke-width="1"/>
-  <rect x="144" y="48" width="16" height="16" fill="url(#cw-hatch)" stroke="#cccccc" stroke-width="1"/>
+  <rect x="128" y="48" width="16" height="16" fill="url(#cw-hatch)" stroke="#333333" stroke-width="2"/>
+  <rect x="144" y="48" width="16" height="16" fill="url(#cw-hatch)" stroke="#333333" stroke-width="2"/>
   <rect x="160" y="48" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
   <rect x="176" y="48" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>
   <rect x="0" y="64" width="16" height="16" fill="rgb(238,238,238)" stroke="#cccccc" stroke-width="1"/>

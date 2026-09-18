@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-17 (TASK-045 accepted by Dave; B-031 done; B-057 filed)
+  updated: 2026-09-18 (TASK-046 accepted by Dave; B-057 done; B-058 filed)
 
 active_work:
   selected_task: none
@@ -13,13 +13,54 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-17
+  updated: 2026-09-18
   note: >-
-    2026-09-17 (later session): TASK-045 accepted by Dave ("seems to work") --
-    status done. One follow-up raised, not blocking: without the developer
-    overlay (F1) toggled on, there is no player-facing visual indicator that
-    a shot was fired or that an agent is wounded/incapacitated --
-    `CommandDemoScene.DrawList()`'s `fireLines` (and the equivalent for
+    2026-09-18: TASK-046 accepted by Dave -- status done. All three review
+    round 1 points (LOS bug, fire-effect hold, simHz revert) confirmed
+    resolved; no further changes needed. B-057 now done.
+    (docs/ledger/2026-09-18-TASK-046-combat-and-casualty-visual-feedback.md)
+
+    Prior: 2026-09-18 (review round 1): Dave tried TASK-046 live and raised three
+    points, all addressed. (1) Confirmed real LOS bug: agents could fire
+    through the demo's impassable block (`Sight.trace` traced directly
+    against the terrain -- the shot path ran through cells authored
+    `Opaque = false`, a demo-content authoring gap, not an engine bug).
+    Fixed in `DemoScenario.fs` (confirmed via `AskUserQuestion` to fix now);
+    re-pinned `SnapshotDemo`'s `--selfcheck` hash and regenerated two
+    `DiagnosticsTests` goldens; `dotnet test` back to `319/319`. (2) The fire
+    effect's one-tick (50ms) visibility fixed with a held/fading buffer
+    (`fireEffectHoldSeconds`, the `orderTextHoldSeconds` precedent) --
+    purely presentational. (3) Movement pacing ("twice as fast as I
+    thought"): confirmed (`Terrain.BaseMoveCost = 1` = 20 cells/sec at
+    20Hz); tried a client-only `simHz` halving live, but Dave explicitly
+    deferred the actual fix ("adding an actual speed to the agent would
+    solve that discrepancy") -- reverted `simHz`, filed new backlog row
+    B-058 (agent movement speed), not designed. Still status review,
+    awaiting Dave's acceptance.
+    (docs/ledger/2026-09-18-TASK-046-combat-and-casualty-visual-feedback.md)
+
+    Prior: 2026-09-18: TASK-046 (player-facing combat and casualty visual
+    feedback, backlog B-057) implemented and self-verified -- status review.
+    Selected via `AskUserQuestion` over B-030 proper and the smaller
+    client-polish rows (B-052/053/054/055/056), directly following up on
+    the gap Dave named on TASK-045's acceptance. Two central decisions
+    confirmed with Dave via `AskUserQuestion`: new art vs. reused primitives
+    (new art); then, after live-checking kenney.nl (the existing Isometric
+    Miniature Prototype pack has no combat-effect sprites or wound/death
+    pose; Kenney's Game Icons packs have only a generic medical cross),
+    Particle Pack for fire feedback with primitives (a wound dot, a "down"
+    badge, a dead cross -- the `DiagnosticRender.Svg` vocabulary) for
+    vitals. `FireLine`/`AgentVitals` promoted from developer-only to
+    always-on; new `DrawItem.Kind = 4` (textured point sprite). No
+    `CommandoWar.Sim`/`CommandoWar.Headless` change, no `Canonical.
+    FormatVersion` bump, both scenes' `--selfcheck` hashes unchanged.
+    (docs/ledger/2026-09-18-TASK-046-combat-and-casualty-visual-feedback.md)
+
+    Prior: 2026-09-17 (later session): TASK-045 accepted by Dave ("seems to
+    work") -- status done. One follow-up raised, not blocking: without the
+    developer overlay (F1) toggled on, there is no player-facing visual
+    indicator that a shot was fired or that an agent is wounded/incapacitated
+    -- `CommandDemoScene.DrawList()`'s `fireLines` (and the equivalent for
     `AgentVitals`) are computed only inside the `devOverlay` branch,
     confirmed by inspection, not assumption. Dave also floated needing
     "better graphics, maybe another free graphics pack" -- an open question,

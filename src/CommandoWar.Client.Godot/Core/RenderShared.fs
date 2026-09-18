@@ -77,6 +77,31 @@ module RenderShared =
           A = a
           Radius = width }
 
+    /// A `Kind = 4` one-shot effect sprite centred at a cell (TASK-046,
+    /// backlog B-057: a muzzle flash or bullet-impact effect), keyed by
+    /// `textureId` -- the `buildTerrainItems`/`DrawItem.TextureId` precedent.
+    /// `Radius` is on-screen sprite size; there is no click interaction for
+    /// these, unlike an agent's `Radius` (its hit-test radius).
+    let effectSprite
+        (cell: Cell)
+        (textureId: int)
+        (r: float32, g: float32, b: float32)
+        (a: float32)
+        (radius: float32)
+        : DrawItem =
+        { Kind = 4
+          TextureId = textureId
+          Cx = float32 cell.X
+          Cy = float32 cell.Y
+          Cx2 = 0.0f
+          Cy2 = 0.0f
+          Text = ""
+          R = r
+          G = g
+          B = b
+          A = a
+          Radius = radius }
+
     /// A `Kind = 3` text label at a cell (TASK-043: grid coordinates).
     let cellLabel (cell: Cell) (text: string) (r: float32, g: float32, b: float32) (a: float32) (fontSize: float32) : DrawItem =
         { Kind = 3

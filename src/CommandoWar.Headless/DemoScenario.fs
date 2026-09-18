@@ -52,11 +52,16 @@ module DemoScenario =
                cell 4 4 "passable" 3 1 false
                cell 5 5 "passable" 2 1 false
                cell 6 6 "passable" 1 1 false
-               // An impassable 2 x 2 block.
-               cell 8 2 "impassable" 0 0 false
-               cell 9 2 "impassable" 0 0 false
-               cell 8 3 "impassable" 0 0 false
-               cell 9 3 "impassable" 0 0 false
+               // An impassable 2 x 2 block. Also opaque -- a solid block
+               // that stops movement should stop sight too; left `false`
+               // originally (an authoring gap, not a deliberate "see-through
+               // wall" scenario feature, unlike the wall below), which let
+               // agents shoot straight through it (found live by Dave while
+               // reviewing TASK-046's fire-effect rendering).
+               cell 8 2 "impassable" 0 0 true
+               cell 9 2 "impassable" 0 0 true
+               cell 8 3 "impassable" 0 0 true
+               cell 9 3 "impassable" 0 0 true
                // A movement-cost patch.
                cell 2 5 "passable" 0 3 false
                cell 3 5 "passable" 0 3 false

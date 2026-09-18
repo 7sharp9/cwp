@@ -53,6 +53,17 @@ type CommandDemoScene() =
     let mutable heldOrderText = ""
     let mutable orderTextHoldRemaining = 0.0
 
+    // How long a fire-feedback effect (muzzle flash / impact sprite) stays
+    // on screen after the tick it fired (TASK-046, backlog B-057; Dave's
+    // live feedback: at the default 20 Hz sim rate a `FireLine` exists for a
+    // single tick -- 50ms -- which read as nothing at all, the identical
+    // "too fast to read" problem `orderTextHoldSeconds` above already solved
+    // for order text). Purely presentational; does not affect
+    // `Simulation.step`, `FireLine`, or any hash. Held items fade out
+    // (`remaining / fireEffectHoldSeconds`) rather than vanishing abruptly.
+    let fireEffectHoldSeconds = 0.4
+    let heldFireLines = ResizeArray<Cell * Cell * bool * float>() // from, at, hit, remaining
+
     // Player-issued orders awaiting delivery. `RecordedCommand` (the
     // `DemoDrive.commandsForTick` precedent) rather than a bespoke type --
     // its `Tick` is the delivery tick, independent of `PlayerCommand.
@@ -76,6 +87,11 @@ type CommandDemoScene() =
         currAgents <- r.Snapshot.Agents
         hash <- r.StateHash.Value
         devFrame <- Diagnostics.frameOf r
+
+        for overlay in devFrame.Overlays do
+            match overlay with
+            | FireLine(_, from, _, at, hit) -> heldFireLines.Add(from, at, hit, fireEffectHoldSeconds)
+            | _ -> ()
 
     let friendlyAt (cell: Cell) : AgentSnapshot option =
         currAgents |> Array.tryFind (fun a -> a.Side = Friendly && a.Position = cell)
@@ -134,6 +150,16 @@ type CommandDemoScene() =
 
             alpha <- System.Math.Clamp(accum * simHz, 0.0, 1.0)
 
+            // Decrement every held fire effect by real wall-clock time
+            // (unlike the tick catch-up above, this runs even while
+            // `paused`, so a flash already showing when the player pauses
+            // does not get stuck on screen forever) and drop expired ones.
+            for i in heldFireLines.Count - 1 .. -1 .. 0 do
+                let from, at, hit, remaining = heldFireLines.[i]
+                let remaining' = remaining - deltaSeconds
+                if remaining' <= 0.0 then heldFireLines.RemoveAt(i)
+                else heldFireLines.[i] <- (from, at, hit, remaining')
+
             // Hold a meaningful order-disposition message on screen for at
             // least `orderTextHoldSeconds` after it appears, even once the
             // underlying `Disposition` clears (order fulfilled) -- see the
@@ -157,24 +183,109 @@ type CommandDemoScene() =
         member _.DrawList() =
             let lerp (a: int) (b: int) (t: float) = float32 a + (float32 (b - a)) * float32 t
 
+            // Player-facing casualty markers (TASK-046, backlog B-057):
+            // promotes `AgentVitals` from developer-only to always-on --
+            // `devFrame` is recomputed every tick regardless of the F1
+            // dev-overlay toggle (see its own field comment), so the data
+            // already exists. Mirrors `DiagnosticRender.Svg`'s own vitals
+            // vocabulary (a wound dot, a status badge, a dead cross) rather
+            // than a colour-only recolour of the agent figure (docs/06
+            // "status indicators that do not rely on colour alone").
             let agentItems =
                 currAgents
-                |> Array.map (fun a ->
-                    let from = prevAgents |> Map.tryFind (AgentId.value a.Id) |> Option.defaultValue a.Position
-                    let r, g, b = RenderShared.agentColor a.Side
+                |> Array.collect (fun a ->
+                    let vitals =
+                        devFrame.Overlays
+                        |> Array.tryPick (function
+                            | AgentVitals(id, _, v) when id = a.Id -> Some v
+                            | _ -> None)
+                        |> Option.defaultValue (Alive Agent.MaxHealth)
 
-                    { Kind = 1
-                      TextureId = 0
-                      Cx = lerp from.X a.Position.X alpha
-                      Cy = lerp from.Y a.Position.Y alpha
-                      Cx2 = 0.0f
-                      Cy2 = 0.0f
-                      Text = ""
-                      R = r
-                      G = g
-                      B = b
-                      A = 1.0f
-                      Radius = 10.0f })
+                    match vitals with
+                    | Dead ->
+                        // A small black cross where the figure would be --
+                        // shape, not colour, carries "no longer active" (the
+                        // `DiagnosticRender.Svg` dead-cross precedent). No
+                        // figure at all: a corpse is not a coloured variant
+                        // of a living agent.
+                        let cx, cy = float32 a.Position.X, float32 a.Position.Y
+                        let d = 0.28f
+
+                        [| { Kind = 2
+                             TextureId = 0
+                             Cx = cx - d
+                             Cy = cy - d
+                             Cx2 = cx + d
+                             Cy2 = cy + d
+                             Text = ""
+                             R = 0.05f
+                             G = 0.05f
+                             B = 0.05f
+                             A = 0.9f
+                             Radius = 2.5f }
+                           { Kind = 2
+                             TextureId = 0
+                             Cx = cx - d
+                             Cy = cy + d
+                             Cx2 = cx + d
+                             Cy2 = cy - d
+                             Text = ""
+                             R = 0.05f
+                             G = 0.05f
+                             B = 0.05f
+                             A = 0.9f
+                             Radius = 2.5f } |]
+                    | Incapacitated _ ->
+                        // Darkened figure plus a plain-language text badge
+                        // (the `RenderShared.reasonText` player-vocabulary
+                        // precedent -- no bleed-out tick count, that is
+                        // developer detail, `devReasonText`'s own distinction)
+                        // -- the badge, not just the tint, is the signal.
+                        let r, g, b = RenderShared.agentColor a.Side
+
+                        [| { Kind = 1
+                             TextureId = 0
+                             Cx = float32 a.Position.X
+                             Cy = float32 a.Position.Y
+                             Cx2 = 0.0f
+                             Cy2 = 0.0f
+                             Text = ""
+                             R = r * 0.5f
+                             G = g * 0.5f
+                             B = b * 0.5f
+                             A = 1.0f
+                             Radius = 10.0f }
+                           RenderShared.cellLabel a.Position "down" (0.9f, 0.9f, 0.9f) 0.9f 9.0f |]
+                    | Alive health ->
+                        let from = prevAgents |> Map.tryFind (AgentId.value a.Id) |> Option.defaultValue a.Position
+                        let r, g, b = RenderShared.agentColor a.Side
+
+                        let figure =
+                            { Kind = 1
+                              TextureId = 0
+                              Cx = lerp from.X a.Position.X alpha
+                              Cy = lerp from.Y a.Position.Y alpha
+                              Cx2 = 0.0f
+                              Cy2 = 0.0f
+                              Text = ""
+                              R = r
+                              G = g
+                              B = b
+                              A = 1.0f
+                              Radius = 10.0f }
+
+                        if health >= Agent.MaxHealth then
+                            [| figure |]
+                        else
+                            // A small red wound dot -- its presence is the
+                            // signal, not a colour-only tint on the agent
+                            // itself (the `Dead`-cross reasoning above);
+                            // opacity scales with severity, the
+                            // `DiagnosticRender.Svg` wound-dot precedent.
+                            let severity = float32 (Agent.MaxHealth - health) / float32 Agent.MaxHealth
+
+                            [| figure
+                               RenderShared.cellMarker a.Position (0.9f, 0.15f, 0.1f) (0.4f + severity * 0.5f) 4.0f |])
 
             // Selection halo: a larger, translucent Kind = 1 item at the
             // selected agent's own cell, inserted before its real circle so
@@ -309,6 +420,29 @@ type CommandDemoScene() =
                     Array.concat
                         [ coordLabels; reservedAndObstructed; knownContacts; exposedCells; fireLines; losItems ]
 
+            // Player-facing fire feedback (TASK-046, backlog B-057):
+            // promotes `FireLine` from developer-only (`fireLines` above) to
+            // always-on -- a muzzle-flash sprite at the shooter and a
+            // distinct hit-spark or miss-puff sprite at the target (Kenney
+            // "Particle Pack", CC0; `art/LICENSE-THIRD-PARTY.md`), not a
+            // colour-only hit/miss tint, plus a thin connecting tracer using
+            // the existing line primitive. Unsorted and appended after the
+            // depth sort, the `devItems` precedent immediately below: a
+            // two-cell line has no single meaningful depth. Reads from
+            // `heldFireLines`, not `devFrame.Overlays` directly, so each
+            // effect stays visible (fading out) for `fireEffectHoldSeconds`
+            // of real time rather than the single tick it actually fired.
+            let fireEffects =
+                heldFireLines
+                |> Seq.collect (fun (from, at, hit, remaining) ->
+                    let fade = float32 (remaining / fireEffectHoldSeconds)
+                    let tint = if hit then (1.0f, 0.85f, 0.55f) else (0.75f, 0.75f, 0.75f)
+
+                    [| RenderShared.lineMarker from at tint (0.5f * fade) 1.5f
+                       RenderShared.effectSprite from 0 (1.0f, 1.0f, 0.9f) fade 16.0f
+                       RenderShared.effectSprite at (if hit then 1 else 2) tint fade 16.0f |])
+                |> Array.ofSeq
+
             // `devItems` is deliberately appended *after* the depth sort, not
             // folded into it: `RenderShared.depthKey` derives a line's depth
             // from its origin cell alone, which is meaningless for an item
@@ -316,12 +450,13 @@ type CommandDemoScene() =
             // could land behind terrain partway along its own length. A
             // developer overlay exists to reveal information that might
             // otherwise be hidden, so every dev item always draws on top,
-            // unsorted among themselves.
+            // unsorted among themselves. `fireEffects` follows the identical
+            // reasoning for the same underlying overlay, now player-facing.
             let sorted =
                 Array.concat [ terrainItems; haloItems; agentItems; previewItems; pendingItems; committedItems ]
                 |> Array.sortBy RenderShared.depthKey
 
-            Array.append sorted devItems
+            Array.concat [ sorted; fireEffects; devItems ]
 
         member _.HudText() =
             let selText =
