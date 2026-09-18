@@ -54,6 +54,7 @@ module AppraisalDemo =
             | RouteTooExposed(Some id) -> sprintf "route-too-exposed threat-agent-%d" (AgentId.value id)
             | TargetNotKnown -> "target-not-known"
             | CriticallyWounded -> "critically-wounded"
+            | InsufficientAmmunition -> "insufficient-ammunition"
 
         match d with
         | Accepted -> "accepted"
@@ -278,6 +279,20 @@ module AppraisalDemo =
             | SquadLeadership leader ->
                 // TASK-045: not yet surfaced in this disposable P3 demo.
                 unhandled.Add(sprintf "squad leadership %A" leader)
+            | AgentAmmo(agent, at, magazine, reserve, reloading) ->
+                // TASK-047: not yet surfaced in this disposable P3 demo (it
+                // predates the task); every agent in exposed-approach stays
+                // fully armed (no combat reaches it at tick 1).
+                unhandled.Add(
+                    sprintf
+                        "ammo agent %d (%d,%d) %d/%d reloading=%b"
+                        (AgentId.value agent)
+                        at.X
+                        at.Y
+                        magazine
+                        reserve
+                        reloading
+                )
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

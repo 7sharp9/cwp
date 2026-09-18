@@ -24,6 +24,7 @@ let private goodRaw () : RawScenario =
       EnemyDeployments = [| { AgentId = 10; Cell = { X = 15; Y = 15 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
       ObjectiveAreas = [| { AreaId = "observation"; Cell = { X = 8; Y = 8 } } |]
       ExtractionAreas = [| { AreaId = "exfil"; Cell = { X = 1; Y = 15 } } |]
+      ResupplyAreas = [||]
       StaticTargets = [| { TargetId = "bridge"; Cell = { X = 8; Y = 0 } } |]
       Objectives =
         [| { Id = 1
@@ -100,12 +101,13 @@ let private errorsOf (raw: RawScenario) : ScenarioError list =
 [<Fact>]
 let ``the content version is independent of the canonical and replay versions`` () =
     // The three version constants move independently: ScenarioContent.Version
-    // is 2 (TASK-010 authored terrain layer), Canonical.FormatVersion is 10
-    // (TASK-018 / TASK-026 / TASK-028 / TASK-032 / TASK-033 / TASK-034 /
-    // TASK-037 / TASK-044 / TASK-045), Replay.FormatVersion is 1. This test
-    // documents the intent, not an inequality.
-    Assert.Equal(2, ScenarioContent.Version)
-    Assert.Equal(10, Canonical.FormatVersion)
+    // is 3 (TASK-010 authored terrain layer; TASK-047 ResupplyAreas),
+    // Canonical.FormatVersion is 11 (TASK-018 / TASK-026 / TASK-028 /
+    // TASK-032 / TASK-033 / TASK-034 / TASK-037 / TASK-044 / TASK-045 /
+    // TASK-047), Replay.FormatVersion is 1. This test documents the intent,
+    // not an inequality.
+    Assert.Equal(3, ScenarioContent.Version)
+    Assert.Equal(11, Canonical.FormatVersion)
     Assert.Equal(1, Replay.FormatVersion)
 
 // --- the happy path -------------------------------------------------
@@ -179,13 +181,13 @@ let ``an extraction with no listed agents validates to AllFriendlyAgents`` () =
 
 [<Fact>]
 let ``an unsupported content version is a typed error`` () =
-    Assert.Contains(UnsupportedContentVersion(99, 2), errorsOf { goodRaw () with ContentVersion = 99 })
+    Assert.Contains(UnsupportedContentVersion(99, 3), errorsOf { goodRaw () with ContentVersion = 99 })
 
 [<Fact>]
 let ``a version-1 scenario is rejected, not migrated`` () =
     // ScenarioContent.Version 1 predates the authored terrain layer. The
     // validator does not migrate it (docs/04 section 16).
-    Assert.Contains(UnsupportedContentVersion(1, 2), errorsOf { goodRaw () with ContentVersion = 1 })
+    Assert.Contains(UnsupportedContentVersion(1, 3), errorsOf { goodRaw () with ContentVersion = 1 })
 
 [<Fact>]
 let ``a blank scenario id is reported`` () =
@@ -322,7 +324,7 @@ let ``a missing required marker is reported for each of the three kinds`` () =
 let ``validation reports every fault in one pass`` () =
     let raw =
         { goodRaw () with
-            ContentVersion = 3
+            ContentVersion = 4
             EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
             Objectives = [| objective 2 "orbit" |]
             TerrainLayer =
@@ -331,7 +333,7 @@ let ``validation reports every fault in one pass`` () =
                         Cover = [| { Cell = { X = 40; Y = 40 }; Direction = "up"; Level = -1 } |] } }
 
     let es = errorsOf raw
-    Assert.Contains(UnsupportedContentVersion(3, 2), es)
+    Assert.Contains(UnsupportedContentVersion(4, 3), es)
     Assert.Contains(DuplicateDeploymentId 1, es)
     Assert.Contains(DeploymentOutOfMap(1, { X = 99; Y = 99 }, { Width = 16; Height = 16 }), es)
     Assert.Contains(UnknownObjectiveKind(2, "orbit"), es)
@@ -649,6 +651,7 @@ let private fixtureScenario () : Scenario =
       EnemyDeployments = [||]
       ObjectiveAreas = [| { AreaId = "observation"; Cell = { X = 20; Y = 14 } } |]
       ExtractionAreas = [| { AreaId = "exfil"; Cell = { X = 0; Y = 0 } } |]
+      ResupplyAreas = [||]
       StaticTargets = [||]
       Objectives = [| { objective 1 "reach" with AreaRef = "observation" } |]
       TerrainLayer = None
@@ -659,7 +662,7 @@ let private fixtureScenario () : Scenario =
 let ``the six-agent fixture as a Scenario reproduces the pinned initial hash`` () =
     match World.ofScenario (fixtureScenario ()) Fixture.Seed with
     | Error e -> Assert.Fail($"World.ofScenario failed: {e}")
-    | Ok world -> Assert.Equal(0xD63C7909BA798617UL, (Hashing.hash world).Value)
+    | Ok world -> Assert.Equal(0xF762ECD4377B5E68UL, (Hashing.hash world).Value)
 
 [<Fact>]
 let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the pinned final hash`` () =
@@ -677,4 +680,4 @@ let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the
         let cmds = if tick = Fixture.CommandIssueTick then [| command |] else [||]
         state <- (Simulation.step SimConfig.standard cmds state).State
 
-    Assert.Equal(0xF0CEAD6CE48BA07EUL, (Hashing.hash state).Value)
+    Assert.Equal(0xAF1FB68EF486CB39UL, (Hashing.hash state).Value)

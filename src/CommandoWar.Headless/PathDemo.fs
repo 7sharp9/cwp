@@ -88,6 +88,7 @@ module PathDemo =
           EnemyDeployments = [||]
           ObjectiveAreas = [| { AreaId = "crossing"; Cell = { X = 15; Y = 0 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 15; Y = 11 } } |]
+          ResupplyAreas = [||]
           StaticTargets = [||]
           Objectives =
             [| { Id = 1

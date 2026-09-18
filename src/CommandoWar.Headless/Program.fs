@@ -196,8 +196,14 @@ let private cmdReplayFile (args: string list) : int =
                                     match c.Command.Body with
                                     | Order(MoveTo t, Replace) -> sprintf "move (%d,%d)" t.X t.Y
                                     | Order(Suppress t, Replace) -> sprintf "suppress agent-%d" (AgentId.value t)
+                                    | Order(Hold t, Replace) -> sprintf "hold (%d,%d)" t.X t.Y
+                                    | Order(Assault t, Replace) -> sprintf "assault (%d,%d)" t.X t.Y
+                                    | Order(Withdraw t, Replace) -> sprintf "withdraw (%d,%d)" t.X t.Y
                                     | Order(MoveTo t, Append) -> sprintf "queue move (%d,%d)" t.X t.Y
                                     | Order(Suppress t, Append) -> sprintf "queue suppress agent-%d" (AgentId.value t)
+                                    | Order(Hold t, Append) -> sprintf "queue hold (%d,%d)" t.X t.Y
+                                    | Order(Assault t, Append) -> sprintf "queue assault (%d,%d)" t.X t.Y
+                                    | Order(Withdraw t, Append) -> sprintf "queue withdraw (%d,%d)" t.X t.Y
                                     | Cancel target -> sprintf "cancel command-%d" (CommandId.value target)
 
                                 printfn

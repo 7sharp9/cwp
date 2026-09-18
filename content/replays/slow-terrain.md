@@ -16,19 +16,19 @@ See `content/replays/CORPUS.md`.
 | Command log | `slow-terrain.cwreplay` |
 | Initial state | Corpus slow-terrain scenario (8 x 8, seed 20260904) |
 | Tick count | 8 |
-| Initial hash (tick 0) | `0x1624A49B7259102B` |
-| Final hash (tick 8) | `0x128EDB3D5820291F` |
+| Initial hash (tick 0) | `0xBEB19062818DB3E2` |
+| Final hash (tick 8) | `0x3EB16FFB01C13786` |
 | Domain events | 9 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x204F1272B0C7DC47` |
-|    2 | `0xA4C27FFE6527E5B7` |
-|    3 | `0xA1269F21CD779A6D` |
-|    4 | `0xAD7DEF5C8587D419` |
-|    5 | `0xF5DE6F252B3FFAC5` |
-|    6 | `0xB3381E409F30AD6A` |
-|    7 | `0x0BA1BAEFC148284C` |
-|    8 | `0x128EDB3D5820291F` |
+|    1 | `0xAE21CE7E3A828A2E` |
+|    2 | `0xE9C71BD0FCD0FD86` |
+|    3 | `0xBC3917C8AC97452C` |
+|    4 | `0x5451A799D42FA888` |
+|    5 | `0xC92E655747FA6C24` |
+|    6 | `0x6CC240EF24F2AFCF` |
+|    7 | `0x9A9A355F5ABE0B3D` |
+|    8 | `0x3EB16FFB01C13786` |

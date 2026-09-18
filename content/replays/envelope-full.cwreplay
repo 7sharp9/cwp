@@ -9,42 +9,43 @@
 # Initial state: the shared spike fixture (Setup.sixAgentWorld, 32 x 32,
 # seed 20260902) — resolved by name from Corpus.all, not serialised.
 #
-# canonical 10 and every hash below were re-pinned by TASK-045 (backlog
-# B-031; Canonical.FormatVersion 9 -> 10, AgentState.Vitals added). This
-# entry's one command is a MoveTo with no combat anywhere near it, so every
-# agent stays Alive at full health throughout: the byte-layout change is the
+# canonical 11 and every hash below were re-pinned by TASK-047 (backlog
+# B-030 proper; Canonical.FormatVersion 10 -> 11, AgentState.Ammo added and
+# three new PlayerIntent cases). This entry's one command is a MoveTo with
+# no combat anywhere near it, so no shot is ever fired and every agent's
+# ammo stays at its full default throughout: the byte-layout change is the
 # only difference, the 24 ticks and 78 domain events are unchanged. Prior
-# re-pin: TASK-044 (Canonical.FormatVersion 8 -> 9, AgentState.OrderQueue
-# added to writeAgent).
+# re-pin: TASK-045 (Canonical.FormatVersion 9 -> 10, AgentState.Vitals
+# added).
 version 1
 seed 20260902
 ticks 24
-canonical 10
+canonical 11
 build cwheadless
 scenario spike-fixture
-initial-hash 0xD63C7909BA798617
-checkpoint 1 0x5B2918AF0F5886E0
-checkpoint 2 0x786DD5BAA13BDD70
-checkpoint 3 0x6CE8BBE167E2559A
-checkpoint 4 0x3A21D9B47635E38C
-checkpoint 5 0xF09F24ABE421C2D2
-checkpoint 6 0x09B6DC787CAC5B30
-checkpoint 7 0xB48C3242350B5D92
-checkpoint 8 0x70223514AFD9B9D4
-checkpoint 9 0x7A48DFB42DEC3D4A
-checkpoint 10 0xA5D20135F8BC6F50
-checkpoint 11 0xDA0DB344B251B36A
-checkpoint 12 0x88FB6E99DDA4F0EC
-checkpoint 13 0xBA76A4AD462199C2
-checkpoint 14 0xA8663EC0B0425990
-checkpoint 15 0x82491ACF07482C52
-checkpoint 16 0x9B2DF465678C3E04
-checkpoint 17 0x3359857CC1CE856A
-checkpoint 18 0xC48412FC9BC68710
-checkpoint 19 0x8BE281262650045A
-checkpoint 20 0xCCC1566EF6E2B98C
-checkpoint 21 0x46694DCA23F077B2
-checkpoint 22 0xFF99FFE82C7A0EE4
-checkpoint 23 0x5472C392CB697436
-checkpoint 24 0x68733B3C55995DAC
+initial-hash 0xF762ECD4377B5E68
+checkpoint 1 0xD8D6EA029CE786FF
+checkpoint 2 0xE1258286D1525A23
+checkpoint 3 0x8ED9BE573FAF4BDD
+checkpoint 4 0xB6671535A9B163C7
+checkpoint 5 0x88AB633616EA8F95
+checkpoint 6 0xCC11085DFF43BA83
+checkpoint 7 0xD85317A38254EB2D
+checkpoint 8 0xBA81D866991F716F
+checkpoint 9 0xA4E5ECE9F803CF75
+checkpoint 10 0x4F0CFDD88A73EAA3
+checkpoint 11 0xB87F63CFA8A9FB7D
+checkpoint 12 0x31B8B4F39A9D7FA7
+checkpoint 13 0x9EEC68C3548D7F85
+checkpoint 14 0xC5C859A3D8E440E3
+checkpoint 15 0x972DAFCD9AC8C26D
+checkpoint 16 0xC60296D3C52D00DF
+checkpoint 17 0xB4DFC1E9CC615605
+checkpoint 18 0xA0212A20E6DFD563
+checkpoint 19 0x2B0A80D1FBF6B5DD
+checkpoint 20 0xF47B40977E56D407
+checkpoint 21 0xB25CD157382A5A95
+checkpoint 22 0xB14B38A299CD65D7
+checkpoint 23 0x50410EC67BF7A651
+checkpoint 24 0xC8AF4FBD8A648EF7
 command 2 0 1 1 immediate aggressive fixture:spike 3,4,5 move 20 14

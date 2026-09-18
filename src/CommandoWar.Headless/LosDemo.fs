@@ -74,6 +74,7 @@ module LosDemo =
           EnemyDeployments = [||]
           ObjectiveAreas = [| { AreaId = "observation-point"; Cell = { X = 11; Y = 0 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 11; Y = 11 } } |]
+          ResupplyAreas = [||]
           StaticTargets = [||]
           Objectives =
             [| { Id = 1

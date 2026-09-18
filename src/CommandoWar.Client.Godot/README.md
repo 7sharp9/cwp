@@ -282,6 +282,37 @@ dotnet build CommandoWar.Client.Godot.slnx -c Debug
 "$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0xF1027A36B36BC3DF
 ```
 
+## Assault, Withdraw, Hold order executors and ammunition (TASK-047)
+
+Sim-side only (backlog B-030 proper; `CommandoWar.Sim` gained three new
+`PlayerIntent` cases, a staged `Assaulting` commitment FSM, `AgentState.Ammo`,
+and `Canonical.FormatVersion` bumped 10 -> 11) -- no new client scene or
+input; issuing `Hold`/`Assault`/`Withdraw` from `CommandDemoScene` stays a
+future client task (the TASK-037 `Suppress`-order precedent). `RenderShared.fs`'s
+`reasonText`/`devReasonText` (`DecisionReason.InsufficientAmmunition`) and
+`devCommitmentText` (`Commitment.Withdrawing`/`.Assaulting`) needed new match
+arms to keep compiling.
+
+Both existing scenes' `--selfcheck` hashes moved (byte-layout only, from the
+`FormatVersion` bump -- neither scene's own scripted drive issues a new order
+type or exhausts an agent's ammo, so the tick/event counts are unchanged):
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x8E93B48D07AE9CBD
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0xE661187DE95E92E6
+```
+
+Both hashes were computed by calling `DemoDrive.runFullSequence()` /
+`CommandDemoDrive.runScriptedSelfCheck()` directly from `dotnet fsi` against
+the built `CommandoWar.Client.Godot.Core.dll` (no Godot install in the
+implementing environment) -- not independently re-run through the real Godot
+4.7.2 editor this session. Flagged for Dave to re-check before accepting, the
+TASK-034/037 precedent.
+
 ## Pinned versions
 
 | Component | Version |

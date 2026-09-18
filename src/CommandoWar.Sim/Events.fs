@@ -163,6 +163,22 @@ type EventBody =
     /// `WorldState` field. Consuming it into a mission-failure outcome is
     /// B-032's job.
     | SquadFailure
+    /// `agent`'s magazine emptied this tick with reserve stock remaining, so
+    /// the State-consequences phase started a reload (TASK-047, backlog
+    /// B-030 proper; `Ammo.tick`). Emitted once, on the transition — the
+    /// `AgentIncapacitated`/`AgentDied` precedent, not every tick the reload
+    /// continues.
+    | ReloadStarted of agent: AgentId
+    /// `agent`'s reload finished this tick, refilling its magazine from
+    /// reserve (TASK-047, backlog B-030 proper; `Ammo.tick`). Emitted once,
+    /// on the transition.
+    | ReloadCompleted of agent: AgentId
+    /// `agent` was refilled to full ammunition this tick, standing on an
+    /// authored `WorldState.ResupplyAreas` cell (TASK-047, backlog B-030
+    /// proper; `Ammo.resupply`). Not emitted every tick an already-full
+    /// agent happens to stand on the cell — the `Suppression`/`Stress`
+    /// silent-decay precedent for avoiding every-tick no-op spam.
+    | AgentResupplied of agent: AgentId
 
 /// An immutable domain event tagged with the tick it occurred on. Within a
 /// single step, events are emitted in a stable order:
@@ -187,12 +203,15 @@ type EventBody =
 ///      qualifying hit that reaches zero health, `AgentIncapacitated` for
 ///      the same shot — TASK-031/TASK-045; from the Combat phase, runs
 ///      after movement, resolving against post-movement positions);
-///   8. state-consequences outcomes (TASK-045, backlog B-031; from the
-///      State-consequences phase, runs after Combat): every `AgentDied`
-///      (an `Incapacitated` agent's bleed-out reaching zero), ascending
-///      agent id, then at most one `LeadershipTransferred` (a squad-wide
-///      fact, not per-agent — no ordering to pick), then at most one
-///      `SquadFailure`.
+///   8. state-consequences outcomes (TASK-045, backlog B-031; TASK-047,
+///      backlog B-030 proper; from the State-consequences phase, runs after
+///      Combat): for each agent in ascending id order, at most one of
+///      `AgentDied` (an `Incapacitated` agent's bleed-out reaching zero),
+///      `ReloadStarted`, `ReloadCompleted`, or `AgentResupplied` (an ammo
+///      transition — mutually exclusive per agent per tick, `Ammo.fs`'s own
+///      "resupply short-circuits reload" rule), then at most one
+///      `LeadershipTransferred` (a squad-wide fact, not per-agent — no
+///      ordering to pick), then at most one `SquadFailure`.
 /// The order follows `Phases.order` (Command intake, Communication,
 /// Perception, Tactical knowledge, Appraisal, Commitment and local action,
 /// Navigation and movement, Combat, State consequences), so a contact is

@@ -276,6 +276,18 @@ type Overlay =
     /// cell: a squad-wide fact, not per-agent. Standing canonical state, so
     /// both `Diagnostics.frame` and `Diagnostics.frameOf` derive it.
     | SquadLeadership of leader: AgentId option
+    /// An agent's current ammunition (TASK-047, backlog B-030 proper):
+    /// `agent` at `at` holds `magazine` rounds ready, `reserve` in stock,
+    /// and `reloading` whether it is currently mid-reload. Follows the
+    /// `AgentSuppression`/`AgentStress` sparse shape: emitted only for an
+    /// agent whose `Ammo` is not a full `Ready (MagazineSize, ReserveStart)`
+    /// — the common case, and an unconditional per-agent overlay would add a
+    /// full-ammo line to every agent in every existing golden for no
+    /// information. Standing canonical state, so both `Diagnostics.frame`
+    /// and `Diagnostics.frameOf` derive it. Developer detail only (the F1
+    /// overlay) — no player-facing ammo readout is scoped by this task
+    /// (Forbidden scope).
+    | AgentAmmo of agent: AgentId * at: Cell * magazine: int * reserve: int * reloading: bool
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -394,6 +406,9 @@ module Diagnostics =
               Cells = [||]
               Agents = current |> Option.map Array.singleton |> Option.defaultValue [||] }
         | SquadFailure -> { Kind = "squad-failure"; Cells = [||]; Agents = [||] }
+        | ReloadStarted agent -> { Kind = "reload-started"; Cells = [||]; Agents = [| agent |] }
+        | ReloadCompleted agent -> { Kind = "reload-completed"; Cells = [||]; Agents = [| agent |] }
+        | AgentResupplied agent -> { Kind = "agent-resupplied"; Cells = [||]; Agents = [| agent |] }
 
     /// A `KnownContact` overlay per contact in the friendly squad's shared
     /// tactical picture (TASK-026), ascending by contact id. Reads
@@ -437,6 +452,7 @@ module Diagnostics =
                         a.Stress
                         a.SuppressionBand
                         a.Vitals
+                        a.Ammo
                         o
                         a.Position
                         budget
@@ -449,9 +465,26 @@ module Diagnostics =
     /// `frame` and `frameOf` derive this from bare authoritative state — the
     /// `OrderAppraisal` precedent.
     let private commitmentOverlays (world: WorldState) : Overlay[] =
+        // TASK-047 (backlog B-030 proper): the identical SuppressionBand
+        // projection `orderAppraisalOverlays` above already computes, needed
+        // here only for `Commitment.ofAgent`'s `Assaulting`-stage derivation.
+        let suppressedThreats =
+            world.Agents |> Array.filter (fun a -> a.SuppressionBand) |> Array.map (fun a -> a.Id)
+
         world.Agents
         |> Array.sortBy (fun a -> a.Id)
-        |> Array.map (fun a -> AgentCommitment(a.Id, a.Position, Commitment.ofAgent a.Order a.Disposition a.Destination))
+        |> Array.map (fun a ->
+            AgentCommitment(
+                a.Id,
+                a.Position,
+                Commitment.ofAgent
+                    world.TacticalKnowledge
+                    suppressedThreats
+                    a.Position
+                    a.Order
+                    a.Disposition
+                    a.Destination
+            ))
 
     /// An `AgentSuppression` overlay per agent with non-zero `Suppression`
     /// (TASK-032), ascending by agent id. Standing canonical `AgentState`
@@ -509,6 +542,21 @@ module Diagnostics =
     let private squadLeadershipOverlay (world: WorldState) : Overlay[] =
         [| SquadLeadership(Casualty.currentLeader world.Agents) |]
 
+    /// An `AgentAmmo` overlay per agent whose `Ammo` is not a full `Ready
+    /// (MagazineSize, ReserveStart)` (TASK-047, backlog B-030 proper),
+    /// ascending by agent id — the `AgentSuppression`/`AgentStress` sparse
+    /// shape.
+    let private agentAmmoOverlays (world: WorldState) : Overlay[] =
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.choose (fun a ->
+            if Ammo.isFull a.Ammo then
+                None
+            else
+                match a.Ammo with
+                | Ready(magazine, reserve) -> Some(AgentAmmo(a.Id, a.Position, magazine, reserve, false))
+                | Reloading(reserve, _) -> Some(AgentAmmo(a.Id, a.Position, 0, reserve, true)))
+
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
     /// (a bare `WorldState` carries no per-tick event history); use
@@ -532,7 +580,8 @@ module Diagnostics =
                hostileKnownContactOverlays world
                orderQueueOverlays world
                agentVitalsOverlays world
-               squadLeadershipOverlay world |]
+               squadLeadershipOverlay world
+               agentAmmoOverlays world |]
             |> Array.concat
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
@@ -579,7 +628,10 @@ module Diagnostics =
             | AgentIncapacitated _
             | AgentDied _
             | LeadershipTransferred _
-            | SquadFailure -> None)
+            | SquadFailure
+            | ReloadStarted _
+            | ReloadCompleted _
+            | AgentResupplied _ -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, winner) -> Reserved(cell, winner, result.State.Tick))
 
@@ -611,7 +663,10 @@ module Diagnostics =
             | AgentIncapacitated _
             | AgentDied _
             | LeadershipTransferred _
-            | SquadFailure -> None)
+            | SquadFailure
+            | ReloadStarted _
+            | ReloadCompleted _
+            | AgentResupplied _ -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, occupant) -> Obstructed(cell, occupant))
 
@@ -645,7 +700,10 @@ module Diagnostics =
             | AgentIncapacitated _
             | AgentDied _
             | LeadershipTransferred _
-            | SquadFailure -> None)
+            | SquadFailure
+            | ReloadStarted _
+            | ReloadCompleted _
+            | AgentResupplied _ -> None)
         |> Array.distinctBy fst
         |> Array.choose (fun (recipient, command) ->
             result.State.Agents
@@ -679,7 +737,10 @@ module Diagnostics =
             | AgentIncapacitated _
             | AgentDied _
             | LeadershipTransferred _
-            | SquadFailure -> None)
+            | SquadFailure
+            | ReloadStarted _
+            | ReloadCompleted _
+            | AgentResupplied _ -> None)
         |> Array.choose (fun (shooter, target, hit) ->
             match
                 result.State.Agents |> Array.tryFind (fun a -> a.Id = shooter),
@@ -719,5 +780,6 @@ module Diagnostics =
                       hostileKnownContactOverlays result.State
                       orderQueueOverlays result.State
                       agentVitalsOverlays result.State
-                      squadLeadershipOverlay result.State ]
+                      squadLeadershipOverlay result.State
+                      agentAmmoOverlays result.State ]
             Hash = result.StateHash }

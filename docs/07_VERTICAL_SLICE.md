@@ -62,6 +62,19 @@ Only these commands are required:
 
 Direct leader movement may use a separate immediate input command, but it must pass through the same authoritative simulation boundary.
 
+Realised as `PlayerIntent.MoveTo | Suppress | Hold | Assault | Withdraw`
+(`src/CommandoWar.Sim/Domain.fs`), each a bare `Cell` target except
+`Suppress`, which is `AgentId` — a specific known contact (TASK-037, a
+thin B-030 slice), not the "known or suspected threat area" this section's
+`SuppressArea` naming implies; no suspected-threat, id-less targeting model
+exists (`docs/05` section 4). `Hold`/`Assault`/`Withdraw` realised by
+TASK-047 (backlog B-030 proper) with real appraisal, a commitment, and an
+executor each (`docs/05` sections 4-5, 9-10); issuing them from
+`CommandDemoScene` (client input) stays a future client task, the
+`Suppress`-order precedent — this session's realisation is sim-side proof
+only (a real corpus regeneration, `SimulationTests` facts, no new client
+UI).
+
 ## 5. Required simulation systems
 
 - fixed integer tick;
@@ -74,8 +87,12 @@ Direct leader movement may use a separate immediate input command, but it must p
 - movement and formation slots;
 - hitscan small-arms combat (realised by TASK-031, backlog B-019: automatic
   symmetric engagement, a deterministic range- and cover-mitigated hit
-  chance, the simulation's first real gameplay PRNG draw — no ammunition,
-  weapon readiness, or wound/death consequence yet, deliberately deferred);
+  chance, the simulation's first real gameplay PRNG draw). Ammunition and
+  weapon readiness realised by TASK-047 (backlog B-030 proper):
+  `AgentState.Ammo` (a magazine + reserve, automatic reload once empty,
+  instant resupply on an authored `WorldState.ResupplyAreas` cell) gates
+  every qualifying shot, `Suppress`/`Assault` alike; wound/death
+  consequence realised by TASK-045 (backlog B-031, below);
 - suppression (realised by TASK-032, backlog B-020: `Combat` raises the
   target's `AgentState.Suppression`, cover-mitigated and independent of a
   hit; `State consequences` decays it every tick. TASK-033, backlog B-021,

@@ -100,6 +100,18 @@ Postures may begin as:
 
 Occupy and defend an area. The executor may choose nearby cover.
 
+Realised by TASK-047 (backlog B-030 proper): `PlayerIntent.Hold of area:
+Cell` — the `MoveTo` precedent, a bare `Cell`. "The executor may choose
+nearby cover" is real: stage 2 redirects through `Appraisal.bestCoverNear`
+(reusing the identical `cellPressure` threat-pressure function stage-3
+route exposure already sums), picking the lowest-pressure cell within
+`AppraisalConfig.HoldCoverSearchRadius` Chebyshev cells of `area` (including
+`area` itself), ties broken by nearest then ascending `(Y, X)`. No new
+`Commitment` case (`docs/05` section 9 below) — an accepted `Hold` writes a
+`Destination` exactly as `MoveTo` does, so it is already `Moving` while en
+route and falls to bare `Holding` on arrival, indistinguishable from an idle
+agent once there.
+
 ### Suppress
 
 Fire toward a known or suspected threat area to reduce enemy effectiveness and perceived route danger.
@@ -117,9 +129,37 @@ degraded accuracy, forced cover-seeking — is not modelled by any system yet.
 
 Close with and secure a target area. This is deliberately more demanding than Move and receives stricter appraisal.
 
+Realised by TASK-047 (backlog B-030 proper): `PlayerIntent.Assault of
+target: Cell`. "Deliberately more demanding ... stricter appraisal" is a
+flat `AppraisalConfig.AssaultResolvePenalty` subtracted from the stage-4
+threshold — a route a `MoveTo` order would Accept can Refuse as an
+Assault. Stage 2 also requires ammunition (`docs/05` section 8 below). The
+executor is a staged finite-state machine (`Commitment.AssaultStage`, the
+`docs/05` section 10 example realised for real): `ApproachingStart` (still
+closing distance) -> `AwaitingSupport` (within
+`AppraisalConfig.AssaultStartRange` of the target, a known unsuppressed
+threat still covers it — the executor freezes movement, no timeout: the
+player must suppress the threat, redirect, or accept the stall) ->
+`Advancing` (no blocking threat — the already-symmetric `Combat` phase
+engages anything visible along the way, "cross danger area" needs nothing
+extra) -> `ClearingThreat` (at the target, a known unsuppressed threat
+remains nearby — the agent holds while `Combat` fires) -> fulfilled once
+clear ("report complete", the existing `CommitmentCompleted` event).
+
 ### Withdraw
 
 Break contact and move toward a safer destination. It may receive priority under high suppression.
+
+Realised by TASK-047 (backlog B-030 proper): `PlayerIntent.Withdraw of
+target: Cell`. "May receive priority" is read narrowly as *appraisal*
+priority, not a new automatic interrupt: a flat
+`AppraisalConfig.WithdrawResolveBonus` is added to the stage-4 threshold, so
+an agent breaking contact is less likely to refuse the very exposure it is
+retreating through. `Commitment.Withdrawing of WithdrawCommitment` is a
+distinct case (unlike `Hold`) since the bonus makes it a genuine behavioural
+difference, not just a label. No autonomous "start withdrawing under
+suppression without being ordered" — that is Hostile-doctrine-shaped work
+(B-022), out of scope for a player-issued order.
 
 ## 5. Order appraisal
 
@@ -168,6 +208,17 @@ model is deferred.
 - Is required ammunition or equipment available?
 
 A failure here is normally a hard refusal or inability, not a morale check.
+
+"Is required ammunition ... available?" realised by TASK-047 (backlog B-030
+proper): `Unable(InsufficientAmmunition)` when a `Suppress`/`Assault`
+order's issuing agent's `AgentState.Ammo` is entirely empty (`Ready(0, 0)`)
+— checked only for those two intents, which explicitly plan to initiate
+fire; `MoveTo`/`Hold`/`Withdraw` never check it (an unarmed agent can still
+walk, hold ground, or retreat). A partial or mid-reload magazine still
+appraises normally — the agent may simply run dry mid-engagement, an
+emergent outcome, not a blocking one. "Is the agent alive, conscious, and
+mobile?" realised by TASK-045 (`Unable(CriticallyWounded)`); "a capability
+the agent lacks" remains unrealised — no capability model exists.
 
 ### Stage 3: tactical viability
 
@@ -276,14 +327,18 @@ Realised by TASK-028 (backlog B-017) as the subset
 `NoKnownRoute | RouteTooExposed of threat: AgentId option`, extended by
 TASK-037 (backlog B-030 thin slice) with `TargetNotKnown` — a `Suppress`
 order naming a contact absent from the issuing agent's own tactical
-knowledge. The doc's `ContactId` is `AgentId` in the code (there is no
-`ContactId` type). `UnableToCommunicate` stays a `DeliveryFailure` case
-(TASK-027) — an undelivered order never reaches appraisal. The rest
-(`RouteBlocked`, `HeavySuppression`, `CriticallyWounded`, `MissingCapability`,
-`InsufficientAmmunition`, `IssuerNotRecognised`, `ImmediateThreat`,
-`UnsupportedAssault`) arrive with the systems that can trigger them — B-019 /
-B-020 / B-021 / B-030 — rather than as
-speculative type machinery now (`AGENTS.md`).
+knowledge — by TASK-045 (backlog B-031) with `CriticallyWounded`, and by
+TASK-047 (backlog B-030 proper) with `InsufficientAmmunition` — a
+`Suppress`/`Assault` order (only; not `MoveTo`/`Hold`/`Withdraw`) from an
+agent whose `AgentState.Ammo` is entirely empty. The doc's `ContactId` is
+`AgentId` in the code (there is no `ContactId` type). `UnableToCommunicate`
+stays a `DeliveryFailure` case (TASK-027) — an undelivered order never
+reaches appraisal. The rest (`RouteBlocked`, `HeavySuppression`,
+`MissingCapability`, `IssuerNotRecognised`, `ImmediateThreat`,
+`UnsupportedAssault`) arrive with the systems that can trigger them — B-021
+(the remaining triggers), a capability model, and a commander-identity /
+interrupt-priority model, none of which exist — rather than as speculative
+type machinery now (`AGENTS.md`).
 
 ## 8. Minimal psychological model
 
@@ -368,21 +423,36 @@ This prevents oscillation.
 Realised by TASK-030 (backlog B-018) as `Holding | Moving of MoveCommitment`
 in `CommandoWar.Sim`, extended by TASK-037 (backlog B-030 thin slice) with
 `Suppressing of SuppressCommitment` (`{ Command: CommandId; Target: AgentId }`
-— the exact shape this section names). `Assaulting` / `Withdrawing` still
-need `PlayerIntent` cases that do not exist yet (`Hold` / `Assault` /
-`Withdraw` — the rest of B-030) and get no case, per `AGENTS.md` "do not
-build speculative type machinery". A `Suppressing` commitment has no
-completed state of its own — it ends only by supersession, exactly like the
-"prevents oscillation" list above minus "completed". `Commitment` is **not** a stored
-`AgentState` field: it is a pure derived value
-(`Commitment.ofAgent : ReceivedOrder option -> OrderDisposition option -> Cell
-option -> Commitment`) recoverable from the already-canonical `Order` /
-`Disposition` / `Destination` at every tick — the `AgentState.Route` precedent
-(`docs/04` section 17). "Continues until completed" and "superseded by a
-newer order" are realised (`CommitmentCompleted` / `CommitmentEstablished`
-events, section 13); "invalidated by a material world change", "interrupted
-by a higher-priority survival event", and "delayed or refused after explicit
-reappraisal" are not — see section 11.
+— the exact shape this section names), and by TASK-047 (backlog B-030
+proper) with `Withdrawing of WithdrawCommitment` (the `MoveCommitment` shape)
+and `Assaulting of AssaultCommitment` (`{ Command: CommandId; Target: Cell;
+Stage: AssaultStage }` — `Stage` is this section's own finite-executor idea,
+below, realised as a pure per-tick derivation rather than a second stored
+field). `Hold` gets **no** `HoldCommitment` payload case, unlike this
+section's own sketch: an accepted `Hold` writes a `Destination` exactly as
+`MoveTo` does, so it already produces `Moving` while en route and falls to
+bare `Holding` on arrival — nothing behaviourally distinguishes an ordered
+hold from an idle agent once arrived, so a payload case would carry no
+information a diagnostic overlay cannot already read from `Order`/
+`Disposition` directly (`AGENTS.md` "do not build speculative type
+machinery"). A `Suppressing` commitment has no completed state of its own —
+it ends only by supersession, exactly like the "prevents oscillation" list
+above minus "completed". `Commitment` is **not** a stored `AgentState`
+field: it is a pure derived value (`Commitment.ofAgent : threats: Contact[]
+-> suppressedThreats: AgentId[] -> position: Cell -> ReceivedOrder option ->
+OrderDisposition option -> Cell option -> Commitment`) recoverable from the
+already-canonical `Order` / `Disposition` / `Destination` plus already-
+canonical world context (`WorldState.TacticalKnowledge`, `AgentState.
+SuppressionBand`, needed only for `Assaulting`'s `Stage`) at every tick —
+the `AgentState.Route` precedent (`docs/04` section 17). "Continues until
+completed" and "superseded by a newer order" are realised (`CommitmentCompleted`
+/ `CommitmentEstablished` events, section 13); "invalidated by a material
+world change" and "delayed or refused after explicit reappraisal" are not —
+see section 11. "Interrupted by a higher-priority survival event" gained a
+second, `Assault`-scoped instance with TASK-047: `AwaitingSupport`
+(section 10) freezes the executor without an explicit interrupt-priority
+mechanism, since it is the order's own stage, not an external event pre-
+empting it.
 
 ## 10. Finite action executor
 
@@ -401,6 +471,32 @@ Acquire approach route
 ```
 
 Do not encode the whole game in one behaviour tree. Typed states and transitions are easier to test and explain.
+
+Realised for `Assault` by TASK-047 (backlog B-030 proper) as
+`Commitment.AssaultStage`, a leaner four-state cut of this example rather
+than a literal state-for-state port — several of the states above collapse
+onto systems that already exist rather than needing new ones:
+
+- "acquire approach route" / "move to assault start" -> `ApproachingStart`
+  (ordinary `Pathfinding`-driven Navigation, unchanged);
+- "wait for required support, if any" -> `AwaitingSupport`: a known threat
+  contact near the target is not yet `SuppressionBand`-latched (the
+  identical hysteresis latch `Suppress`/TASK-037 already reads) — the
+  executor freezes `Destination` to `None` for as long as this holds, no
+  timeout;
+- "cross danger area" -> `Advancing`: needs no special handling at all, the
+  already-symmetric `Combat` phase engages any visible hostile along the
+  way exactly as it does for any other commitment;
+- "enter target area" / "clear immediate threat" -> `ClearingThreat`: at
+  the target with a known unsuppressed threat still nearby, the agent
+  holds while `Combat` fires;
+- "report complete" -> the existing `CommitmentCompleted` event once no
+  such threat remains, no new event type.
+
+`MoveTo`'s own executor (TASK-030) stays correspondingly thin, the
+precedent this cut follows: "there is no 'wait for support' or 'cross
+danger area' concept without suppression or a richer order vocabulary" is
+no longer true for `Assault` specifically, now that both exist.
 
 Realised by TASK-030 (backlog B-018) for `Move`, correspondingly thin since
 `Simulation.navigationAndMovement` (`docs/04` section 12.7) already owns the

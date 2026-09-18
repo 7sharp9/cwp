@@ -51,6 +51,7 @@ module DiagnosticRender =
         | RouteTooExposed(Some id) -> sprintf "route-too-exposed threat-agent-%d" (AgentId.value id)
         | TargetNotKnown -> "target-not-known"
         | CriticallyWounded -> "critically-wounded"
+        | InsufficientAmmunition -> "insufficient-ammunition"
 
     /// Short text for an `OrderDisposition` (TASK-028).
     let private dispositionText (d: OrderDisposition) : string =
@@ -73,6 +74,16 @@ module DiagnosticRender =
         | Holding -> "holding"
         | Moving mc -> sprintf "moving to %s" (cellText mc.Target)
         | Suppressing sc -> sprintf "suppressing agent %d" (AgentId.value sc.Target)
+        | Withdrawing wc -> sprintf "withdrawing to %s" (cellText wc.Target)
+        | Assaulting ac ->
+            let stage =
+                match ac.Stage with
+                | ApproachingStart -> "approaching start"
+                | AwaitingSupport -> "awaiting support"
+                | Advancing -> "advancing"
+                | ClearingThreat -> "clearing threat"
+
+            sprintf "assaulting %s (%s)" (cellText ac.Target) stage
 
     /// Short text for a `PlayerIntent` (TASK-044, backlog B-051, for
     /// `AgentOrderQueue` overlay entries) — the `Program.fs` `cwheadless
@@ -81,6 +92,9 @@ module DiagnosticRender =
         match i with
         | MoveTo target -> sprintf "move %s" (cellText target)
         | Suppress target -> sprintf "suppress agent %d" (AgentId.value target)
+        | Hold area -> sprintf "hold %s" (cellText area)
+        | Assault target -> sprintf "assault %s" (cellText target)
+        | Withdraw target -> sprintf "withdraw %s" (cellText target)
 
     /// Short text for a `VitalStatus` (TASK-045, backlog B-031).
     let private vitalsText (v: VitalStatus) : string =
@@ -88,6 +102,14 @@ module DiagnosticRender =
         | Alive health -> sprintf "alive %d/%d" health Agent.MaxHealth
         | Incapacitated remaining -> sprintf "incapacitated (bleeding out, %d tick(s))" remaining
         | Dead -> "dead"
+
+    /// Short text for an `AgentAmmo` overlay's fields (TASK-047, backlog
+    /// B-030 proper).
+    let private ammoText (magazine: int) (reserve: int) (reloading: bool) : string =
+        if reloading then
+            sprintf "reloading (reserve %d)" reserve
+        else
+            sprintf "ammo %d/reserve %d" magazine reserve
 
     /// Steps `initial` through `log` for `tickCount` ticks and collects the
     /// diagnostic frame at every tick: index 0 is tick 0 (`Diagnostics.frame`
@@ -152,7 +174,8 @@ module DiagnosticRender =
                 | HostileKnownContact _
                 | AgentOrderQueue _
                 | AgentVitals _
-                | SquadLeadership _ -> None)
+                | SquadLeadership _
+                | AgentAmmo _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -186,7 +209,8 @@ module DiagnosticRender =
                 | HostileKnownContact _
                 | AgentOrderQueue _
                 | AgentVitals _
-                | SquadLeadership _ -> None)
+                | SquadLeadership _
+                | AgentAmmo _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -454,6 +478,10 @@ module DiagnosticRender =
                         | None -> "none (every friendly down)"
 
                     line (sprintf "  squad leader: %s" text)
+                | AgentAmmo(agent, at, magazine, reserve, reloading) ->
+                    line (
+                        sprintf "  ammo %s: agent %d  %s" (cellText at) (AgentId.value agent) (ammoText magazine reserve reloading)
+                    )
 
         line ""
 
@@ -790,6 +818,8 @@ module DiagnosticRender =
                     | Holding -> "#2c7a7b"
                     | Moving _ -> "none"
                     | Suppressing _ -> "#dd6b20"
+                    | Withdrawing _ -> "#3182ce"
+                    | Assaulting _ -> "#e53e3e"
 
                 line (
                     sprintf
@@ -944,6 +974,24 @@ module DiagnosticRender =
                                 (a.Cell.X * s + mid)
                                 (a.Cell.Y * s + mid)
                         )
+            | AgentAmmo(_, at, _, _, reloading) ->
+                // Ammunition (TASK-047, backlog B-030 proper): every corner
+                // and edge midpoint around the cell is already spoken for
+                // (AgentCommitment top-left, AgentSuppression top-right,
+                // AgentStress bottom-left, OrderAppraisal bottom-right,
+                // AgentOrderQueue top-edge, AgentVitals bottom-edge), so a
+                // mid-reload agent gets a dashed amber ring one radius out
+                // from the main agent circle instead of a corner badge; a
+                // merely low-on-ammo (but not reloading) agent draws nothing
+                // in SVG — the full magazine/reserve count is developer text
+                // detail, `Ascii`/HTML's job, not scoped for a new SVG glyph.
+                if reloading then
+                    line (
+                        sprintf
+                            "  <circle cx=\"%d\" cy=\"%d\" r=\"6\" fill=\"none\" stroke=\"#b7791f\" stroke-width=\"1\" stroke-dasharray=\"2,1\"/>"
+                            (at.X * s + mid)
+                            (at.Y * s + mid)
+                    )
 
         // Footer.
         let footerText (dy: int) (str: string) =

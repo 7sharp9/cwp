@@ -110,6 +110,7 @@ let private randomCaseGen: Gen<RandomCase> =
               Agents = agents
               TacticalKnowledge = [||]
               HostileTacticalKnowledge = [||]
+              ResupplyAreas = [||]
               Random = SplitMix64.create (uint64 seed) }
 
         let! tickCount = Gen.choose (5, 15)
@@ -382,6 +383,7 @@ let private perceptionCaseGen: Gen<RandomCase> =
               Agents = agents
               TacticalKnowledge = [||]
               HostileTacticalKnowledge = [||]
+              ResupplyAreas = [||]
               Random = SplitMix64.create (uint64 seed) }
 
         let! tickCount = Gen.choose (5, 15)
@@ -610,7 +612,8 @@ let ``every appraisal outcome is consistent with a fresh recompute`` () =
                             | Refused(RouteTooExposed _, _) -> a.Destination = None
                             | Refused(NoKnownRoute, _)
                             | Refused(TargetNotKnown, _)
-                            | Refused(CriticallyWounded, _) -> false
+                            | Refused(CriticallyWounded, _)
+                            | Refused(InsufficientAmmunition, _) -> false
                             | Unable(NoKnownRoute, _) ->
                                 a.Destination = None && not (reachable st a.Position target)
                             | Unable _ -> a.Destination = None
@@ -681,15 +684,18 @@ let ``every agent's derived Commitment matches its Order, Disposition, and Desti
                             | Some _, Some Accepted, Some _ -> true
                             | _ -> false
 
-                        match Commitment.ofAgent a.Order a.Disposition a.Destination with
+                        match Commitment.ofAgent [||] [||] a.Position a.Order a.Disposition a.Destination with
                         | Moving _ -> expectedMoving
                         | Holding -> not expectedMoving
                         // This generator (appraisalCaseGen) only ever issues
-                        // MoveTo orders (TASK-037's Suppress is untested by
-                        // this property) — Suppressing here is unreachable,
-                        // and false fails loudly rather than silently passing
-                        // if that ever stops being true.
-                        | Suppressing _ -> false))
+                        // MoveTo orders (TASK-037's Suppress, TASK-047's
+                        // Hold/Assault/Withdraw are untested by this
+                        // property) — every other case here is unreachable,
+                        // and false fails loudly rather than silently
+                        // passing if that ever stops being true.
+                        | Suppressing _
+                        | Withdrawing _
+                        | Assaulting _ -> false))
 
             commitmentsOk)
 

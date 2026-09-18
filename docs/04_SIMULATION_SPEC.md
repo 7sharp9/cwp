@@ -751,13 +751,21 @@ geometry, `Appraisal.attackDirection` made public and reused) is compared to
 one `RandomStream.next` draw, and `ShotFired(shooter, target, hit)` is
 emitted. This is the simulation's **first real gameplay consumer** of
 `WorldState.Random` (section 17); the stream was already canonical (TASK-003),
-so no `Canonical.FormatVersion` bump. "Validate ... ammunition", "resolve
-weapon readiness", and "apply cover and impact" (beyond the hit-chance
-mitigation) remain unrealised — named, not built (no `AgentState`
-weapon/ammo/wound field exists; a future task will add ammunition as either a
-cooldown-between-magazines or reload-from-stock model, and death as a
-critical/bleed-out timer rather than a binary kill — backlog numbers not yet
-assigned); casualties are B-031.
+so no `Canonical.FormatVersion` bump. "Apply cover and impact" (beyond the
+hit-chance mitigation) remains unrealised. Casualties are B-031.
+
+**"Validate ... ammunition"/"resolve weapon readiness" realised by TASK-047
+(backlog B-030 proper):** every shooter's qualifying-shot check now also
+requires `Ammo.canFire shooter.Ammo` (a `Ready` state with a round
+chambered) before `Combat.chooseTarget` runs at all — an unarmed or
+mid-reload agent simply does not engage, no event, the existing
+sparse-`ShotFired` precedent. A qualifying shot consumes one round
+(`Ammo.fire`). `Combat.hitChance`/`.chooseTarget` themselves are unchanged:
+ammo is a firing gate the `Simulation.combat` phase applies, not a term in
+the hit-chance formula. `AgentState.Ammo: AmmoState` (`Ready of magazine *
+reserve | Reloading of reserve * ticksRemaining`, `src/CommandoWar.Sim/
+Ammo.fs`) is new genuine canonical state (`Canonical.FormatVersion` 10 ->
+11). Reload and resupply are State consequences (12.9) concerns, below.
 
 **"Create suppression independent of a hit" realised by TASK-032 (backlog
 B-020):** every qualifying shot also raises the target's `AgentState.Suppression`
@@ -811,7 +819,21 @@ non-empty (`Stress.gain`), then always decays by `StressConfig.DecayPerTick`,
 floored at `0` (`Stress.decay`) — gain then decay, the `Suppression`
 precedent, but both steps live here since nothing else produces stress yet.
 Silent: no event. "Apply deaths and incapacitation" and "update command
-succession" remain unrealised — B-031.
+succession" realised by TASK-045 (backlog B-031; see `Casualty.fs`).
+
+**Ammunition reload and resupply realised by TASK-047 (backlog B-030
+proper):** for every agent, in ascending id order, first an authored
+`WorldState.ResupplyAreas` cell check — an agent standing on one is
+refilled to a full magazine and reserve (`Ammo.resupply`) and emits
+`AgentResupplied`, short-circuiting any in-progress reload, unless already
+full (no event on an already-full agent, the `Suppression`/`Stress`
+silent-decay precedent for avoiding every-tick no-op spam). Otherwise
+`Ammo.tick`: an empty magazine with reserve remaining starts a reload
+(`ReloadStarted`), and a `Reloading` state counts down and refills on
+completion (`ReloadCompleted`) — both emitted once, on the transition, the
+`AgentIncapacitated`/`AgentDied` precedent. `WorldState.ResupplyAreas: Cell[]`
+is static authored scenario data (`Scenario.ResupplyAreas`), excluded from
+`Canonical.encode`, the `Terrain`/`CommunicationAvailable` precedent.
 
 ### 12.10 Mission
 
@@ -837,6 +859,15 @@ type PlayerIntent =
     | Assault of target: TargetArea * approach: Approach option
     | WithdrawTo of target: Cell
 ```
+
+Realised (`src/CommandoWar.Sim/Domain.fs`) in a leaner shape than this initial
+sketch: `MoveTo of target: Cell` (no posture — no movement-posture model
+exists), `Suppress of target: AgentId` (TASK-037, a known contact, not a
+`TargetArea`), and (TASK-047, backlog B-030 proper) `Hold of area: Cell`,
+`Assault of target: Cell`, `Withdraw of target: Cell` — all three take a
+bare `Cell`, the `MoveTo` precedent, since no `AreaId`/`TargetArea`/
+`Approach` model exists either (`AGENTS.md` "no speculative type
+machinery"). `docs/05` section 4 documents each order's actual behaviour.
 
 An envelope supplies command ID, issuer, recipients, issue tick, urgency, and risk tolerance.
 
@@ -1168,13 +1199,16 @@ At minimum:
 
 An authored scenario is framework-neutral typed data: a scenario id, map
 dimensions, friendly and enemy deployments (agent id, side, cell), an objective
-algebra, objective and extraction areas, static targets, scenario-wide rules,
-and an optional authored terrain layer (TASK-010; elevation, passability and
-movement cost, opacity, directional low cover). Line of sight and pathfinding
-are still not part of it (sections 8 to 9; backlog B-009, B-010), and objective
-evaluation and mission success/failure are deferred (backlog B-032) so the
-objective algebra is a data-only type at this stage; the terrain grid the
-layer produces is likewise not consumed by any tick phase.
+algebra, objective, extraction, and resupply areas, static targets,
+scenario-wide rules, and an optional authored terrain layer (TASK-010;
+elevation, passability and movement cost, opacity, directional low cover).
+Line of sight and pathfinding are still not part of it (sections 8 to 9;
+backlog B-009, B-010), and objective evaluation and mission success/failure
+are deferred (backlog B-032) so the objective algebra is a data-only type at
+this stage; the terrain grid the layer produces is likewise not consumed by
+any tick phase. `ResupplyAreas` (TASK-047, backlog B-030 proper;
+`ScenarioContent.Version` 2 -> 3) is the first authored area type an actual
+phase consumes: `Simulation.stateConsequences`'s ammo-resupply check (12.9).
 
 The authored input is versioned by a content-format version that is independent
 of the canonical-state format version (section 17) and the replay container

@@ -1287,20 +1287,22 @@ let ``Commitment.ofAgent matches every reachable (Order, Disposition, Destinatio
               Urgency = Routine
               RiskTolerance = Standard }
 
+    let ofAgent = Commitment.ofAgent [||] [||] { X = 0; Y = 0 }
+
     // Accepted, still mid-route -> Moving.
     Assert.Equal(
         Moving { Command = CommandId.ofInt 1; Target = { X = 5; Y = 5 } },
-        Commitment.ofAgent order (Some Accepted) (Some { X = 5; Y = 5 })
+        ofAgent order (Some Accepted) (Some { X = 5; Y = 5 })
     )
     // Accepted but already arrived (Destination cleared) -> Holding.
-    Assert.Equal(Holding, Commitment.ofAgent order (Some Accepted) None)
+    Assert.Equal(Holding, ofAgent order (Some Accepted) None)
     // Refused / Unable -> Holding regardless of any stale Destination.
-    Assert.Equal(Holding, Commitment.ofAgent order (Some(Refused(NoKnownRoute, [||]))) None)
-    Assert.Equal(Holding, Commitment.ofAgent order (Some(Unable(NoKnownRoute, [||]))) None)
+    Assert.Equal(Holding, ofAgent order (Some(Refused(NoKnownRoute, [||]))) None)
+    Assert.Equal(Holding, ofAgent order (Some(Unable(NoKnownRoute, [||]))) None)
     // Not yet appraised -> Holding.
-    Assert.Equal(Holding, Commitment.ofAgent order None None)
+    Assert.Equal(Holding, ofAgent order None None)
     // No order at all -> Holding.
-    Assert.Equal(Holding, Commitment.ofAgent None None None)
+    Assert.Equal(Holding, ofAgent None None None)
 
     // Accepted Suppress order (TASK-037) -> Suppressing, keyed by AgentId,
     // never by Destination (a Suppress order never writes one).
@@ -1312,7 +1314,39 @@ let ``Commitment.ofAgent matches every reachable (Order, Disposition, Destinatio
               Urgency = Routine
               RiskTolerance = Standard }
 
-    Assert.Equal(Suppressing { Command = CommandId.ofInt 2; Target = agent 9 }, Commitment.ofAgent suppressOrder (Some Accepted) None)
+    Assert.Equal(Suppressing { Command = CommandId.ofInt 2; Target = agent 9 }, ofAgent suppressOrder (Some Accepted) None)
+
+    // Accepted Withdraw order (TASK-047, backlog B-030 proper) -> Withdrawing,
+    // the MoveCommitment shape but a distinct case.
+    let withdrawOrder =
+        Some
+            { Command = CommandId.ofInt 3
+              Intent = Withdraw { X = 0; Y = 0 }
+              IssuedAtTick = 0L
+              Urgency = Routine
+              RiskTolerance = Standard }
+
+    Assert.Equal(
+        Withdrawing { Command = CommandId.ofInt 3; Target = { X = 0; Y = 0 } },
+        ofAgent withdrawOrder (Some Accepted) (Some { X = 0; Y = 0 })
+    )
+
+    // Accepted Assault order, far from the target -> Assaulting ApproachingStart.
+    let assaultOrder =
+        Some
+            { Command = CommandId.ofInt 4
+              Intent = Assault { X = 20; Y = 20 }
+              IssuedAtTick = 0L
+              Urgency = Routine
+              RiskTolerance = Standard }
+
+    Assert.Equal(
+        Assaulting
+            { Command = CommandId.ofInt 4
+              Target = { X = 20; Y = 20 }
+              Stage = ApproachingStart },
+        ofAgent assaultOrder (Some Accepted) (Some { X = 20; Y = 20 })
+    )
 
 // --- Hitscan combat and directional cover effects (TASK-031) ----------
 
@@ -1727,7 +1761,7 @@ let ``a Suppress order naming an unknown contact is Unable TargetNotKnown`` () =
     Assert.Equal(Some(Unable(TargetNotKnown, [||])), dispositionOf (agent 0) r)
     let a0 = agentOf (agent 0) r.State
     Assert.Equal(None, a0.Destination)
-    Assert.Equal(Holding, Commitment.ofAgent a0.Order a0.Disposition a0.Destination)
+    Assert.Equal(Holding, Commitment.ofAgent [||] [||] a0.Position a0.Order a0.Disposition a0.Destination)
 
 [<Fact>]
 let ``a Suppress order naming a known contact is Accepted with no Destination and a Suppressing commitment`` () =
@@ -1740,7 +1774,7 @@ let ``a Suppress order naming a known contact is Accepted with no Destination an
     Assert.Equal({ X = 5; Y = 10 }, a0.Position) // holds position, never moves
     Assert.Equal(
         Suppressing { Command = CommandId.ofInt 1; Target = agent 9 },
-        Commitment.ofAgent a0.Order a0.Disposition a0.Destination
+        Commitment.ofAgent [||] [||] a0.Position a0.Order a0.Disposition a0.Destination
     )
 
 [<Fact>]
@@ -2128,3 +2162,243 @@ let ``SquadFailure fires exactly once, the tick every friendly becomes non-Alive
     // A signal event only: stepping continues normally afterwards.
     let after = stepIdle st
     Assert.DoesNotContain(SquadFailure, bodies after)
+
+// --- Assault, Withdraw, Hold order executors and ammunition (TASK-047, backlog B-030 proper) ----
+
+let private contactAt (id: int) (cell: Cell) : Contact =
+    { Contact = agent id
+      LastKnownCell = cell
+      LastSeenTick = 0L
+      Confidence = PerceptionConfig.ConfidenceFull }
+
+// --- Commitment.assaultStage: pure per-tick derivation, all four states ---
+
+[<Fact>]
+let ``assaultStage is ApproachingStart while beyond AssaultStartRange, regardless of threats`` () =
+    let target = { X = 10; Y = 10 }
+    let position = { X = 0; Y = 0 }
+    let threats = [| contactAt 9 target |]
+
+    Assert.Equal(ApproachingStart, Commitment.assaultStage threats [||] position target)
+
+[<Fact>]
+let ``assaultStage is AwaitingSupport within AssaultStartRange with an unsuppressed threat near the target`` () =
+    let target = { X = 10; Y = 10 }
+    let position = { X = 9; Y = 10 } // Chebyshev 1 <= AssaultStartRange
+    let threats = [| contactAt 9 target |] // Chebyshev 0 <= ThreatEngagementRange, unsuppressed
+
+    Assert.Equal(AwaitingSupport, Commitment.assaultStage threats [||] position target)
+
+[<Fact>]
+let ``assaultStage is Advancing within AssaultStartRange once the blocking threat is suppressed`` () =
+    let target = { X = 10; Y = 10 }
+    let position = { X = 9; Y = 10 }
+    let threats = [| contactAt 9 target |]
+
+    Assert.Equal(Advancing, Commitment.assaultStage threats [| agent 9 |] position target)
+
+[<Fact>]
+let ``assaultStage is ClearingThreat at the target with an unsuppressed threat within AssaultClearRadius`` () =
+    let target = { X = 10; Y = 10 }
+    let threats = [| contactAt 9 target |] // Chebyshev 0 <= AssaultClearRadius
+
+    Assert.Equal(ClearingThreat, Commitment.assaultStage threats [||] target target)
+
+[<Fact>]
+let ``assaultStage is Advancing at the target once the last known threat is cleared`` () =
+    let target = { X = 10; Y = 10 }
+    Assert.Equal(Advancing, Commitment.assaultStage [||] [||] target target)
+
+// --- Withdraw: resolve bonus lets a route Refused for MoveTo Accept ---
+
+[<Fact>]
+let ``a Withdraw order Accepts a route a MoveTo order to the same target Refuses`` () =
+    // The "Refused for a low-discipline agent" geometry: friendly (5,10),
+    // hostile at (9,3), route to (14,10) exposed at every cell (pressure
+    // 100). Discipline 4 -> base threshold 80 (Refused, < 100);
+    // AppraisalConfig.WithdrawResolveBonus (30) lifts it to 110 (Accepted).
+    let w = appraisalWorld [ 0, { X = 5; Y = 10 }, 4 ] [ 5, { X = 9; Y = 3 } ]
+
+    let moveTo = stepWith [| cmd 1 (agent 0) { X = 14; Y = 10 } |] w
+
+    match dispositionOf (agent 0) moveTo with
+    | Some(Refused(RouteTooExposed _, _)) -> ()
+    | other -> Assert.Fail($"expected the plain MoveTo to Refuse, got {other}")
+
+    let withdraw =
+        stepWith [| Command.withdraw (CommandId.ofInt 1) 0L (agent 0) { X = 14; Y = 10 } |] w
+
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) withdraw)
+
+    match
+        Commitment.ofAgent
+            [||]
+            [||]
+            { X = 0; Y = 0 }
+            (agentOf (agent 0) withdraw.State).Order
+            (agentOf (agent 0) withdraw.State).Disposition
+            (agentOf (agent 0) withdraw.State).Destination
+    with
+    | Withdrawing wc -> Assert.Equal({ X = 14; Y = 10 }, wc.Target)
+    | other -> Assert.Fail($"expected Withdrawing, got {other}")
+
+// --- Assault: the resolve penalty Refuses a route a MoveTo order Accepts ---
+
+[<Fact>]
+let ``an Assault order Refuses a route a MoveTo order to the same target Accepts`` () =
+    // Discipline 6 -> base threshold 110 (Accepted, the same exposure-100
+    // geometry above -- the "high-discipline" precedent);
+    // AppraisalConfig.AssaultResolvePenalty (30) drops it to 80 (Refused).
+    let w = appraisalWorld [ 0, { X = 5; Y = 10 }, 6 ] [ 5, { X = 9; Y = 3 } ]
+
+    let moveTo = stepWith [| cmd 1 (agent 0) { X = 14; Y = 10 } |] w
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) moveTo)
+
+    let assault =
+        stepWith [| Command.assault (CommandId.ofInt 1) 0L (agent 0) { X = 14; Y = 10 } |] w
+
+    match dispositionOf (agent 0) assault with
+    | Some(Refused(RouteTooExposed(Some threat), _)) -> Assert.Equal(agent 5, threat)
+    | other -> Assert.Fail($"expected the Assault to Refuse, got {other}")
+
+// --- Hold: may redirect to a lower-pressure nearby cell ------------------
+
+[<Fact>]
+let ``a Hold order with no known threat walks straight to the authored area`` () =
+    let w = appraisalWorld [ 0, { X = 0; Y = 5 }, 3 ] []
+    let r = stepWith [| Command.hold (CommandId.ofInt 1) 0L (agent 0) { X = 5; Y = 5 } |] w
+
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) r)
+    Assert.Equal(Some { X = 5; Y = 5 }, (agentOf (agent 0) r.State).Destination)
+
+[<Fact>]
+let ``a Hold order redirects to a covered neighbour when the authored area is exposed`` () =
+    // Threat at (5,0), area (5,5): attackDirection is North (dy < 0, |dy| >
+    // |dx| = 0), so authored North-facing cover on (5,4) alone (not the area
+    // itself) zeroes that one neighbour's pressure (10 - 3*4 = -2 -> 0)
+    // while the area and every other candidate cell in HoldCoverSearchRadius
+    // stays at 10 -- bestCoverNear must pick (5,4) uniquely.
+    let cover: AuthoredCover[] = [| { Cell = { X = 5; Y = 4 }; Direction = North; Level = 3 } |]
+
+    let w =
+        { appraisalWorld [ 0, { X = 0; Y = 5 }, 3 ] [ 5, { X = 5; Y = 0 } ] with
+            Terrain = Terrain.build { Width = 16; Height = 16 } [||] cover }
+
+    let r = stepWith [| Command.hold (CommandId.ofInt 1) 0L (agent 0) { X = 5; Y = 5 } |] w
+
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) r)
+    Assert.Equal(Some { X = 5; Y = 4 }, (agentOf (agent 0) r.State).Destination)
+
+// --- Ammo: pure Ammo.fs functions -----------------------------------------
+
+[<Fact>]
+let ``Ammo.canFire is true only for a Ready state with a round chambered`` () =
+    Assert.True(Ammo.canFire (Ready(1, 0)))
+    Assert.False(Ammo.canFire (Ready(0, 30)))
+    Assert.False(Ammo.canFire (Reloading(30, 5)))
+
+[<Fact>]
+let ``Ammo.fire consumes one round and is a no-op when the magazine is already empty`` () =
+    Assert.Equal(Ready(4, 10), Ammo.fire (Ready(5, 10)))
+    Assert.Equal(Ready(0, 10), Ammo.fire (Ready(0, 10)))
+    Assert.Equal(Reloading(10, 5), Ammo.fire (Reloading(10, 5)))
+
+[<Fact>]
+let ``Ammo.tick starts a reload once empty with reserve, then refills on completion`` () =
+    let started, justStarted, justCompleted = Ammo.tick (Ready(0, 10))
+    Assert.Equal(Reloading(10, AmmoConfig.ReloadTicks), started)
+    Assert.True(justStarted)
+    Assert.False(justCompleted)
+
+    let counting, s2, c2 = Ammo.tick (Reloading(10, 5))
+    Assert.Equal(Reloading(10, 4), counting)
+    Assert.False(s2)
+    Assert.False(c2)
+
+    let refilled, s3, c3 = Ammo.tick (Reloading(10, 1))
+    Assert.Equal(Ready(10, 0), refilled) // min MagazineSize 10 = 10
+    Assert.False(s3)
+    Assert.True(c3)
+
+    // Truly empty (no reserve) and an untouched Ready state are both inert.
+    let inert, s4, c4 = Ammo.tick (Ready(0, 0))
+    Assert.Equal(Ready(0, 0), inert)
+    Assert.False(s4)
+    Assert.False(c4)
+
+[<Fact>]
+let ``Ammo.resupply always fills to a full magazine and reserve`` () =
+    Assert.Equal(Ready(AmmoConfig.MagazineSize, AmmoConfig.ReserveStart), Ammo.resupply (Ready(0, 0)))
+    Assert.Equal(Ready(AmmoConfig.MagazineSize, AmmoConfig.ReserveStart), Ammo.resupply (Reloading(5, 10)))
+    Assert.True(Ammo.isFull (Ready(AmmoConfig.MagazineSize, AmmoConfig.ReserveStart)))
+    Assert.False(Ammo.isFull (Ready(AmmoConfig.MagazineSize - 1, AmmoConfig.ReserveStart)))
+
+// --- Ammo: Combat gates firing --------------------------------------------
+
+[<Fact>]
+let ``an agent with no ammunition at all does not fire even at a qualifying target`` () =
+    let friendly = { Agent.create (agent 0) Friendly { X = 0; Y = 0 } with Ammo = Ready(0, 0) }
+    let hostile = Agent.create (agent 1) Hostile { X = 5; Y = 0 } // Chebyshev 5 <= WeaponRange, visible
+    let r = stepIdle (worldOf [ friendly; hostile ])
+
+    Assert.DoesNotContain(0, shotsFiredIn r |> Array.map (fun (s, _, _) -> AgentId.value s))
+
+// --- Ammo: reload and resupply consequence phases -------------------------
+
+[<Fact>]
+let ``an empty magazine with reserve starts and finishes a reload with the documented events`` () =
+    let a = { Agent.create (agent 0) Friendly { X = 0; Y = 0 } with Ammo = Ready(0, 10) }
+    let mutable st = worldOf [ a ]
+
+    let r1 = stepIdle st
+    Assert.Equal(Reloading(10, AmmoConfig.ReloadTicks), (agentOf (agent 0) r1.State).Ammo)
+    Assert.Contains(ReloadStarted(agent 0), bodies r1)
+    st <- r1.State
+
+    // The `Casualty.tickBleedOut` precedent exactly: the reload runs for
+    // AmmoConfig.ReloadTicks further ticks (ticks 2..ReloadTicks here, one
+    // per tick since tick 1 already consumed the first) before the
+    // (ReloadTicks + 1)-th tick refills, on the identical "ticksRemaining
+    // <= 1" boundary bleed-out uses.
+    for _ in 2 .. AmmoConfig.ReloadTicks do
+        let r = stepIdle st
+        Assert.DoesNotContain(ReloadCompleted(agent 0), bodies r)
+        st <- r.State
+
+    let final = stepIdle st
+    Assert.Equal(Ready(10, 0), (agentOf (agent 0) final.State).Ammo)
+    Assert.Contains(ReloadCompleted(agent 0), bodies final)
+
+[<Fact>]
+let ``an agent standing on a resupply area is refilled instantly, once`` () =
+    let cell = { X = 3; Y = 3 }
+    let a = { Agent.create (agent 0) Friendly cell with Ammo = Ready(0, 0) }
+    let w = { worldOf [ a ] with ResupplyAreas = [| cell |] }
+
+    let r = stepIdle w
+    Assert.Equal(Ready(AmmoConfig.MagazineSize, AmmoConfig.ReserveStart), (agentOf (agent 0) r.State).Ammo)
+    Assert.Contains(AgentResupplied(agent 0), bodies r)
+
+    // Already full: no further event on a quiet tick.
+    let again = stepIdle r.State
+    Assert.DoesNotContain(AgentResupplied(agent 0), bodies again)
+
+// --- Ammo: stage-2 appraisal gate for Suppress / Assault only -------------
+
+[<Fact>]
+let ``Suppress and Assault orders from an unarmed agent are Unable InsufficientAmmunition`` () =
+    let unarmedSuppress =
+        { Agent.create (agent 0) Friendly { X = 0; Y = 0 } with Ammo = Ready(0, 0) }
+
+    let hostile = Agent.create (agent 9) Hostile { X = 1; Y = 0 }
+    let w = worldOf [ unarmedSuppress; hostile ]
+
+    let suppress = stepWith [| Command.suppress (CommandId.ofInt 1) 0L (agent 0) (agent 9) |] w
+    Assert.Equal(Some(Unable(InsufficientAmmunition, [||])), dispositionOf (agent 0) suppress)
+
+    let assault = stepWith [| Command.assault (CommandId.ofInt 1) 0L (agent 0) { X = 7; Y = 0 } |] w
+    Assert.Equal(Some(Unable(InsufficientAmmunition, [||])), dispositionOf (agent 0) assault)
+
+    // MoveTo/Hold/Withdraw are unaffected: an unarmed agent can still walk.
+    let move = stepWith [| cmd 1 (agent 0) { X = 3; Y = 0 } |] w
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) move)

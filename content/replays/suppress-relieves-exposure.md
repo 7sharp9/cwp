@@ -16,21 +16,21 @@ See `content/replays/CORPUS.md`.
 | Command log | `suppress-relieves-exposure.cwreplay` |
 | Initial state | Corpus suppress-relieves-exposure scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile) |
 | Tick count | 10 |
-| Initial hash (tick 0) | `0xE4CBC8602B422C0E` |
-| Final hash (tick 10) | `0x0FEC6D179CDC8869` |
+| Initial hash (tick 0) | `0x24C7DF529357546B` |
+| Final hash (tick 10) | `0x9376A28F05D57714` |
 | Domain events | 37 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x306202B8A9B68A1C` |
-|    2 | `0xF3D274E166DD0E4D` |
-|    3 | `0xFC8A62EA5E837632` |
-|    4 | `0x6C99B66808F66B0C` |
-|    5 | `0x2E42FE9ED9F09C51` |
-|    6 | `0xAA69977530BEDD0A` |
-|    7 | `0x683B885B128934AD` |
-|    8 | `0x7C78F278A7EB3704` |
-|    9 | `0x7B1E36DDBD9AD353` |
-|   10 | `0x0FEC6D179CDC8869` |
+|    1 | `0x331261EBE2DC1FA5` |
+|    2 | `0x11F83D4CAFE5162A` |
+|    3 | `0x77041258355387BF` |
+|    4 | `0x792DFAF7494A3909` |
+|    5 | `0x80539EA6E9B8F558` |
+|    6 | `0x952B0D5AC83FA65B` |
+|    7 | `0x21465D4CA259452C` |
+|    8 | `0x654C1114232A2FE9` |
+|    9 | `0xB223AFFBBDB771CE` |
+|   10 | `0x9376A28F05D57714` |

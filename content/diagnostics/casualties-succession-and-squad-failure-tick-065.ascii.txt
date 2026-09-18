@@ -57,7 +57,11 @@ overlays:
   vitals (0,3): agent 2  dead
   vitals (5,3): agent 3  dead
   squad leader: none (every friendly down)
+  ammo (0,0): agent 0  ammo 26/reserve 90
+  ammo (5,0): agent 1  ammo 25/reserve 90
+  ammo (0,3): agent 2  ammo 25/reserve 90
+  ammo (5,3): agent 3  ammo 27/reserve 90
 
 events: none
 
-tick 65 | hash 0x4A12BC4350F5E2B7 (format 10) | draws 17 | agents 4 | cover-edges 0 | events 0
+tick 65 | hash 0x9516F7C342D91B61 (format 11) | draws 17 | agents 4 | cover-edges 0 | events 0

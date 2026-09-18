@@ -37,8 +37,14 @@ namespace CommandoWar.Sim
 ///   checkpoint <tick> 0x<16 hex>    -- zero or more, strictly ascending tick
 ///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> move <x> <y>
 ///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> suppress <targetAgentId>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> hold <x> <y>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> assault <x> <y>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> withdraw <x> <y>
 ///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> queue-move <x> <y>
 ///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> queue-suppress <targetAgentId>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> queue-hold <x> <y>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> queue-assault <x> <y>
+///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> queue-withdraw <x> <y>
 ///   command <deliveryTick> <sequence> <id> <issuedAtTick> <urgency> <risk> <issuer> <recipients> cancel <targetCommandId>
 ///                                   -- zero or more, strictly ascending
 ///                                      (deliveryTick, sequence)
@@ -47,15 +53,15 @@ namespace CommandoWar.Sim
 /// | `aggressive` (lowercase, culture-invariant). `<issuer>` is a single
 /// whitespace-free token. `<recipients>` is a non-empty comma-separated list of
 /// non-negative agent ids with no spaces. `move <x> <y>` and `suppress
-/// <targetAgentId>` (TASK-037, a thin B-030 slice) mean `PlayerCommandBody.
-/// Order(_, Replace)`; `queue-move` / `queue-suppress` (TASK-044, backlog
-/// B-051) mean `Order(_, Append)` — the same intent, stacked behind the
-/// recipient's active order instead of replacing it; `cancel
-/// <targetCommandId>` (TASK-044) means `Cancel target`, withdrawing a
-/// specific queued or active order by its own `CommandId`. Five intent
-/// keywords today, added without a version bump, exactly as this grammar
-/// always had room for; it still has room for `hold` / `assault` / `withdraw`
-/// as later intent keywords the same way. The legacy `.cwlog` fixture
+/// <targetAgentId>` (TASK-037, a thin B-030 slice), and `hold`/`assault`/
+/// `withdraw <x> <y>` (TASK-047, backlog B-030 proper) mean
+/// `PlayerCommandBody.Order(_, Replace)`; the `queue-` prefixed forms
+/// (TASK-044, backlog B-051; TASK-047) mean `Order(_, Append)` — the same
+/// intent, stacked behind the recipient's active order instead of replacing
+/// it; `cancel <targetCommandId>` (TASK-044) means `Cancel target`,
+/// withdrawing a specific queued or active order by its own `CommandId`.
+/// Eight intent keywords today, added without a version bump, exactly as
+/// this grammar always had room for. The legacy `.cwlog` fixture
 /// grammar (`CommandoWar.Headless.CommandLogFile`) is deliberately NOT
 /// extended for queueing/cancellation (TASK-044 Central decision 4) — it
 /// stays one-recipient-per-line, always-replace.
@@ -138,8 +144,14 @@ module ReplaySerialisation =
         match body with
         | Order(MoveTo target, Replace) -> sprintf "move %d %d" target.X target.Y
         | Order(Suppress target, Replace) -> sprintf "suppress %d" (AgentId.value target)
+        | Order(Hold area, Replace) -> sprintf "hold %d %d" area.X area.Y
+        | Order(Assault target, Replace) -> sprintf "assault %d %d" target.X target.Y
+        | Order(Withdraw target, Replace) -> sprintf "withdraw %d %d" target.X target.Y
         | Order(MoveTo target, Append) -> sprintf "queue-move %d %d" target.X target.Y
         | Order(Suppress target, Append) -> sprintf "queue-suppress %d" (AgentId.value target)
+        | Order(Hold area, Append) -> sprintf "queue-hold %d %d" area.X area.Y
+        | Order(Assault target, Append) -> sprintf "queue-assault %d %d" target.X target.Y
+        | Order(Withdraw target, Append) -> sprintf "queue-withdraw %d %d" target.X target.Y
         | Cancel target -> sprintf "cancel %d" (CommandId.value target)
 
     /// Serialises a parsed-file view to the canonical text form. Deterministic
@@ -296,9 +308,27 @@ module ReplaySerialisation =
                         Error(FieldOutOfRange(lineNo, "target", idTok))
                     else
                         Ok(Order(Suppress(AgentId.ofInt id), Replace))
+            | [| "hold"; xTok; yTok |] ->
+                parseI32 lineNo "x" xTok
+                >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(Order(Hold { X = x; Y = y }, Replace))
+            | [| "assault"; xTok; yTok |] ->
+                parseI32 lineNo "x" xTok
+                >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(Order(Assault { X = x; Y = y }, Replace))
+            | [| "withdraw"; xTok; yTok |] ->
+                parseI32 lineNo "x" xTok
+                >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(Order(Withdraw { X = x; Y = y }, Replace))
             | [| "queue-move"; xTok; yTok |] ->
                 parseI32 lineNo "x" xTok
                 >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(Order(MoveTo { X = x; Y = y }, Append))
+            | [| "queue-hold"; xTok; yTok |] ->
+                parseI32 lineNo "x" xTok
+                >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(Order(Hold { X = x; Y = y }, Append))
+            | [| "queue-assault"; xTok; yTok |] ->
+                parseI32 lineNo "x" xTok
+                >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(Order(Assault { X = x; Y = y }, Append))
+            | [| "queue-withdraw"; xTok; yTok |] ->
+                parseI32 lineNo "x" xTok
+                >>= fun x -> parseI32 lineNo "y" yTok >>= fun y -> Ok(Order(Withdraw { X = x; Y = y }, Append))
             | [| "queue-suppress"; idTok |] ->
                 parseI32 lineNo "target" idTok
                 >>= fun id ->

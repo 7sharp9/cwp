@@ -104,4 +104,4 @@ overlays:
 
 events: movement-stepped@(20,7),(20,8)
 
-tick 25 | hash 0x14B7750A1E6A3F57 (format 10) | draws 0 | agents 6 | cover-edges 0 | events 1
+tick 25 | hash 0x0B68392FEFB3B3C4 (format 11) | draws 0 | agents 6 | cover-edges 0 | events 1

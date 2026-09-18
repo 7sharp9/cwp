@@ -157,6 +157,36 @@ module Command =
           RiskTolerance = Standard
           Body = Order(Suppress target, Replace) }
 
+    /// Builds a single-recipient hold command with the default envelope
+    /// (TASK-047, backlog B-030 proper) — the `moveTo` precedent.
+    let hold (id: CommandId) (issuedAtTick: int64) (agent: AgentId) (area: Cell) : PlayerCommand =
+        { Id = id
+          IssuedAtTick = issuedAtTick
+          Recipients = [ agent ]
+          Urgency = Routine
+          RiskTolerance = Standard
+          Body = Order(Hold area, Replace) }
+
+    /// Builds a single-recipient assault command with the default envelope
+    /// (TASK-047, backlog B-030 proper) — the `moveTo` precedent.
+    let assault (id: CommandId) (issuedAtTick: int64) (agent: AgentId) (target: Cell) : PlayerCommand =
+        { Id = id
+          IssuedAtTick = issuedAtTick
+          Recipients = [ agent ]
+          Urgency = Routine
+          RiskTolerance = Standard
+          Body = Order(Assault target, Replace) }
+
+    /// Builds a single-recipient withdraw command with the default envelope
+    /// (TASK-047, backlog B-030 proper) — the `moveTo` precedent.
+    let withdraw (id: CommandId) (issuedAtTick: int64) (agent: AgentId) (target: Cell) : PlayerCommand =
+        { Id = id
+          IssuedAtTick = issuedAtTick
+          Recipients = [ agent ]
+          Urgency = Routine
+          RiskTolerance = Standard
+          Body = Order(Withdraw target, Replace) }
+
     /// Builds a move command addressing several agents, with an explicit
     /// urgency and risk tolerance. Exercised only from code (TASK-020's unit
     /// tests): the legacy `.cwlog` fixture grammar is one recipient per line

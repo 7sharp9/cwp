@@ -63,7 +63,11 @@ overlays:
   vitals (0,3): agent 2  incapacitated (bleeding out, 59 tick(s))
   vitals (5,3): agent 3  incapacitated (bleeding out, 57 tick(s))
   squad leader: none (every friendly down)
+  ammo (0,0): agent 0  ammo 26/reserve 90
+  ammo (5,0): agent 1  ammo 25/reserve 90
+  ammo (0,3): agent 2  ammo 25/reserve 90
+  ammo (5,3): agent 3  ammo 27/reserve 90
 
 events: shot-fired-hit; agent-incapacitated@(0,3); shot-fired-hit; agent-incapacitated@(5,0); leadership-transferred; squad-failure
 
-tick 5 | hash 0x17417A43235BF496 (format 10) | draws 17 | agents 4 | cover-edges 0 | events 6
+tick 5 | hash 0x8C43B622A96AD91C (format 11) | draws 17 | agents 4 | cover-edges 0 | events 6

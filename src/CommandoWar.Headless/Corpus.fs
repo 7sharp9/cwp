@@ -112,6 +112,9 @@ module Corpus =
     type private ScenarioIntent =
         | MoveOrder of target: Cell
         | SuppressOrder of target: int
+        | HoldOrder of area: Cell
+        | AssaultOrder of target: Cell
+        | WithdrawOrder of target: Cell
 
     /// One authored order, delivered on `Tick` to `Agent`, with the default
     /// envelope (`Command.moveTo` / `Command.suppress`'s
@@ -134,6 +137,10 @@ module Corpus =
           Terrain: RawTerrainCell list
           Objective: Cell
           Extraction: Cell
+          /// An authored resupply-cache cell (TASK-047, backlog B-030
+          /// proper), or `None` for the overwhelming majority of entries
+          /// that need none.
+          Resupply: Cell option
           Orders: ScenarioOrder list }
 
     let private agent (id: int) (cell: Cell) : ScenarioAgent =
@@ -159,6 +166,19 @@ module Corpus =
     let private suppressOrder (tick: int64) (agentId: int) (targetAgentId: int) : ScenarioOrder =
         { Tick = tick; Agent = agentId; Intent = SuppressOrder targetAgentId }
 
+    /// A `Hold` order (TASK-047, backlog B-030 proper) — the `order`
+    /// precedent for `MoveTo`.
+    let private holdOrder (tick: int64) (agentId: int) (area: Cell) : ScenarioOrder =
+        { Tick = tick; Agent = agentId; Intent = HoldOrder area }
+
+    /// An `Assault` order (TASK-047, backlog B-030 proper).
+    let private assaultOrder (tick: int64) (agentId: int) (target: Cell) : ScenarioOrder =
+        { Tick = tick; Agent = agentId; Intent = AssaultOrder target }
+
+    /// A `Withdraw` order (TASK-047, backlog B-030 proper).
+    let private withdrawOrder (tick: int64) (agentId: int) (target: Cell) : ScenarioOrder =
+        { Tick = tick; Agent = agentId; Intent = WithdrawOrder target }
+
     let private rawOf (spec: ScenarioSpec) : RawScenario =
         let deployment (a: ScenarioAgent) : RawDeployment =
             { AgentId = a.Id
@@ -174,6 +194,10 @@ module Corpus =
           EnemyDeployments = spec.Enemies |> List.map deployment |> List.toArray
           ObjectiveAreas = [| { AreaId = "objective"; Cell = spec.Objective } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = spec.Extraction } |]
+          ResupplyAreas =
+            match spec.Resupply with
+            | Some cell -> [| { AreaId = "resupply"; Cell = cell } |]
+            | None -> [||]
           StaticTargets = [||]
           Objectives =
             [| { Id = 1
@@ -226,6 +250,11 @@ module Corpus =
                     | MoveOrder target -> Command.moveTo (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) target
                     | SuppressOrder target ->
                         Command.suppress (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) (AgentId.ofInt target)
+                    | HoldOrder area -> Command.hold (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) area
+                    | AssaultOrder target ->
+                        Command.assault (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) target
+                    | WithdrawOrder target ->
+                        Command.withdraw (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) target
 
                 { Tick = tick
                   Sequence = seq
@@ -245,6 +274,7 @@ module Corpus =
           Terrain = [ for y in 0..6 -> wall 5 y ]
           Objective = { X = 11; Y = 0 }
           Extraction = { X = 0; Y = 8 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 10; Y = 3 } ] }
 
     /// One friendly agent at (1,4); the target (5,4) is passable but its four
@@ -259,6 +289,7 @@ module Corpus =
           Terrain = [ wall 4 4; wall 6 4; wall 5 3; wall 5 5 ]
           Objective = { X = 7; Y = 0 }
           Extraction = { X = 0; Y = 7 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 5; Y = 4 } ] }
 
     /// Two friendly agents on open terrain: agent 0 at (3,0) -> (3,7) crosses
@@ -275,6 +306,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 7; Y = 7 }
           Extraction = { X = 0; Y = 0 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 3; Y = 7 }; order 1L 1 { X = 7; Y = 3 } ] }
 
     /// One friendly agent at (0,0) ordered to (4,0), open terrain except
@@ -291,6 +323,7 @@ module Corpus =
           Terrain = [ costly 1 0 3 ]
           Objective = { X = 7; Y = 7 }
           Extraction = { X = 0; Y = 7 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 4; Y = 0 } ] }
 
     /// Three friendly agents in a line at (1,3), (2,3), (3,3), all ordered east
@@ -307,6 +340,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 11; Y = 3 }
           Extraction = { X = 0; Y = 8 }
+          Resupply = None
           Orders =
             [ order 1L 0 { X = 11; Y = 3 }
               order 1L 1 { X = 11; Y = 3 }
@@ -325,6 +359,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 7; Y = 7 }
           Extraction = { X = 0; Y = 0 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 4; Y = 3 }; order 1L 1 { X = 3; Y = 3 } ] }
 
     /// One friendly agent at (1,5) ordered east to (9,5), and a stationary
@@ -345,6 +380,7 @@ module Corpus =
           Terrain = [ for y in 0..3 -> opaqueWall 6 y ]
           Objective = { X = 9; Y = 5 }
           Extraction = { X = 0; Y = 7 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 9; Y = 5 } ] }
 
     /// One friendly agent 0 at (1,4) with `CommunicationAvailable = false`
@@ -363,6 +399,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 7; Y = 0 }
           Extraction = { X = 0; Y = 7 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 6; Y = 4 } ] }
 
     /// Two friendlies on open ground ordered along the same exposed approach
@@ -385,6 +422,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 11; Y = 4 }
           Extraction = { X = 0; Y = 7 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 11; Y = 3 }; order 1L 1 { X = 11; Y = 5 } ] }
 
     /// One friendly agent at (1,4), open ground, no threats: ordered east to
@@ -407,6 +445,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 14; Y = 0 }
           Extraction = { X = 0; Y = 8 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 14; Y = 4 }; order 3L 0 { X = 14; Y = 8 } ] }
 
     /// Three agents: friendly 0 (Discipline 1) at (1,3) is ordered on tick 1
@@ -437,6 +476,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 11; Y = 4 }
           Extraction = { X = 0; Y = 7 }
+          Resupply = None
           Orders = [ order 1L 0 { X = 11; Y = 3 }; suppressOrder 1L 1 2 ] }
 
     /// The `suppress-relieves-exposure` geometry exactly, extended with one
@@ -474,6 +514,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 9; Y = 0 }
           Extraction = { X = 0; Y = 9 }
+          Resupply = None
           Orders = [] }
 
     /// One friendly agent, no hostiles -- the world half of
@@ -492,6 +533,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 11; Y = 0 }
           Extraction = { X = 0; Y = 2 }
+          Resupply = None
           Orders = [] }
 
     /// `order-queue-stacking-and-cancellation`'s command log, built directly
@@ -546,6 +588,7 @@ module Corpus =
           Terrain = []
           Objective = { X = 9; Y = 9 }
           Extraction = { X = 9; Y = 0 }
+          Resupply = None
           Orders = [] }
 
     /// Every corpus entry, in a fixed order.

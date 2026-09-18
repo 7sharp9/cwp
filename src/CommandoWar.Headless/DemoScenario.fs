@@ -86,6 +86,7 @@ module DemoScenario =
           EnemyDeployments = [| { AgentId = 5; Cell = { X = 11; Y = 7 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault } |]
           ObjectiveAreas = [| { AreaId = "ridge-top"; Cell = { X = 4; Y = 4 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 0; Y = 7 } } |]
+          ResupplyAreas = [||]
           StaticTargets = [||]
           Objectives =
             [| { Id = 1

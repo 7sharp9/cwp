@@ -1,7 +1,7 @@
 version 1
 seed 20260904
 ticks 14
-canonical 10
+canonical 11
 build cwheadless
 scenario perception-contact
 command 1 0 1 1 routine standard corpus 0 move 9 5

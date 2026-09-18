@@ -171,8 +171,29 @@ module Canonical =
     /// `Suppress`-order and `Suppression` state from the tick suppression
     /// fire starts — real new state, not a byte-layout artefact). Tick counts
     /// and event counts are unchanged everywhere else (TASK-037 ledger).
+    ///
+    /// 11 (TASK-047): `writeOrder` gained three `PlayerIntent` cases
+    /// (`Hold`/`Assault`/`Withdraw`, backlog B-030 proper) and `writeReason`
+    /// gained a fifth `DecisionReason` case (`InsufficientAmmunition`) —
+    /// both inside `AgentState.Order`/`.Disposition`'s already-canonical
+    /// encoding, a byte-layout change to an existing section, not a new
+    /// one. `writeAgent` gained an `AgentState.Ammo` section: genuine
+    /// per-tick memory on the `Suppression`/`Vitals` precedent — it changes
+    /// every tick from gameplay events (`Combat`'s `Ammo.fire`, State
+    /// consequences' `Ammo.tick`/`.resupply`) and cannot be recomputed from
+    /// `Position` alone. `Commitment.Withdrawing`/`.Assaulting` are NOT
+    /// written: `Commitment` stays a pure derived value (the TASK-030/037
+    /// precedent), never itself part of `Canonical.encode`.
+    /// `WorldState.ResupplyAreas` is NOT written either: static authored
+    /// scenario data, the `Terrain`/`CommunicationAvailable` precedent.
+    /// Every scenario pinned before this version issues no
+    /// `Hold`/`Assault`/`Withdraw` order and starts every agent at full
+    /// ammo with no `ShotFired` tick ever exhausting a magazine (30 rounds
+    /// comfortably exceeds any pinned scenario's shot count), so the moved
+    /// hashes are a byte-layout change, not a behaviour change, for every
+    /// entry except this task's own new corpus entries (TASK-047 ledger).
     [<Literal>]
-    let FormatVersion = 10
+    let FormatVersion = 11
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -263,6 +284,7 @@ module Canonical =
         | RouteTooExposed _ -> 1
         | TargetNotKnown -> 2
         | CriticallyWounded -> 3
+        | InsufficientAmmunition -> 4
 
     let private writeReason (w: Writer) (r: DecisionReason) =
         w.I32(reasonCode r)
@@ -277,6 +299,7 @@ module Canonical =
                 w.I32(AgentId.value id)
         | TargetNotKnown -> ()
         | CriticallyWounded -> ()
+        | InsufficientAmmunition -> ()
 
     let private writeDisposition (w: Writer) (d: OrderDisposition) =
         match d with
@@ -305,6 +328,18 @@ module Canonical =
         | Suppress target ->
             w.I32 1
             w.I32(AgentId.value target)
+        | Hold area ->
+            w.I32 2
+            w.I32 area.X
+            w.I32 area.Y
+        | Assault target ->
+            w.I32 3
+            w.I32 target.X
+            w.I32 target.Y
+        | Withdraw target ->
+            w.I32 4
+            w.I32 target.X
+            w.I32 target.Y
 
         w.I64 o.IssuedAtTick
 
@@ -371,6 +406,18 @@ module Canonical =
         | Dead -> w.I32 2
 
         w.U8(if a.RecentlyWounded then 1uy else 0uy)
+
+        // AgentState.Ammo (TASK-047, backlog B-030 proper) — see the
+        // FormatVersion 11 doc comment above.
+        match a.Ammo with
+        | Ready(magazine, reserve) ->
+            w.I32 0
+            w.I32 magazine
+            w.I32 reserve
+        | Reloading(reserve, ticksRemaining) ->
+            w.I32 1
+            w.I32 reserve
+            w.I32 ticksRemaining
 
     // The friendly squad's shared tactical picture (TASK-026,
     // `WorldState.TacticalKnowledge`, docs/04 section 12.4). Genuine per-tick

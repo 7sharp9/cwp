@@ -51,7 +51,9 @@ overlays:
   vitals (2,2): agent 0  alive 650/1000
   vitals (7,2): agent 1  alive 1000/1000
   squad leader: agent 0
+  ammo (2,2): agent 0  ammo 29/reserve 90
+  ammo (7,2): agent 1  ammo 29/reserve 90
 
 events: contact-observed@(7,2); contact-observed@(2,2); shot-fired-miss; shot-fired-hit
 
-tick 1 | hash 0xC74B517DEA7D051C (format 10) | draws 2 | agents 2 | cover-edges 0 | events 4
+tick 1 | hash 0xF149298AF980744D (format 11) | draws 2 | agents 2 | cover-edges 0 | events 4

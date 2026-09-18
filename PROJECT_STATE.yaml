@@ -5,17 +5,55 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-18 (TASK-046 accepted by Dave; B-057 done; B-058 filed)
+  updated: 2026-09-18 (TASK-047 implemented and self-verified, awaiting Dave's acceptance; B-030 review)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-047
+  task_file: tasks/TASK-047-ASSAULT-WITHDRAW-HOLD-AND-AMMUNITION.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-18
   note: >-
-    2026-09-18: TASK-046 accepted by Dave -- status done. All three review
+    2026-09-18: TASK-047 (Assault/Withdraw/Hold order executors and an
+    ammunition/reload/resupply model, backlog B-030 proper) implemented and
+    self-verified -- status review, awaiting Dave. Selected via
+    `AskUserQuestion` over B-058 (agent movement speed). Three further
+    `AskUserQuestion` rounds before drafting, all Dave choosing the larger
+    option over the recommended narrower one: bundle order executors with
+    the ammo model in one task; the full staged Assault FSM (`docs/05`
+    section 10's example), not a thin executor; reload-from-stock ammo
+    applied to all combat fire, with resupply designed now via a new
+    authored `WorldState.ResupplyAreas` content type.
+
+    `PlayerIntent` gained `Hold`/`Assault`/`Withdraw` (bare `Cell`
+    targets); `Hold` redirects to nearby cover via a new
+    `Appraisal.bestCoverNear`; `Assault` gets a stricter resolve penalty
+    and a staged `Commitment.AssaultStage` FSM (`ApproachingStart`/
+    `AwaitingSupport`/`Advancing`/`ClearingThreat`, a pure per-tick
+    derivation -- no stored wait-counter, no timeout, a stalled assault is
+    a deliberate legible outcome); `Withdraw` gets a resolve bonus and its
+    own `Withdrawing` commitment. New `AgentState.Ammo: AmmoState`
+    (`Ready`/`Reloading`, new `Ammo.fs` leaf) gates every qualifying shot;
+    `DecisionReason.InsufficientAmmunition` gates `Suppress`/`Assault`
+    stage 2 only; `ResupplyAreas` (`ScenarioContent.Version` 2 -> 3)
+    triggers instant resupply in State consequences. `Canonical.
+    FormatVersion` 10 -> 11, full re-pin, behaviour-neutral for every
+    pre-existing entry. No new corpus entry (a deliberate, documented
+    choice) -- proof via 17 new `SimulationTests` facts on the phases and
+    pure functions directly. `dotnet build` both `.slnx` (main; Godot
+    client Debug/Release) `0/0`; `dotnet test` `336/336`; `-- corpus`
+    16/16 (`--regenerate` twice byte-identical); `-- fixture`/`--
+    replay-file envelope-full` unaffected. No client-facing UI for the
+    three new orders (the TASK-037 precedent); no player-facing ammo
+    readout (F1 dev-overlay detail only). Godot's `--selfcheck` pinned
+    hashes recomputed via `dotnet fsi` against the built Core assembly (no
+    Godot install in the implementing environment), not independently
+    re-run through the real Godot editor -- flagged for Dave to re-check
+    before accepting.
+    (docs/ledger/2026-09-18-TASK-047-assault-withdraw-hold-and-ammunition.md)
+
+    Prior: 2026-09-18: TASK-046 accepted by Dave -- status done. All three review
     round 1 points (LOS bug, fire-effect hold, simHz revert) confirmed
     resolved; no further changes needed. B-057 now done.
     (docs/ledger/2026-09-18-TASK-046-combat-and-casualty-visual-feedback.md)

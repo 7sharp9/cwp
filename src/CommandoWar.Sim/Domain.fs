@@ -60,9 +60,7 @@ type Contact =
 
 /// What a command asks an agent to do (moved here from `Commands.fs` by
 /// TASK-028: `AgentState.Order` below carries a `PlayerIntent`, and `Domain.fs`
-/// compiles before `Commands.fs`). `Hold`, `Assault` and `Withdraw`
-/// (`docs/04_SIMULATION_SPEC.md` section 13) remain later tasks (the rest of
-/// B-030 — assault/withdraw executors, ammunition).
+/// compiles before `Commands.fs`).
 ///
 /// `Suppress` (TASK-037, a thin B-030 slice pulled forward as P3
 /// decision-support) names a specific known contact by `AgentId`, not a bare
@@ -73,9 +71,24 @@ type Contact =
 /// contact already present in the issuing agent's own tactical knowledge
 /// (`Appraisal.appraise`'s `Unable(TargetNotKnown)` check) — never
 /// authoritative hostile state (risk R-023).
+///
+/// `Hold`, `Assault`, and `Withdraw` (TASK-047, backlog B-030 proper) all
+/// take a bare `Cell` target, the `MoveTo` precedent (`docs/07` section 4's
+/// "`HoldArea`/`AssaultArea`" naming means "an area the player designates by
+/// cell," not a new region/rectangle type). `Hold`'s stage-2 appraisal may
+/// redirect to a nearby covered cell (`Appraisal.bestCoverNear`) rather than
+/// the literal `area`; `Assault`'s stage-4 appraisal is deliberately
+/// stricter (`AppraisalConfig.AssaultResolvePenalty`) and its executor is a
+/// staged finite-state machine (`Commitment.AssaultStage`); `Withdraw`'s
+/// stage-4 appraisal is deliberately more lenient
+/// (`AppraisalConfig.WithdrawResolveBonus`) — see `TASK-047-ASSAULT-
+/// WITHDRAW-HOLD-AND-AMMUNITION.md` Decisions D-F.
 type PlayerIntent =
     | MoveTo of target: Cell
     | Suppress of target: AgentId
+    | Hold of area: Cell
+    | Assault of target: Cell
+    | Withdraw of target: Cell
 
 /// How urgently an order should be acted on, relative to an agent's current
 /// activity (moved here from `Commands.fs` by TASK-028). `docs/05` section 5
@@ -144,6 +157,14 @@ type DecisionReason =
     /// refused." A whole-order short-circuit ahead of every other stage-2
     /// check, for any `PlayerIntent`.
     | CriticallyWounded
+    /// Stage 2 (TASK-047, backlog B-030 proper): a `Suppress` or `Assault`
+    /// order — the two intents that explicitly plan to initiate fire — names
+    /// an agent whose `AgentState.Ammo` is entirely empty (`Ready(0, 0)`, no
+    /// magazine and no reserve). Not checked for `MoveTo`/`Hold`/`Withdraw`:
+    /// an unarmed agent can still walk, hold ground, or retreat. A partial
+    /// or mid-reload state still appraises `Accepted` — the agent may simply
+    /// run dry mid-engagement, an emergent outcome, not a blocking one.
+    | InsufficientAmmunition
 
 /// The agent's appraisal of its current `Order` (TASK-028; `docs/05` section
 /// 6). TASK-028 subset: `Adapted` (stage 5 safer adaptation) is B-018 and
@@ -177,6 +198,18 @@ type VitalStatus =
     | Alive of health: int
     | Incapacitated of bleedOutRemaining: int
     | Dead
+
+/// An agent's ammunition state (TASK-047, backlog B-030 proper; `docs/04`
+/// sections 12.8/12.9, `docs/05` section 8's "is required ammunition ...
+/// available?"). `Ready magazine reserve` carries rounds ready to fire and
+/// rounds in reserve stock; `Reloading reserve ticksRemaining` carries only
+/// the reserve — a reloading weapon's magazine is definitionally empty, so
+/// there is no `Magazine: int` alongside a status flag to go stale (the
+/// `VitalStatus` "single field rather than a separate flag" idiom, `AGENTS.md`
+/// "make invalid states hard to construct"). `Ammo.fs` owns every transition.
+type AmmoState =
+    | Ready of magazine: int * reserve: int
+    | Reloading of reserve: int * ticksRemaining: int
 
 /// Minimal authoritative agent state for the simulation skeleton: identity,
 /// side, logical position, movement progress within the current edge, an
@@ -387,7 +420,23 @@ type AgentState =
       /// **Genuine canonical per-tick state**: real per-tick memory no other
       /// field reproduces. Defaults to `false` — every agent starts
       /// unwounded.
-      RecentlyWounded: bool }
+      RecentlyWounded: bool
+      /// This agent's ammunition (TASK-047, backlog B-030 proper). The
+      /// Combat phase gates firing on `Ammo.canFire` and consumes one round
+      /// per qualifying shot (`Ammo.fire`); the State-consequences phase
+      /// ticks an empty weapon into `Reloading` and back
+      /// (`Ammo.tick`), and instantly refills an agent standing on an
+      /// authored `WorldState.ResupplyAreas` cell (`Ammo.resupply`). Read by
+      /// Appraisal's stage 2 (`Unable(InsufficientAmmunition)` for a
+      /// `Suppress`/`Assault` order when totally empty).
+      ///
+      /// **Genuine canonical per-tick state** (the `Suppression`/`Vitals`
+      /// precedent): it changes every tick from gameplay events and cannot
+      /// be recomputed from `Position` alone. Defaults to `Ready
+      /// (AmmoConfig.MagazineSize, AmmoConfig.ReserveStart)` — every agent
+      /// starts fully armed, no scenario-authored override (the
+      /// `Suppression` precedent).
+      Ammo: AmmoState }
 
 /// Minimal authoritative world state: an integer tick, the logical grid
 /// bounds, the authoritative terrain grid, the agents ordered by ascending
@@ -439,6 +488,17 @@ type WorldState =
       /// same-tick check strictly tighter than anything this stale-tolerant
       /// store could provide (TASK-034 Decision E).
       HostileTacticalKnowledge: Contact[]
+      /// Authored resupply-cache cells (TASK-047, backlog B-030 proper;
+      /// `Scenario.ResupplyAreas`). An agent standing on one of these cells
+      /// is refilled to full ammunition by the State-consequences phase
+      /// (`Ammo.resupply`). **Static authored data**, set once from the
+      /// scenario and never mutated during a run — the `Terrain`/
+      /// `CommunicationAvailable` precedent (ADR-0002 amendment): both runs
+      /// load the identical cells at tick 0 and they cannot diverge, so this
+      /// is **excluded** from `Canonical.encode`. A resupply-driven
+      /// behaviour difference still surfaces in the hash within one tick
+      /// through the resupplied agent's own `Ammo`.
+      ResupplyAreas: Cell[]
       /// The authoritative deterministic random stream. It is threaded through
       /// every step and is part of the canonical state hash. No gameplay phase
       /// draws from it yet (TASK-003 wires the stream; gameplay draws arrive
@@ -465,17 +525,31 @@ module Agent =
     [<Literal>]
     let MaxHealth = 1000
 
+    /// Rounds a freshly created agent's magazine holds (TASK-047, backlog
+    /// B-030 proper). The `MaxHealth` precedent: kept as a literal here to
+    /// avoid a module-ordering dependency on `Ammo.fs`; `AmmoConfig.
+    /// MagazineSize` carries the same value.
+    [<Literal>]
+    let MagazineSize = 30
+
+    /// Rounds a freshly created agent's reserve stock holds. The
+    /// `MagazineSize` precedent; `AmmoConfig.ReserveStart` carries the same
+    /// value.
+    [<Literal>]
+    let ReserveStart = 90
+
     /// Creates an agent at rest (no destination, no route, no progress, no
     /// visible contacts, no order, communication available, default
-    /// discipline, unsuppressed, full health) at the given position.
-    /// `World.ofScenario` overrides `CommunicationAvailable` and
+    /// discipline, unsuppressed, full health, full ammunition) at the given
+    /// position. `World.ofScenario` overrides `CommunicationAvailable` and
     /// `Discipline` from the authored deployment; every other construction
     /// path takes the defaults. `Suppression` has no authored override
     /// anywhere (the `Progress` precedent) — every agent always starts at
     /// `0`. `SuppressionBand` and `Stress` (TASK-033) follow the identical
     /// rule: `false` / `0` always. `Vitals`/`RecentlyWounded` (TASK-045)
     /// follow it too: every agent always starts `Alive MaxHealth` /
-    /// unwounded, no authored override.
+    /// unwounded, no authored override. `Ammo` (TASK-047) follows it as
+    /// well: every agent always starts `Ready (MagazineSize, ReserveStart)`.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -493,4 +567,5 @@ module Agent =
           SuppressionBand = false
           Stress = 0
           Vitals = Alive MaxHealth
-          RecentlyWounded = false }
+          RecentlyWounded = false
+          Ammo = Ready(MagazineSize, ReserveStart) }

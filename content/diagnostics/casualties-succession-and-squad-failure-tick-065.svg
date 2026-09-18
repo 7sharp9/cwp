@@ -133,7 +133,7 @@
   <line x1="16" y1="48" x2="0" y2="64" stroke="#000000" stroke-width="2"/>
   <line x1="80" y1="48" x2="96" y2="64" stroke="#000000" stroke-width="2"/>
   <line x1="96" y1="48" x2="80" y2="64" stroke="#000000" stroke-width="2"/>
-  <text x="4" y="176" font-family="monospace" font-size="11" fill="#111111">tick 65  hash 0x4A12BC4350F5E2B7  draws 17</text>
+  <text x="4" y="176" font-family="monospace" font-size="11" fill="#111111">tick 65  hash 0x9516F7C342D91B61  draws 17</text>
   <text x="4" y="190" font-family="monospace" font-size="11" fill="#111111">agents 4  cover-edges 0  events 0</text>
   <text x="4" y="204" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

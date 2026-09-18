@@ -163,6 +163,40 @@ module AppraisalConfig =
     [<Literal>]
     let WoundDivisor = 25
 
+    /// Flat stage-4 resolve-threshold subtraction for an `Assault` order
+    /// (TASK-047, backlog B-030 proper; `docs/05` section 4 "more demanding
+    /// than Move, receives stricter appraisal"). Comparable in scale to
+    /// `SuppressionBandPenalty`.
+    [<Literal>]
+    let AssaultResolvePenalty = 30
+
+    /// Chebyshev cells from an `Assault` order's target within which the
+    /// executor stops merely closing distance and starts checking for a
+    /// blocking threat (`Commitment.AssaultStage`).
+    [<Literal>]
+    let AssaultStartRange = 3
+
+    /// Chebyshev cells from an `Assault` order's target within which a
+    /// known, currently-alive threat contact keeps the order from being
+    /// treated as fulfilled once the agent arrives (`ClearingThreat`).
+    [<Literal>]
+    let AssaultClearRadius = 2
+
+    /// Flat stage-4 resolve-threshold addition for a `Withdraw` order
+    /// (TASK-047, backlog B-030 proper; `docs/05` section 4 "may receive
+    /// priority under high suppression," read as appraisal priority — an
+    /// agent breaking contact should not be blocked by the very exposure it
+    /// is retreating through). Comparable in scale to `RiskAggressive`/
+    /// `UrgencyImmediate`.
+    [<Literal>]
+    let WithdrawResolveBonus = 30
+
+    /// Chebyshev cells around a `Hold` order's authored `area` searched for
+    /// a lower-pressure nearby cell (`Appraisal.bestCoverNear`; `docs/05`
+    /// section 4 "the executor may choose nearby cover").
+    [<Literal>]
+    let HoldCoverSearchRadius = 2
+
 [<RequireQualifiedAccess>]
 module Appraisal =
 
@@ -248,6 +282,35 @@ module Appraisal =
         routeCells
         |> Array.filter (fun c -> threats |> Array.exists (fun t -> cellPressure terrain suppressedThreats t c > 0))
 
+    /// The best nearby cell for a `Hold` order to occupy instead of the
+    /// literal authored `area` (TASK-047, backlog B-030 proper; `docs/05`
+    /// section 4 "the executor may choose nearby cover"): among every
+    /// passable, in-bounds cell within `AppraisalConfig.HoldCoverSearchRadius`
+    /// Chebyshev cells of `area` (including `area` itself), the one with the
+    /// lowest total `cellPressure` summed over every known threat
+    /// (reusing the identical threat-pressure function `routeExposure`
+    /// already sums over a route), ties broken by nearest to `area` then
+    /// ascending `(Y, X)`. A scenario with no known threats near `area`
+    /// picks `area` itself (every candidate scores 0, and `area` is the
+    /// nearest to itself). Pure, total: if `area` and every cell in radius
+    /// are impassable this still returns `area` unchanged (Stage 2's
+    /// `Pathfinding` call then fails exactly as it would have without this
+    /// step).
+    let bestCoverNear (terrain: Terrain) (threats: Contact[]) (suppressedThreats: AgentId[]) (area: Cell) : Cell =
+        let r = AppraisalConfig.HoldCoverSearchRadius
+
+        [ for dy in -r..r do
+              for dx in -r..r do
+                  let c = { X = area.X + dx; Y = area.Y + dy }
+
+                  if GridBounds.contains c terrain.Bounds && Terrain.passable terrain c then
+                      let pressure = threats |> Array.sumBy (fun t -> cellPressure terrain suppressedThreats t c)
+                      pressure, Perception.chebyshev area c, c.Y, c.X, c ]
+        |> List.sortBy (fun (pressure, dist, y, x, _) -> pressure, dist, y, x)
+        |> List.tryHead
+        |> Option.map (fun (_, _, _, _, c) -> c)
+        |> Option.defaultValue area
+
     /// The stage-4 resolve threshold for an agent and an order (`docs/05`
     /// section 5 stage 4). Integer, bounded, order-independent of the world.
     /// `stress` and `suppressed` (TASK-033, backlog B-021) are the agent's
@@ -325,6 +388,7 @@ module Appraisal =
         (stress: int)
         (suppressed: bool)
         (vitals: VitalStatus)
+        (ammo: AmmoState)
         (order: ReceivedOrder)
         (fromCell: Cell)
         (budget: int)
@@ -333,8 +397,22 @@ module Appraisal =
         | Incapacitated _
         | Dead -> Unable(CriticallyWounded, [||]), [||]
         | Alive _ ->
-            match order.Intent with
-            | MoveTo target ->
+            // TASK-047 (backlog B-030 proper): stage-2 ammo check, `Suppress`/
+            // `Assault` only (Decision L) — the two intents that explicitly
+            // plan to initiate fire. `MoveTo`/`Hold`/`Withdraw` never check
+            // this: an unarmed agent can still walk, hold ground, or retreat.
+            let noAmmo = ammo = Ready(0, 0)
+
+            // The shared MoveTo-shaped pipeline (stages 2-4): `target` is
+            // where Pathfinding routes to, `thresholdAdjust` is a signed
+            // stage-4 flat adjustment applied on top of `resolveThreshold`
+            // and re-floored at 0 (the `resolveThreshold` "never refuses a
+            // safe route" invariant, preserved for `Assault`'s stricter
+            // penalty exactly as for the unmodified case). `MoveTo` and
+            // `Withdraw` pass `target` through unchanged; `Hold` redirects
+            // through `bestCoverNear`; `Assault`'s ammo check happens before
+            // this is ever called.
+            let moveLike (target: Cell) (thresholdAdjust: int) =
                 if fromCell = target then
                     Accepted, [||]
                 else
@@ -343,7 +421,10 @@ module Appraisal =
                         let exposure, topThreat = routeExposure terrain threats suppressedThreats cells
                         let exposed = exposedCells terrain threats suppressedThreats cells
 
-                        if exposure <= resolveThreshold discipline stress suppressed vitals order then
+                        let threshold =
+                            max 0 (resolveThreshold discipline stress suppressed vitals order + thresholdAdjust)
+
+                        if exposure <= threshold then
                             Accepted, exposed
                         else
                             Refused(RouteTooExposed topThreat, [||]), exposed
@@ -351,8 +432,20 @@ module Appraisal =
                     | NoPath
                     | BudgetExhausted _
                     | InvalidEndpoint _ -> Unable(NoKnownRoute, [||]), [||]
+
+            match order.Intent with
+            | MoveTo target -> moveLike target 0
+            | Hold area -> moveLike (bestCoverNear terrain threats suppressedThreats area) 0
+            | Withdraw target -> moveLike target AppraisalConfig.WithdrawResolveBonus
+            | Assault target ->
+                if noAmmo then
+                    Unable(InsufficientAmmunition, [||]), [||]
+                else
+                    moveLike target (-AppraisalConfig.AssaultResolvePenalty)
             | Suppress target ->
-                if threats |> Array.exists (fun t -> t.Contact = target) then
+                if noAmmo then
+                    Unable(InsufficientAmmunition, [||]), [||]
+                elif threats |> Array.exists (fun t -> t.Contact = target) then
                     Accepted, [||]
                 else
                     Unable(TargetNotKnown, [||]), [||]

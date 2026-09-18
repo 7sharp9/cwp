@@ -142,6 +142,7 @@ module RenderShared =
         | RouteTooExposed(Some id) -> sprintf "route too exposed (threat: agent %d)" (AgentId.value id)
         | TargetNotKnown -> "target not known"
         | CriticallyWounded -> "critically wounded"
+        | InsufficientAmmunition -> "out of ammunition"
 
     /// Player-facing text for an agent's current order disposition (TASK-042,
     /// backlog B-028; docs/06 section 11 "order acknowledgement and
@@ -170,6 +171,7 @@ module RenderShared =
         | RouteTooExposed(Some id) -> sprintf "route-too-exposed threat-agent-%d" (AgentId.value id)
         | TargetNotKnown -> "target-not-known"
         | CriticallyWounded -> "critically-wounded"
+        | InsufficientAmmunition -> "insufficient-ammunition"
 
     /// Developer-facing text for a `Commitment` (TASK-043; `DiagnosticRender.
     /// commitmentText`'s wording).
@@ -178,6 +180,24 @@ module RenderShared =
         | Holding -> "holding"
         | Moving mc -> sprintf "moving-to-(%d,%d)" mc.Target.X mc.Target.Y
         | Suppressing sc -> sprintf "suppressing-agent-%d" (AgentId.value sc.Target)
+        | Withdrawing wc -> sprintf "withdrawing-to-(%d,%d)" wc.Target.X wc.Target.Y
+        | Assaulting ac ->
+            let stage =
+                match ac.Stage with
+                | ApproachingStart -> "approaching-start"
+                | AwaitingSupport -> "awaiting-support"
+                | Advancing -> "advancing"
+                | ClearingThreat -> "clearing-threat"
+
+            sprintf "assaulting-(%d,%d)-%s" ac.Target.X ac.Target.Y stage
+
+    /// Developer-facing text for an `AgentAmmo` overlay's fields (TASK-047,
+    /// backlog B-030 proper; `DiagnosticRender.ammoText`'s wording).
+    let private ammoText (magazine: int) (reserve: int) (reloading: bool) : string =
+        if reloading then
+            sprintf "reloading(reserve=%d)" reserve
+        else
+            sprintf "%d/%d" magazine reserve
 
     /// The developer-overlay HUD line for one agent (TASK-043, backlog
     /// B-029): commitment, suppression, stress, and the appraisal reason plus
@@ -225,13 +245,25 @@ module RenderShared =
                 | _ -> None)
             |> Option.defaultValue ("no-order", 0)
 
+        // TASK-047 (backlog B-030 proper): AgentAmmo is sparse (only an
+        // agent not at a full default magazine+reserve carries one, the
+        // AgentSuppression/AgentStress precedent) -- falls back to the
+        // full-ammo default text rather than a bare "absent" reading.
+        let ammo =
+            overlays
+            |> Array.tryPick (function
+                | AgentAmmo(a, _, magazine, reserve, reloading) when a = agent -> Some(ammoText magazine reserve reloading)
+                | _ -> None)
+            |> Option.defaultValue (ammoText AmmoConfig.MagazineSize AmmoConfig.ReserveStart false)
+
         sprintf
-            "commitment=%s suppression=%d stress=%d reason=%s exposed=%dcells"
+            "commitment=%s suppression=%d stress=%d reason=%s exposed=%dcells ammo=%s"
             commitment
             suppression
             stress
             reason
             exposedCount
+            ammo
 
     /// The developer-overlay legend (TASK-043 review round 2, Dave's live
     /// feedback: the overlay has no legend, and green/red are each reused

@@ -54,7 +54,10 @@ overlays:
   vitals (10,1): agent 1  incapacitated (bleeding out, 55 tick(s))
   vitals (10,4): agent 2  incapacitated (bleeding out, 56 tick(s))
   squad leader: agent 0
+  ammo (6,3): agent 0  ammo 29/reserve 90
+  ammo (10,1): agent 1  ammo 26/reserve 90
+  ammo (10,4): agent 2  ammo 25/reserve 90
 
 events: command-accepted@(11,3); order-appraised; commitment-established@(11,3); movement-stepped@(5,3),(6,3)
 
-tick 8 | hash 0x75DD1AEFA71D3C23 (format 10) | draws 10 | agents 3 | cover-edges 0 | events 4
+tick 8 | hash 0x4A1D0E1A9348AC06 (format 11) | draws 10 | agents 3 | cover-edges 0 | events 4

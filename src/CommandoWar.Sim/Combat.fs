@@ -12,8 +12,12 @@ namespace CommandoWar.Sim
 ///
 /// ## What is deliberately absent (later backlog items)
 ///
-///   * ammunition, weapon readiness, fire-rate / cooldown, reload, resupply —
-///     a future task, not yet scoped;
+///   * ammunition, weapon readiness, fire-rate / cooldown, reload, resupply
+///     — realised by TASK-047 (backlog B-030 proper): `Ammo.fs` owns every
+///     transition; the `Simulation.combat` phase gates firing on
+///     `Ammo.canFire`, so this leaf's `hitChance`/`chooseTarget` themselves
+///     are unchanged — ammo is a firing gate applied by the caller, not a
+///     term in the hit-chance formula;
 ///   * any wound / death consequence, agent removal, incapacitation — B-031;
 ///   * suppression, stress, or exposure changes from being shot at — B-020;
 ///   * enemy doctrine choosing when or whether to engage — B-022 (this leaf

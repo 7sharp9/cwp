@@ -55,6 +55,7 @@ module World =
         (terrain: Terrain)
         (seed: uint64)
         (agents: AgentState list)
+        (resupplyAreas: Cell[])
         : Result<WorldState, WorldError> =
         if bounds.Width <= 0 || bounds.Height <= 0 then
             Error(EmptyGrid bounds)
@@ -90,6 +91,7 @@ module World =
                               Agents = List.toArray sorted
                               TacticalKnowledge = [||]
                               HostileTacticalKnowledge = [||]
+                              ResupplyAreas = resupplyAreas
                               Random = SplitMix64.create seed }
 
     /// Builds a validated world at tick 0 with a SplitMix64 random stream
@@ -98,7 +100,7 @@ module World =
     /// Fails explicitly on an empty grid, duplicate ids, or an agent placed
     /// outside the grid.
     let create (bounds: GridBounds) (seed: uint64) (agents: AgentState list) : Result<WorldState, WorldError> =
-        build bounds (Terrain.empty bounds) seed agents
+        build bounds (Terrain.empty bounds) seed agents [||]
 
     /// Builds the authoritative world at tick 0 from a validated scenario
     /// (docs/04_SIMULATION_SPEC.md section 21). Friendly then enemy deployments
@@ -120,7 +122,7 @@ module World =
                     Discipline = d.Discipline })
             |> Array.toList
 
-        build scenario.Map scenario.Terrain seed agents
+        build scenario.Map scenario.Terrain seed agents (scenario.ResupplyAreas |> Array.map (fun a -> a.Cell))
 
 [<RequireQualifiedAccess>]
 module Setup =
@@ -163,6 +165,10 @@ module Simulation =
           /// The authoritative terrain for this run. Immutable within a run;
           /// the Navigation and movement phase reads it for pathfinding.
           Terrain: Terrain
+          /// Authored resupply-cache cells, carried in from the input
+          /// `WorldState` (TASK-047, backlog B-030 proper). Static within a
+          /// run, the `Terrain` precedent — never reassigned during a tick.
+          ResupplyAreas: Cell[]
           mutable Agents: AgentState[]
           /// Commands accepted by Command intake this tick and not yet
           /// applied to their recipients, as `(recipient, commandId, body)`
@@ -321,55 +327,78 @@ module Simulation =
                     match firstDuplicate recipients with
                     | Some repeated -> emit (CommandRejected(cmd.Id, DuplicateRecipient repeated)) s
                     | None ->
-                        // The bounds check (TASK-020) applies only to a
-                        // MoveTo target Cell. A Suppress target (TASK-037,
-                        // backlog B-030 thin slice) is an AgentId, not a
-                        // bounds-checkable Cell — whether it names a contact
-                        // the recipient actually knows about is Appraisal's
-                        // stage-2 TargetNotKnown check, never authoritative
-                        // hostile state at intake (risk R-023). A Cancel
-                        // (TASK-044) has no bounds-checkable target either.
-                        match cmd.Body with
-                        | Order(MoveTo target, _) when not (GridBounds.contains target s.Bounds) ->
-                            emit (CommandRejected(cmd.Id, TargetOutOfBounds target)) s
-                        | Order(intent, mode) ->
-                            for recipient in recipients |> List.sortBy AgentId.value do
-                                match Map.tryFind recipient indexOf with
-                                | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
-                                | Some idx when agents.[idx].Side = Hostile ->
-                                    emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
-                                | Some idx ->
-                                    // CommandAccepted's Cell reports the move
-                                    // target, or (Suppress has none) the
-                                    // recipient's own unmoving position.
-                                    let cell =
-                                        match intent with
-                                        | MoveTo target -> target
-                                        | Suppress _ -> agents.[idx].Position
+                        // The bounds check (TASK-020) applies to every
+                        // `Cell`-targeted intent: `MoveTo`, and (TASK-047,
+                        // backlog B-030 proper) `Hold`/`Assault`/`Withdraw`,
+                        // whose targets are equally bounds-checkable areas.
+                        // A Suppress target (TASK-037, a thin B-030 slice)
+                        // is an AgentId, not a bounds-checkable Cell —
+                        // whether it names a contact the recipient actually
+                        // knows about is Appraisal's stage-2 TargetNotKnown
+                        // check, never authoritative hostile state at
+                        // intake (risk R-023). A Cancel (TASK-044) has no
+                        // bounds-checkable target either.
+                        let cellTarget =
+                            match cmd.Body with
+                            | Order(MoveTo target, _)
+                            | Order(Hold target, _)
+                            | Order(Assault target, _)
+                            | Order(Withdraw target, _) -> Some target
+                            | Order(Suppress _, _)
+                            | Cancel _ -> None
 
-                                    emit (CommandAccepted(cmd.Id, recipient, cell)) s
+                        let outOfBounds =
+                            match cellTarget with
+                            | Some target when not (GridBounds.contains target s.Bounds) -> Some target
+                            | _ -> None
 
-                                    let order: ReceivedOrder =
-                                        { Command = cmd.Id
-                                          Intent = intent
-                                          IssuedAtTick = cmd.IssuedAtTick
-                                          Urgency = cmd.Urgency
-                                          RiskTolerance = cmd.RiskTolerance }
+                        match outOfBounds with
+                        | Some target -> emit (CommandRejected(cmd.Id, TargetOutOfBounds target)) s
+                        | None ->
+                            match cmd.Body with
+                            | Order(intent, mode) ->
+                                for recipient in recipients |> List.sortBy AgentId.value do
+                                    match Map.tryFind recipient indexOf with
+                                    | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
+                                    | Some idx when agents.[idx].Side = Hostile ->
+                                        emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
+                                    | Some idx ->
+                                        // CommandAccepted's Cell reports the
+                                        // move-shaped target, or (Suppress
+                                        // has none) the recipient's own
+                                        // unmoving position.
+                                        let cell =
+                                            match intent with
+                                            | MoveTo target
+                                            | Hold target
+                                            | Assault target
+                                            | Withdraw target -> target
+                                            | Suppress _ -> agents.[idx].Position
 
-                                    pending.Add(recipient, cmd.Id, PendingOrder(order, mode))
-                        | Cancel target ->
-                            for recipient in recipients |> List.sortBy AgentId.value do
-                                match Map.tryFind recipient indexOf with
-                                | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
-                                | Some idx when agents.[idx].Side = Hostile ->
-                                    emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
-                                | Some idx when not (holdsCommand agents.[idx] target) ->
-                                    emit (CommandRejected(cmd.Id, UnknownTargetCommand(recipient, target))) s
-                                | Some idx ->
-                                    // No natural target Cell for a Cancel —
-                                    // the Suppress CommandAccepted precedent.
-                                    emit (CommandAccepted(cmd.Id, recipient, agents.[idx].Position)) s
-                                    pending.Add(recipient, cmd.Id, PendingCancel target)
+                                        emit (CommandAccepted(cmd.Id, recipient, cell)) s
+
+                                        let order: ReceivedOrder =
+                                            { Command = cmd.Id
+                                              Intent = intent
+                                              IssuedAtTick = cmd.IssuedAtTick
+                                              Urgency = cmd.Urgency
+                                              RiskTolerance = cmd.RiskTolerance }
+
+                                        pending.Add(recipient, cmd.Id, PendingOrder(order, mode))
+                            | Cancel target ->
+                                for recipient in recipients |> List.sortBy AgentId.value do
+                                    match Map.tryFind recipient indexOf with
+                                    | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
+                                    | Some idx when agents.[idx].Side = Hostile ->
+                                        emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
+                                    | Some idx when not (holdsCommand agents.[idx] target) ->
+                                        emit (CommandRejected(cmd.Id, UnknownTargetCommand(recipient, target))) s
+                                    | Some idx ->
+                                        // No natural target Cell for a
+                                        // Cancel — the Suppress
+                                        // CommandAccepted precedent.
+                                        emit (CommandAccepted(cmd.Id, recipient, agents.[idx].Position)) s
+                                        pending.Add(recipient, cmd.Id, PendingCancel target)
 
         s.PendingCommands <- List.ofSeq pending
 
@@ -749,9 +778,26 @@ module Simulation =
                 // defeats that clear. A Suppress order (TASK-037) has no
                 // fulfilled state at all (Commitment.fs Decision D/E) — it
                 // only ends by supersession, so it is never "fulfilled" here.
+                // TASK-047 (backlog B-030 proper): Hold/Assault/Withdraw use
+                // the identical MoveTo-shaped fulfilled test — Assault's own
+                // extra "is the target actually clear" nuance is deliberately
+                // NOT checked here (that lives in commitmentAndLocalAction,
+                // which owns the real fulfilment decision): treating
+                // "physically arrived" as fulfilled for THIS phase's own
+                // fast-path purposes just means appraisal leaves Destination
+                // alone once the agent is standing at the target, exactly as
+                // it already does for MoveTo, letting commitmentAndLocalAction
+                // be the sole owner of Destination from that point on.
                 let fulfilled =
                     match o.Intent with
                     | MoveTo target -> a.Disposition = Some Accepted && a.Destination = None && a.Position = target
+                    | Hold area ->
+                        a.Disposition = Some Accepted
+                        && a.Destination = None
+                        && a.Position = Appraisal.bestCoverNear terrain threats suppressedThreats area
+                    | Assault target
+                    | Withdraw target ->
+                        a.Disposition = Some Accepted && a.Destination = None && a.Position = target
                     | Suppress _ -> false
 
                 // TASK-045 (backlog B-031): "the agent is wounded" (docs/05
@@ -791,6 +837,7 @@ module Simulation =
                             a.Stress
                             newBand
                             a.Vitals
+                            a.Ammo
                             o
                             a.Position
                             budget
@@ -804,9 +851,21 @@ module Simulation =
                     // the agent holds no Destination. A Suppress order
                     // (TASK-037) never writes a Destination even when
                     // Accepted — it does not move (Commitment.fs Decision D).
+                    // TASK-047 (backlog B-030 proper): `Assault`/`Withdraw`
+                    // pass their target through unchanged, the `MoveTo`
+                    // precedent; `Hold` writes `Appraisal.bestCoverNear`'s
+                    // resolved cell, not the literal authored `area` —
+                    // recomputed here (pure, deterministic, identical inputs
+                    // to the call inside `Appraisal.appraise` above) rather
+                    // than threading it back out of `appraise`'s return
+                    // value, so `Destination` always matches the cell
+                    // `appraise` actually routed to.
                     let destination =
                         match disposition, o.Intent with
                         | Accepted, MoveTo target -> Some target
+                        | Accepted, Hold area -> Some(Appraisal.bestCoverNear terrain threats suppressedThreats area)
+                        | Accepted, Assault target -> Some target
+                        | Accepted, Withdraw target -> Some target
                         | Accepted, Suppress _
                         | Refused _, _
                         | Unable _, _ -> None
@@ -871,6 +930,18 @@ module Simulation =
     // route-search algorithm and a Navigation change to follow a pinned
     // route, which does not belong in this task. No PRNG draw.
     let private commitmentAndLocalAction (s: StepState) =
+        let terrain = s.Terrain
+        let threats = s.TacticalKnowledge
+
+        // This tick's already-finalised SuppressionBand latch — Appraisal,
+        // which runs immediately before this phase, wrote the final value
+        // onto s.Agents this tick. The identical projection
+        // Simulation.appraisal / Diagnostics.orderAppraisalOverlays already
+        // compute (TASK-047, backlog B-030 proper: needed for Hold's
+        // `bestCoverNear` and Assault's stage derivation below).
+        let suppressedThreats =
+            s.Agents |> Array.filter (fun a -> a.SuppressionBand) |> Array.map (fun a -> a.Id)
+
         let acceptedThisTick =
             s.EventsRev
             |> List.choose (function
@@ -880,6 +951,28 @@ module Simulation =
 
         let agents = Array.copy s.Agents
 
+        // Shared fulfilled-completion mechanics for every order shape that
+        // reaches a target cell and stops (MoveTo, Hold, Withdraw, Assault):
+        // relocated from the Appraisal phase's prior housekeeping
+        // (TASK-028). TASK-044 (backlog B-051): promote the queue head into
+        // Order instead of just clearing it, when one is stacked behind this
+        // order. The promoted order is judged by NEXT tick's Appraisal, not
+        // this one — Appraisal already ran earlier this tick, before
+        // commitmentAndLocalAction — a deliberate one-tick gap before a
+        // chained waypoint's next leg begins, not a new interrupt mechanism
+        // duplicating Appraisal.appraise inline.
+        let completeOrder (i: int) (a: AgentState) (command: CommandId) =
+            match a.OrderQueue with
+            | head :: tail ->
+                agents.[i] <-
+                    { a with
+                        Order = Some head
+                        Disposition = None
+                        OrderQueue = tail }
+            | [] -> agents.[i] <- { a with Order = None; Disposition = None }
+
+            emit (CommitmentCompleted(a.Id, command, a.Position)) s
+
         for i in 0 .. agents.Length - 1 do
             let a = agents.[i]
 
@@ -888,30 +981,80 @@ module Simulation =
                 match o.Intent with
                 | MoveTo target ->
                     if a.Destination = None && a.Position = target then
-                        // Fulfilled: relocated from the Appraisal phase's prior
-                        // housekeeping (TASK-028). TASK-044 (backlog B-051):
-                        // promote the queue head into Order instead of just
-                        // clearing it, when one is stacked behind this order.
-                        // The promoted order is judged by NEXT tick's
-                        // Appraisal, not this one — Appraisal already ran
-                        // earlier this tick, before commitmentAndLocalAction
-                        // — a deliberate one-tick gap before a chained
-                        // waypoint's next leg begins, not a new interrupt
-                        // mechanism duplicating Appraisal.appraise inline.
-                        match a.OrderQueue with
-                        | head :: tail ->
-                            agents.[i] <-
-                                { a with
-                                    Order = Some head
-                                    Disposition = None
-                                    OrderQueue = tail }
-                        | [] -> agents.[i] <- { a with Order = None; Disposition = None }
-
-                        emit (CommitmentCompleted(a.Id, o.Command, a.Position)) s
+                        completeOrder i a o.Command
                     elif Set.contains a.Id acceptedThisTick then
                         // Freshly accepted this tick: a commitment begins.
                         emit (CommitmentEstablished(a.Id, o.Command, target)) s
                     // else: a Moving commitment continues unchanged; no event.
+                | Hold area ->
+                    // TASK-047 (backlog B-030 proper): the MoveTo shape
+                    // exactly, redirected through `bestCoverNear`'s resolved
+                    // cell (Decision D) rather than the literal authored
+                    // `area` — recomputed here on the identical inputs
+                    // `Simulation.appraisal` used when it wrote
+                    // `Destination`, so it always agrees with what the agent
+                    // is actually walking toward. No distinct `Commitment`
+                    // case (Decision C): this produces `Moving` via
+                    // `Commitment.ofAgent`'s generic accepted-with-
+                    // destination arm.
+                    let target = Appraisal.bestCoverNear terrain threats suppressedThreats area
+
+                    if a.Destination = None && a.Position = target then
+                        completeOrder i a o.Command
+                    elif Set.contains a.Id acceptedThisTick then
+                        emit (CommitmentEstablished(a.Id, o.Command, target)) s
+                | Withdraw target ->
+                    // TASK-047 (backlog B-030 proper): the MoveTo shape
+                    // exactly; `Commitment.ofAgent` reports this as
+                    // `Withdrawing`, not `Moving` (Decision E).
+                    if a.Destination = None && a.Position = target then
+                        completeOrder i a o.Command
+                    elif Set.contains a.Id acceptedThisTick then
+                        emit (CommitmentEstablished(a.Id, o.Command, target)) s
+                | Assault target ->
+                    // TASK-047 (backlog B-030 proper; Decisions F-H). Fulfilled
+                    // needs one more clause than the MoveTo shape: no known,
+                    // currently-unsuppressed threat contact within
+                    // AssaultClearRadius of `target` — an agent standing at
+                    // the target with a defender still known nearby is
+                    // `ClearingThreat`, not done.
+                    let clear =
+                        not (
+                            Commitment.hasUnsuppressedThreatWithin
+                                threats
+                                suppressedThreats
+                                AppraisalConfig.AssaultClearRadius
+                                target
+                        )
+
+                    if a.Destination = None && a.Position = target && clear then
+                        completeOrder i a o.Command
+                    else
+                        // Not yet fulfilled: drive the stage-dependent
+                        // Destination freeze/unfreeze (Decision G) through
+                        // the ordinary, unchanged Navigation pipeline —
+                        // `AwaitingSupport` clears it so Navigation sees no
+                        // destination and does not move the agent this tick;
+                        // `ApproachingStart`/`Advancing` (re)assert it so
+                        // Navigation resumes. `ClearingThreat` needs no write
+                        // here: the agent is already at `target` and
+                        // Navigation already cleared `Destination` on
+                        // arrival. Re-asserting an unchanged value every tick
+                        // is a harmless no-op — `MovementBlocked`'s "does not
+                        // retry" concern does not apply to an already-
+                        // Accepted order under this codebase's static
+                        // terrain (docs/05 section 11: "an Appraisal-Accepted
+                        // route cannot later become unreachable").
+                        match Commitment.assaultStage threats suppressedThreats a.Position target with
+                        | AwaitingSupport -> if a.Destination <> None then agents.[i] <- { a with Destination = None }
+                        | ApproachingStart
+                        | Advancing ->
+                            if a.Destination = None then
+                                agents.[i] <- { a with Destination = Some target }
+                        | ClearingThreat -> ()
+
+                        if Set.contains a.Id acceptedThisTick then
+                            emit (CommitmentEstablished(a.Id, o.Command, target)) s
                 | Suppress target ->
                     // A Suppress commitment (TASK-037) has no fulfilled state
                     // (Commitment.fs Decision D/E) — it holds position
@@ -1335,12 +1478,22 @@ module Simulation =
     // agent stays down).
     let private combat (s: StepState) =
         let terrain = s.Terrain
+        let threats = s.TacticalKnowledge
         let candidateSource = s.Agents // ascending by id; candidate lookup only, never mutated
+
+        // This tick's already-finalised SuppressionBand latch, the
+        // Simulation.appraisal / commitmentAndLocalAction precedent — needed
+        // only for Commitment.ofAgent's Assaulting-stage derivation below,
+        // which this phase itself never reads (Decision K: ammo, not stage,
+        // gates firing for every commitment alike).
+        let suppressedThreats =
+            candidateSource |> Array.filter (fun a -> a.SuppressionBand) |> Array.map (fun a -> a.Id)
+
         let agents = Array.copy s.Agents
         let mutable random = s.Random
 
         for shooter in candidateSource do
-            if Casualty.isAlive shooter.Vitals then
+            if Casualty.isAlive shooter.Vitals && Ammo.canFire shooter.Ammo then
                 let candidates =
                     // A Suppressing agent (TASK-037, backlog B-030 thin slice)
                     // pins its named contact as the only candidate — a
@@ -1348,14 +1501,29 @@ module Simulation =
                     // whatever else wanders into view — still gated by this
                     // tick's actual VisibleContacts, range, and line of fire via
                     // the unchanged Combat.chooseTarget below (Decision E).
-                    match Commitment.ofAgent shooter.Order shooter.Disposition shooter.Destination with
+                    // Every other commitment (Holding, Moving, Withdrawing,
+                    // Assaulting — TASK-047, backlog B-030 proper) engages
+                    // ordinarily: "cross danger area" and "clear immediate
+                    // threat" both rely on this unmodified automatic
+                    // engagement, not special targeting logic.
+                    match
+                        Commitment.ofAgent
+                            threats
+                            suppressedThreats
+                            shooter.Position
+                            shooter.Order
+                            shooter.Disposition
+                            shooter.Destination
+                    with
                     | Suppressing sc ->
                         shooter.VisibleContacts
                         |> Array.filter (fun id -> id = sc.Target)
                         |> Array.choose (fun id ->
                             candidateSource |> Array.tryFind (fun a -> a.Id = id && Casualty.isAlive a.Vitals))
                     | Holding
-                    | Moving _ ->
+                    | Moving _
+                    | Withdrawing _
+                    | Assaulting _ ->
                         shooter.VisibleContacts
                         |> Array.choose (fun id ->
                             candidateSource |> Array.tryFind (fun a -> a.Id = id && Casualty.isAlive a.Vitals))
@@ -1368,6 +1536,11 @@ module Simulation =
                     random <- next
                     let hit = (draw % 1000UL) < uint64 chance
                     emit (ShotFired(shooter.Id, target.Id, hit)) s
+
+                    // TASK-047 (backlog B-030 proper, Decision K): one round
+                    // consumed per qualifying shot, every commitment alike.
+                    let shooterIdx = agents |> Array.findIndex (fun a -> a.Id = shooter.Id)
+                    agents.[shooterIdx] <- { agents.[shooterIdx] with Ammo = Ammo.fire shooter.Ammo }
 
                     let gain = Suppression.gain terrain shooter.Position target.Position hit
                     let idx = agents |> Array.findIndex (fun a -> a.Id = target.Id)
@@ -1451,8 +1624,43 @@ module Simulation =
 
             let vitals = Casualty.tickBleedOut a.Vitals
 
-            if suppression <> a.Suppression || stress <> a.Stress || vitals <> a.Vitals then
-                agents.[i] <- { a with Suppression = suppression; Stress = stress; Vitals = vitals }
+            // TASK-047 (backlog B-030 proper, Decisions M/N): an agent
+            // standing on an authored resupply cell is refilled instantly,
+            // short-circuiting any in-progress reload — checked first, so a
+            // resupplied agent never also runs Ammo.tick the same tick.
+            // Otherwise Ammo.tick's own reload bookkeeping runs: an empty
+            // magazine with reserve remaining starts reloading
+            // (ReloadStarted), a Reloading state counts down and refills on
+            // completion (ReloadCompleted), anything else is unchanged.
+            let ammo =
+                if s.ResupplyAreas |> Array.contains a.Position then
+                    if Ammo.isFull a.Ammo then
+                        a.Ammo
+                    else
+                        emit (AgentResupplied a.Id) s
+                        Ammo.resupply a.Ammo
+                else
+                    let next, justStarted, justCompleted = Ammo.tick a.Ammo
+
+                    if justStarted then
+                        emit (ReloadStarted a.Id) s
+                    elif justCompleted then
+                        emit (ReloadCompleted a.Id) s
+
+                    next
+
+            if
+                suppression <> a.Suppression
+                || stress <> a.Stress
+                || vitals <> a.Vitals
+                || ammo <> a.Ammo
+            then
+                agents.[i] <-
+                    { a with
+                        Suppression = suppression
+                        Stress = stress
+                        Vitals = vitals
+                        Ammo = ammo }
 
             match a.Vitals, vitals with
             | Incapacitated _, Dead -> emit (AgentDied(a.Id, a.Position)) s
@@ -1536,6 +1744,7 @@ module Simulation =
             { Tick = nextTick
               Bounds = state.Bounds
               Terrain = state.Terrain
+              ResupplyAreas = state.ResupplyAreas
               Agents = state.Agents
               PendingCommands = []
               TacticalKnowledge = state.TacticalKnowledge

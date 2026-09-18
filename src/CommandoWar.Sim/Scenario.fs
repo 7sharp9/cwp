@@ -102,13 +102,17 @@ module TargetId =
 /// it when either the authored shape or a validation rule changes.
 ///
 /// Version 2 (TASK-010) added the optional authored terrain layer and its
-/// validation. A version-1 scenario is rejected, not migrated (`docs/04`
-/// section 16: "does not guess migrations").
+/// validation. Version 3 (TASK-047, backlog B-030 proper) added
+/// `ResupplyAreas` — the first authored area type an actual phase consumes
+/// (`Simulation.stateConsequences`'s ammo-resupply check), unlike
+/// `ObjectiveAreas`/`ExtractionAreas`, still unread (B-032). A
+/// version-1-or-2 scenario is rejected, not migrated (`docs/04` section 16:
+/// "does not guess migrations").
 [<RequireQualifiedAccess>]
 module ScenarioContent =
 
     [<Literal>]
-    let Version = 2
+    let Version = 3
 
 // --- validated model ---------------------------------------------------
 
@@ -188,6 +192,12 @@ type Scenario =
       EnemyDeployments: Deployment[]
       ObjectiveAreas: Area[]
       ExtractionAreas: Area[]
+      /// Authored resupply-cache cells (TASK-047, backlog B-030 proper).
+      /// Unlike `ObjectiveAreas`/`ExtractionAreas`, consumed by
+      /// `Simulation.stateConsequences`: an agent standing on one of these
+      /// cells is refilled to full ammunition. Carried onto
+      /// `WorldState.ResupplyAreas` by `World.ofScenario`.
+      ResupplyAreas: Area[]
       StaticTargets: StaticTarget[]
       Objectives: Objective[]
       Rules: ScenarioRules }
@@ -276,6 +286,8 @@ type RawScenario =
       EnemyDeployments: RawDeployment[]
       ObjectiveAreas: RawArea[]
       ExtractionAreas: RawArea[]
+      /// Authored resupply-cache markers (TASK-047, backlog B-030 proper).
+      ResupplyAreas: RawArea[]
       StaticTargets: RawTarget[]
       Objectives: RawObjective[]
       /// The authored terrain layer, or `None` for empty terrain.
@@ -419,7 +431,12 @@ module Scenario =
             report (DeploymentCellShared(cell, ids))
 
         // --- area and target markers ------------------------------------
-        let areaMarkers = Array.append raw.ObjectiveAreas raw.ExtractionAreas
+        // ResupplyAreas (TASK-047, backlog B-030 proper) shares the same
+        // AreaId namespace and validation as ObjectiveAreas/ExtractionAreas
+        // — a resupply cache is authored identically to an objective/
+        // extraction marker, just consumed differently.
+        let areaMarkers =
+            Array.append (Array.append raw.ObjectiveAreas raw.ExtractionAreas) raw.ResupplyAreas
 
         for a in areaMarkers do
             if System.String.IsNullOrWhiteSpace a.AreaId then
@@ -647,6 +664,9 @@ module Scenario =
                     |> Array.map (fun a -> ({ Id = AreaId.ofString a.AreaId; Cell = a.Cell }: Area))
                   ExtractionAreas =
                     raw.ExtractionAreas
+                    |> Array.map (fun a -> ({ Id = AreaId.ofString a.AreaId; Cell = a.Cell }: Area))
+                  ResupplyAreas =
+                    raw.ResupplyAreas
                     |> Array.map (fun a -> ({ Id = AreaId.ofString a.AreaId; Cell = a.Cell }: Area))
                   StaticTargets =
                     raw.StaticTargets
