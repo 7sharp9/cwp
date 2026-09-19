@@ -112,6 +112,8 @@ module DemoScenario =
                  IsOptional = false } |]
           TerrainLayer = Some terrainLayer
           UnitTypes = [| { Id = TrooperUnitType; MoveSpeed = TrooperMoveSpeed } |]
+          Headquarters = None
+          Jammers = [||]
           FailOnFriendlyForceEliminated = true }
 
     /// The validated scenario. Fails hard (this is a fixed test vector, not

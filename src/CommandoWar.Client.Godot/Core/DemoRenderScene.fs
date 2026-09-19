@@ -54,12 +54,93 @@ type DemoRenderScene() =
     let mutable alpha = 0.0
     let mutable hash = 0UL
 
+    // Agent-facing bins (TASK-054, backlog B-052), one authoritative tick at
+    // a time -- not per render frame, so a stationary agent's facing does
+    // not get recomputed (and trivially reconfirmed) on every `_Draw` call.
+    let mutable facing: Map<int, int> = Map.empty
+
+    // Run-cycle animation clock (TASK-056, backlog B-052): this scene has no
+    // tactical pause (unlike `CommandDemoScene`, it steps unattended once
+    // launched), so real elapsed time and "ticks are advancing" already
+    // coincide -- advanced unconditionally in `Update` below.
+    let mutable runClock = 0.0
+
+    // TASK-056 review round 1: the `CommandDemoScene.nextStepCell`/
+    // `edgeTickEstimate`/`prevProgress` precedent (its own field comment
+    // has the full root-cause explanation) -- correct facing and smooth,
+    // continuous position across a whole multi-tick edge, applied
+    // identically here since both scenes share the one `FSharpSceneHost`
+    // draw path.
+    let mutable nextStepCell: Map<int, Cell> = Map.empty
+    let mutable prevProgress: Map<int, int> = Map.empty
+    let defaultEdgeTickEstimate = 2
+    let mutable edgeTickEstimate: Map<int, int> = Map.empty
+
+    // TASK-056 review round 2 (backlog B-052): the `CommandDemoScene.
+    // stalled` precedent (its own field comment has the full root-cause
+    // explanation) -- an agent whose route is stalled by a reservation
+    // contest keeps an unmet `Destination` with a frozen `Progress`, which
+    // without this both sawtoothed the render-time lerp and kept the
+    // run-cycle animation playing forever on a stationary figure. Applied
+    // identically here since both scenes share the one `FSharpSceneHost`
+    // draw path.
+    let mutable stalled: Map<int, bool> = Map.empty
+
     let advanceOneTick () =
         let next, snapshot, h = DemoDrive.stepOnce log state
         prevAgents <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Position) |> Map.ofArray
+        let priorProgress = prevProgress
         state <- next
         currAgents <- snapshot.Agents
         hash <- h
+
+        nextStepCell <-
+            currAgents
+            |> Array.fold
+                (fun m a ->
+                    let id = AgentId.value a.Id
+                    match a.Destination with
+                    | Some d when d <> a.Position ->
+                        match Pathfinding.find state.Terrain a.Position d with
+                        | Found(cells, _) when cells.Length > 1 -> Map.add id cells.[1] m
+                        | _ -> Map.add id a.Position m
+                    | _ -> Map.add id a.Position m)
+                nextStepCell
+
+        edgeTickEstimate <-
+            currAgents
+            |> Array.fold
+                (fun m a ->
+                    let id = AgentId.value a.Id
+                    match prevAgents |> Map.tryFind id with
+                    | Some p when p <> a.Position ->
+                        let justCrossed = (priorProgress |> Map.tryFind id |> Option.defaultValue 0) + 1
+                        Map.add id justCrossed m
+                    | _ -> m)
+                edgeTickEstimate
+
+        prevProgress <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Progress) |> Map.ofArray
+
+        // TASK-056 review round 2: see the field comment on `stalled`.
+        stalled <-
+            currAgents
+            |> Array.fold
+                (fun m a ->
+                    let id = AgentId.value a.Id
+                    let tryingToMove = a.Destination |> Option.exists (fun d -> d <> a.Position)
+                    let madeProgress = a.Progress <> (priorProgress |> Map.tryFind id |> Option.defaultValue -1)
+                    Map.add id (tryingToMove && not madeProgress) m)
+                Map.empty
+
+        facing <-
+            currAgents
+            |> Array.fold
+                (fun m a ->
+                    let id = AgentId.value a.Id
+                    let prevBin = m |> Map.tryFind id |> Option.defaultValue 0
+                    let step = nextStepCell |> Map.tryFind id
+                    Map.add id (RenderShared.facingBin prevBin a.Position step) m)
+                facing
 
     interface IClientScene with
         member _.Ready() =
@@ -76,6 +157,11 @@ type DemoRenderScene() =
                       Disposition = a.Disposition })
             prevAgents <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Position) |> Map.ofArray
 
+            // TASK-056 review round 2: the `CommandDemoScene` precedent --
+            // seeds `stalled`'s first-tick comparison from each agent's real
+            // starting `Progress` instead of an empty-map `-1` sentinel.
+            prevProgress <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Progress) |> Map.ofArray
+
         member _.Update(deltaSeconds: float) =
             if state.Tick < DemoScenario.TickCount then
                 let simStep = 1.0 / simHz
@@ -87,6 +173,8 @@ type DemoRenderScene() =
                     accum <- accum - simStep
                     steps <- steps + 1
 
+                runClock <- runClock + deltaSeconds
+
             alpha <- System.Math.Clamp(accum * simHz, 0.0, 1.0)
 
         member _.DrawList() =
@@ -95,14 +183,40 @@ type DemoRenderScene() =
             let agentItems =
                 currAgents
                 |> Array.map (fun a ->
-                    let from = prevAgents |> Map.tryFind (AgentId.value a.Id) |> Option.defaultValue a.Position
+                    let id = AgentId.value a.Id
                     let r, g, b = RenderShared.agentColor a.Side
+                    let facingBin = facing |> Map.tryFind id |> Option.defaultValue 0
+
+                    // TASK-056, backlog B-052: the `CommandDemoScene.
+                    // renderVitals` `Alive`-branch precedent (this scene
+                    // does not track vitals at all -- a pre-existing,
+                    // unaffected gap, since `DemoScenario` has no combat
+                    // within its 20-tick run).
+                    // TASK-056 review round 2: also freezes while `stalled`
+                    // -- see the field comment on `stalled`.
+                    let isStalled = stalled |> Map.tryFind id |> Option.defaultValue false
+                    let isMoving = (a.Destination |> Option.exists (fun d -> d <> a.Position)) && not isStalled
+                    let runFrame = if isMoving then RenderShared.runFrameIndex runClock else -1
+
+                    // TASK-056 review round 1/2: the `CommandDemoScene`
+                    // precedent -- smooth, continuous position across a
+                    // whole multi-tick edge instead of a single-tick snap,
+                    // frozen (no `alpha` credit) instead of sawtoothing
+                    // while genuinely stalled.
+                    let target = nextStepCell |> Map.tryFind id |> Option.defaultValue a.Position
+                    let estTicks = edgeTickEstimate |> Map.tryFind id |> Option.defaultValue defaultEdgeTickEstimate |> max 1
+
+                    let edgeFrac =
+                        if isStalled then
+                            System.Math.Clamp(float a.Progress / float estTicks, 0.0, 1.0)
+                        else
+                            System.Math.Clamp((float a.Progress + alpha) / float estTicks, 0.0, 1.0)
 
                     { Kind = 1
-                      TextureId = 0
-                      Cx = lerp from.X a.Position.X alpha
-                      Cy = lerp from.Y a.Position.Y alpha
-                      Cx2 = 0.0f
+                      TextureId = facingBin
+                      Cx = lerp a.Position.X target.X edgeFrac
+                      Cy = lerp a.Position.Y target.Y edgeFrac
+                      Cx2 = float32 runFrame
                       Cy2 = 0.0f
                       Text = ""
                       R = r

@@ -76,6 +76,25 @@ module Divergence =
             else
                 Match overlap
 
+    /// Replays a reference and a candidate command log from the same initial
+    /// state. A typed `ReplayError` from either run is surfaced, not
+    /// swallowed.
+    let private runBoth
+        (config: SimConfig)
+        (initial: WorldState)
+        (reference: RecordedCommand[])
+        (candidate: RecordedCommand[])
+        (tickCount: int64)
+        : Result<ReplayOutcome * ReplayOutcome, ReplayError> =
+
+        let toRecord (commands: RecordedCommand[]) =
+            Replay.record ReplayMeta.unspecified initial tickCount (CommandLog.create commands)
+
+        match Replay.run config (toRecord reference), Replay.run config (toRecord candidate) with
+        | Ok referenceRun, Ok candidateRun -> Ok(referenceRun, candidateRun)
+        | Error err, _ -> Error err
+        | _, Error err -> Error err
+
     /// Runs a reference and a candidate command log from the same initial
     /// state and reports the first tick at which their authoritative hashes
     /// diverge. A typed `ReplayError` from either run is surfaced, not
@@ -88,10 +107,22 @@ module Divergence =
         (tickCount: int64)
         : Result<DivergenceReport, ReplayError> =
 
-        let toRecord (commands: RecordedCommand[]) =
-            Replay.record ReplayMeta.unspecified initial tickCount (CommandLog.create commands)
+        runBoth config initial reference candidate tickCount
+        |> Result.map (fun (referenceRun, candidateRun) -> compare referenceRun candidateRun)
 
-        match Replay.run config (toRecord reference), Replay.run config (toRecord candidate) with
-        | Ok referenceRun, Ok candidateRun -> Ok(compare referenceRun candidateRun)
-        | Error err, _ -> Error err
-        | _, Error err -> Error err
+    /// As `diagnose`, but also returns both full run outcomes (their
+    /// `TickStates`), for a caller that wants to inspect the states around
+    /// the divergence point directly (TASK-057, backlog B-050: rendering a
+    /// divergence needs the actual `WorldState` on each side at the
+    /// divergent tick, not just the report). `diagnose` itself stays the
+    /// text/test-facing entry point and is unchanged.
+    let diagnoseDetailed
+        (config: SimConfig)
+        (initial: WorldState)
+        (reference: RecordedCommand[])
+        (candidate: RecordedCommand[])
+        (tickCount: int64)
+        : Result<DivergenceReport * ReplayOutcome * ReplayOutcome, ReplayError> =
+
+        runBoth config initial reference candidate tickCount
+        |> Result.map (fun (referenceRun, candidateRun) -> compare referenceRun candidateRun, referenceRun, candidateRun)

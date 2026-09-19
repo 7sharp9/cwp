@@ -56,6 +56,8 @@ module World =
         (seed: uint64)
         (agents: AgentState list)
         (resupplyAreas: Cell[])
+        (headquarters: Cell option)
+        (jammers: Jammer[])
         : Result<WorldState, WorldError> =
         if bounds.Width <= 0 || bounds.Height <= 0 then
             Error(EmptyGrid bounds)
@@ -92,6 +94,8 @@ module World =
                               TacticalKnowledge = [||]
                               HostileTacticalKnowledge = [||]
                               ResupplyAreas = resupplyAreas
+                              Headquarters = headquarters
+                              Jammers = jammers
                               Random = SplitMix64.create seed }
 
     /// Builds a validated world at tick 0 with a SplitMix64 random stream
@@ -100,7 +104,7 @@ module World =
     /// Fails explicitly on an empty grid, duplicate ids, or an agent placed
     /// outside the grid.
     let create (bounds: GridBounds) (seed: uint64) (agents: AgentState list) : Result<WorldState, WorldError> =
-        build bounds (Terrain.empty bounds) seed agents [||]
+        build bounds (Terrain.empty bounds) seed agents [||] None [||]
 
     /// Builds the authoritative world at tick 0 from a validated scenario
     /// (docs/04_SIMULATION_SPEC.md section 21). Friendly then enemy deployments
@@ -123,7 +127,14 @@ module World =
                     MoveSpeed = d.MoveSpeed })
             |> Array.toList
 
-        build scenario.Map scenario.Terrain seed agents (scenario.ResupplyAreas |> Array.map (fun a -> a.Cell))
+        build
+            scenario.Map
+            scenario.Terrain
+            seed
+            agents
+            (scenario.ResupplyAreas |> Array.map (fun a -> a.Cell))
+            scenario.Headquarters
+            scenario.Jammers
 
 [<RequireQualifiedAccess>]
 module Setup =
@@ -170,6 +181,16 @@ module Simulation =
           /// `WorldState` (TASK-047, backlog B-030 proper). Static within a
           /// run, the `Terrain` precedent — never reassigned during a tick.
           ResupplyAreas: Cell[]
+          /// The authored command-origin cell, carried in from the input
+          /// `WorldState` (TASK-058, backlog B-016b). Static within a run,
+          /// the `ResupplyAreas` precedent. `None` is the opt-in-out state:
+          /// the whole range/delay/jamming/radio-destroyed feature set is
+          /// inert for a run that never sets this.
+          Headquarters: Cell option
+          /// Authored jammers, carried in from the input `WorldState`
+          /// (TASK-058, backlog B-016b). Static within a run, the
+          /// `ResupplyAreas` precedent.
+          Jammers: Jammer[]
           mutable Agents: AgentState[]
           /// Commands accepted by Command intake this tick and not yet
           /// applied to their recipients, as `(recipient, commandId, body)`
@@ -290,8 +311,9 @@ module Simulation =
     // No agent array copy: this phase reads s.Agents (for the AgentId -> index
     // map and the hostile-side check) but never mutates it. Agent identity and
     // order are stable, so one index map is valid for the whole batch.
-    // Cancel handling (TASK-044, backlog B-051): whether `agent` currently
-    // holds `target` as its active Order or somewhere in its OrderQueue,
+    // Cancel handling (TASK-044, backlog B-051; extended by TASK-058, backlog
+    // B-016b): whether `agent` currently holds `target` as its active Order,
+    // somewhere in its OrderQueue, or in flight in its PendingDelivery,
     // checked against the START-of-tick s.Agents snapshot (this phase reads
     // but never mutates it, the existing precedent) — so a same-tick
     // "queue order, then cancel it" sequence cannot anticipate the queue
@@ -301,6 +323,7 @@ module Simulation =
     let private holdsCommand (agent: AgentState) (target: CommandId) : bool =
         (agent.Order |> Option.exists (fun o -> o.Command = target))
         || (agent.OrderQueue |> List.exists (fun o -> o.Command = target))
+        || (agent.PendingDelivery |> Option.exists (fun (o, _, _) -> o.Command = target))
 
     let private commandIntake (commands: PlayerCommand list) (s: StepState) =
         let agents = s.Agents
@@ -457,8 +480,39 @@ module Simulation =
     // correctly with no extra bookkeeping.
     //
     // CommunicationAvailable is STATIC authored scenario data, excluded from
-    // Canonical.encode (ADR-0002 amendment; B-016b). This phase draws
-    // nothing from the deterministic stream.
+    // Canonical.encode (ADR-0002 amendment). This phase draws nothing from
+    // the deterministic stream.
+    //
+    // TASK-058 (backlog B-016b) layered dynamic range/jamming/radio-destroyed
+    // checks on top via `Communication.available`, gated behind whether
+    // `s.Headquarters` is authored at all (the opt-in gate): when it is
+    // `None`, every branch below behaves exactly as before this task
+    // (same-tick delivery, `PendingDelivery` never written). When it is
+    // `Some _`, a `PendingOrder` that clears the availability check is
+    // stashed in `AgentState.PendingDelivery` instead of taking effect
+    // immediately, and a second pass below (after this loop) delivers or
+    // drops it once its due tick arrives. A `PendingCancel` is never
+    // delayed — cancelling an order that has not even arrived yet needs no
+    // radio round-trip to model.
+    /// Applies a delivered order to `agent`, returning the updated agent and
+    /// whether it joined `OrderQueue` behind an already-active order (the
+    /// caller emits `OrderQueued` for that case — this function is pure, so
+    /// it cannot emit itself, and its two call sites need different
+    /// additional events around it: a zero-delay delivery emits nothing
+    /// else, a delayed one also emits `OrderDelivered`).
+    let private applyDelivered (agent: AgentState) (order: ReceivedOrder) (mode: QueueMode) : AgentState * bool =
+        match mode with
+        | Replace ->
+            { agent with
+                Order = Some order
+                Disposition = None
+                OrderQueue = [] },
+            false
+        | Append ->
+            match agent.Order with
+            | None -> { agent with Order = Some order; Disposition = None }, false
+            | Some _ -> { agent with OrderQueue = agent.OrderQueue @ [ order ] }, true
+
     let private communication (s: StepState) =
         match s.PendingCommands with
         | [] -> ()
@@ -478,67 +532,125 @@ module Simulation =
                 // adds or removes an agent, so the lookup always succeeds.
                 match Map.tryFind recipient indexOf with
                 | None -> ()
-                | Some idx when not agents.[idx].CommunicationAvailable ->
-                    emit (OrderUndelivered(cmdId, recipient, UnableToCommunicate)) s
+                | Some idx when not (Communication.available s.Headquarters s.Jammers s.Tick agents.[idx]) ->
+                    let reason =
+                        Communication.reason s.Headquarters s.Jammers s.Tick agents.[idx]
+                        |> Option.defaultValue UnableToCommunicate
+
+                    emit (OrderUndelivered(cmdId, recipient, reason)) s
                 | Some idx ->
                     let a = agents.[idx]
 
                     match body with
-                    | PendingOrder(order, Replace) ->
+                    | PendingOrder(order, mode) when s.Headquarters.IsSome ->
+                        // A new pending command always supersedes an
+                        // in-flight one outright (Central decision,
+                        // TASK-058): the previous PendingDelivery, if any,
+                        // is silently overwritten, the same "no event for
+                        // the superseded state" precedent Replace already
+                        // uses for an active Order.
                         agents.[idx] <-
                             { a with
-                                Order = Some order
-                                Disposition = None
-                                OrderQueue = [] }
-                    | PendingOrder(order, Append) ->
-                        match a.Order with
-                        | None -> agents.[idx] <- { a with Order = Some order; Disposition = None }
-                        | Some _ ->
-                            agents.[idx] <- { a with OrderQueue = a.OrderQueue @ [ order ] }
+                                PendingDelivery = Some(order, mode, s.Tick + CommsConfig.DeliveryDelayTicks) }
+                    | PendingOrder(order, mode) ->
+                        let updated, queued = applyDelivered a order mode
+                        agents.[idx] <- updated
+
+                        if queued then
                             emit (OrderQueued(order.Command, recipient)) s
                     | PendingCancel target ->
-                        match a.Order with
-                        | Some active when active.Command = target ->
-                            // Destination is cleared here regardless of
-                            // promotion: it belongs to the CANCELLED order
-                            // (a MoveTo target), and a promoted order has not
-                            // been appraised yet (Disposition = None) to
-                            // write its own — leaving the stale value would
-                            // have Navigation keep driving the agent toward
-                            // an order it no longer holds. The Appraisal
-                            // precedent for a superseding Replace order,
-                            // applied explicitly here since a Cancel-driven
-                            // promotion bypasses Appraisal this tick.
-                            match a.OrderQueue with
-                            | head :: tail ->
-                                agents.[idx] <-
-                                    { a with
-                                        Order = Some head
-                                        Disposition = None
-                                        Destination = None
-                                        OrderQueue = tail }
-                            | [] ->
-                                agents.[idx] <-
-                                    { a with
-                                        Order = None
-                                        Disposition = None
-                                        Destination = None }
-
-                            emit (OrderCancelled(target, recipient, true)) s
-                        | _ ->
-                            if a.OrderQueue |> List.exists (fun o -> o.Command = target) then
-                                agents.[idx] <-
-                                    { a with
-                                        OrderQueue = a.OrderQueue |> List.filter (fun o -> o.Command <> target) }
-
+                        // TASK-058 (backlog B-016b): a cancel targeting an
+                        // order still in flight (not yet Order/OrderQueue)
+                        // needs no radio round-trip to model -- it is
+                        // simply dropped, reported the same "not active"
+                        // way a queued-entry cancel is (it never took
+                        // effect). Checked ahead of the pre-existing
+                        // active/queue cases below, which are otherwise
+                        // completely unchanged from before this task.
+                        let cancelledInFlight =
+                            match a.PendingDelivery with
+                            | Some(order, _, _) when order.Command = target ->
+                                agents.[idx] <- { a with PendingDelivery = None }
                                 emit (OrderCancelled(target, recipient, false)) s
-                            // else: superseded earlier this same tick by a
-                            // lower-CommandId command (see the phase comment
-                            // above) — nothing to cancel any more.
+                                true
+                            | _ -> false
+
+                        if not cancelledInFlight then
+                            match a.Order with
+                            | Some active when active.Command = target ->
+                                // Destination is cleared here regardless of
+                                // promotion: it belongs to the CANCELLED order
+                                // (a MoveTo target), and a promoted order has not
+                                // been appraised yet (Disposition = None) to
+                                // write its own — leaving the stale value would
+                                // have Navigation keep driving the agent toward
+                                // an order it no longer holds. The Appraisal
+                                // precedent for a superseding Replace order,
+                                // applied explicitly here since a Cancel-driven
+                                // promotion bypasses Appraisal this tick.
+                                match a.OrderQueue with
+                                | head :: tail ->
+                                    agents.[idx] <-
+                                        { a with
+                                            Order = Some head
+                                            Disposition = None
+                                            Destination = None
+                                            OrderQueue = tail }
+                                | [] ->
+                                    agents.[idx] <-
+                                        { a with
+                                            Order = None
+                                            Disposition = None
+                                            Destination = None }
+
+                                emit (OrderCancelled(target, recipient, true)) s
+                            | _ ->
+                                if a.OrderQueue |> List.exists (fun o -> o.Command = target) then
+                                    agents.[idx] <-
+                                        { a with
+                                            OrderQueue = a.OrderQueue |> List.filter (fun o -> o.Command <> target) }
+
+                                    emit (OrderCancelled(target, recipient, false)) s
+                                // else: superseded earlier this same tick by a
+                                // lower-CommandId command (see the phase comment
+                                // above) — nothing to cancel any more.
 
             s.Agents <- agents
 
         s.PendingCommands <- []
+
+        // Second pass (TASK-058, backlog B-016b): deliver or drop every
+        // agent whose PendingDelivery has come due. Only ever non-empty
+        // when s.Headquarters is authored (the opt-in gate) — the loop body
+        // is a no-op for every one of the 16 pre-existing corpus entries.
+        // A freshly-set PendingDelivery from the loop above can never be due
+        // this same tick (CommsConfig.DeliveryDelayTicks >= 1), so this pass
+        // never double-processes a command the first pass just queued.
+        if s.Headquarters.IsSome then
+            let agents = Array.copy s.Agents
+
+            for idx in 0 .. agents.Length - 1 do
+                match agents.[idx].PendingDelivery with
+                | Some(order, mode, dueTick) when dueTick <= s.Tick ->
+                    let a = agents.[idx]
+
+                    if Communication.available s.Headquarters s.Jammers s.Tick a then
+                        let updated, queued = applyDelivered a order mode
+                        agents.[idx] <- { updated with PendingDelivery = None }
+                        emit (OrderDelivered(order.Command, a.Id)) s
+
+                        if queued then
+                            emit (OrderQueued(order.Command, a.Id)) s
+                    else
+                        let reason =
+                            Communication.reason s.Headquarters s.Jammers s.Tick a
+                            |> Option.defaultValue UnableToCommunicate
+
+                        agents.[idx] <- { a with PendingDelivery = None }
+                        emit (OrderUndelivered(order.Command, a.Id, reason)) s
+                | _ -> ()
+
+            s.Agents <- agents
 
     // --- Phase: perception -------------------------------------------------
     // Realised by TASK-026 (backlog B-015). The first phase consumer of the
@@ -1572,16 +1684,37 @@ module Simulation =
                     let vitals, recentlyWounded =
                         if hit then Casualty.wound t.Vitals, true else t.Vitals, t.RecentlyWounded
 
+                    // TASK-058 (backlog B-016b): a qualifying hit also has a
+                    // CommsConfig.RadioDestroyChanceOnHit chance to
+                    // permanently destroy the target's radio -- an
+                    // independent RandomStream draw, alongside the existing
+                    // hit-chance roll, rolled only when the world authors a
+                    // Headquarters (the opt-in gate: every one of the 16
+                    // pre-existing corpus entries draws nothing extra here)
+                    // and the radio is not already destroyed (sticky, no
+                    // re-roll, the Vitals.Dead one-way-door precedent).
+                    let radioDestroyed =
+                        if hit && s.Headquarters.IsSome && not t.RadioDestroyed then
+                            let struct (draw, next) = RandomStream.next random
+                            random <- next
+                            draw % 1000UL < uint64 CommsConfig.RadioDestroyChanceOnHit
+                        else
+                            t.RadioDestroyed
+
                     agents.[idx] <-
                         { t with
                             Suppression = Suppression.raise t.Suppression gain
                             Vitals = vitals
-                            RecentlyWounded = recentlyWounded }
+                            RecentlyWounded = recentlyWounded
+                            RadioDestroyed = radioDestroyed }
 
                     if hit then
                         match t.Vitals, vitals with
                         | Alive _, Incapacitated _ -> emit (AgentIncapacitated(target.Id, target.Position)) s
                         | _ -> ()
+
+                        if radioDestroyed && not t.RadioDestroyed then
+                            emit (AgentRadioDestroyed(target.Id, target.Position)) s
 
         s.Agents <- agents
         s.Random <- random
@@ -1768,6 +1901,8 @@ module Simulation =
               Bounds = state.Bounds
               Terrain = state.Terrain
               ResupplyAreas = state.ResupplyAreas
+              Headquarters = state.Headquarters
+              Jammers = state.Jammers
               Agents = state.Agents
               PendingCommands = []
               TacticalKnowledge = state.TacticalKnowledge

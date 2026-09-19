@@ -1,20 +1,11 @@
 namespace CommandoWar.Sim
 
-// `PlayerIntent`, `Urgency`, and `RiskTolerance` moved to `Domain.fs` (TASK-028):
-// `AgentState.Order` carries a `PlayerIntent`, and `Domain.fs` compiles before
-// this file. `docs/05` section 5 stage 4 names `Urgency` and `RiskTolerance` as
+// `PlayerIntent`, `Urgency`, and `RiskTolerance` moved to `Domain.fs` (TASK-028);
+// `QueueMode` moved to `Domain.fs` (TASK-058, backlog B-016b): `AgentState.
+// PendingDelivery` carries a `QueueMode`, and `Domain.fs` compiles before this
+// file. `docs/05` section 5 stage 4 names `Urgency` and `RiskTolerance` as
 // appraisal resolve-threshold inputs; the Appraisal phase (12.5) now reads
 // them, so they are no longer "inert envelope data".
-
-/// Whether a new `Order` command replaces an agent's active order (and
-/// clears anything already queued behind it) or joins the tail of
-/// `AgentState.OrderQueue` (TASK-044, backlog B-051). `Replace` is the
-/// default for every existing builder below, preserving every pre-TASK-044
-/// caller's exact behaviour; `Append` is reached only through
-/// `Command.queued`.
-type QueueMode =
-    | Replace
-    | Append
 
 /// What a `PlayerCommand` actually asks the simulation to do (TASK-044,
 /// backlog B-051). `Order` carries the existing `PlayerIntent` (`Domain.fs`,

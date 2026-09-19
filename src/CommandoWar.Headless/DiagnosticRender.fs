@@ -175,7 +175,10 @@ module DiagnosticRender =
                 | AgentOrderQueue _
                 | AgentVitals _
                 | SquadLeadership _
-                | AgentAmmo _ -> None)
+                | AgentAmmo _
+                | Divergence _
+                | AgentRadioLost _
+                | AgentPendingDelivery _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -210,7 +213,10 @@ module DiagnosticRender =
                 | AgentOrderQueue _
                 | AgentVitals _
                 | SquadLeadership _
-                | AgentAmmo _ -> None)
+                | AgentAmmo _
+                | Divergence _
+                | AgentRadioLost _
+                | AgentPendingDelivery _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -482,6 +488,25 @@ module DiagnosticRender =
                     line (
                         sprintf "  ammo %s: agent %d  %s" (cellText at) (AgentId.value agent) (ammoText magazine reserve reloading)
                     )
+                | Divergence(section, agents) ->
+                    let who =
+                        if agents.Length = 0 then
+                            ""
+                        else
+                            "  agent " + (agents |> Array.map (AgentId.value >> string) |> String.concat ",")
+
+                    line (sprintf "  DIVERGED: first differing section %s%s" section who)
+                | AgentRadioLost(agent, at) ->
+                    line (sprintf "  radio lost %s: agent %d" (cellText at) (AgentId.value agent))
+                | AgentPendingDelivery(agent, at, command, dueTick) ->
+                    line (
+                        sprintf
+                            "  pending delivery %s: agent %d  command %d  due tick %d"
+                            (cellText at)
+                            (AgentId.value agent)
+                            (CommandId.value command)
+                            dueTick
+                    )
 
         line ""
 
@@ -530,7 +555,17 @@ module DiagnosticRender =
         let s = Scale
         let w = b.Width * s
         let gridH = b.Height * s
-        let footerH = 52
+
+        // A `Divergence` overlay (TASK-057, backlog B-050) adds one extra
+        // footer line naming the first differing canonical section; the
+        // per-agent highlight itself is drawn on the grid, not the footer.
+        let divergenceText =
+            frame.Overlays
+            |> Array.tryPick (function
+                | Divergence(section, _) -> Some section
+                | _ -> None)
+
+        let footerH = if divergenceText.IsSome then 66 else 52
         let h = gridH + footerH
 
         let elevation = layer LayerName.Elevation frame
@@ -992,6 +1027,63 @@ module DiagnosticRender =
                             (at.X * s + mid)
                             (at.Y * s + mid)
                     )
+            | Divergence(_, agents) ->
+                // First-divergence marker (TASK-057, backlog B-050): a thick
+                // solid magenta square around each named agent's cell,
+                // deliberately unlike every other overlay's thin/dashed
+                // stroke, since this is the one thing the render exists to
+                // draw attention to. The section text itself is footer-only
+                // (below) -- there is no single cell to put it on when the
+                // divergence names no agent.
+                for agent in agents do
+                    match frame.Agents |> Array.tryFind (fun a -> a.Id = agent) with
+                    | None -> ()
+                    | Some a ->
+                        line (
+                            sprintf
+                                "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#ff00ff\" stroke-width=\"4\"/>"
+                                (a.Cell.X * s) (a.Cell.Y * s) s s
+                        )
+            | AgentRadioLost(_, at) ->
+                // Radio destroyed (TASK-058, backlog B-016b): a dark-red
+                // diagonal cross directly over the agent's circle -- unlike
+                // AgentAmmo's dashed ring one radius out, this sits ON the
+                // agent since a destroyed radio is a property of the agent
+                // itself, not a status ring around it. Only ever present
+                // when the world authors a Headquarters (the opt-in gate).
+                let cx = at.X * s + mid
+                let cy = at.Y * s + mid
+                let r = 5
+
+                line (
+                    sprintf
+                        "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#4A0E0E\" stroke-width=\"2\"/>"
+                        (cx - r) (cy - r) (cx + r) (cy + r)
+                )
+
+                line (
+                    sprintf
+                        "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#4A0E0E\" stroke-width=\"2\"/>"
+                        (cx - r) (cy + r) (cx + r) (cy - r)
+                )
+            | AgentPendingDelivery(_, at, _, dueTick) ->
+                // In-flight order (TASK-058, backlog B-016b): a small dotted
+                // ring one radius out (the AgentAmmo reloading-ring
+                // precedent) in a distinct blue, plus the due tick as text.
+                line (
+                    sprintf
+                        "  <circle cx=\"%d\" cy=\"%d\" r=\"8\" fill=\"none\" stroke=\"#2B6CB0\" stroke-width=\"1\" stroke-dasharray=\"1,2\"/>"
+                        (at.X * s + mid)
+                        (at.Y * s + mid)
+                )
+
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"8\" fill=\"#2B6CB0\">@%d</text>"
+                        (at.X * s + 1)
+                        (at.Y * s + 3)
+                        dueTick
+                )
 
         // Footer.
         let footerText (dy: int) (str: string) =
@@ -1003,6 +1095,9 @@ module DiagnosticRender =
         footerText 16 (sprintf "tick %d  hash %s  draws %d" frame.Tick (hx frame.Hash) frame.RandomDraws)
         footerText 30 (sprintf "agents %d  cover-edges %d  events %d" frame.Agents.Length frame.Edges.Length frame.Events.Length)
         footerText 44 "hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent"
+        match divergenceText with
+        | Some section -> footerText 58 (sprintf "DIVERGED: first differing section %s" section)
+        | None -> ()
 
         line "</svg>"
         sb.ToString()
@@ -1233,6 +1328,22 @@ module DiagnosticRender =
         line (sprintf "<p><strong>Squad tactical picture:</strong> %s</p>" (contactList knownContacts))
         line (sprintf "<p><strong>Hostile tactical picture:</strong> %s</p>" (contactList hostileKnownContacts))
         line "</div>"
+
+        // First-divergence banner (TASK-057, backlog B-050): at most one
+        // `Divergence` overlay per frame, the caller-supplied precedent
+        // (`SightRay`/`PlannedPath`) -- absent from every ordinary run.
+        match frame.Overlays |> Array.tryPick (function
+            | Divergence(section, agents) -> Some(section, agents)
+            | _ -> None) with
+        | None -> ()
+        | Some(section, agents) ->
+            let who =
+                if agents.Length = 0 then
+                    ""
+                else
+                    " (agent " + (agents |> Array.map (AgentId.value >> string) |> String.concat ",") + ")"
+
+            line (sprintf "<p class=\"cw-diverged\"><strong>DIVERGED:</strong> first differing section %s%s</p>" (esc section) (esc who))
 
         line "</div>"
         sb.ToString()

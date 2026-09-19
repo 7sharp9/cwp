@@ -137,6 +137,116 @@ module RenderShared =
           A = a
           Radius = fontSize }
 
+    /// The fixed width:height ratio of this game's isometric tile diamond
+    /// (`FSharpSceneHost.cs`'s `TileW`/`TileH`, `88:44` -- a `2:1` isometric
+    /// proportion that has held across every scale change so far, TASK-052's
+    /// doubling included). Not literal screen pixels (`Origin`/`TileW`/
+    /// `TileH` themselves stay a C# concern, ADR-0004), just the shape of
+    /// the projection -- needed by `facingBin` below to translate a
+    /// world-grid heading into the screen-relative compass bearing the
+    /// Kenney rig's own rotation set is authored against.
+    [<Literal>]
+    let private IsoAspect = 0.5 // TileH / TileW
+
+    /// The eight world-grid unit directions in Kenney `Human_N` clockwise
+    /// order (`0=N,1=NE,2=E,3=SE,4=S,5=SW,6=W,7=NW`). Not a guess: the
+    /// pack's own `Information.png` labels the FOUR EDGES of one terrain
+    /// tile diamond (not its vertices) `N` (upper-right edge), `E`
+    /// (lower-right edge), `S` (lower-left edge), `W` (upper-left edge), and
+    /// the displacement from a tile's centre to its `N`-neighbour's centre
+    /// is exactly twice the centre-to-edge-midpoint vector -- i.e. a
+    /// `(half-width, -half-height)` screen step, which is exactly what a
+    /// **world pure-axis** move (`dx=0,dy=-1`) produces under this
+    /// project's own `CellToScreen`, not a world-diagonal move. TASK-056
+    /// (a second live-review correction of TASK-054's B-052): the previous
+    /// `facingBin` had this backwards, assigning the four Kenney cardinal
+    /// poses to the four world-DIAGONAL moves instead -- confirmed directly
+    /// from its own prior doc comment (`world NW -> bin 0 (N)`, etc.), a
+    /// mistake that read as "close but off" rather than random because
+    /// every one of the 8 primary directions happened to land exactly one
+    /// 45-degree bin past its correct target under the old uniform-sector
+    /// rounding.
+    let private worldUnitDirections: (int * int)[] =
+        [| (0, -1) // 0 = N
+           (1, -1) // 1 = NE
+           (1, 0) // 2 = E
+           (1, 1) // 3 = SE
+           (0, 1) // 4 = S
+           (-1, 1) // 5 = SW
+           (-1, 0) // 6 = W
+           (-1, -1) |] // 7 = NW
+
+    /// Projects a world-grid delta through the same isometric skew
+    /// `FSharpSceneHost.cs`'s `CellToScreen` applies -- a raw (not unit)
+    /// screen-space direction vector.
+    let private toScreenVector (dx: float, dy: float) : float * float = dx - dy, (dx + dy) * IsoAspect
+
+    /// The agent-facing bin (TASK-054, backlog B-052; corrected TASK-056) an
+    /// agent's figure should render at: one of 8 pre-rendered `45°`
+    /// rotations of the Kenney "Isometric Miniature" **idle** pose (`art/
+    /// agent_human_facingN.png`, `N = 0..7`, cropped from `Characters/Human/
+    /// Human_N_Idle0.png`).
+    ///
+    /// Pure and framework-neutral: derived from already-existing
+    /// `AgentSnapshot` fields, never touches
+    /// `CommandoWar.Sim`/`CommandoWar.Headless`. When the agent has an
+    /// active `Destination` different from its current `Position`, projects
+    /// the world-grid heading through `toScreenVector`, then picks whichever
+    /// of the 8 `worldUnitDirections` -- projected through the identical
+    /// skew -- is closest by cosine similarity: this is correct by
+    /// construction for the 8 primary directions themselves (each is
+    /// trivially its own best match) and, unlike a fixed-angle-sector
+    /// round, also handles an arbitrary heading correctly (`Destination` is
+    /// the agent's overall target cell, not its next path step, so the
+    /// delta fed in here is frequently not a primary direction at all --
+    /// e.g. partway along a `MoveTo(10,6)` route). The 8 target screen
+    /// angles are NOT evenly 45-degrees apart under this anisotropic (2:1)
+    /// projection, so comparing directly against the real projected
+    /// reference vectors (rather than rounding to a uniform angular sector)
+    /// is what makes this correct in general, not just for the 8 exact
+    /// tested directions. The reference vector's own magnitude (not the
+    /// query's, which is constant across all 8 comparisons for one call and
+    /// so cannot change which one wins) is divided out, since a world
+    /// pure-axis reference and a world-diagonal reference do not project to
+    /// the same screen length under this skew -- an unnormalised dot
+    /// product would bias the choice toward whichever reference happens to
+    /// be longer on screen. Otherwise (no destination, or already arrived)
+    /// returns `prevBin` unchanged -- freezing on the last active-movement
+    /// facing while stationary.
+    ///
+    /// Verified against a real Godot view, not just re-derived on paper
+    /// (TASK-056; the prior two correction rounds this session were each
+    /// caught only by Dave live-testing a version checked solely against
+    /// pure-function probes and static composited comparison images).
+    let facingBin (prevBin: int) (position: Cell) (destination: Cell option) : int =
+        match destination with
+        | Some d when d <> position ->
+            let screenDx, screenDy = toScreenVector (float (d.X - position.X), float (d.Y - position.Y))
+
+            worldUnitDirections
+            |> Array.mapi (fun bin (rdx, rdy) ->
+                let rsx, rsy = toScreenVector (float rdx, float rdy)
+                let dot = screenDx * rsx + screenDy * rsy
+                let refMag = sqrt (rsx * rsx + rsy * rsy)
+                bin, dot / refMag)
+            |> Array.maxBy snd
+            |> fst
+        | _ -> prevBin
+
+    /// One full `Run0..9` loop's real-time duration (TASK-056, backlog
+    /// B-052): a presentation-only judgement call, not gameplay-affecting --
+    /// a plausible sprite run-cycle pace (~16.7 fps over the pack's own
+    /// 10-frame cycle).
+    [<Literal>]
+    let RunFrameSeconds = 0.06
+
+    /// Which of the 10 `Run0..9` frames a moving agent should render,
+    /// derived from a scene-wide, wall-clock `runClock` that only advances
+    /// while ticks themselves are advancing (TASK-056: gated the same way
+    /// `CommandDemoScene`'s own tactical pause gates tick catch-up, so the
+    /// run cycle never animates while the sim itself is frozen). Pure.
+    let runFrameIndex (runClock: float) : int = int (runClock / RunFrameSeconds) % 10
+
     let agentColor (side: Side) : float32 * float32 * float32 =
         match side with
         | Friendly -> 0.35f, 0.75f, 1.0f

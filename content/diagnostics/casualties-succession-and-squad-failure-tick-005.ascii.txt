@@ -41,7 +41,7 @@ agents:
 
 overlays:
   known contact (0,3): agent 2  confidence 1000  seen tick 5
-  known contact (5,3): agent 3  confidence 1000  seen tick 5
+  known contact (5,3): agent 3  confidence 1000  seen tick 3
   commitment (0,0): agent 0  holding
   commitment (5,0): agent 1  holding
   commitment (0,3): agent 2  holding
@@ -56,7 +56,7 @@ overlays:
   stress (5,0): agent 1  250/1000
   stress (0,3): agent 2  250/1000
   stress (5,3): agent 3  250/1000
-  hostile known contact (0,0): agent 0  confidence 1000  seen tick 5
+  hostile known contact (0,0): agent 0  confidence 1000  seen tick 4
   hostile known contact (5,0): agent 1  confidence 1000  seen tick 5
   vitals (0,0): agent 0  incapacitated (bleeding out, 58 tick(s))
   vitals (5,0): agent 1  incapacitated (bleeding out, 59 tick(s))
@@ -70,4 +70,4 @@ overlays:
 
 events: shot-fired-hit; agent-incapacitated@(0,3); shot-fired-hit; agent-incapacitated@(5,0); leadership-transferred; squad-failure
 
-tick 5 | hash 0x8C43B622A96AD91C (format 11) | draws 17 | agents 4 | cover-edges 0 | events 6
+tick 5 | hash 0xCBA7396B183853BC (format 12) | draws 17 | agents 4 | cover-edges 0 | events 6

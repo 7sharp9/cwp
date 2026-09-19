@@ -111,6 +111,8 @@ let private randomCaseGen: Gen<RandomCase> =
               TacticalKnowledge = [||]
               HostileTacticalKnowledge = [||]
               ResupplyAreas = [||]
+              Headquarters = None
+              Jammers = [||]
               Random = SplitMix64.create (uint64 seed) }
 
         let! tickCount = Gen.choose (5, 15)
@@ -384,6 +386,8 @@ let private perceptionCaseGen: Gen<RandomCase> =
               TacticalKnowledge = [||]
               HostileTacticalKnowledge = [||]
               ResupplyAreas = [||]
+              Headquarters = None
+              Jammers = [||]
               Random = SplitMix64.create (uint64 seed) }
 
         let! tickCount = Gen.choose (5, 15)

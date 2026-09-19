@@ -119,7 +119,10 @@ type EventMarker =
 ///   * B-019 combat          -> `FireLine` (realised by TASK-031);
 ///   * B-020 suppression     -> `AgentSuppression` (realised by TASK-032);
 ///   * B-021 stress          -> `AgentStress` (realised by TASK-033);
-///   * B-022 hostile picture -> `HostileKnownContact` (realised by TASK-034).
+///   * B-022 hostile picture -> `HostileKnownContact` (realised by TASK-034);
+///   * B-050 divergence      -> `Divergence` (realised by TASK-057);
+///   * B-016b dynamic comms  -> `AgentRadioLost` / `AgentPendingDelivery`
+///     (realised by TASK-058).
 ///
 /// `Diagnostics.frame` produces one `KnownContact` per contact in
 /// `WorldState.TacticalKnowledge`, one `OrderAppraisal` per agent that holds
@@ -288,6 +291,41 @@ type Overlay =
     /// overlay) — no player-facing ammo readout is scoped by this task
     /// (Forbidden scope).
     | AgentAmmo of agent: AgentId * at: Cell * magazine: int * reserve: int * reloading: bool
+    /// A first-divergence marker from comparing two independently replayed
+    /// runs (TASK-057, backlog B-050; `docs/notes/2026-09-06-tooling-and-
+    /// debug-display.md` section 2): `section` is
+    /// `Canonical.firstDifferingSection`'s own label (a top-level section
+    /// name, or `Agent[N]`), and `agents` names the diverging agent when the
+    /// section identifies one (empty for a top-level section like `Random`
+    /// or `TacticalKnowledge`, which has no single agent to point at). A
+    /// divergence exists only by comparing two independently replayed runs,
+    /// never derivable from one `WorldState`/`StepResult` — supplied by a
+    /// caller (`cwheadless render-divergence`); `Diagnostics.frame` and
+    /// `.frameOf` never emit one (the `SightRay`/`PlannedPath` precedent).
+    | Divergence of section: string * agents: AgentId[]
+    /// An agent whose radio has been permanently destroyed (TASK-058,
+    /// backlog B-016b; `AgentState.RadioDestroyed`). Named distinctly from
+    /// the `EventBody.AgentRadioDestroyed` transition event it derives from
+    /// (the `OrderAppraisal`/`OrderDisposition` case-name/type-name
+    /// collision precedent) — this is standing state, not the one-shot
+    /// event. Follows the `AgentSuppression`/`AgentAmmo` sparse shape:
+    /// emitted only for an agent with `RadioDestroyed = true` — the common
+    /// case is `false`, and an unconditional per-agent overlay would add a
+    /// not-destroyed line to every agent in every existing golden for no
+    /// information. Standing canonical state, so both `Diagnostics.frame`
+    /// and `.frameOf` derive it. Only ever present when the world's
+    /// `Headquarters` is authored (the opt-in gate) — never appears for a
+    /// scenario that authors none.
+    | AgentRadioLost of agent: AgentId * at: Cell
+    /// An order in flight toward `agent`, not yet delivered (TASK-058,
+    /// backlog B-016b; `AgentState.PendingDelivery`): accepted at some
+    /// earlier tick, due to arrive (or be dropped) at `dueTick`. The
+    /// `AgentOrderQueue`/`UndeliveredOrder` sparse shape: emitted only for
+    /// an agent with a non-`None` `PendingDelivery`. Standing canonical
+    /// state, so both `Diagnostics.frame` and `.frameOf` derive it. Only
+    /// ever present when the world's `Headquarters` is authored (the
+    /// opt-in gate, `Communication.available`'s zero-delay path otherwise).
+    | AgentPendingDelivery of agent: AgentId * at: Cell * command: CommandId * dueTick: int64
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -372,6 +410,7 @@ module Diagnostics =
         | CommandRejected(_, UnknownTargetCommand(recipient, _)) ->
             { Kind = "command-rejected"; Cells = [||]; Agents = [| recipient |] }
         | OrderUndelivered(_, recipient, _) -> { Kind = "order-undelivered"; Cells = [||]; Agents = [| recipient |] }
+        | OrderDelivered(_, recipient) -> { Kind = "order-delivered"; Cells = [||]; Agents = [| recipient |] }
         | OrderQueued(_, recipient) -> { Kind = "order-queued"; Cells = [||]; Agents = [| recipient |] }
         | OrderCancelled(_, agent, wasActive) ->
             { Kind = (if wasActive then "order-cancelled-active" else "order-cancelled-queued")
@@ -400,6 +439,7 @@ module Diagnostics =
         | ContactExpired(contact, lastKnownCell) ->
             { Kind = "contact-expired"; Cells = [| lastKnownCell |]; Agents = [| contact |] }
         | AgentIncapacitated(agent, at) -> { Kind = "agent-incapacitated"; Cells = [| at |]; Agents = [| agent |] }
+        | AgentRadioDestroyed(agent, at) -> { Kind = "agent-radio-destroyed"; Cells = [| at |]; Agents = [| agent |] }
         | AgentDied(agent, at) -> { Kind = "agent-died"; Cells = [| at |]; Agents = [| agent |] }
         | LeadershipTransferred(_, current) ->
             { Kind = "leadership-transferred"
@@ -557,6 +597,25 @@ module Diagnostics =
                 | Ready(magazine, reserve) -> Some(AgentAmmo(a.Id, a.Position, magazine, reserve, false))
                 | Reloading(reserve, _) -> Some(AgentAmmo(a.Id, a.Position, 0, reserve, true)))
 
+    /// An `AgentRadioLost` overlay per agent with `RadioDestroyed = true`
+    /// (TASK-058, backlog B-016b), ascending by agent id — the
+    /// `AgentSuppression`/`AgentAmmo` sparse shape.
+    let private agentRadioDestroyedOverlays (world: WorldState) : Overlay[] =
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.choose (fun a -> if a.RadioDestroyed then Some(AgentRadioLost(a.Id, a.Position)) else None)
+
+    /// An `AgentPendingDelivery` overlay per agent with a non-`None`
+    /// `PendingDelivery` (TASK-058, backlog B-016b), ascending by agent id —
+    /// the `AgentOrderQueue` sparse shape.
+    let private agentPendingDeliveryOverlays (world: WorldState) : Overlay[] =
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.choose (fun a ->
+            match a.PendingDelivery with
+            | Some(order, _, dueTick) -> Some(AgentPendingDelivery(a.Id, a.Position, order.Command, dueTick))
+            | None -> None)
+
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
     /// (a bare `WorldState` carries no per-tick event history); use
@@ -581,7 +640,9 @@ module Diagnostics =
                orderQueueOverlays world
                agentVitalsOverlays world
                squadLeadershipOverlay world
-               agentAmmoOverlays world |]
+               agentAmmoOverlays world
+               agentRadioDestroyedOverlays world
+               agentPendingDeliveryOverlays world |]
             |> Array.concat
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
@@ -613,6 +674,7 @@ module Diagnostics =
             | CommandAccepted _
             | CommandRejected _
             | OrderUndelivered _
+            | OrderDelivered _
             | OrderQueued _
             | OrderCancelled _
             | OrderAppraised _
@@ -626,6 +688,7 @@ module Diagnostics =
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
+            | AgentRadioDestroyed _
             | AgentDied _
             | LeadershipTransferred _
             | SquadFailure
@@ -648,6 +711,7 @@ module Diagnostics =
             | CommandAccepted _
             | CommandRejected _
             | OrderUndelivered _
+            | OrderDelivered _
             | OrderQueued _
             | OrderCancelled _
             | OrderAppraised _
@@ -661,6 +725,7 @@ module Diagnostics =
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
+            | AgentRadioDestroyed _
             | AgentDied _
             | LeadershipTransferred _
             | SquadFailure
@@ -684,6 +749,7 @@ module Diagnostics =
             | OrderUndelivered(command, recipient, _) -> Some(recipient, command)
             | CommandAccepted _
             | CommandRejected _
+            | OrderDelivered _
             | OrderQueued _
             | OrderCancelled _
             | OrderAppraised _
@@ -698,6 +764,7 @@ module Diagnostics =
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
+            | AgentRadioDestroyed _
             | AgentDied _
             | LeadershipTransferred _
             | SquadFailure
@@ -722,6 +789,7 @@ module Diagnostics =
             | CommandAccepted _
             | CommandRejected _
             | OrderUndelivered _
+            | OrderDelivered _
             | OrderQueued _
             | OrderCancelled _
             | OrderAppraised _
@@ -735,6 +803,7 @@ module Diagnostics =
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
+            | AgentRadioDestroyed _
             | AgentDied _
             | LeadershipTransferred _
             | SquadFailure
@@ -781,5 +850,7 @@ module Diagnostics =
                       orderQueueOverlays result.State
                       agentVitalsOverlays result.State
                       squadLeadershipOverlay result.State
-                      agentAmmoOverlays result.State ]
+                      agentAmmoOverlays result.State
+                      agentRadioDestroyedOverlays result.State
+                      agentPendingDeliveryOverlays result.State ]
             Hash = result.StateHash }

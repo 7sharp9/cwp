@@ -107,6 +107,18 @@ type RiskTolerance =
     | Standard
     | Aggressive
 
+/// Whether a new `Order` command replaces an agent's active order (and
+/// clears anything already queued behind it) or joins the tail of
+/// `AgentState.OrderQueue` (TASK-044, backlog B-051). `Replace` is the
+/// default for every existing builder in `Commands.fs`, preserving every
+/// pre-TASK-044 caller's exact behaviour; `Append` is reached only through
+/// `Command.queued`. Moved here from `Commands.fs` by TASK-058 (backlog
+/// B-016b): `AgentState.PendingDelivery` carries one, and `Domain.fs`
+/// compiles before `Commands.fs`.
+type QueueMode =
+    | Replace
+    | Append
+
 /// An order that has been delivered to an agent and awaits (or already holds)
 /// an appraisal outcome (TASK-028, backlog B-017; `docs/04` section 11
 /// "current order", section 12.5). The Communication phase (12.2) writes this
@@ -326,6 +338,42 @@ type AgentState =
       /// `Canonical.FormatVersion` and adds it to the image, exactly as the
       /// amendment specifies for `Terrain`.
       CommunicationAvailable: bool
+      /// Whether this agent's radio has been permanently destroyed (TASK-058,
+      /// backlog B-016b): once `true`, `Communication.available` is `false`
+      /// for this agent for the rest of the run regardless of range or
+      /// jamming, even though the agent itself may remain `Alive` and keep
+      /// fighting — a distinct failure mode from `Vitals` (TASK-055's
+      /// "downed agent" gap is about the *target* of perception, not the
+      /// agent's own ability to *receive* orders). Set by the Combat phase:
+      /// a qualifying hit against an agent has a
+      /// `CommsConfig.RadioDestroyChanceOnHit` chance to flip this,
+      /// evaluated only when the world's `Headquarters` is authored (the
+      /// opt-in gate — every existing scenario without one draws no extra
+      /// random number and never sets this). No repair mechanic — sticky
+      /// once `true`, the `Vitals.Dead` one-way-door precedent.
+      ///
+      /// **Genuine canonical per-tick state** (the `Vitals`/`RadioDestroyed`
+      /// precedent): it changes from a gameplay event and cannot be
+      /// recomputed from any other field. Defaults to `false`.
+      RadioDestroyed: bool
+      /// An order accepted this tick but not yet delivered (TASK-058,
+      /// backlog B-016b): `Some(order, mode, dueTick)` while it is in
+      /// flight toward this agent, delivered (`AgentState.Order`/
+      /// `.OrderQueue` written, `OrderDelivered` emitted) once the tick
+      /// reaches `dueTick` and `Communication.available` still holds —
+      /// re-checked at delivery time, since the agent may have moved out of
+      /// range or into a jammer since the order was issued. Only ever
+      /// non-`None` when the world's `Headquarters` is authored (the
+      /// opt-in gate): without one, `Simulation.communication` still
+      /// delivers same-tick exactly as before TASK-058, so this field never
+      /// leaves `None` for any of the 16 pre-existing corpus entries. A new
+      /// pending command for this recipient (of either `QueueMode`)
+      /// supersedes an in-flight one outright, the `Order`-replace
+      /// precedent extended to "not yet arrived".
+      ///
+      /// **Genuine canonical per-tick state**: real per-tick memory no
+      /// other field reproduces. Defaults to `None`.
+      PendingDelivery: (ReceivedOrder * QueueMode * int64) option
       /// This agent's current suppression on the `0..1000` scale (TASK-032,
       /// backlog B-020; `docs/05` section 8 "immediate effect of hostile fire
       /// and impacts"). The Combat phase raises it on a qualifying shot
@@ -463,6 +511,20 @@ type AgentState =
       /// `Position`/`Progress`.
       MoveSpeed: int }
 
+/// A validated jammer (TASK-058, backlog B-016b; `Scenario.Jammers`): a
+/// recipient within `Radius` Chebyshev cells of `Position` cannot receive
+/// an order while the current tick lies in `[ActiveFromTick,
+/// ActiveUntilTick]` (both inclusive) -- the "dynamic" part of dynamic
+/// jamming, since a scenario can author it to turn on and off over a run,
+/// even though nothing can destroy a jammer yet this task. Defined here
+/// (not in `Scenario.fs`, which compiles later) so `WorldState.Jammers`
+/// below can reference it directly.
+type Jammer =
+    { Position: Cell
+      Radius: int
+      ActiveFromTick: int64
+      ActiveUntilTick: int64 }
+
 /// Minimal authoritative world state: an integer tick, the logical grid
 /// bounds, the authoritative terrain grid, the agents ordered by ascending
 /// id, and the deterministic random stream. Fields are added only when an
@@ -524,6 +586,22 @@ type WorldState =
       /// behaviour difference still surfaces in the hash within one tick
       /// through the resupplied agent's own `Ammo`.
       ResupplyAreas: Cell[]
+      /// The authored command-origin cell (TASK-058, backlog B-016b;
+      /// `Scenario.Headquarters`), or `None`. This is the opt-in gate for
+      /// the whole range/delay/jamming/radio-destroyed feature set
+      /// (`Communication.available`): when `None`, every agent's effective
+      /// comms availability reduces to exactly the static
+      /// `AgentState.CommunicationAvailable` check (TASK-027's own
+      /// behaviour, unchanged), delivery stays same-tick, and Combat draws
+      /// no radio-destroy roll. **Static authored data**, the
+      /// `ResupplyAreas`/`Terrain` precedent — **excluded** from
+      /// `Canonical.encode`.
+      Headquarters: Cell option
+      /// Authored jammers (TASK-058, backlog B-016b; `Scenario.Jammers`).
+      /// Empty for every scenario that authors no jamming. **Static
+      /// authored data**, the `ResupplyAreas`/`Terrain` precedent —
+      /// **excluded** from `Canonical.encode`.
+      Jammers: Jammer[]
       /// The authoritative deterministic random stream. It is threaded through
       /// every step and is part of the canonical state hash. No gameplay phase
       /// draws from it yet (TASK-003 wires the stream; gameplay draws arrive
@@ -592,7 +670,9 @@ module Agent =
     /// `false` / `0` always. `Vitals`/`RecentlyWounded` (TASK-045) follow it
     /// too: every agent always starts `Alive MaxHealth` / unwounded, no
     /// authored override. `Ammo` (TASK-047) follows it as well: every agent
-    /// always starts `Ready (MagazineSize, ReserveStart)`.
+    /// always starts `Ready (MagazineSize, ReserveStart)`. `RadioDestroyed`/
+    /// `PendingDelivery` (TASK-058) follow it too: every agent always starts
+    /// with an intact radio and nothing in flight, no authored override.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -606,6 +686,8 @@ module Agent =
           Disposition = None
           Discipline = DisciplineDefault
           CommunicationAvailable = true
+          RadioDestroyed = false
+          PendingDelivery = None
           Suppression = 0
           SuppressionBand = false
           Stress = 0

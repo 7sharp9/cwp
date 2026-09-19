@@ -2,6 +2,7 @@ module CommandoWar.Headless.Program
 
 open System
 open System.IO
+open System.Text
 open CommandoWar.Sim
 open CommandoWar.Headless
 
@@ -296,6 +297,152 @@ let private cmdCompare (args: string list) : int =
             | _ -> Exit.usage
     | _ ->
         eprintfn "usage: cwheadless compare <command-log-a> <command-log-b> [--ticks N]"
+        Exit.usage
+
+/// Parses a `Canonical.firstDifferingSection` label into the single agent it
+/// names, when it names one (`"Agent[N]"`) -- every other label (a
+/// top-level section name such as `"Random"` or `"TacticalKnowledge"`)
+/// names no agent, so this returns an empty array for it.
+let private agentFromSection (section: string) : AgentId[] =
+    if section.StartsWith("Agent[") && section.EndsWith("]") then
+        match Int32.TryParse(section.Substring(6, section.Length - 7)) with
+        | true, n -> [| AgentId.ofInt n |]
+        | _ -> [||]
+    else
+        [||]
+
+/// Renders the first tick at which two replayed command logs diverge
+/// (TASK-057, backlog B-050): the reference and candidate `DiagnosticFrame`
+/// at that tick, each carrying a `Divergence` overlay naming the first
+/// differing canonical section and (when the section identifies one) the
+/// diverging agent. On `Match`/`TruncatedRun` there is nothing to render --
+/// prints the same text `compare` would and exits without producing a
+/// frame.
+let private cmdRenderDivergence (args: string list) : int =
+    match args with
+    | pathA :: pathB :: rest ->
+        let mutable format = "ascii"
+        let mutable out: string option = None
+        let mutable ticksOpt: string list = []
+        let mutable optErr: string option = None
+
+        let rec parseOpts xs =
+            match xs with
+            | [] -> ()
+            | "--format" :: v :: t ->
+                match v with
+                | "ascii"
+                | "svg"
+                | "html" ->
+                    format <- v
+                    parseOpts t
+                | _ -> optErr <- Some $"invalid --format '{v}', expected ascii|svg|html"
+            | "--out" :: v :: t ->
+                out <- Some v
+                parseOpts t
+            | "--ticks" :: v :: t ->
+                ticksOpt <- [ "--ticks"; v ]
+                parseOpts t
+            | other :: _ -> optErr <- Some $"unexpected argument '{other}'"
+
+        parseOpts rest
+
+        match optErr with
+        | Some m ->
+            eprintfn "error: %s" m
+            Exit.usage
+        | None ->
+            match optTicks ticksOpt with
+            | Error msg ->
+                eprintfn "error: %s" msg
+                Exit.usage
+            | Ok ticks ->
+                match loadLog pathA, loadLog pathB with
+                | Some a, Some b ->
+                    match Divergence.diagnoseDetailed SimConfig.standard (Fixture.initialState ()) a b ticks with
+                    | Error e ->
+                        eprintfn "replay error: %s" (describeReplayError e)
+                        Exit.replayError
+                    | Ok(report, referenceRun, candidateRun) ->
+                        printfn "# render-divergence %s (reference) vs %s (candidate), %d tick(s)" pathA pathB ticks
+
+                        match report with
+                        | Match n ->
+                            printfn "MATCH: %d tick(s) compared, all authoritative hashes identical -- nothing to render" n
+                            Exit.ok
+                        | TruncatedRun(lastAgreed, expTicks, actTicks) ->
+                            printfn
+                                "TRUNCATED: agreed through tick %d, then lengths differ (reference %d, candidate %d) -- nothing to render"
+                                lastAgreed expTicks actTicks
+                            Exit.diverged
+                        | Diverged(p, _, _) ->
+                            let idx = referenceRun.TickHashes |> Array.findIndex (fun cp -> cp.Tick = p.Tick)
+                            let section = defaultArg p.Section "(unavailable)"
+                            let agents = agentFromSection section
+
+                            let attach (label: string) (base_: DiagnosticFrame) =
+                                { base_ with
+                                    Overlays = Array.append base_.Overlays [| Divergence(label + ": " + section, agents) |] }
+
+                            let referenceFrame = attach "reference" (Diagnostics.frame referenceRun.TickStates.[idx])
+                            let candidateFrame = attach "candidate" (Diagnostics.frame candidateRun.TickStates.[idx])
+
+                            printfn "  first differing section: %s" section
+                            printfn "  diverged at tick: %d" p.Tick
+
+                            match format with
+                            | "html" ->
+                                let text = DiagnosticRender.Html [| referenceFrame; candidateFrame |]
+
+                                match out with
+                                | Some path ->
+                                    File.WriteAllText(path, text)
+                                    printfn "wrote %s (%d bytes)" path (Text.Encoding.UTF8.GetByteCount text)
+                                | None -> printf "%s" text
+
+                                Exit.diverged
+                            | "svg" ->
+                                let refSvg = DiagnosticRender.Svg referenceFrame
+                                let candSvg = DiagnosticRender.Svg candidateFrame
+
+                                match out with
+                                | Some path ->
+                                    let dir = Path.GetDirectoryName path
+                                    let stem = Path.GetFileNameWithoutExtension path
+                                    let ext = Path.GetExtension path
+                                    let withSuffix suffix = Path.Combine(dir, stem + suffix + ext)
+                                    let refPath = withSuffix "-reference"
+                                    let candPath = withSuffix "-candidate"
+                                    File.WriteAllText(refPath, refSvg)
+                                    File.WriteAllText(candPath, candSvg)
+                                    printfn "wrote %s and %s" refPath candPath
+                                | None ->
+                                    printfn "<!-- reference, tick %d -->" p.Tick
+                                    printf "%s" refSvg
+                                    printfn "<!-- candidate, tick %d -->" p.Tick
+                                    printf "%s" candSvg
+
+                                Exit.diverged
+                            | _ ->
+                                let text =
+                                    StringBuilder()
+                                        .AppendLine(sprintf "==== reference, tick %d ====" p.Tick)
+                                        .Append(DiagnosticRender.Ascii referenceFrame)
+                                        .AppendLine()
+                                        .AppendLine(sprintf "==== candidate, tick %d ====" p.Tick)
+                                        .Append(DiagnosticRender.Ascii candidateFrame)
+                                        .ToString()
+
+                                match out with
+                                | Some path ->
+                                    File.WriteAllText(path, text)
+                                    printfn "wrote %s (%d bytes)" path (Text.Encoding.UTF8.GetByteCount text)
+                                | None -> printf "%s" text
+
+                                Exit.diverged
+                | _ -> Exit.usage
+    | _ ->
+        eprintfn "usage: cwheadless render-divergence <command-log-a> <command-log-b> [--ticks N] [--format ascii|svg|html] [--out PATH]"
         Exit.usage
 
 let private cmdFixture () : int =
@@ -630,6 +777,8 @@ let private usage () =
     printfn "  cwheadless replay <command-log> [--ticks N]      replay a legacy .cwlog against the fixture"
     printfn "  cwheadless replay-file <replay-command-file>     replay a production replay-command file (ReplaySerialisation)"
     printfn "  cwheadless compare <log-a> <log-b> [--ticks N]   report the first authoritative divergence"
+    printfn "  cwheadless render-divergence <log-a> <log-b> [--ticks N] [--format ascii|svg|html] [--out PATH]"
+    printfn "                                                    render the first authoritative divergence (B-050)"
     printfn "  cwheadless fixture                               emit the pinned shared fixture + per-tick hashes"
     printfn "  cwheadless render <target> [opts]                render diagnostic frames (target: fixture | demo | los | path | <command-log>)"
     printfn "        [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--path AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
@@ -658,6 +807,7 @@ let main argv =
     | "replay" :: rest -> cmdReplay rest
     | "replay-file" :: rest -> cmdReplayFile rest
     | "compare" :: rest -> cmdCompare rest
+    | "render-divergence" :: rest -> cmdRenderDivergence rest
     | [ "fixture" ] -> cmdFixture ()
     | "render" :: rest -> cmdRender rest
     | "corpus" :: rest -> cmdCorpus rest

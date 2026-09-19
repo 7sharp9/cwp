@@ -4,15 +4,27 @@ namespace CommandoWar.Sim
 /// recipient (TASK-027, backlog B-016; `docs/04_SIMULATION_SPEC.md` section
 /// 12.2 "communication failure must be explicit, not silently ignored").
 ///
-/// One case for this task's scope: the recipient's
-/// `AgentState.CommunicationAvailable` is `false` (an authored comms
-/// blackout). `UnableToCommunicate` matches the
+/// `UnableToCommunicate`: the recipient's `AgentState.CommunicationAvailable`
+/// is `false` (an authored comms blackout) — matches the
 /// `docs/05_COMMAND_AND_AGENT_AI.md` section 7 `DecisionReason` name so order
-/// appraisal (backlog B-017) can carry it through unchanged. Radio range
-/// (`OutOfRange`), dynamic jamming (`Jammed`), and a destroyed radio
-/// (`RadioDestroyed`) are backlog B-016b.
+/// appraisal (backlog B-017) can carry it through unchanged.
+///
+/// `OutOfRange`/`Jammed`/`RadioDestroyed` (TASK-058, backlog B-016b): the
+/// recipient is beyond `CommsConfig.Range` of the world's authored
+/// `Headquarters`, inside an active `Jammer`'s radius, or has
+/// `AgentState.RadioDestroyed = true`, respectively (`Communication.
+/// available`). All three are reachable only when the world authors a
+/// `Headquarters` at all (the opt-in gate) — a scenario without one never
+/// produces them, `UnableToCommunicate` stays its only reachable case. When
+/// more than one condition holds at once, `Simulation.communication` reports
+/// in this fixed priority order: `UnableToCommunicate`, then `OutOfRange`,
+/// then `Jammed`, then `RadioDestroyed` — deterministic and documented, not
+/// an unordered "whichever the implementation finds first".
 type DeliveryFailure =
     | UnableToCommunicate
+    | OutOfRange
+    | Jammed
+    | RadioDestroyed
 
 /// What happened during a tick. Events state facts, not renderer actions
 /// (docs/03_ARCHITECTURE.md section 12). Audio and visual effects are client
@@ -33,6 +45,17 @@ type EventBody =
     /// destination) already records it; an `OrderDelivered` success event
     /// arrives with delayed delivery (B-016b).
     | OrderUndelivered of command: CommandId * recipient: AgentId * reason: DeliveryFailure
+    /// An order that was delayed in flight (TASK-058, backlog B-016b --
+    /// only reachable when the world authors a `Headquarters`, the opt-in
+    /// gate) reached `recipient` this tick, `CommsConfig.DeliveryDelayTicks`
+    /// ticks after it was accepted: `AgentState.Order`/`.OrderQueue` are
+    /// written exactly as a zero-delay delivery's would be, and
+    /// `AgentState.PendingDelivery` is cleared. Unlike a zero-delay
+    /// delivery (which emits nothing beyond `CommandAccepted`), this DOES
+    /// get its own event: the delivering tick is no longer the same tick as
+    /// acceptance, so nothing else in the trace would otherwise show it
+    /// happened at all.
+    | OrderDelivered of command: CommandId * recipient: AgentId
     | MovementStepped of agent: AgentId * from: Cell * into: Cell
     | MovementCompleted of agent: AgentId * at: Cell
     /// The agent holds a destination but no traversable path connects its
@@ -140,6 +163,13 @@ type EventBody =
     /// Emitted by the Combat phase, once, the tick this transition happens
     /// (not every tick the agent stays down).
     | AgentIncapacitated of agent: AgentId * at: Cell
+    /// `agent`, at `at`, had its radio permanently destroyed by a qualifying
+    /// hit this tick (TASK-058, backlog B-016b -- only reachable when the
+    /// world authors a `Headquarters`, the opt-in gate). Emitted by the
+    /// Combat phase, once, the tick `AgentState.RadioDestroyed` flips to
+    /// `true` -- distinct from `AgentIncapacitated`/`AgentDied`: the agent
+    /// may still be `Alive` and fighting, just uncommandable.
+    | AgentRadioDestroyed of agent: AgentId * at: Cell
     /// `agent`, at `at`, finished bleeding out this tick (TASK-045, backlog
     /// B-031) — `Incapacitated`'s countdown reached zero with no rescue.
     /// Emitted by the State-consequences phase, once, the tick `Dead` is
@@ -186,7 +216,11 @@ type EventBody =
 ///      `CommandRejected`, from the Command-intake phase);
 ///   2. order-delivery and queue outcomes, ascending `(recipient, command)`
 ///      id (`OrderUndelivered` — TASK-027; `OrderQueued` / `OrderCancelled`
-///      — TASK-044, backlog B-051; all from the Communication phase);
+///      — TASK-044, backlog B-051; all from the Communication phase). A
+///      delayed order's eventual `OrderDelivered` or (re-checked-at-delivery)
+///      `OrderUndelivered` (TASK-058, backlog B-016b) is emitted in this
+///      same phase, in a second pass after every this-tick command's own
+///      outcome, ascending recipient id;
 ///   3. this tick's perception events — every `ContactObserved` ascending
 ///      `(observer, contact)`, then every `ContactExpired` ascending contact
 ///      id (from the Perception / Tactical-knowledge phases);
@@ -200,9 +234,12 @@ type EventBody =
 ///      runs after Appraisal, before movement);
 ///   6. movement outcomes, ascending agent id;
 ///   7. combat outcomes, ascending shooter agent id (`ShotFired` then, for a
-///      qualifying hit that reaches zero health, `AgentIncapacitated` for
-///      the same shot — TASK-031/TASK-045; from the Combat phase, runs
-///      after movement, resolving against post-movement positions);
+///      qualifying hit, in order: `AgentIncapacitated` if it reaches zero
+///      health (TASK-031/TASK-045), then `AgentRadioDestroyed` if the same
+///      hit's independent radio-destroy roll also succeeds (TASK-058,
+///      backlog B-016b, only rolled when the world authors a
+///      `Headquarters`) — from the Combat phase, runs after movement,
+///      resolving against post-movement positions);
 ///   8. state-consequences outcomes (TASK-045, backlog B-031; TASK-047,
 ///      backlog B-030 proper; from the State-consequences phase, runs after
 ///      Combat): for each agent in ascending id order, at most one of

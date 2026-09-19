@@ -6,9 +6,11 @@ namespace CwClientCore
 /// type, an F# option/DU/list/tuple. `Kind`: `0` = a terrain cell (the host
 /// draws a Kenney tile texture keyed on `TextureId`), `1` = an agent or an
 /// overlay marker (a full-opacity item, `A >= 0.99`, is a real agent and
-/// draws the Kenney human texture; a translucent item is a halo/route-preview
-/// marker and still draws a plain circle of `Radius` -- TASK-041, backlog
-/// B-034), `2` = a line segment from `(Cx,Cy)` to `(Cx2,Cy2)` with `Radius`
+/// draws one of 8 pre-rendered facing textures keyed on `TextureId`
+/// (`RenderShared.facingBin`, TASK-054, backlog B-052); a translucent item
+/// is a halo/route-preview marker, ignores `TextureId`/`Cx2`, and still
+/// draws a plain circle of `Radius` -- TASK-041, backlog B-034), `2` = a
+/// line segment from `(Cx,Cy)` to `(Cx2,Cy2)` with `Radius`
 /// as line width (TASK-043, backlog B-029: line-of-sight rays, fire lines),
 /// `3` = a text label drawn at `(Cx,Cy)` with `Radius` as font size
 /// (TASK-043: grid coordinates), `4` = a one-shot effect sprite centred at
@@ -22,11 +24,17 @@ namespace CwClientCore
 /// `Kind = 0` (`0` = passable open ground, elevation-tinted via `R`/`G`/`B`,
 /// `1` = impassable, `2` = passable-but-opaque cover -- shape, not colour
 /// alone, carries this distinction, docs/06 "status indicators that do not
-/// rely on colour alone") and for `Kind = 4` (`0` = muzzle flash, `1` =
+/// rely on colour alone"), for a full-opacity `Kind = 1` (`0..7`, a facing
+/// bin -- meaningless for a translucent `Kind = 1` marker), and for
+/// `Kind = 4` (`0` = muzzle flash, `1` =
 /// bullet impact/hit, `2` = a miss puff -- again a distinct shape per
 /// outcome, not a colour-only hit/miss tint). `Cx2`/`Cy2` are meaningful
-/// only for `Kind = 2`; `Text` only for `Kind = 3` (empty string
-/// otherwise). The array is
+/// for `Kind = 2` (the line's second endpoint) and, for a full-opacity
+/// `Kind = 1` item only, `Cx2` doubles as a run-cycle frame index
+/// (TASK-056, backlog B-052: `RenderShared.runFrameIndex`) -- `< 0` (a `-1`
+/// sentinel) means frozen on the idle pose, `0..9` selects that `Human_N`
+/// direction's own `Run0..9` frame; `Text` only for `Kind = 3` (empty
+/// string otherwise). The array is
 /// pre-sorted back-to-front by the F# side (screen depth `(Cx + Cy)`,
 /// terrain before an agent occupying the same cell); the C# host only
 /// projects each item's cell coordinates to screen space and issues one

@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-18 (TASK-053 accepted by Dave, realises B-061)
+  updated: 2026-09-19 (TASK-057 and TASK-058 accepted by Dave, realising B-050 and B-016b)
 
 active_work:
   selected_task: none
@@ -13,9 +13,320 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-18
+  updated: 2026-09-19
   note: >-
-    2026-09-18: TASK-053 accepted by Dave (realises B-061). No changes
+    2026-09-19: TASK-057 and TASK-058 both accepted by Dave on the
+    self-verification evidence (neither has client UI: TASK-057 is a
+    headless CLI tool, TASK-058 is Sim-side only) -- no changes requested
+    on either. These were the two tasks Dave asked for this session (B-050
+    then B-016b, in that order); both are now `done`.
+    `active_work.selected_task -> none`; next task not yet chosen.
+    (tasks/TASK-057-DIVERGENCE-VISUALISATION-RENDERER.md,
+    tasks/TASK-058-COMMUNICATION-RANGE-DELAY-JAMMING-AND-RADIO-DESTROYED.md;
+    docs/ledger/2026-09-19-TASK-057-divergence-visualisation-renderer.md,
+    docs/ledger/2026-09-19-TASK-058-communication-range-delay-jamming-and-radio-destroyed.md)
+
+    Prior: 2026-09-19: TASK-058 (realises B-016b: communication range, delivery
+    delay, dynamic jamming, and radio-destroyed) implemented and
+    self-verified -- status review, awaiting Dave's acceptance. Six
+    `AskUserQuestion` rounds confirmed the design: full bundle (not a
+    narrower slice); range from a new authored HQ entity; a flat delivery
+    delay; a new authored Jammer entity; radio-destroyed as a new
+    independent per-agent field set by a combat-hit chance; the whole
+    feature set gated behind a scenario authoring an HQ (confirmed after
+    investigating the unconditional alternative's cost) so every existing
+    corpus entry stays behaviour-neutral (only a Canonical.FormatVersion
+    11 -> 12 byte-layout re-pin, no RNG-stream or event-count change).
+    New leaf Communication.fs; new AgentState.RadioDestroyed/
+    .PendingDelivery (genuinely canonical); new Scenario.Headquarters/
+    .Jammers (ScenarioContent.Version 4 -> 5, opt-in). Simulation.
+    communication rewritten with a second delayed-delivery pass;
+    Simulation.combat gained the radio-destroy roll. Two real bugs found
+    and fixed during implementation: commandIntake.holdsCommand didn't
+    check PendingDelivery (a Cancel on an in-flight order was silently
+    unreachable); the first applyDelivered refactor dropped the
+    pre-existing OrderQueued event for a still-zero-delay Append. New
+    sparse Overlay.AgentRadioLost/.AgentPendingDelivery satisfy the
+    diagnostics-extension rule. No new corpus entry (deliberate deviation,
+    documented in the ledger) -- full coverage via 10 new SimulationTests
+    facts and 8 new ScenarioTests facts instead. `dotnet build` all three
+    `.slnx` 0/0; `dotnet test` 362/362 (+18); `cwheadless corpus` 16/16
+    (unaffected). This was the second of two tasks Dave asked for in this
+    session (B-050 then B-016b); both are now done/review, awaiting his
+    acceptance.
+    (tasks/TASK-058-COMMUNICATION-RANGE-DELAY-JAMMING-AND-RADIO-DESTROYED.md;
+    docs/ledger/2026-09-19-TASK-058-communication-range-delay-jamming-and-radio-destroyed.md)
+
+    Prior: 2026-09-19: TASK-057 (divergence-visualisation renderer, realises B-050)
+    implemented and self-verified -- status review, awaiting Dave's
+    acceptance. New `cwheadless render-divergence <log-a> <log-b>` verb
+    (ascii/svg/html) plus a new caller-supplied `Overlay.Divergence` case;
+    no `CommandoWar.Sim` behaviour change, no canonical/hash change. `dotnet
+    build` all three `.slnx` 0/0; `dotnet test` 344/344 (+1); `cwheadless
+    corpus` 16/16 (unaffected); a manual CLI smoke test on two hand-built
+    `.cwlog` files confirmed both the `Match` (nothing-to-render) and
+    `Diverged` (rendered, correct exit code) paths in every format. B-016b
+    (communication range/delay/jamming) is next, per Dave's own instruction
+    to do both in this session -- not yet started.
+    (tasks/TASK-057-DIVERGENCE-VISUALISATION-RENDERER.md;
+    docs/ledger/2026-09-19-TASK-057-divergence-visualisation-renderer.md)
+
+    Prior: 2026-09-19: TASK-054 and TASK-055 both accepted by Dave, confirmed live
+    in the running game (no changes requested on either). TASK-054/B-056
+    (audio-localised threat indicator): unchanged since its first
+    implementation, never touched by any of TASK-056's three facing/
+    animation correction rounds. TASK-055/B-062 (perception stops observing
+    a downed agent): the fix that had been blocking further live testing of
+    B-056 earlier in the session. All three same-session client-polish
+    tasks (TASK-054, TASK-055, TASK-056) are now `done`.
+    `active_work.selected_task -> none`; next task not yet chosen.
+    (tasks/TASK-054-AGENT-FACING-AND-AUDIO-THREAT-INDICATOR.md,
+    tasks/TASK-055-PERCEPTION-STOPS-OBSERVING-DOWNED-AGENTS.md;
+    docs/ledger/2026-09-19-TASK-054-agent-facing-and-audio-threat-indicator.md,
+    docs/ledger/2026-09-19-TASK-055-perception-stops-observing-downed-agents.md)
+
+    Prior: 2026-09-19: TASK-056 accepted by Dave ("ok that looks vetter") after
+    live-testing review round 2's selection-halo and stall-freeze fix.
+    B-052 now `done` across all three correction rounds this session
+    (TASK-054's original facing rewrite; TASK-056's facing/run-animation
+    redo; TASK-056 review round 1's smoothing fix; TASK-056 review round
+    2's halo-tracking and run-animation-freeze fix). No further changes
+    requested. `active_work.selected_task -> none`; next task not yet
+    chosen. Two other tasks from earlier this session remain in `review`,
+    not yet live-tested by Dave: TASK-054's other half B-056 (audio-
+    localised threat indicator) and TASK-055/B-062 (perception stops
+    observing downed agents).
+    (tasks/TASK-056-AGENT-FACING-CORRECTION-AND-RUN-ANIMATION.md;
+    docs/ledger/2026-09-19-TASK-056-agent-facing-correction-and-run-animation.md)
+
+    Prior: 2026-09-19 (review round 2): Dave tried again and reported "i just tried
+    again and it seemed the same, did you not fix this?", plus two new,
+    specific observations round 1's own probe never checked: the selection
+    halo "jumps between cells", and the run animation "runs continously if
+    the agents get stuck on the same cell". Ruled out a stale build first
+    (rebuilt both `.slnx` clean from the round-1 source). Root cause: round
+    1's fix only ever updated the real figure's own render position --
+    `haloItems` (the selection halo) still read the raw, discrete `Position`
+    directly, so it kept snapping a whole cell at a time on every edge
+    completion even though the figure under it had already smoothed out;
+    since the halo is the single largest, most attention-grabbing element
+    while watching a selected agent move, this alone made the whole fix
+    read as unchanged. Separately, `isMoving` was still just "has an unmet
+    `Destination`", true forever for an agent stalled by a
+    route-reservation contest (`Simulation.navigationAndMovement` freezes
+    such an agent's `Progress`, never increments it, while `Destination`
+    stays set) -- so the run-cycle animation played forever on a figure
+    that was not actually advancing, and the render-time `alpha` ramp kept
+    getting credited to an edge that would never complete, producing a
+    small creep-then-snap-back sawtooth on top of that. Fixed with one new
+    `stalled` map (recomputed fresh each tick from a `Progress`-unchanged
+    comparison) and one new shared `renderPos` helper that the real figure
+    and the selection halo both now call, so they cannot disagree; while
+    `stalled`, the render position freezes exactly and the run cycle stops.
+    Verified live through the real Godot 4.7.2 editor with a temporary,
+    fully-removed `--stall-probe` hook and a purpose-built scenario (an
+    agent redirected into a second, stationary agent's own occupied cell,
+    forcing a genuine stall): a pixel-diff across 16 consecutive captures
+    spanning 2.4 real seconds of the stalled state shows zero changed
+    pixels, proving the figure, halo, and run-cycle frame are all fully
+    static (`docs/evidence/task-056-round2-halo-and-stall-freeze.png`).
+    One unexplained, single-frame, transient colour glitch was
+    investigated (ruled out combat/vitals; the colour fields involved are
+    untouched by this round's diff) but not resolved -- flagged for
+    awareness, does not recur, does not affect either reported defect.
+    `dotnet test` 343/343 unaffected; all three scenes' `--selfcheck`
+    hashes unaffected. B-052 stays `review`, not `done` -- all three
+    rounds' fixes await Dave's live acceptance.
+    (tasks/TASK-056-AGENT-FACING-CORRECTION-AND-RUN-ANIMATION.md;
+    docs/ledger/2026-09-19-TASK-056-agent-facing-correction-and-run-animation.md)
+
+    Prior: 2026-09-19 (review round 1): Dave live-tested TASK-056's facing/
+    animation fixes and reported "its better but i dont think it always
+    stay the correct facing. also theres some sort of jerkyness to the
+    movement, it also also moving really fast too." Both traced to one
+    shared root cause: `AgentSnapshot.Position` only changes once a whole
+    grid edge completes (`Progress` accumulates across several mid-edge
+    ticks first, TASK-018), but rendering lerped screen position between
+    the previous and current tick's discrete `Position` alone -- identical
+    on every mid-edge tick, so the figure sat frozen then snapped across a
+    whole cell inside one tick's 50ms window (jerky, and reading as fast
+    since the whole displacement compresses into that short burst); the
+    same crow-flies-to-final-`Destination` assumption (not the immediate
+    next path step) also explained facing going wrong on a bent or
+    redirected route. Fixed by computing each moving agent's true next
+    path cell once per tick (`Pathfinding.find`, the `committedItems`
+    route-preview precedent) and using it both as `facingBin`'s target and
+    the render lerp target, with the lerp fraction driven by the
+    already-canonical `AgentSnapshot.Progress` normalised against a learned
+    per-agent tick-count estimate (self-correcting, no `CommandoWar.Sim`
+    change -- `MoveSpeed` deliberately stays unexposed to the client).
+    Verified live via a temporary burst-screenshot probe (removed after
+    use): confirmed continuous fractional-cell position progression (no
+    flat-then-jump pattern) and a real mid-route direction change showing
+    facing genuinely switch to match. `dotnet test` 343/343 unaffected;
+    all three scenes' `--selfcheck` unaffected. Flagged, not changed: the
+    underlying grid movement pace itself (`DemoScenario`'s Trooper
+    half-speed, TASK-049) may still feel too fast once the jerkiness is
+    gone -- that's content authoring outside this task's presentation-only
+    scope, Dave's own call after trying the smoothed version live. Still
+    `review`, not `done`.
+    (tasks/TASK-056-AGENT-FACING-CORRECTION-AND-RUN-ANIMATION.md;
+    docs/ledger/2026-09-19-TASK-056-agent-facing-correction-and-run-animation.md)
+
+    Prior: 2026-09-19: TASK-056 (corrects backlog B-052 a second time: agent facing
+    rotation still ~30 degrees off, plus no run-cycle animation while
+    moving) implemented and self-verified -- status review, awaiting Dave's
+    live acceptance. Diagnosed directly from Dave live-testing TASK-054's
+    already-once-corrected facing feature. Facing: re-examined the Kenney
+    pack's own `Information.png` directly (its diamond legend labels the
+    tile's four EDGES N/E/S/W, not vertices) and found `RenderShared.
+    facingBin` had the world-direction-to-pose mapping backwards --
+    assigning the four Kenney cardinal poses to the four world-DIAGONAL
+    moves instead of the four world pure-axis moves the geometry actually
+    requires; every one of the 8 primary directions landed exactly one
+    45-degree bin past its correct target under the old uniform-sector
+    rounding. Rewrote `facingBin` as a nearest-reference-vector match
+    (cosine similarity against the 8 primary directions' own
+    screen-projected vectors) instead of an angle-sector round -- correct
+    by construction for the 8 primary directions and, unlike a
+    fixed-offset patch, also correct for an arbitrary heading (`Destination`
+    is the agent's overall target, not its next path step). Animation:
+    added all 80 `Human_0..7_Run0..9` frames, all 88 idle+run textures
+    re-cropped to one shared global bbox so switching between them never
+    pops the figure's on-screen size; a wall-clock `runClock` (gated to real
+    ticks advancing) drives a new `DrawItem.Cx2` run-frame index.
+
+    Verified live through the real Godot 4.7.2 editor this round, not just
+    re-derived on paper (the explicit instruction this task was scoped
+    under, after two prior correction rounds were each caught only by Dave
+    live-testing a version checked solely against pure-function probes and
+    static composited images): a temporary command-line screenshot probe
+    (fully removed before finishing) captured all 8 primary directions and
+    compared them directly against `Information.png`'s own reference image
+    (confirmed consistent -- the N/W/NW cluster reads as a back view in
+    both, matching the legend's two "upper" tile edges; E/S/SE reads as a
+    front view in both); a second probe variant captured two genuinely
+    different mid-transit running poses and an identical frozen idle pose
+    across three separate post-arrival ticks. `dotnet build` both `.slnx`
+    (main Release; Godot client Debug) `0/0`; `dotnet test` `343/343`
+    (unaffected); all three scenes' `--selfcheck` hashes confirmed `MATCH`
+    through the real Godot editor. B-052 stays `review`, not `done` --
+    both fixes still need Dave's own live confirmation.
+    (tasks/TASK-056-AGENT-FACING-CORRECTION-AND-RUN-ANIMATION.md;
+    docs/ledger/2026-09-19-TASK-056-agent-facing-correction-and-run-animation.md)
+
+    Prior: 2026-09-19: TASK-055 (Perception stops observing a downed
+    Incapacitated/Dead agent, new backlog B-062) implemented and
+    self-verified -- status review, awaiting Dave's acceptance. Diagnosed
+    directly from Dave live-testing TASK-054's audio-cue feature: "after
+    the enemy agent is incapacitated or killed the other agent refuses
+    order due to threat when there is none." Traced to a gap already
+    surfaced and left unfixed in TASK-050's ledger --
+    `Perception.visibleContactsFor` never checked `Vitals`, and a corpse is
+    never removed from `WorldState.Agents` (TASK-045), so it stayed "seen"
+    at full confidence forever, keeping `Appraisal`'s route-exposure model
+    treating it as a live threat indefinitely. `AskUserQuestion` confirmed
+    the fix location (`Perception` stops observing a non-`Alive` agent,
+    reusing the existing `StaleAfter`/`ExpireAfter` decay path, over
+    `Appraisal` reading true current `Vitals` directly) and the timing (fix
+    now, since it was blocking further live testing). One added condition
+    (`&& Casualty.isAlive other.Vitals`); symmetric, so a downed friendly
+    also stops being a target for the Hostile side's own picture for free.
+    No `Canonical.FormatVersion` bump, no new field/event. New
+    `SimulationTests` fact proves it directly. 5 of 16 corpus entries
+    legitimately re-pinned; two `DiagnosticsTests` golden pairs
+    regenerated via a temporary `dotnet fsi` script, every diff inspected
+    line by line and explained (a `seen tick`/stress value freezing, or a
+    contact finally expiring past `ExpireAfter` once every hostile in the
+    scenario is `Dead`, correctly emitting `ContactExpired`); `demo.html`
+    confirmed byte-identical. `dotnet build` `0/0`; `dotnet test` `343/343`
+    (+1); `cwheadless corpus` 16/16 after `--regenerate`; both Godot
+    scenes' `--selfcheck` hashes confirmed `MATCH` through the real Godot
+    4.7.2 editor, unaffected.
+    (tasks/TASK-055-PERCEPTION-STOPS-OBSERVING-DOWNED-AGENTS.md;
+    docs/ledger/2026-09-19-TASK-055-perception-stops-observing-downed-agents.md)
+
+    Prior: 2026-09-19: TASK-054 (agent sprite facing/orientation and
+    audio-localised threat indicator, backlog B-052 and B-056, bundled),
+    corrected through one live review round with Dave -- status review,
+    still awaiting Dave's final acceptance, in parallel with TASK-055
+    above (which was diagnosed and fixed while reviewing this task).
+    Review round 1: Dave tried the facing live ("doesn't seem any better
+    either") -- a real math bug (`facingBin` binned the raw world-grid
+    angle instead of the actual screen-projected one); fixing that still
+    wasn't enough ("looks like part of a running animation, not different
+    angles of ONE frame") -- correct, since the `Run0..Run9` frames used
+    are a genuine running animation, not a rotation set. Dave pointed
+    directly at his own local copy of the pack's `Information.png`, which
+    documents that `Human_0..7` are actually 8 rotations of one *idle*
+    pose (`0=N,1=NE,2=E,3=SE,4=S,5=SW,6=W,7=NW`) -- neither this session's
+    nor TASK-041's kenney.nl inspection had caught this. Corrected: all
+    ten `agent_human_facing*.png` replaced with the eight true `Idle0`
+    rotations; `facingBin` reduced to 8 bins/45° aligned directly to the
+    pack's own convention. Re-verified: `dotnet build`/`dotnet test`
+    `342/342`/both scenes' `--selfcheck` all unaffected/green throughout.
+    (tasks/TASK-054-AGENT-FACING-AND-AUDIO-THREAT-INDICATOR.md;
+    docs/ledger/2026-09-19-TASK-054-agent-facing-and-audio-threat-indicator.md)
+
+    Prior: 2026-09-19: TASK-054 (agent sprite facing/orientation and
+    audio-localised threat indicator, backlog B-052 and B-056, bundled)
+    implemented and self-verified -- status review, awaiting Dave's
+    acceptance. Chosen via `AskUserQuestion` over B-016b (communication
+    range/delay/jamming, a chunkier sim-only feature needing real design
+    work before drafting). Both backlog rows carried Dave's own "do not
+    guess past this" design forks, resolved via five `AskUserQuestion`
+    rounds: B-052 movement-direction-only facing (no threat-facing); B-052
+    art -- a live re-check of kenney.nl (downloaded and unzipped both
+    "Isometric Miniature Prototype" and "Isometric Miniature Dungeon")
+    confirmed the whole "Isometric Miniature" family shares one rig (a
+    single non-rotating `Idle0`, only the `Run0..Run9` cycle rotates); Dave
+    flagged the first "freeze on a Run frame" compromise as unsatisfying
+    and asked for a further asset search, which found free CC0
+    8-directional-idle packs exist but are all pixel art (a style clash
+    against the existing rendered terrain/prop art) -- Dave then confirmed
+    staying in-style with the original compromise. B-056: trigger is
+    `FireLine` from a `Hostile` shooter with no `KnownContact` at all for
+    the friendly side; visual is a screen-edge-ish `Kind = 2`/`3`
+    line-and-label cue, no new `DrawItem.Kind`.
+
+    New `agent_human_facing0..9.png` (Kenney's `Run0..9` cropped to the
+    union of all 10 frames' own alpha bboxes; `agent_human.png`/`Idle0`
+    retired), a new pure `RenderShared.facingBin`, applied identically in
+    both `DemoRenderScene` and `CommandDemoScene` through the one shared
+    `FSharpSceneHost` draw path. A real correction found during
+    implementation: B-056's known-contact check must read the friendly
+    squad's knowledge from *before* the tick's own `Simulation.step`, not
+    the post-tick `devFrame` -- Perception runs ahead of Combat in phase
+    order, and `CombatConfig.WeaponRange` (7) sits inside
+    `PerceptionConfig.SightRange` (10), so the post-tick set would already
+    show a newly-contacted shooter as known on precisely the "just came
+    into view and fired" tick the feature exists to cover. No
+    `CommandoWar.Sim`/`CommandoWar.Headless` change either feature.
+
+    Verified with `dotnet fsi` scratch probes (removed after use):
+    `facingBin` checked as a pure function across all 8 primary directions
+    plus the freeze cases; a live scripted `MoveTo(3,0)` confirmed the
+    emitted facing texture tracks the real path; a probe driving a
+    friendly into a hostile's weapon range confirmed real combat
+    (`state.Random.Draws` increasing) produced exactly one audio cue,
+    first appearing the same tick as the first shot, unchanged in count
+    through three further ticks of continued fire once the hostile became
+    known, and absent before contact.
+
+    `dotnet build` both `.slnx` (main Release; Godot client Debug) `0/0`;
+    `dotnet test` `342/342` (unaffected); `-- corpus` `16/16` (unaffected).
+    All three scenes' `--selfcheck` hashes confirmed `MATCH` through the
+    real Godot 4.7.2 editor, unchanged from TASK-053's pins
+    (`SnapshotDemo.tscn` `0xF422ACB8D5A86FF0`, `CommandDemo.tscn`
+    `0x00D3D471EF7354BC`, `AppraisalDemo.tscn` `0x194805888CBE240D`) --
+    expected, a presentation-only change. Committed screenshot
+    `docs/evidence/task-054-agent-facing.png` (the standard scripted
+    priming, showing both friendlies now rendering a running-cycle facing
+    frame in place of the old single idle pose).
+    (tasks/TASK-054-AGENT-FACING-AND-AUDIO-THREAT-INDICATOR.md;
+    docs/ledger/2026-09-19-TASK-054-agent-facing-and-audio-threat-indicator.md)
+
+    Prior: 2026-09-18: TASK-053 accepted by Dave (realises B-061). No changes
     requested. `active_work.selected_task -> none`; next task not yet
     chosen.
 

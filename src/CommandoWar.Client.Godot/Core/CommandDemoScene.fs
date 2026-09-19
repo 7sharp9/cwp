@@ -88,6 +88,99 @@ type CommandDemoScene() =
     let fireEffectHoldSeconds = 0.4
     let heldFireLines = ResizeArray<Cell * Cell * bool * float>() // from, at, hit, remaining
 
+    // Agent-facing bins (TASK-054, backlog B-052), one authoritative tick at
+    // a time (the `heldFireLines`/`devFrame` precedent: computed once per
+    // `stepOnce`, not per render frame).
+    let mutable facing: Map<int, int> = Map.empty
+
+    // TASK-056 review round 1 (backlog B-052): Dave live-tested the
+    // corrected facing and run animation and found the facing still wrong
+    // some of the time, and movement jerky and too fast. Root cause of both:
+    // `AgentSnapshot.Position` only changes once an entire grid edge
+    // completes (`Simulation.navigationAndMovement`'s `Progress`
+    // accumulates for several ticks first, TASK-018) -- but this scene used
+    // to lerp screen position between the *previous tick's* and *current
+    // tick's* discrete `Position` alone, which are equal on every mid-edge
+    // tick. The figure therefore sat visually frozen for most of an edge,
+    // then snapped across the whole cell inside a single tick's real-time
+    // window (50ms at 20Hz) -- reading as jerky, and (since the whole visual
+    // displacement is compressed into that one short window) as
+    // unnaturally fast. It also explains "doesn't always stay the correct
+    // facing": `facingBin` was fed the raw crow-flies bearing to the
+    // agent's overall final `Destination`, not its immediate next path
+    // step -- correct on a straight leg (next step and final bearing
+    // coincide) but visibly wrong the moment a route bends around terrain
+    // (`Pathfinding.find`'s route, not a straight line, is what the agent
+    // actually walks).
+    //
+    // Fixed by computing, once per tick alongside `facing`, each moving
+    // agent's actual next path cell (`Pathfinding.find` from `Position`
+    // toward `Destination`, the `committedItems` route-preview precedent,
+    // just cached per tick instead of recomputed every render frame) --
+    // fed into `facingBin` in place of the raw `Destination`, and used as
+    // the *target* of the render-time lerp in place of `Position` itself.
+    // The lerp *fraction* comes from `AgentSnapshot.Progress` (already
+    // canonical and exact, not re-derived) normalised against
+    // `edgeTickEstimate`: the exact tick-count an edge takes depends on
+    // `Terrain.moveCost` and the agent's own (non-canonical, not exposed to
+    // the client) `MoveSpeed`, neither fully available client-side, so the
+    // threshold is *learned* from the most recently completed edge instead
+    // of replicated exactly -- self-corrects every edge regardless of a
+    // wrong guess, since `Position` itself always snaps to the true cell
+    // the instant an edge genuinely completes.
+    let mutable nextStepCell: Map<int, Cell> = Map.empty
+    let mutable prevProgress: Map<int, int> = Map.empty
+
+    // Default guess before any edge has completed (the Trooper half-speed
+    // ratio DemoScenario's own `UnitTypes` table authors, TASK-049 --
+    // this file already couples to `DemoScenario` throughout, so assuming
+    // its own unit type here is consistent, not a new dependency). Only
+    // ever used for the very first tick of an agent's very first move this
+    // session; every edge after that uses its own learned estimate.
+    let defaultEdgeTickEstimate = 2
+    let mutable edgeTickEstimate: Map<int, int> = Map.empty
+
+    // TASK-056 review round 2 (backlog B-052): Dave live-tested again and
+    // reported "seemed the same", plus two new specifics -- the selection
+    // halo (`haloItems` below) jumps between cells, and the run animation
+    // keeps playing when an agent is stuck on the same cell. Both trace to
+    // the same gap: round 1's fix computed a smooth `edgeFrac` and a
+    // genuine `nextStepCell` target, but never accounted for an agent whose
+    // route is stalled by a reservation contest -- `Simulation.
+    // navigationAndMovement` freezes such an agent's `Progress` at
+    // `startProgress` (does not increment it) while `Destination` stays
+    // set. Recomputed fresh every tick in `stepOnce`: `true` when the agent
+    // still has an unmet `Destination` but its `Progress` did not change
+    // this tick (compared against the value it held entering the tick, the
+    // same `priorProgress` snapshot `edgeTickEstimate` above already
+    // reads). Used by `renderPos` (below) to stop crediting `alpha`'s
+    // per-render-frame ramp to an edge that is not actually advancing (the
+    // old code produced a forward-creep-then-snap-back sawtooth on a
+    // stalled agent even though `Position` never moved), and by
+    // `renderVitals`'s `isMoving` to stop the run cycle the instant an
+    // agent stops making real progress, not just when it lacks a
+    // `Destination`.
+    let mutable stalled: Map<int, bool> = Map.empty
+
+    // Run-cycle animation clock (TASK-056, backlog B-052): real elapsed
+    // time, advanced only while `not paused` (the same gate tick catch-up
+    // itself uses, in `Update` below) so a moving agent's run cycle never
+    // animates while the sim is tactically frozen -- unlike
+    // `heldFireLines`/`heldAudioCues`, which deliberately decay even while
+    // paused, this must track genuine simulation progress, not wall clock
+    // alone. `RenderShared.runFrameIndex` turns it into a `0..9` frame.
+    let mutable runClock = 0.0
+
+    // How long an audio-localised threat cue (TASK-054, backlog B-056)
+    // stays on screen after the qualifying shot that raised it -- the
+    // `fireEffectHoldSeconds` precedent, held longer since it is the
+    // player's only cue that anything happened at all (no accompanying
+    // fire-line/muzzle-flash draws for a shooter this fogged). Anchor and
+    // tip are resolved once, at trigger time, from the squad centroid and
+    // the grid bounds then in effect -- not recomputed every frame.
+    let audioCueHoldSeconds = 1.5
+    let heldAudioCues = ResizeArray<(float32 * float32) * (float32 * float32) * float>() // anchor, tip, remaining
+
     // Player-issued orders awaiting delivery. `RecordedCommand` (the
     // `DemoDrive.commandsForTick` precedent) rather than a bespoke type --
     // its `Tick` is the delivery tick, independent of `PlayerCommand.
@@ -100,28 +193,6 @@ type CommandDemoScene() =
         let cmds = pending |> Seq.filter (fun c -> c.Tick = t) |> Seq.map (fun c -> c.Command) |> Array.ofSeq
         pending.RemoveAll(fun c -> c.Tick = t) |> ignore
         cmds
-
-    /// One authoritative step consuming any orders queued for delivery at
-    /// `state.Tick + 1`. Used by both `Update` (wall-clock-paced) and the
-    /// scripted headless self-check (paced by direct calls, no wall clock).
-    let stepOnce () =
-        let r = Simulation.step SimConfig.standard (commandsForTick (state.Tick + 1L)) state
-        prevAgents <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Position) |> Map.ofArray
-        state <- r.State
-        currAgents <- r.Snapshot.Agents
-        hash <- r.StateHash.Value
-        devFrame <- Diagnostics.frameOf r
-
-        for overlay in devFrame.Overlays do
-            match overlay with
-            | FireLine(_, from, _, at, hit) -> heldFireLines.Add(from, at, hit, fireEffectHoldSeconds)
-            | _ -> ()
-
-    let friendlyAt (cell: Cell) : AgentSnapshot option =
-        currAgents |> Array.tryFind (fun a -> a.Side = Friendly && a.Position = cell)
-
-    let agentPosition (id: AgentId) : Cell option =
-        currAgents |> Array.tryFind (fun a -> a.Id = id) |> Option.map (fun a -> a.Position)
 
     /// An agent's current `VitalStatus`, read from `devFrame`'s always-on
     /// `AgentVitals` overlay (TASK-053, backlog B-061) -- `AgentSnapshot`
@@ -136,6 +207,191 @@ type CommandDemoScene() =
             | AgentVitals(aid, _, v) when aid = id -> Some v
             | _ -> None)
         |> Option.defaultValue (Alive Agent.MaxHealth)
+
+    /// The listening squad's reference point for an audio-cue bearing
+    /// (TASK-054, backlog B-056): the mean cell position of every currently
+    /// `Alive` friendly agent. `None` when the squad has no living member
+    /// left to hear anything.
+    let squadCentroid () : (float32 * float32) option =
+        let alive = currAgents |> Array.filter (fun a -> a.Side = Friendly && Casualty.isAlive (vitalsOf a.Id))
+
+        if alive.Length = 0 then
+            None
+        else
+            let n = float32 alive.Length
+            Some((alive |> Array.sumBy (fun a -> float32 a.Position.X)) / n, (alive |> Array.sumBy (fun a -> float32 a.Position.Y)) / n)
+
+    /// A boundary anchor point just outside `state.Bounds`, one of 8 `45°`
+    /// sectors around `angle` (radians, world-grid space) -- the audio
+    /// cue's own coarser sibling to `RenderShared.facingBin`'s 10-bin
+    /// scheme (TASK-054, backlog B-056: "a rough bearing, not the shooter's
+    /// exact position", so 8 wide sectors rather than a precise line to the
+    /// shooter's true cell). `margin` keeps the anchor clear of the terrain
+    /// itself.
+    let audioCueAnchor (bounds: GridBounds) (angle: float) : float32 * float32 =
+        let margin = 1.0f
+        let w = float32 (bounds.Width - 1)
+        let h = float32 (bounds.Height - 1)
+        let sectorRaw = int (System.Math.Round(angle / (System.Math.PI / 4.0)))
+        let sector = ((sectorRaw % 8) + 8) % 8
+
+        match sector with
+        | 0 -> (w + margin, h * 0.5f) // East
+        | 1 -> (w + margin, h + margin) // South-East
+        | 2 -> (w * 0.5f, h + margin) // South
+        | 3 -> (-margin, h + margin) // South-West
+        | 4 -> (-margin, h * 0.5f) // West
+        | 5 -> (-margin, -margin) // North-West
+        | 6 -> (w * 0.5f, -margin) // North
+        | _ -> (w + margin, -margin) // North-East
+
+    /// One authoritative step consuming any orders queued for delivery at
+    /// `state.Tick + 1`. Used by both `Update` (wall-clock-paced) and the
+    /// scripted headless self-check (paced by direct calls, no wall clock).
+    let stepOnce () =
+        // The friendly squad's known-contact set as of *before* this tick's
+        // own Perception phase runs (TASK-054, backlog B-056). Perception
+        // runs ahead of Combat in phase order (`Simulation.step`'s own
+        // phase sequence), so the *post*-tick `devFrame` below already
+        // reflects any contact this same tick's shot itself caused the
+        // squad to newly register -- checking against that would suppress
+        // the audio cue on exactly the "just came into view and fired"
+        // tick B-056 exists to cover, leaving only already-redundant cases
+        // reachable. Checking the *pre*-tick set instead correctly still
+        // fires the cue the instant a previously-unknown hostile shoots.
+        let hostileKnownContactIdsBefore =
+            devFrame.Overlays
+            |> Array.choose (function
+                | KnownContact(_, contact, _, _) -> Some(AgentId.value contact)
+                | _ -> None)
+            |> Set.ofArray
+
+        let r = Simulation.step SimConfig.standard (commandsForTick (state.Tick + 1L)) state
+        prevAgents <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Position) |> Map.ofArray
+        let priorProgress = prevProgress
+        state <- r.State
+        currAgents <- r.Snapshot.Agents
+        hash <- r.StateHash.Value
+        devFrame <- Diagnostics.frameOf r
+
+        // The immediate next path cell (not the far-off final `Destination`)
+        // for every currently-moving agent -- see the field comment on
+        // `nextStepCell` above. `Array.skip 1` on the returned route would
+        // also work; indexing `cells.[1]` directly makes "the cell right
+        // after the one we're standing on" explicit.
+        nextStepCell <-
+            currAgents
+            |> Array.fold
+                (fun m a ->
+                    let id = AgentId.value a.Id
+                    match a.Destination with
+                    | Some d when d <> a.Position ->
+                        match Pathfinding.find state.Terrain a.Position d with
+                        | Found(cells, _) when cells.Length > 1 -> Map.add id cells.[1] m
+                        | _ -> Map.add id a.Position m
+                    | _ -> Map.add id a.Position m)
+                nextStepCell
+
+        // Learn this edge's real tick-count the instant it completes (see
+        // the field comment on `edgeTickEstimate`): `priorProgress` is the
+        // value `Progress` held the tick *before* this one, i.e. the last
+        // tick still mid-edge, so the threshold just crossed is one past it.
+        edgeTickEstimate <-
+            currAgents
+            |> Array.fold
+                (fun m a ->
+                    let id = AgentId.value a.Id
+                    match prevAgents |> Map.tryFind id with
+                    | Some p when p <> a.Position ->
+                        let justCrossed = (priorProgress |> Map.tryFind id |> Option.defaultValue 0) + 1
+                        Map.add id justCrossed m
+                    | _ -> m)
+                edgeTickEstimate
+
+        prevProgress <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Progress) |> Map.ofArray
+
+        // TASK-056 review round 2: see the field comment on `stalled` above.
+        // `priorProgress` is this same agent's `Progress` entering this
+        // tick (captured before `state <- r.State` overwrote it), so
+        // comparing it against the post-tick value directly tells us
+        // whether this tick's own attempt actually advanced the edge.
+        stalled <-
+            currAgents
+            |> Array.fold
+                (fun m a ->
+                    let id = AgentId.value a.Id
+                    let tryingToMove = a.Destination |> Option.exists (fun d -> d <> a.Position)
+                    let madeProgress = a.Progress <> (priorProgress |> Map.tryFind id |> Option.defaultValue -1)
+                    Map.add id (tryingToMove && not madeProgress) m)
+                Map.empty
+
+        facing <-
+            currAgents
+            |> Array.fold
+                (fun m a ->
+                    let id = AgentId.value a.Id
+                    let prevBin = m |> Map.tryFind id |> Option.defaultValue 0
+                    let step = nextStepCell |> Map.tryFind id
+                    Map.add id (RenderShared.facingBin prevBin a.Position step) m)
+                facing
+
+        for overlay in devFrame.Overlays do
+            match overlay with
+            | FireLine(shooter, from, _, at, hit) ->
+                heldFireLines.Add(from, at, hit, fireEffectHoldSeconds)
+
+                let shooterWasUnknownHostile =
+                    currAgents
+                    |> Array.exists (fun a -> a.Id = shooter && a.Side = Hostile)
+                    && not (Set.contains (AgentId.value shooter) hostileKnownContactIdsBefore)
+
+                if shooterWasUnknownHostile then
+                    match squadCentroid () with
+                    | Some(ccx, ccy) ->
+                        let angle = atan2 (float from.Y - float ccy) (float from.X - float ccx)
+                        let anchor = audioCueAnchor state.Bounds angle
+                        let ax, ay = anchor
+                        let tip = (ax + 0.3f * (ccx - ax), ay + 0.3f * (ccy - ay))
+                        heldAudioCues.Add(anchor, tip, audioCueHoldSeconds)
+                    | None -> ()
+            | _ -> ()
+
+    let friendlyAt (cell: Cell) : AgentSnapshot option =
+        currAgents |> Array.tryFind (fun a -> a.Side = Friendly && a.Position = cell)
+
+    let agentPosition (id: AgentId) : Cell option =
+        currAgents |> Array.tryFind (fun a -> a.Id = id) |> Option.map (fun a -> a.Position)
+
+    /// The on-screen position a moving agent's own figure renders at (the
+    /// `nextStepCell`/`edgeTickEstimate` smoothing, folding in the `stalled`
+    /// freeze above) -- shared so every other consumer of "where is this
+    /// agent right now" (the selection halo below) agrees with it, instead
+    /// of the figure alone reading smoothly while everything else still
+    /// jumps between raw grid cells (Dave's review round 2 report: "the
+    /// circle thats drawn as selection indicator ... jumps between
+    /// cells" -- `haloItems` used to read `agentPosition`'s raw discrete
+    /// `Cell` directly). Only meaningful for a currently-`Alive` agent;
+    /// callers with a non-`Alive` selection must use the agent's raw
+    /// `Position` instead, matching `renderVitals`'s own `Dead`/
+    /// `Incapacitated` branches, which never lerp.
+    let renderPos (a: AgentSnapshot) : float32 * float32 =
+        let id = AgentId.value a.Id
+        let target = nextStepCell |> Map.tryFind id |> Option.defaultValue a.Position
+        let estTicks = edgeTickEstimate |> Map.tryFind id |> Option.defaultValue defaultEdgeTickEstimate |> max 1
+        let isStalled = stalled |> Map.tryFind id |> Option.defaultValue false
+
+        let edgeFrac =
+            if isStalled then
+                // No `alpha` credit while genuinely stalled -- see the
+                // field comment on `stalled`: crediting the render-frame
+                // ramp to an edge that will not actually complete this
+                // tick is exactly the sawtooth bug being fixed here.
+                System.Math.Clamp(float a.Progress / float estTicks, 0.0, 1.0)
+            else
+                System.Math.Clamp((float a.Progress + alpha) / float estTicks, 0.0, 1.0)
+
+        float32 a.Position.X + float32 (target.X - a.Position.X) * float32 edgeFrac,
+        float32 a.Position.Y + float32 (target.Y - a.Position.Y) * float32 edgeFrac
 
     /// Auto-disarms the HUD order mode back to `0` the instant the selected
     /// agent is no longer `Alive` (TASK-053, backlog B-061; Dave's own
@@ -191,6 +447,17 @@ type CommandDemoScene() =
                       Disposition = a.Disposition })
             prevAgents <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Position) |> Map.ofArray
 
+            // TASK-056 review round 2: without this, `stalled`'s very first
+            // `stepOnce` call would compare against an empty `prevProgress`
+            // (the `-1` sentinel default), misreading a genuinely-blocked
+            // agent's first tick (`Progress` frozen at its own starting `0`)
+            // as "made progress" (`0 <> -1`) -- a one-tick blind spot right
+            // at the moment an order that stalls immediately is issued.
+            // Seeding from each agent's real starting `Progress` (always `0`
+            // for a fresh `DemoScenario`) makes the very first comparison
+            // exact instead of sentinel-driven.
+            prevProgress <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Progress) |> Map.ofArray
+
         member _.Update(deltaSeconds: float) =
             if not paused then
                 let simStep = 1.0 / simHz
@@ -201,6 +468,11 @@ type CommandDemoScene() =
                     stepOnce ()
                     accum <- accum - simStep
                     steps <- steps + 1
+
+                // TASK-056, backlog B-052: only advances while ticks
+                // themselves are advancing -- see the field comment on
+                // `runClock`.
+                runClock <- runClock + deltaSeconds
 
                 // The selected agent's vitals can only change from a
                 // `stepOnce` (TASK-053, backlog B-061) -- disarm any order
@@ -219,6 +491,14 @@ type CommandDemoScene() =
                 let remaining' = remaining - deltaSeconds
                 if remaining' <= 0.0 then heldFireLines.RemoveAt(i)
                 else heldFireLines.[i] <- (from, at, hit, remaining')
+
+            // Audio-localised threat cues (TASK-054, backlog B-056) decay by
+            // real wall-clock time the same way, independent of `paused`.
+            for i in heldAudioCues.Count - 1 .. -1 .. 0 do
+                let anchor, tip, remaining = heldAudioCues.[i]
+                let remaining' = remaining - deltaSeconds
+                if remaining' <= 0.0 then heldAudioCues.RemoveAt(i)
+                else heldAudioCues.[i] <- (anchor, tip, remaining')
 
             // Hold a meaningful order-disposition message on screen for at
             // least `orderTextHoldSeconds` after it appears, even once the
@@ -241,8 +521,6 @@ type CommandDemoScene() =
                 heldOrderText <- liveOrderText
 
         member _.DrawList() =
-            let lerp (a: int) (b: int) (t: float) = float32 a + (float32 (b - a)) * float32 t
-
             // Player-facing fog of war (TASK-051, backlog B-055): a hostile
             // this squad has never made contact with (or whose contact has
             // fully expired, `PerceptionConfig.ExpireAfter` ticks after it
@@ -311,14 +589,23 @@ type CommandDemoScene() =
                     // (the `RenderShared.reasonText` player-vocabulary
                     // precedent -- no bleed-out tick count, that is
                     // developer detail, `devReasonText`'s own distinction)
-                    // -- the badge, not just the tint, is the signal.
+                    // -- the badge, not just the tint, is the signal. Keeps
+                    // its last active-movement facing (TASK-054, backlog
+                    // B-052) rather than snapping to bin 0 -- a downed agent
+                    // isn't moving, so nothing should visually reset it.
+                    // Always frozen on the idle pose (Cx2 = -1, TASK-056),
+                    // never a run-cycle frame, regardless of any stale
+                    // `Destination` left over from before it went down --
+                    // `NavigationAndMovement` skips a non-`Alive` agent
+                    // (TASK-045), so `Destination` is never cleared for one.
                     let r, g, b = RenderShared.agentColor a.Side
+                    let facingBin = facing |> Map.tryFind (AgentId.value a.Id) |> Option.defaultValue 0
 
                     [| { Kind = 1
-                         TextureId = 0
+                         TextureId = facingBin
                          Cx = float32 a.Position.X
                          Cy = float32 a.Position.Y
-                         Cx2 = 0.0f
+                         Cx2 = -1.0f
                          Cy2 = 0.0f
                          Text = ""
                          R = r * 0.5f
@@ -328,15 +615,38 @@ type CommandDemoScene() =
                          Radius = agentRadius }
                        RenderShared.cellLabel a.Position "down" (0.9f, 0.9f, 0.9f) 0.9f 9.0f |]
                 | Alive health ->
-                    let from = prevAgents |> Map.tryFind (AgentId.value a.Id) |> Option.defaultValue a.Position
+                    let id = AgentId.value a.Id
                     let r, g, b = RenderShared.agentColor a.Side
+                    let facingBin = facing |> Map.tryFind id |> Option.defaultValue 0
+
+                    // TASK-056, backlog B-052: a `-1` `Cx2` freezes on the
+                    // idle pose the instant `Destination` clears or is
+                    // reached (the existing facing-freeze precedent above);
+                    // otherwise cycles through `Run0..9` by `runClock`.
+                    // TASK-056 review round 2: also freezes while `stalled`
+                    // -- Dave's report that the run animation keeps playing
+                    // when an agent is stuck on the same cell was a real
+                    // gap, since a route-reservation contest leaves
+                    // `Destination` unmet indefinitely with no actual
+                    // motion. See the field comment on `stalled`.
+                    let isMoving =
+                        (a.Destination |> Option.exists (fun d -> d <> a.Position))
+                        && not (stalled |> Map.tryFind id |> Option.defaultValue false)
+
+                    let runFrame = if isMoving then RenderShared.runFrameIndex runClock else -1
+
+                    // TASK-056 review round 1/2: smooth, continuous screen
+                    // position across a whole multi-tick edge, frozen
+                    // instead of sawtoothing while genuinely stalled -- see
+                    // `renderPos`'s own doc comment.
+                    let cx, cy = renderPos a
 
                     let figure =
                         { Kind = 1
-                          TextureId = 0
-                          Cx = lerp from.X a.Position.X alpha
-                          Cy = lerp from.Y a.Position.Y alpha
-                          Cx2 = 0.0f
+                          TextureId = facingBin
+                          Cx = cx
+                          Cy = cy
+                          Cx2 = float32 runFrame
                           Cy2 = 0.0f
                           Text = ""
                           R = r
@@ -399,13 +709,33 @@ type CommandDemoScene() =
             // Selection halo: a larger, translucent Kind = 1 item at the
             // selected agent's own cell, inserted before its real circle so
             // the stable depth-sort tie-break draws it underneath.
+            //
+            // TASK-056 review round 2: used to read `agentPosition`'s raw
+            // discrete `Cell` directly, so it kept snapping between grid
+            // cells exactly like before round 1's smoothing fix -- Dave's
+            // own report ("the circle thats drawn as selection indicator,
+            // it jumps between cells") pointed straight at this, and
+            // explains "seemed the same": the halo is the dominant visual
+            // cue while watching a selected agent move, so a smoothed
+            // figure sitting under a still-snapping halo reads as no fix at
+            // all. Now shares `renderPos` with the real figure -- but only
+            // for a currently-`Alive` agent; a `Dead`/`Incapacitated`
+            // selection must stay pinned to its raw `Position`, matching
+            // `renderVitals`'s own frozen (never-lerped) figure for those
+            // states, or the halo would visibly drift off a figure that
+            // itself never moves.
             let haloItems =
-                match selected |> Option.bind agentPosition with
-                | Some pos ->
+                match selected |> Option.bind (fun id -> currAgents |> Array.tryFind (fun a -> a.Id = id)) with
+                | Some a ->
+                    let cx, cy =
+                        match vitalsOf a.Id with
+                        | Alive _ -> renderPos a
+                        | _ -> float32 a.Position.X, float32 a.Position.Y
+
                     [| { Kind = 1
                          TextureId = 0
-                         Cx = float32 pos.X
-                         Cy = float32 pos.Y
+                         Cx = cx
+                         Cy = cy
                          Cx2 = 0.0f
                          Cy2 = 0.0f
                          Text = ""
@@ -618,6 +948,49 @@ type CommandDemoScene() =
                        RenderShared.effectSprite at (if hit then 1 else 2) tint fade 16.0f |])
                 |> Array.ofSeq
 
+            // Audio-localised threat cue (TASK-054, backlog B-056): a short
+            // inward-pointing line plus a `"!"` label at a boundary anchor
+            // point outside `state.Bounds`, in the rough bearing sector of
+            // an unseen hostile's shot -- never the shooter's true position
+            // (`audioCueAnchor`/`stepOnce`'s own reasoning). Fractional,
+            // off-grid coordinates, so built directly rather than through
+            // `RenderShared.cellLabel`/`lineMarker` (both `Cell`-typed,
+            // i.e. integer-only). Always-on, the `fireEffects` precedent
+            // (a player-feedback item, not a developer-overlay one): dev
+            // overlay exists for ground-truth comparison, not to gate
+            // player-facing cues.
+            let audioCueItems =
+                heldAudioCues
+                |> Seq.collect (fun ((ax, ay), (tx, ty), remaining) ->
+                    let fade = float32 (remaining / audioCueHoldSeconds)
+                    let cr, cg, cb = 1.0f, 0.45f, 0.1f
+
+                    [| { Kind = 2
+                         TextureId = 0
+                         Cx = ax
+                         Cy = ay
+                         Cx2 = tx
+                         Cy2 = ty
+                         Text = ""
+                         R = cr
+                         G = cg
+                         B = cb
+                         A = 0.85f * fade
+                         Radius = 2.5f }
+                       { Kind = 3
+                         TextureId = 0
+                         Cx = ax
+                         Cy = ay
+                         Cx2 = 0.0f
+                         Cy2 = 0.0f
+                         Text = "!"
+                         R = cr
+                         G = cg
+                         B = cb
+                         A = fade
+                         Radius = 14.0f } |])
+                |> Array.ofSeq
+
             // `devItems` is deliberately appended *after* the depth sort, not
             // folded into it: `RenderShared.depthKey` derives a line's depth
             // from its origin cell alone, which is meaningless for an item
@@ -625,15 +998,16 @@ type CommandDemoScene() =
             // could land behind terrain partway along its own length. A
             // developer overlay exists to reveal information that might
             // otherwise be hidden, so every dev item always draws on top,
-            // unsorted among themselves. `fireEffects` follows the identical
-            // reasoning for the same underlying overlay, now player-facing.
+            // unsorted among themselves. `fireEffects`/`audioCueItems`
+            // follow the identical reasoning for player-facing items with
+            // no single meaningful depth.
             let sorted =
                 Array.concat
                     [ terrainItems; haloItems; agentItems; hoverHighlightItems; previewItems; pendingItems
                       committedItems ]
                 |> Array.sortBy RenderShared.depthKey
 
-            Array.concat [ sorted; fireEffects; holdOutlineItems; devItems ]
+            Array.concat [ sorted; fireEffects; audioCueItems; holdOutlineItems; devItems ]
 
         member _.HudText() =
             let selText =

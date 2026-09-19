@@ -40,18 +40,10 @@ agents:
   agent 3  hostile   (5,3)  at rest
 
 overlays:
-  known contact (0,3): agent 2  confidence 1000  seen tick 65
-  known contact (5,3): agent 3  confidence 1000  seen tick 65
   commitment (0,0): agent 0  holding
   commitment (5,0): agent 1  holding
   commitment (0,3): agent 2  holding
   commitment (5,3): agent 3  holding
-  stress (0,0): agent 0  970/1000
-  stress (5,0): agent 1  970/1000
-  stress (0,3): agent 2  970/1000
-  stress (5,3): agent 3  970/1000
-  hostile known contact (0,0): agent 0  confidence 1000  seen tick 65
-  hostile known contact (5,0): agent 1  confidence 1000  seen tick 65
   vitals (0,0): agent 0  dead
   vitals (5,0): agent 1  dead
   vitals (0,3): agent 2  dead
@@ -62,6 +54,6 @@ overlays:
   ammo (0,3): agent 2  ammo 25/reserve 90
   ammo (5,3): agent 3  ammo 27/reserve 90
 
-events: none
+events: contact-expired@(0,3); contact-expired@(5,0)
 
-tick 65 | hash 0x9516F7C342D91B61 (format 11) | draws 17 | agents 4 | cover-edges 0 | events 0
+tick 65 | hash 0x99E04CA6BA623140 (format 12) | draws 17 | agents 4 | cover-edges 0 | events 2

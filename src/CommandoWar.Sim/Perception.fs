@@ -91,12 +91,22 @@ module Perception =
 
     /// The opposing-side agents `observer` can currently see, ascending by id.
     /// An agent never sees itself or an ally; range is capped before the
-    /// (more expensive) line-of-sight trace.
+    /// (more expensive) line-of-sight trace. A non-`Alive` `other` is never
+    /// (re-)seen (TASK-055, backlog B-062): a corpse is not removed from
+    /// `WorldState.Agents` (TASK-045), so without this check it would stay
+    /// "currently visible" — and so at permanent full `Contact.Confidence`
+    /// — for as long as it remained in sight range, keeping `Appraisal`'s
+    /// route-exposure model treating it as a live threat indefinitely.
+    /// Excluding it here lets an existing `Contact` on it age and expire
+    /// through the ordinary `PerceptionConfig.StaleAfter`/`ExpireAfter`
+    /// bands instead (`Perception.mergeKnowledge`), the same path a threat
+    /// that simply moved out of sight already takes.
     let visibleContactsFor (terrain: Terrain) (observer: AgentState) (agents: AgentState[]) : AgentId[] =
         agents
         |> Array.choose (fun other ->
             if
                 other.Side <> observer.Side
+                && Casualty.isAlive other.Vitals
                 && chebyshev observer.Position other.Position <= PerceptionConfig.SightRange
                 && Sight.visible terrain observer.Position other.Position
             then

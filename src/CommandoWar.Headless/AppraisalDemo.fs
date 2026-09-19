@@ -293,6 +293,32 @@ module AppraisalDemo =
                         reserve
                         reloading
                 )
+            | Divergence(section, agents) ->
+                // TASK-057: not yet surfaced in this disposable P3 demo (it
+                // predates the task, and never occurs from a single
+                // committed corpus frame -- a divergence only exists by
+                // comparing two independently replayed runs).
+                unhandled.Add(
+                    sprintf "divergence %s agents=%s" section (agents |> Array.map AgentId.value |> Array.map string |> String.concat ",")
+                )
+            | AgentRadioLost(agent, at) ->
+                // TASK-058: not yet surfaced in this disposable P3 demo (it
+                // predates the task); exposed-approach authors no
+                // Headquarters, so this never fires for the committed frame.
+                unhandled.Add(sprintf "radio lost agent %d (%d,%d)" (AgentId.value agent) at.X at.Y)
+            | AgentPendingDelivery(agent, at, command, dueTick) ->
+                // TASK-058: not yet surfaced in this disposable P3 demo (it
+                // predates the task); exposed-approach authors no
+                // Headquarters, so this never fires for the committed frame.
+                unhandled.Add(
+                    sprintf
+                        "pending delivery agent %d (%d,%d) command %d due tick %d"
+                        (AgentId.value agent)
+                        at.X
+                        at.Y
+                        (CommandId.value command)
+                        dueTick
+                )
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

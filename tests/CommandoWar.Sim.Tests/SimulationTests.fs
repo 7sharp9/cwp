@@ -2082,6 +2082,43 @@ let ``an Incapacitated agent with a live Destination never moves, and its Destin
     Assert.Equal(Some { X = 5; Y = 0 }, (agentOf a r.State).Destination)
     Assert.DoesNotContain(MovementCompleted(a, { X = 5; Y = 0 }), bodies r)
 
+// --- Perception stops observing a downed hostile (TASK-055, backlog B-062) --
+
+[<Fact>]
+let ``an Incapacitated or Dead hostile is no longer freshly observed, even still in range and in line of sight`` () =
+    // Before this fix, a corpse or downed hostile was never removed from
+    // `WorldState.Agents` (TASK-045) and `Perception.visibleContactsFor`
+    // never checked `Vitals`, so it stayed a permanent full-`Confidence`
+    // `Contact` forever -- keeping `Appraisal`'s route-exposure model
+    // treating it as a live threat indefinitely (Dave's own live-play
+    // report). The fix lets an existing `Contact` on it age and expire
+    // through the ordinary `StaleAfter`/`ExpireAfter` bands instead, the
+    // same path a threat that moved out of sight already takes.
+    for downVitals in [ Incapacitated 10; Dead ] do
+        let b: GridBounds = { Width = 16; Height = 8 }
+        let w = perceptionWorld b [ 0, { X = 1; Y = 1 } ] [ 1, { X = 6; Y = 1 } ] (Terrain.empty b)
+
+        // Baseline: an Alive hostile in range and LOS is genuinely observed.
+        let baseline = stepIdle w
+        Assert.Equal<AgentId[]>([| agent 1 |], (agentOf (agent 0) baseline.State).VisibleContacts)
+        Assert.Equal(1L, (contactOf (agent 1) baseline.State).Value.LastSeenTick)
+
+        // The hostile goes down mid-knowledge, still at the identical cell,
+        // still within SightRange, still with clear line of sight.
+        let downed =
+            { baseline.State with
+                Agents =
+                    baseline.State.Agents
+                    |> Array.map (fun a -> if a.Id = agent 1 then { a with Vitals = downVitals } else a) }
+
+        let r = stepIdle downed
+        Assert.Empty((agentOf (agent 0) r.State).VisibleContacts)
+        // The existing Contact is retained (aging normally, not refreshed):
+        // LastSeenTick stays pinned at the last tick it was actually
+        // Alive-and-seen, one tick behind the current tick.
+        Assert.Equal(1L, (contactOf (agent 1) r.State).Value.LastSeenTick)
+        Assert.Equal(2L, r.State.Tick)
+
 [<Fact>]
 let ``an order addressed to a Dead or Incapacitated agent appraises Unable CriticallyWounded, writing no Destination`` () =
     for downVitals in [ Incapacitated 10; Dead ] do
@@ -2431,3 +2468,189 @@ let ``Suppress and Assault orders from an unarmed agent are Unable InsufficientA
     // MoveTo/Hold/Withdraw are unaffected: an unarmed agent can still walk.
     let move = stepWith [| cmd 1 (agent 0) { X = 3; Y = 0 } |] w
     Assert.Equal(Some Accepted, dispositionOf (agent 0) move)
+
+// --- Communication range, delay, jamming, and radio-destroyed (TASK-058, backlog B-016b) ----
+
+/// A 32x32 world with an authored Headquarters and (optionally) jammers --
+/// the `commsBlackoutWorld` precedent, extended. `agents` are Friendly,
+/// placed directly: Headquarters/Jammers are plain `WorldState` fields, not
+/// Scenario-validated content, so no deployment machinery is needed for a
+/// phase-level test.
+let private commsHqWorld (hq: Cell) (jammers: Jammer[]) (agents: (int * Cell) list) : WorldState =
+    let bounds: GridBounds = { Width = 32; Height = 32 }
+    let created = agents |> List.map (fun (i, c) -> Agent.create (agent i) Friendly c)
+
+    match World.create bounds 1UL created with
+    | Ok w -> { w with Headquarters = Some hq; Jammers = jammers }
+    | Error e -> failwith $"unexpected {e}"
+
+let private deliveredIn (r: StepResult) =
+    bodies r
+    |> Array.choose (function
+        | OrderDelivered(c, recipient) -> Some(c, recipient)
+        | _ -> None)
+
+[<Fact>]
+let ``an order to a recipient beyond CommsConfig.Range is refused OutOfRange, never delivered`` () =
+    let w = commsHqWorld { X = 0; Y = 0 } [||] [ 0, { X = 20; Y = 0 } ]
+    let r = stepWith [| cmd 1 (agent 0) { X = 21; Y = 0 } |] w
+
+    Assert.Equal<_[]>([| (CommandId.ofInt 1, agent 0, OutOfRange) |], undeliveredIn r)
+    Assert.Equal(None, (agentOf (agent 0) r.State).PendingDelivery)
+    Assert.Equal(None, (agentOf (agent 0) r.State).Destination)
+
+[<Fact>]
+let ``an order to a recipient within range is stashed as PendingDelivery, not delivered the same tick`` () =
+    let w = commsHqWorld { X = 0; Y = 0 } [||] [ 0, { X = 10; Y = 0 } ]
+    let r = stepWith [| cmd 1 (agent 0) { X = 15; Y = 0 } |] w
+
+    Assert.Empty(undeliveredIn r)
+    Assert.Empty(deliveredIn r)
+    Assert.Equal(None, (agentOf (agent 0) r.State).Order)
+    Assert.Equal(None, (agentOf (agent 0) r.State).Destination)
+
+    match (agentOf (agent 0) r.State).PendingDelivery with
+    | Some(order, Replace, dueTick) ->
+        Assert.Equal(MoveTo { X = 15; Y = 0 }, order.Intent)
+        Assert.Equal(1L + CommsConfig.DeliveryDelayTicks, dueTick)
+    | other -> Assert.Fail($"expected a PendingDelivery, got {other}")
+
+[<Fact>]
+let ``a delayed order is delivered exactly DeliveryDelayTicks ticks after acceptance, not before`` () =
+    let w = commsHqWorld { X = 0; Y = 0 } [||] [ 0, { X = 10; Y = 0 } ]
+    let mutable st = (stepWith [| cmd 1 (agent 0) { X = 15; Y = 0 } |] w).State
+
+    // Ticks 2 and 3 (due tick is 1 + CommsConfig.DeliveryDelayTicks = 4):
+    // still pending, no delivery.
+    for _ in 2..3 do
+        let r = stepIdle st
+        Assert.Empty(deliveredIn r)
+        Assert.Equal(None, (agentOf (agent 0) r.State).Destination)
+        st <- r.State
+
+    let r4 = stepIdle st
+    Assert.Equal<_[]>([| (CommandId.ofInt 1, agent 0) |], deliveredIn r4)
+    Assert.Equal(Some { X = 15; Y = 0 }, (agentOf (agent 0) r4.State).Destination)
+    Assert.Equal(None, (agentOf (agent 0) r4.State).PendingDelivery)
+
+[<Fact>]
+let ``a recipient inside an active jammer's radius is refused Jammed, then delivers once the window closes`` () =
+    let jammer: Jammer =
+        { Position = { X = 10; Y = 0 }
+          Radius = 0
+          ActiveFromTick = 1L
+          ActiveUntilTick = 3L }
+
+    let w = commsHqWorld { X = 0; Y = 0 } [| jammer |] [ 0, { X = 10; Y = 0 } ]
+
+    let r1 = stepWith [| cmd 1 (agent 0) { X = 15; Y = 0 } |] w
+    Assert.Equal<_[]>([| (CommandId.ofInt 1, agent 0, Jammed) |], undeliveredIn r1)
+
+    // Tick 2: still jammed (2 <= ActiveUntilTick 3).
+    let r2 = stepWith [| cmd 2 (agent 0) { X = 15; Y = 0 } |] r1.State
+    Assert.Equal<_[]>([| (CommandId.ofInt 2, agent 0, Jammed) |], undeliveredIn r2)
+
+    // Tick 3 is the jammer's last active tick; tick 4 the window has closed.
+    let r3 = stepIdle r2.State
+    let r4 = stepWith [| cmd 4 (agent 0) { X = 15; Y = 0 } |] r3.State
+    Assert.Empty(undeliveredIn r4)
+
+    match (agentOf (agent 0) r4.State).PendingDelivery with
+    | Some(order, _, dueTick) ->
+        Assert.Equal(MoveTo { X = 15; Y = 0 }, order.Intent)
+        Assert.Equal(4L + CommsConfig.DeliveryDelayTicks, dueTick)
+    | None -> Assert.Fail("expected a PendingDelivery once the jammer window closed")
+
+[<Fact>]
+let ``a radio-destroyed agent's orders are refused RadioDestroyed even while still Alive`` () =
+    let w = commsHqWorld { X = 0; Y = 0 } [||] [ 0, { X = 10; Y = 0 } ]
+
+    let w =
+        { w with
+            Agents =
+                w.Agents
+                |> Array.map (fun a -> if a.Id = agent 0 then { a with RadioDestroyed = true } else a) }
+
+    let r = stepWith [| cmd 1 (agent 0) { X = 15; Y = 0 } |] w
+    Assert.Equal<_[]>([| (CommandId.ofInt 1, agent 0, RadioDestroyed) |], undeliveredIn r)
+
+    Assert.True(
+        (match (agentOf (agent 0) r.State).Vitals with
+         | Alive _ -> true
+         | _ -> false),
+        "the agent should still be Alive -- radio-destroyed is distinct from a casualty"
+    )
+
+[<Fact>]
+let ``a new pending command supersedes an in-flight one outright, no double delivery`` () =
+    let w = commsHqWorld { X = 0; Y = 0 } [||] [ 0, { X = 10; Y = 0 } ]
+    let tick1 = stepWith [| cmd 1 (agent 0) { X = 15; Y = 0 } |] w // due tick 4
+    let tick2 = stepWith [| cmd 2 (agent 0) { X = 20; Y = 0 } |] tick1.State // supersedes, due tick 5
+
+    match (agentOf (agent 0) tick2.State).PendingDelivery with
+    | Some(order, _, dueTick) ->
+        Assert.Equal(MoveTo { X = 20; Y = 0 }, order.Intent)
+        Assert.Equal(5L, dueTick)
+    | None -> Assert.Fail("expected the superseding order to be pending")
+
+    // Tick 4 (order 1's original due tick): nothing delivers -- it was
+    // silently superseded, not merely delayed further (the Replace-over-
+    // active-Order precedent, extended to "not yet arrived").
+    let tick3 = stepIdle tick2.State
+    let tick4 = stepIdle tick3.State
+    Assert.Empty(deliveredIn tick4)
+
+    // Tick 5: order 2 delivers.
+    let tick5 = stepIdle tick4.State
+    Assert.Equal<_[]>([| (CommandId.ofInt 2, agent 0) |], deliveredIn tick5)
+    Assert.Equal(Some { X = 20; Y = 0 }, (agentOf (agent 0) tick5.State).Destination)
+
+[<Fact>]
+let ``cancelling an in-flight order drops it with no radio round-trip, and it never arrives`` () =
+    let w = commsHqWorld { X = 0; Y = 0 } [||] [ 0, { X = 10; Y = 0 } ]
+    let tick1 = stepWith [| cmd 1 (agent 0) { X = 15; Y = 0 } |] w // due tick 4
+
+    let tick2 = stepWith [| cancelCmd 2 (agent 0) (CommandId.ofInt 1) |] tick1.State
+    Assert.Contains(OrderCancelled(CommandId.ofInt 1, agent 0, false), bodies tick2)
+    Assert.Equal(None, (agentOf (agent 0) tick2.State).PendingDelivery)
+
+    let mutable st = tick2.State
+
+    for _ in 3..4 do
+        st <- (stepIdle st).State
+
+    Assert.Equal(None, (agentOf (agent 0) st).Destination)
+    Assert.Empty(deliveredIn (stepIdle st))
+
+[<Fact>]
+let ``Communication.available reduces to the static check alone when no Headquarters is authored`` () =
+    let w = commsBlackoutWorld [ 2 ]
+    Assert.False(Communication.available w.Headquarters w.Jammers w.Tick (agentOf (agent 2) w))
+    Assert.True(Communication.available w.Headquarters w.Jammers w.Tick (agentOf (agent 0) w))
+
+[<Fact>]
+let ``a radio-destroy roll is deterministic across two runs`` () =
+    // Two agents close enough to trade fire every tick (automatic symmetric
+    // engagement, no order needed -- the TASK-031 precedent), with an
+    // authored Headquarters so the radio-destroy roll is active.
+    let build () =
+        let agents =
+            [ Agent.create (agent 0) Friendly { X = 0; Y = 0 }
+              Agent.create (agent 9) Hostile { X = 1; Y = 0 } ]
+
+        match World.create { Width = 8; Height = 8 } 1UL agents with
+        | Ok w -> { w with Headquarters = Some { X = 0; Y = 0 } }
+        | Error e -> failwith $"unexpected {e}"
+
+    let run () =
+        let mutable st = build ()
+
+        for _ in 1..10 do
+            st <- (stepIdle st).State
+
+        st
+
+    let r1 = run ()
+    let r2 = run ()
+    Assert.Equal<AgentState[]>(r1.Agents, r2.Agents)
+    Assert.Equal(Hashing.hash r1, Hashing.hash r2)

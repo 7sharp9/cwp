@@ -108,14 +108,18 @@ module TargetId =
 /// `ObjectiveAreas`/`ExtractionAreas`, still unread (B-032). Version 4
 /// (TASK-049, backlog B-058) added the authored unit-type table
 /// (`RawScenario.UnitTypes`) and each deployment's `UnitType` reference,
-/// the source of `Deployment.MoveSpeed` / `AgentState.MoveSpeed`. A
-/// version-1-2-or-3 scenario is rejected, not migrated (`docs/04` section
-/// 16: "does not guess migrations").
+/// the source of `Deployment.MoveSpeed` / `AgentState.MoveSpeed`. Version 5
+/// (TASK-058, backlog B-016b) added the optional authored `Headquarters`
+/// command-origin cell and the authored `Jammers` table -- both optional
+/// (an absent `Headquarters` opts a scenario out of the whole range/delay/
+/// jamming/radio-destroyed feature set, `Communication.available`'s own
+/// doc comment). A version-1-2-3-or-4 scenario is rejected, not migrated
+/// (`docs/04` section 16: "does not guess migrations").
 [<RequireQualifiedAccess>]
 module ScenarioContent =
 
     [<Literal>]
-    let Version = 4
+    let Version = 5
 
 // --- validated model ---------------------------------------------------
 
@@ -217,7 +221,15 @@ type Scenario =
       ResupplyAreas: Area[]
       StaticTargets: StaticTarget[]
       Objectives: Objective[]
-      Rules: ScenarioRules }
+      Rules: ScenarioRules
+      /// The authored command-origin cell (TASK-058, backlog B-016b), or
+      /// `None`. Carried onto `WorldState.Headquarters` by `World.ofScenario`;
+      /// excluded from `Canonical.encode` (the `ResupplyAreas`/`Terrain`
+      /// precedent -- static authored data, not per-tick state).
+      Headquarters: Cell option
+      /// Authored jammers (TASK-058, backlog B-016b). Carried onto
+      /// `WorldState.Jammers`; excluded from `Canonical.encode` the same way.
+      Jammers: Jammer[] }
 
 // --- raw (unvalidated) input -----------------------------------------
 
@@ -302,6 +314,20 @@ type RawTerrainLayer =
 /// resolved `Deployment.MoveSpeed` scalar does.
 type RawUnitType = { Id: string; MoveSpeed: int }
 
+/// One authored jammer (TASK-058, backlog B-016b): a recipient within
+/// `Radius` Chebyshev cells of `Position` cannot receive an order while the
+/// current tick lies in `[ActiveFromTick, ActiveUntilTick]` (both
+/// inclusive) -- the "dynamic" part of dynamic jamming, since a scenario
+/// can author it to turn on and off over a run, even though nothing can
+/// destroy a jammer yet this task. `Radius` must be non-negative;
+/// `ActiveFromTick`/`ActiveUntilTick` must both be non-negative with
+/// `ActiveFromTick <= ActiveUntilTick`.
+type RawJammer =
+    { Position: Cell
+      Radius: int
+      ActiveFromTick: int64
+      ActiveUntilTick: int64 }
+
 /// The whole unvalidated authored scenario, as a content reader (a Godot
 /// `.tscn` reader, a Tiled importer, or a test) produces it. Every field is a
 /// primitive, an array of primitives, or the optional terrain layer, so the
@@ -325,6 +351,14 @@ type RawScenario =
       /// `RawDeployment.UnitType`. Every deployment must reference a defined
       /// entry here — no silent default (`DeploymentReferencesUnknownUnitType`).
       UnitTypes: RawUnitType[]
+      /// The authored command-origin cell (TASK-058, backlog B-016b), or
+      /// `None` when the scenario authors no comms-degradation model at all
+      /// -- the opt-in gate for the whole range/delay/jamming/radio-destroyed
+      /// feature set (`Communication.available`).
+      Headquarters: Cell option
+      /// Authored jammers (TASK-058, backlog B-016b). Empty for the
+      /// overwhelming majority of scenarios.
+      Jammers: RawJammer[]
       FailOnFriendlyForceEliminated: bool }
 
 /// Why a raw scenario is invalid (docs/03 section 17, docs/06 section 7).
@@ -383,6 +417,16 @@ type ScenarioError =
     /// A `RawDeployment.UnitType` naming no entry in `RawScenario.UnitTypes`
     /// — no silent default is supplied.
     | DeploymentReferencesUnknownUnitType of agent: int * unitType: string
+    // --- headquarters and jammers (ScenarioContent.Version 5, TASK-058, backlog B-016b) ---
+    | HeadquartersOutOfMap of cell: Cell * bounds: GridBounds
+    | JammerOutOfMap of index: int * cell: Cell * bounds: GridBounds
+    /// An authored `RawJammer.Radius` below 0. A negative radius has no
+    /// meaning (the `NegativeDiscipline`/`NegativeElevation` precedent).
+    | NegativeJammerRadius of index: int * radius: int
+    /// An authored jammer whose `ActiveFromTick`/`ActiveUntilTick` are
+    /// negative, or where `ActiveFromTick > ActiveUntilTick` (an empty or
+    /// backwards window has no meaning).
+    | InvalidJammerWindow of index: int * fromTick: int64 * untilTick: int64
 
 [<RequireQualifiedAccess>]
 module Scenario =
@@ -460,6 +504,23 @@ module Scenario =
             |> Array.filter (fun u -> not (System.String.IsNullOrWhiteSpace u.Id) && u.MoveSpeed > 0)
             |> Array.map (fun u -> u.Id, u.MoveSpeed)
             |> Map.ofArray
+
+        // --- headquarters and jammers (ScenarioContent.Version 5, TASK-058, backlog B-016b) ---
+        if mapOk then
+            match raw.Headquarters with
+            | Some cell when not (GridBounds.contains cell bounds) -> report (HeadquartersOutOfMap(cell, bounds))
+            | _ -> ()
+
+        raw.Jammers
+        |> Array.iteri (fun i j ->
+            if mapOk && not (GridBounds.contains j.Position bounds) then
+                report (JammerOutOfMap(i, j.Position, bounds))
+
+            if j.Radius < 0 then
+                report (NegativeJammerRadius(i, j.Radius))
+
+            if j.ActiveFromTick < 0L || j.ActiveUntilTick < 0L || j.ActiveFromTick > j.ActiveUntilTick then
+                report (InvalidJammerWindow(i, j.ActiveFromTick, j.ActiveUntilTick)))
 
         // --- deployments (friendly then enemy) ---------------------------
         let deployments =
@@ -741,4 +802,12 @@ module Scenario =
                     raw.StaticTargets
                     |> Array.map (fun t -> ({ Id = TargetId.ofString t.TargetId; Cell = t.Cell }: StaticTarget))
                   Objectives = built.ToArray()
-                  Rules = { FailOnFriendlyForceEliminated = raw.FailOnFriendlyForceEliminated } }
+                  Rules = { FailOnFriendlyForceEliminated = raw.FailOnFriendlyForceEliminated }
+                  Headquarters = raw.Headquarters
+                  Jammers =
+                    raw.Jammers
+                    |> Array.map (fun j ->
+                        ({ Position = j.Position
+                           Radius = j.Radius
+                           ActiveFromTick = j.ActiveFromTick
+                           ActiveUntilTick = j.ActiveUntilTick }: Jammer)) }

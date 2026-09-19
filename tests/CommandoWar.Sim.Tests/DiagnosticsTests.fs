@@ -111,7 +111,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0xF762ECD4377B5E68UL, f.Hash.Value)
+    Assert.Equal(0xB25FE816BCB67A11UL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -434,7 +434,10 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | AgentOrderQueue _
         | AgentVitals _
         | SquadLeadership _
-        | AgentAmmo _ -> None) with
+        | AgentAmmo _
+        | Divergence _
+        | AgentRadioLost _
+        | AgentPendingDelivery _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -506,7 +509,10 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | AgentOrderQueue _
             | AgentVitals _
             | SquadLeadership _
-            | AgentAmmo _ -> None)
+            | AgentAmmo _
+            | Divergence _
+            | AgentRadioLost _
+            | AgentPendingDelivery _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -554,7 +560,10 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | AgentOrderQueue _
             | AgentVitals _
             | SquadLeadership _
-            | AgentAmmo _ -> None)
+            | AgentAmmo _
+            | Divergence _
+            | AgentRadioLost _
+            | AgentPendingDelivery _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -639,7 +648,10 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | AgentOrderQueue _
             | AgentVitals _
             | SquadLeadership _
-            | AgentAmmo _ -> None)
+            | AgentAmmo _
+            | Divergence _
+            | AgentRadioLost _
+            | AgentPendingDelivery _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)
@@ -1105,7 +1117,7 @@ let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` ()
 let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
     let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
     Assert.Equal(13, frames.Length)
-    Assert.Equal(0x194805888CBE240DUL, frames.[1].Hash.Value)
+    Assert.Equal(0xC5EB3D123661F874UL, frames.[1].Hash.Value)
 
     let appraisals =
         frames.[1].Overlays
@@ -1173,8 +1185,8 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0xF762ECD4377B5E68UL, frames.[0].Hash.Value)
-    Assert.Equal(0xAF1FB68EF486CB39UL, frames.[40].Hash.Value)
+    Assert.Equal(0xB25FE816BCB67A11UL, frames.[0].Hash.Value)
+    Assert.Equal(0x0A822498317E0958UL, frames.[40].Hash.Value)
     // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
     // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
     // since Commitment is derived, not canonical (Decision B).
@@ -1183,5 +1195,118 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0xAF1FB68EF486CB39UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0x0A822498317E0958UL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(36, outcome.Events.Length)
+
+// --- divergence rendering (TASK-057, backlog B-050) --------------------
+
+/// The `ReplayTests.fs` `move` helper, duplicated here (not shared) since
+/// this test drives `Divergence.diagnoseDetailed` through to rendering, not
+/// `Divergence` itself.
+let private divergenceMove (tick: int64) (sequence: int) (dest: Cell) : RecordedCommand =
+    { Tick = tick
+      Sequence = sequence
+      Command = Command.moveTo (CommandId.ofInt (int tick * 100 + sequence)) (tick - 1L) (AgentId.ofInt sequence) dest
+      Issuer = "test" }
+
+[<Fact>]
+let ``Divergence.diagnoseDetailed's states render as a Divergence overlay naming the diverging agent and section, in every format`` () =
+    let bounds: GridBounds = { Width = 8; Height = 8 }
+    let initial = Setup.sixAgentWorld bounds 1UL
+    // Agent 0 ordered to two different destinations on tick 1 -- the
+    // `ReplayTests.fs` "a mutated command destination is reported as a
+    // divergence at the changed tick" fixture, which already proves this
+    // diverges at tick 1 on `Agent[0]`.
+    let reference = [| divergenceMove 1L 0 { X = 3; Y = 0 } |]
+    let candidate = [| divergenceMove 1L 0 { X = 3; Y = 5 } |]
+
+    match Divergence.diagnoseDetailed SimConfig.standard initial reference candidate 2L with
+    | Error e -> Assert.Fail($"unexpected replay error: {e}")
+    | Ok(Match _, _, _)
+    | Ok(TruncatedRun _, _, _) -> Assert.Fail("expected Diverged")
+    | Ok(Diverged(point, _, _), referenceRun, candidateRun) ->
+        Assert.Equal(1L, point.Tick)
+        Assert.Equal(Some "Agent[0]", point.Section)
+
+        let idx = referenceRun.TickHashes |> Array.findIndex (fun cp -> cp.Tick = point.Tick)
+        let section = defaultArg point.Section "(unavailable)"
+
+        let agents =
+            if section.StartsWith("Agent[") && section.EndsWith("]") then
+                [| AgentId.ofInt (int (section.Substring(6, section.Length - 7))) |]
+            else
+                [||]
+
+        Assert.Equal<AgentId[]>([| AgentId.ofInt 0 |], agents)
+
+        let attach (label: string) (f: DiagnosticFrame) =
+            { f with
+                Overlays = Array.append f.Overlays [| Divergence(label + ": " + section, agents) |] }
+
+        let referenceFrame = attach "reference" (Diagnostics.frame referenceRun.TickStates.[idx])
+        let candidateFrame = attach "candidate" (Diagnostics.frame candidateRun.TickStates.[idx])
+
+        let refAscii = DiagnosticRender.Ascii referenceFrame
+        let candAscii = DiagnosticRender.Ascii candidateFrame
+        Assert.Contains("DIVERGED: first differing section reference: Agent[0]  agent 0", refAscii)
+        Assert.Contains("DIVERGED: first differing section candidate: Agent[0]  agent 0", candAscii)
+
+        let refSvg = DiagnosticRender.Svg referenceFrame
+        let candSvg = DiagnosticRender.Svg candidateFrame
+        Assert.Contains("stroke=\"#ff00ff\"", refSvg)
+        Assert.Contains("stroke=\"#ff00ff\"", candSvg)
+        Assert.Contains("DIVERGED: first differing section reference: Agent[0]", refSvg)
+        Assert.Contains("DIVERGED: first differing section candidate: Agent[0]", candSvg)
+
+        let html = DiagnosticRender.Html [| referenceFrame; candidateFrame |]
+        Assert.Contains("cw-diverged", html)
+        Assert.Contains("Agent[0]", html)
+
+// --- AgentRadioLost / AgentPendingDelivery overlays (TASK-058, backlog B-016b) ----
+
+[<Fact>]
+let ``Diagnostics.frame renders a radio-destroyed and an in-flight-order agent visibly, in every format`` () =
+    let bounds: GridBounds = { Width = 8; Height = 8 }
+    let radioLost = { Agent.create (AgentId.ofInt 0) Friendly { X = 1; Y = 1 } with RadioDestroyed = true }
+
+    let pendingOrder: ReceivedOrder =
+        { Command = CommandId.ofInt 7
+          Intent = MoveTo { X = 5; Y = 5 }
+          IssuedAtTick = 1L
+          Urgency = Routine
+          RiskTolerance = Standard }
+
+    let pending =
+        { Agent.create (AgentId.ofInt 1) Friendly { X = 2; Y = 2 } with
+            PendingDelivery = Some(pendingOrder, Replace, 4L) }
+
+    let w =
+        { (Setup.sixAgentWorld bounds 1UL |> fun s -> { s with Agents = [| radioLost; pending |] }) with
+            Headquarters = Some { X = 0; Y = 0 } }
+
+    let frame = Diagnostics.frame w
+
+    Assert.Contains(AgentRadioLost(AgentId.ofInt 0, { X = 1; Y = 1 }), frame.Overlays)
+    Assert.Contains(AgentPendingDelivery(AgentId.ofInt 1, { X = 2; Y = 2 }, CommandId.ofInt 7, 4L), frame.Overlays)
+
+    let ascii = DiagnosticRender.Ascii frame
+    Assert.Contains("radio lost (1,1): agent 0", ascii)
+    Assert.Contains("pending delivery (2,2): agent 1  command 7  due tick 4", ascii)
+
+    let svg = DiagnosticRender.Svg frame
+    Assert.Contains("#4A0E0E", svg) // the radio-lost cross
+    Assert.Contains("#2B6CB0", svg) // the pending-delivery ring
+    Assert.Contains("@4</text>", svg) // the due-tick label
+
+    // A world with neither field set (the overwhelming common case, and
+    // every one of the 16 pre-existing corpus entries) renders neither
+    // overlay -- the sparse-overlay precedent.
+    let quiet = Diagnostics.frame (Setup.sixAgentWorld bounds 1UL)
+
+    Assert.DoesNotContain(
+        quiet.Overlays,
+        (function
+        | AgentRadioLost _
+        | AgentPendingDelivery _ -> true
+        | _ -> false)
+    )

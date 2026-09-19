@@ -57,6 +57,8 @@ let private goodRaw () : RawScenario =
              IsOptional = false } |]
       TerrainLayer = None
       UnitTypes = [| { Id = "standard"; MoveSpeed = Agent.MoveSpeedDefault } |]
+      Headquarters = None
+      Jammers = [||]
       FailOnFriendlyForceEliminated = true }
 
 /// A well-formed authored terrain layer for the 16x16 `goodRaw` map: one
@@ -102,14 +104,16 @@ let private errorsOf (raw: RawScenario) : ScenarioError list =
 [<Fact>]
 let ``the content version is independent of the canonical and replay versions`` () =
     // The three version constants move independently: ScenarioContent.Version
-    // is 4 (TASK-010 authored terrain layer; TASK-047 ResupplyAreas;
-    // TASK-049 unit types), Canonical.FormatVersion is 11 (TASK-018 /
-    // TASK-026 / TASK-028 / TASK-032 / TASK-033 / TASK-034 / TASK-037 /
-    // TASK-044 / TASK-045 / TASK-047 -- TASK-049's MoveSpeed is static,
-    // excluded, so it does not move this one), Replay.FormatVersion is 1.
-    // This test documents the intent, not an inequality.
-    Assert.Equal(4, ScenarioContent.Version)
-    Assert.Equal(11, Canonical.FormatVersion)
+    // is 5 (TASK-010 authored terrain layer; TASK-047 ResupplyAreas;
+    // TASK-049 unit types; TASK-058 Headquarters/Jammers), Canonical.
+    // FormatVersion is 12 (TASK-018 / TASK-026 / TASK-028 / TASK-032 /
+    // TASK-033 / TASK-034 / TASK-037 / TASK-044 / TASK-045 / TASK-047 /
+    // TASK-058 -- TASK-049's MoveSpeed and TASK-058's Headquarters/Jammers
+    // are static, excluded, so they do not move this one; RadioDestroyed/
+    // PendingDelivery do), Replay.FormatVersion is 1. This test documents
+    // the intent, not an inequality.
+    Assert.Equal(5, ScenarioContent.Version)
+    Assert.Equal(12, Canonical.FormatVersion)
     Assert.Equal(1, Replay.FormatVersion)
 
 // --- the happy path -------------------------------------------------
@@ -183,13 +187,13 @@ let ``an extraction with no listed agents validates to AllFriendlyAgents`` () =
 
 [<Fact>]
 let ``an unsupported content version is a typed error`` () =
-    Assert.Contains(UnsupportedContentVersion(99, 4), errorsOf { goodRaw () with ContentVersion = 99 })
+    Assert.Contains(UnsupportedContentVersion(99, 5), errorsOf { goodRaw () with ContentVersion = 99 })
 
 [<Fact>]
 let ``a version-1 scenario is rejected, not migrated`` () =
     // ScenarioContent.Version 1 predates the authored terrain layer. The
     // validator does not migrate it (docs/04 section 16).
-    Assert.Contains(UnsupportedContentVersion(1, 4), errorsOf { goodRaw () with ContentVersion = 1 })
+    Assert.Contains(UnsupportedContentVersion(1, 5), errorsOf { goodRaw () with ContentVersion = 1 })
 
 [<Fact>]
 let ``a blank scenario id is reported`` () =
@@ -326,7 +330,7 @@ let ``a missing required marker is reported for each of the three kinds`` () =
 let ``validation reports every fault in one pass`` () =
     let raw =
         { goodRaw () with
-            ContentVersion = 5
+            ContentVersion = 6
             EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |]
             Objectives = [| objective 2 "orbit" |]
             TerrainLayer =
@@ -335,7 +339,7 @@ let ``validation reports every fault in one pass`` () =
                         Cover = [| { Cell = { X = 40; Y = 40 }; Direction = "up"; Level = -1 } |] } }
 
     let es = errorsOf raw
-    Assert.Contains(UnsupportedContentVersion(5, 4), es)
+    Assert.Contains(UnsupportedContentVersion(6, 5), es)
     Assert.Contains(DuplicateDeploymentId 1, es)
     Assert.Contains(DeploymentOutOfMap(1, { X = 99; Y = 99 }, { Width = 16; Height = 16 }), es)
     Assert.Contains(UnknownObjectiveKind(2, "orbit"), es)
@@ -700,6 +704,80 @@ let ``a deployment's UnitType resolves to Deployment.MoveSpeed`` () =
         fun d -> Assert.Equal(Agent.MoveSpeedDefault, d.MoveSpeed)
     )
 
+// --- headquarters and jammers (ScenarioContent.Version 5, TASK-058, backlog B-016b) ---
+
+[<Fact>]
+let ``an absent Headquarters and empty Jammers validate cleanly, the pre-TASK-058 default`` () =
+    let s = validated (goodRaw ())
+    Assert.Equal(None, s.Headquarters)
+    Assert.Empty(s.Jammers)
+
+[<Fact>]
+let ``an authored Headquarters and Jammer round-trip onto the validated Scenario`` () =
+    let raw =
+        { goodRaw () with
+            Headquarters = Some { X = 2; Y = 2 }
+            Jammers =
+                [| { Position = { X = 4; Y = 4 }
+                     Radius = 3
+                     ActiveFromTick = 5L
+                     ActiveUntilTick = 40L } |] }
+
+    let s = validated raw
+    Assert.Equal(Some { X = 2; Y = 2 }, s.Headquarters)
+    let jammer = Assert.Single s.Jammers
+    Assert.Equal({ X = 4; Y = 4 }, jammer.Position)
+    Assert.Equal(3, jammer.Radius)
+    Assert.Equal(5L, jammer.ActiveFromTick)
+    Assert.Equal(40L, jammer.ActiveUntilTick)
+
+[<Fact>]
+let ``a Headquarters outside the map is reported`` () =
+    let raw = { goodRaw () with Headquarters = Some { X = 99; Y = 99 } }
+    Assert.Contains(HeadquartersOutOfMap({ X = 99; Y = 99 }, { Width = 16; Height = 16 }), errorsOf raw)
+
+[<Fact>]
+let ``a jammer outside the map is reported`` () =
+    let raw =
+        { goodRaw () with
+            Jammers = [| { Position = { X = 99; Y = 99 }; Radius = 1; ActiveFromTick = 0L; ActiveUntilTick = 10L } |] }
+
+    Assert.Contains(JammerOutOfMap(0, { X = 99; Y = 99 }, { Width = 16; Height = 16 }), errorsOf raw)
+
+[<Fact>]
+let ``a negative jammer radius is reported`` () =
+    let raw =
+        { goodRaw () with
+            Jammers = [| { Position = { X = 4; Y = 4 }; Radius = -1; ActiveFromTick = 0L; ActiveUntilTick = 10L } |] }
+
+    Assert.Contains(NegativeJammerRadius(0, -1), errorsOf raw)
+
+[<Fact>]
+let ``a jammer window with ActiveFromTick after ActiveUntilTick is reported`` () =
+    let raw =
+        { goodRaw () with
+            Jammers = [| { Position = { X = 4; Y = 4 }; Radius = 1; ActiveFromTick = 10L; ActiveUntilTick = 5L } |] }
+
+    Assert.Contains(InvalidJammerWindow(0, 10L, 5L), errorsOf raw)
+
+[<Fact>]
+let ``a jammer with a negative tick bound is reported`` () =
+    let raw =
+        { goodRaw () with
+            Jammers = [| { Position = { X = 4; Y = 4 }; Radius = 1; ActiveFromTick = -1L; ActiveUntilTick = 5L } |] }
+
+    Assert.Contains(InvalidJammerWindow(0, -1L, 5L), errorsOf raw)
+
+[<Fact>]
+let ``the jammer index in a reported fault matches its position in the authored array`` () =
+    let raw =
+        { goodRaw () with
+            Jammers =
+                [| { Position = { X = 4; Y = 4 }; Radius = 1; ActiveFromTick = 0L; ActiveUntilTick = 10L }
+                   { Position = { X = 6; Y = 6 }; Radius = -2; ActiveFromTick = 0L; ActiveUntilTick = 10L } |] }
+
+    Assert.Contains(NegativeJammerRadius(1, -2), errorsOf raw)
+
 // --- pinning: the six-agent fixture as a Scenario ---------------
 
 /// The shared spike fixture (src/CommandoWar.Headless/Fixture.fs,
@@ -720,6 +798,8 @@ let private fixtureScenario () : Scenario =
       Objectives = [| { objective 1 "reach" with AreaRef = "observation" } |]
       TerrainLayer = None
       UnitTypes = [| { Id = "standard"; MoveSpeed = Agent.MoveSpeedDefault } |]
+      Headquarters = None
+      Jammers = [||]
       FailOnFriendlyForceEliminated = true }
     |> validated
 
@@ -727,7 +807,7 @@ let private fixtureScenario () : Scenario =
 let ``the six-agent fixture as a Scenario reproduces the pinned initial hash`` () =
     match World.ofScenario (fixtureScenario ()) Fixture.Seed with
     | Error e -> Assert.Fail($"World.ofScenario failed: {e}")
-    | Ok world -> Assert.Equal(0xF762ECD4377B5E68UL, (Hashing.hash world).Value)
+    | Ok world -> Assert.Equal(0xB25FE816BCB67A11UL, (Hashing.hash world).Value)
 
 [<Fact>]
 let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the pinned final hash`` () =
@@ -745,4 +825,4 @@ let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the
         let cmds = if tick = Fixture.CommandIssueTick then [| command |] else [||]
         state <- (Simulation.step SimConfig.standard cmds state).State
 
-    Assert.Equal(0xAF1FB68EF486CB39UL, (Hashing.hash state).Value)
+    Assert.Equal(0x0A822498317E0958UL, (Hashing.hash state).Value)

@@ -147,6 +147,15 @@ module Corpus =
           /// proper), or `None` for the overwhelming majority of entries
           /// that need none.
           Resupply: Cell option
+          /// An authored command-origin cell (TASK-058, backlog B-016b), or
+          /// `None` for every entry except the one demonstrating the
+          /// feature — the opt-in gate for the whole range/delay/jamming/
+          /// radio-destroyed model (`Communication.available`).
+          Headquarters: Cell option
+          /// Authored jammers (TASK-058, backlog B-016b): position, radius,
+          /// and the inclusive `[fromTick, untilTick]` active window. Empty
+          /// for every entry except the one demonstrating the feature.
+          Jammers: (Cell * int * int64 * int64) list
           Orders: ScenarioOrder list }
 
     /// The sole unit type every builder-authored corpus entry's agents use
@@ -230,6 +239,15 @@ module Corpus =
                       Cells = List.toArray cs
                       Cover = [||] }
           UnitTypes = [| { Id = StandardUnitType; MoveSpeed = Agent.MoveSpeedDefault } |]
+          Headquarters = spec.Headquarters
+          Jammers =
+            spec.Jammers
+            |> List.map (fun (cell, radius, fromTick, untilTick) ->
+                ({ Position = cell
+                   Radius = radius
+                   ActiveFromTick = fromTick
+                   ActiveUntilTick = untilTick }: RawJammer))
+            |> List.toArray
           FailOnFriendlyForceEliminated = true }
 
     /// Validates and instantiates a corpus scenario's initial `WorldState`.
@@ -289,6 +307,8 @@ module Corpus =
           Objective = { X = 11; Y = 0 }
           Extraction = { X = 0; Y = 8 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 10; Y = 3 } ] }
 
     /// One friendly agent at (1,4); the target (5,4) is passable but its four
@@ -304,6 +324,8 @@ module Corpus =
           Objective = { X = 7; Y = 0 }
           Extraction = { X = 0; Y = 7 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 5; Y = 4 } ] }
 
     /// Two friendly agents on open terrain: agent 0 at (3,0) -> (3,7) crosses
@@ -321,6 +343,8 @@ module Corpus =
           Objective = { X = 7; Y = 7 }
           Extraction = { X = 0; Y = 0 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 3; Y = 7 }; order 1L 1 { X = 7; Y = 3 } ] }
 
     /// One friendly agent at (0,0) ordered to (4,0), open terrain except
@@ -338,6 +362,8 @@ module Corpus =
           Objective = { X = 7; Y = 7 }
           Extraction = { X = 0; Y = 7 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 4; Y = 0 } ] }
 
     /// Three friendly agents in a line at (1,3), (2,3), (3,3), all ordered east
@@ -355,6 +381,8 @@ module Corpus =
           Objective = { X = 11; Y = 3 }
           Extraction = { X = 0; Y = 8 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders =
             [ order 1L 0 { X = 11; Y = 3 }
               order 1L 1 { X = 11; Y = 3 }
@@ -374,6 +402,8 @@ module Corpus =
           Objective = { X = 7; Y = 7 }
           Extraction = { X = 0; Y = 0 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 4; Y = 3 }; order 1L 1 { X = 3; Y = 3 } ] }
 
     /// One friendly agent at (1,5) ordered east to (9,5), and a stationary
@@ -395,6 +425,8 @@ module Corpus =
           Objective = { X = 9; Y = 5 }
           Extraction = { X = 0; Y = 7 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 9; Y = 5 } ] }
 
     /// One friendly agent 0 at (1,4) with `CommunicationAvailable = false`
@@ -414,6 +446,8 @@ module Corpus =
           Objective = { X = 7; Y = 0 }
           Extraction = { X = 0; Y = 7 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 6; Y = 4 } ] }
 
     /// Two friendlies on open ground ordered along the same exposed approach
@@ -437,6 +471,8 @@ module Corpus =
           Objective = { X = 11; Y = 4 }
           Extraction = { X = 0; Y = 7 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 11; Y = 3 }; order 1L 1 { X = 11; Y = 5 } ] }
 
     /// One friendly agent at (1,4), open ground, no threats: ordered east to
@@ -460,6 +496,8 @@ module Corpus =
           Objective = { X = 14; Y = 0 }
           Extraction = { X = 0; Y = 8 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 14; Y = 4 }; order 3L 0 { X = 14; Y = 8 } ] }
 
     /// Three agents: friendly 0 (Discipline 1) at (1,3) is ordered on tick 1
@@ -491,6 +529,8 @@ module Corpus =
           Objective = { X = 11; Y = 4 }
           Extraction = { X = 0; Y = 7 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [ order 1L 0 { X = 11; Y = 3 }; suppressOrder 1L 1 2 ] }
 
     /// The `suppress-relieves-exposure` geometry exactly, extended with one
@@ -529,6 +569,8 @@ module Corpus =
           Objective = { X = 9; Y = 0 }
           Extraction = { X = 0; Y = 9 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [] }
 
     /// One friendly agent, no hostiles -- the world half of
@@ -548,6 +590,8 @@ module Corpus =
           Objective = { X = 11; Y = 0 }
           Extraction = { X = 0; Y = 2 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [] }
 
     /// `order-queue-stacking-and-cancellation`'s command log, built directly
@@ -603,6 +647,8 @@ module Corpus =
           Objective = { X = 9; Y = 9 }
           Extraction = { X = 9; Y = 0 }
           Resupply = None
+          Headquarters = None
+          Jammers = []
           Orders = [] }
 
     /// Every corpus entry, in a fixed order.

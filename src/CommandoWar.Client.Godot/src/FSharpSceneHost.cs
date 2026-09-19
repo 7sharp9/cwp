@@ -47,8 +47,7 @@ public partial class FSharpSceneHost : Node2D
     // Prototype" (CC0, src/CommandoWar.Client.Godot/art/LICENSE-THIRD-PARTY.md).
     // Loaded once and shared by every FSharpSceneHost instance -- never
     // per-frame. Keyed by DrawItem.TextureId for terrain (0 = floor,
-    // 1 = block, 2 = crate); the agent texture is the same for both sides,
-    // tinted per DrawItem.R/G/B (RenderShared.agentColor).
+    // 1 = block, 2 = crate).
     private static readonly Texture2D[] TerrainTextures =
     [
         GD.Load<Texture2D>("res://art/terrain_floor.png"),
@@ -56,7 +55,43 @@ public partial class FSharpSceneHost : Node2D
         GD.Load<Texture2D>("res://art/terrain_crate.png"),
     ];
 
-    private static readonly Texture2D AgentTexture = GD.Load<Texture2D>("res://art/agent_human.png");
+    // Agent facing (TASK-054, backlog B-052; TASK-056 renamed from
+    // AgentFacingTextures once a second, animated texture set was added):
+    // 8 pre-rendered `45°` rotations of the Kenney **idle** pose
+    // (`Human_0..7_Idle0.png`, the pack's own `Information.png` documents
+    // these as 8 rotations of one pose, not 8 character variants --
+    // art/LICENSE-THIRD-PARTY.md), indexed by DrawItem.TextureId for a
+    // full-opacity Kind = 1 item with no active run-cycle frame
+    // (RenderShared.facingBin -- index N is directly Kenney's own `Human_N`
+    // rotation, no remapping). Same for both sides, tinted per
+    // DrawItem.R/G/B (RenderShared.agentColor).
+    private static readonly Texture2D[] AgentIdleTextures =
+    [
+        GD.Load<Texture2D>("res://art/agent_human_facing0.png"),
+        GD.Load<Texture2D>("res://art/agent_human_facing1.png"),
+        GD.Load<Texture2D>("res://art/agent_human_facing2.png"),
+        GD.Load<Texture2D>("res://art/agent_human_facing3.png"),
+        GD.Load<Texture2D>("res://art/agent_human_facing4.png"),
+        GD.Load<Texture2D>("res://art/agent_human_facing5.png"),
+        GD.Load<Texture2D>("res://art/agent_human_facing6.png"),
+        GD.Load<Texture2D>("res://art/agent_human_facing7.png"),
+    ];
+
+    // Agent run-cycle animation (TASK-056, backlog B-052): each of the 8
+    // facing directions' own 10-frame `Human_N_RunF.png` cycle
+    // (`agent_human_run{dir}_{frame}.png`, cropped to the identical shared
+    // rect the idle textures above use, so switching between an idle and a
+    // running frame never changes the drawn figure's on-screen size --
+    // DrawAgentFigure derives height from each texture's own aspect ratio
+    // at a fixed on-screen width). Flat 80-entry array indexed
+    // `dir * 10 + frame`, not a jagged Texture2D[8][10] -- ADR-0004's
+    // "arrays of primitives/CLIMutable records" interop idiom is an F#/C#
+    // boundary rule, not binding on a pure-C#-side asset table, but a flat
+    // array keeps this table the same shape as every other GD.Load array
+    // in this file.
+    private static readonly Texture2D[] AgentRunTextures = Enumerable.Range(0, 8 * 10)
+        .Select(i => GD.Load<Texture2D>($"res://art/agent_human_run{i / 10}_{i % 10}.png"))
+        .ToArray();
 
     // Fire-feedback effect sprites (TASK-046, backlog B-057): Kenney
     // "Particle Pack" (CC0, art/LICENSE-THIRD-PARTY.md). Keyed by
@@ -97,14 +132,6 @@ public partial class FSharpSceneHost : Node2D
             OrderModeBarOrigin.Y,
             OrderModeIconSize,
             OrderModeIconSize);
-
-    // The human figure's own pixel bounds within the 256x512 Kenney canvas
-    // (the rest is transparent padding sized for the tallest block in the
-    // set) -- found by inspecting the source PNG's alpha channel, not
-    // guessed. Cropped via DrawTextureRectRegion rather than drawing the
-    // whole padded canvas, or the figure would render illegibly small at
-    // terrain-tile scale.
-    private static readonly Rect2 AgentSourceRect = new(106, 324, 45, 133);
 
     private IClientScene _scene;
     private Label _hud;
@@ -402,9 +429,10 @@ public partial class FSharpSceneHost : Node2D
                     // A translucent item (A < 0.99) is a halo/route-preview
                     // marker, not a real agent (TryHitAgentCircle's own
                     // precedent) -- keep the plain circle for those; only a
-                    // real, full-opacity agent gets the Kenney figure.
+                    // real, full-opacity agent gets the Kenney figure, at
+                    // its current facing bin (TextureId, TASK-054).
                     if (item.A >= 0.99f)
-                        DrawAgentFigure(agentPos, item.Radius, color);
+                        DrawAgentFigure(agentPos, item.TextureId, Mathf.RoundToInt(item.Cx2), item.Radius, color);
                     else
                     {
                         DrawCircle(agentPos, item.Radius, color);
@@ -457,17 +485,30 @@ public partial class FSharpSceneHost : Node2D
         DrawTextureRect(tex, rect, false, color);
     }
 
-    // An agent's Kenney figure is cropped from its own padded canvas
-    // (AgentSourceRect) and drawn foot-anchored at `agentPos`, the same point
-    // TryHitAgentCircle already treats as the agent's on-screen centre --
-    // `radius` scales the crop the same way the old circle's diameter did,
-    // so click hit-testing (unchanged) still matches what is drawn.
-    private void DrawAgentFigure(Vector2 agentPos, float radius, Color color)
+    // An agent's Kenney figure (one of 8 pre-cropped facing textures,
+    // TASK-054, backlog B-052 -- no further crop needed, unlike the old
+    // single-pose AgentTexture, since the new art is already tightly
+    // bounded to its own alpha bbox, the DrawTerrainTile precedent) is
+    // drawn foot-anchored at `agentPos`, the same point TryHitAgentCircle
+    // already treats as the agent's on-screen centre -- `radius` scales it
+    // the same way the old circle's diameter did, so click hit-testing
+    // (unchanged) still matches what is drawn. `runFrame < 0` (the
+    // `RenderShared.runFrameIndex`/`DrawItem.Cx2` sentinel, TASK-056) draws
+    // the frozen idle pose; `0..9` draws that direction's own running-cycle
+    // frame instead. Both texture sets share the identical crop rect
+    // (art/LICENSE-THIRD-PARTY.md), so their aspect ratio -- and therefore
+    // the drawn size at this fixed on-screen width -- never changes when
+    // switching between them.
+    private void DrawAgentFigure(Vector2 agentPos, int facingIndex, int runFrame, float radius, Color color)
     {
+        Texture2D tex = runFrame < 0
+            ? AgentIdleTextures[Mathf.Clamp(facingIndex, 0, AgentIdleTextures.Length - 1)]
+            : AgentRunTextures[Mathf.Clamp(facingIndex, 0, 7) * 10 + Mathf.Clamp(runFrame, 0, 9)];
+        Vector2 size = tex.GetSize();
         float w = radius * 2f;
-        float h = w * (AgentSourceRect.Size.Y / AgentSourceRect.Size.X);
+        float h = w * (size.Y / size.X);
         var rect = new Rect2(agentPos.X - w * 0.5f, agentPos.Y + radius - h, w, h);
-        DrawTextureRectRegion(AgentTexture, rect, AgentSourceRect, color);
+        DrawTextureRect(tex, rect, false, color);
     }
 
     // A fire-feedback effect sprite (TASK-046, backlog B-057) is centred, not

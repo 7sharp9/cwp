@@ -65,6 +65,8 @@ module TurnDemo =
                  IsOptional = false } |]
           TerrainLayer = None
           UnitTypes = [| { Id = StandardUnitType; MoveSpeed = Agent.MoveSpeedDefault } |]
+          Headquarters = None
+          Jammers = [||]
           FailOnFriendlyForceEliminated = true }
 
     /// The validated scenario. Fails hard: this is a fixed test vector, not

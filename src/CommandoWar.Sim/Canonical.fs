@@ -192,8 +192,23 @@ module Canonical =
     /// comfortably exceeds any pinned scenario's shot count), so the moved
     /// hashes are a byte-layout change, not a behaviour change, for every
     /// entry except this task's own new corpus entries (TASK-047 ledger).
+    /// 12 (TASK-058, backlog B-016b): `writeAgent` gained an
+    /// `AgentState.RadioDestroyed` flag and a `PendingDelivery` section —
+    /// both genuine per-tick memory (the `Suppression`/`Vitals` precedent):
+    /// `RadioDestroyed` changes from a gameplay event (a combat hit) and
+    /// cannot be recomputed from any other field; `PendingDelivery` carries
+    /// an in-flight order's own envelope and due tick, which no other field
+    /// reproduces. `WorldState.Headquarters`/`.Jammers` are NOT written
+    /// either: static authored scenario data, the `Terrain`/
+    /// `CommunicationAvailable`/`ResupplyAreas` precedent. Every scenario
+    /// pinned before this version authors no `Headquarters` (the opt-in
+    /// gate, `Communication.available`'s own doc comment), so every agent's
+    /// `RadioDestroyed` stays `false` and `PendingDelivery` stays `None` for
+    /// the whole run — the moved hashes are a byte-layout change, not a
+    /// behaviour change, for every entry except this task's own new corpus
+    /// entry (TASK-058 ledger).
     [<Literal>]
-    let FormatVersion = 11
+    let FormatVersion = 12
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -261,6 +276,12 @@ module Canonical =
     // `Discipline`. A speed-driven behaviour difference surfaces in the hash
     // within one tick via `Position` / `Progress`.
     //
+    // `WorldState.Headquarters` and `.Jammers` (TASK-058, backlog B-016b)
+    // are likewise NOT written — static authored scenario data
+    // (`Scenario.Headquarters`/`.Jammers`), the `Terrain`/`ResupplyAreas`
+    // precedent. A comms-derived behaviour difference still surfaces in the
+    // hash within one tick via `Order`/`Position`/`RadioDestroyed`.
+    //
     // `AgentState.Order` and `AgentState.Disposition` (TASK-028) ARE written:
     // they carry per-tick memory no other field reproduces (an order's
     // `IssuedAtTick`; a persisting `Refused` outcome and its reasons), so
@@ -283,6 +304,13 @@ module Canonical =
     // one-shot flag but still genuinely affects future behaviour (the
     // wounded reappraisal trigger) and cannot be recomputed from `Vitals`
     // alone (see the FormatVersion 9 doc comment above).
+    //
+    // `AgentState.RadioDestroyed` and `.PendingDelivery` (TASK-058, backlog
+    // B-016b) ARE written, the identical argument: `RadioDestroyed` changes
+    // from a gameplay event (a combat hit) and cannot be recomputed from any
+    // other field; `PendingDelivery` carries an in-flight order's own
+    // envelope and due tick, genuine per-tick memory no other field
+    // reproduces.
 
     let private reasonCode (r: DecisionReason) : int =
         match r with
@@ -424,6 +452,24 @@ module Canonical =
             w.I32 1
             w.I32 reserve
             w.I32 ticksRemaining
+
+        // AgentState.RadioDestroyed / .PendingDelivery (TASK-058, backlog
+        // B-016b) — see the FormatVersion 12 doc comment above.
+        w.U8(if a.RadioDestroyed then 1uy else 0uy)
+
+        match a.PendingDelivery with
+        | None -> w.U8 0uy
+        | Some(order, mode, dueTick) ->
+            w.U8 1uy
+            writeOrder w order
+
+            w.I32(
+                match mode with
+                | Replace -> 0
+                | Append -> 1
+            )
+
+            w.I64 dueTick
 
     // The friendly squad's shared tactical picture (TASK-026,
     // `WorldState.TacticalKnowledge`, docs/04 section 12.4). Genuine per-tick
