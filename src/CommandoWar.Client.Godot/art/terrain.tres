@@ -1,0 +1,71 @@
+[gd_resource type="TileSet" format=3 uid="uid://bjh5p6ql6ary0"]
+
+[ext_resource type="Texture2D" uid="uid://bjfylvvcbnogv" path="res://art/terrain_floor.png" id="1_4ckm1"]
+[ext_resource type="Texture2D" uid="uid://dv7j2m37osvfn" path="res://art/terrain_block.png" id="2_y73rw"]
+[ext_resource type="Texture2D" uid="uid://bkakwvgd360uw" path="res://art/terrain_crate.png" id="3_yj6hr"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_3myc2"]
+texture = ExtResource("1_4ckm1")
+texture_region_size = Vector2i(256, 512)
+0:0/next_alternative_id = 3
+0:0/0 = 0
+0:0/0/custom_data_0 = "passable"
+0:0/0/custom_data_1 = 1
+0:0/1 = 1
+0:0/1/custom_data_0 = "passable"
+0:0/1/custom_data_1 = 1
+0:0/1/custom_data_3 = 1
+0:0/2 = 2
+0:0/2/custom_data_0 = "passable"
+0:0/2/custom_data_1 = 1
+0:0/2/custom_data_3 = 2
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_myyj0"]
+texture = ExtResource("2_y73rw")
+texture_region_size = Vector2i(256, 512)
+0:0/next_alternative_id = 3
+0:0/0 = 0
+0:0/0/custom_data_0 = "impassable"
+0:0/0/custom_data_2 = true
+0:0/1 = 1
+0:0/1/custom_data_0 = "impassable"
+0:0/1/custom_data_2 = true
+0:0/1/custom_data_3 = 1
+0:0/2 = 2
+0:0/2/custom_data_0 = "impassable"
+0:0/2/custom_data_2 = true
+0:0/2/custom_data_3 = 2
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_m42mm"]
+texture = ExtResource("3_yj6hr")
+texture_region_size = Vector2i(256, 512)
+0:0/next_alternative_id = 3
+0:0/0 = 0
+0:0/0/custom_data_0 = "passable"
+0:0/0/custom_data_1 = 3
+0:0/0/custom_data_2 = true
+0:0/1 = 1
+0:0/1/custom_data_0 = "passable"
+0:0/1/custom_data_1 = 3
+0:0/1/custom_data_2 = true
+0:0/1/custom_data_3 = 1
+0:0/2 = 2
+0:0/2/custom_data_0 = "passable"
+0:0/2/custom_data_1 = 3
+0:0/2/custom_data_2 = true
+0:0/2/custom_data_3 = 2
+
+[resource]
+tile_shape = 1
+tile_size = Vector2i(256, 128)
+custom_data_layer_0/name = "Class"
+custom_data_layer_0/type = 4
+custom_data_layer_1/name = "MoveCost"
+custom_data_layer_1/type = 2
+custom_data_layer_2/name = "Opaque"
+custom_data_layer_2/type = 1
+custom_data_layer_3/name = "Elevation"
+custom_data_layer_3/type = 2
+sources/0 = SubResource("TileSetAtlasSource_3myc2")
+sources/1 = SubResource("TileSetAtlasSource_myyj0")
+sources/2 = SubResource("TileSetAtlasSource_m42mm")

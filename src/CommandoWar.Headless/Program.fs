@@ -14,6 +14,11 @@ module Exit =
     let usage = 1
     let replayError = 2
     let diverged = 3
+    /// A `.cwscenario` file parsed but its content failed `Scenario.validate`
+    /// (TASK-060, `cwheadless import`). Distinct from `replayError` (a
+    /// malformed replay-command file or a replay/determinism failure) and
+    /// `usage` (a CLI or file-not-found mistake).
+    let scenarioInvalid = 4
 
 let private hx (h: StateHash) = sprintf "0x%016X" h.Value
 let private hxv (v: uint64) = sprintf "0x%016X" v
@@ -32,6 +37,67 @@ let private describeReplayError (e: ReplayError) : string =
         $"command {index} at tick {tick} is outside the replay range 1..{tickCount}"
     | DuplicateCommandIdInLog(id, first, second) ->
         $"command id {CommandId.value id} is reused: commands at index {first} and {second}"
+
+/// Human-readable rendering of one `Scenario.validate` fault (TASK-060,
+/// `cwheadless import`), in the `describeReplayError` style.
+let private describeScenarioError (e: ScenarioError) : string =
+    let atCell (c: Cell) = $"({c.X},{c.Y})"
+    let inMap (bounds: GridBounds) = $"{bounds.Width}x{bounds.Height} map"
+
+    match e with
+    | UnsupportedContentVersion(found, supported) ->
+        $"unsupported scenario content version {found}, this build supports {supported}"
+    | BlankScenarioId -> "scenario id is blank"
+    | NonPositiveMapDimensions(w, h) -> $"map dimensions must be positive, got {w}x{h}"
+    | DuplicateDeploymentId agent -> $"duplicate deployment agent id {agent}"
+    | NegativeDeploymentId agent -> $"negative deployment agent id {agent}"
+    | NegativeDiscipline(agent, value) -> $"agent {agent} has negative Discipline {value}"
+    | DeploymentOutOfMap(agent, cell, bounds) -> $"agent {agent} at {atCell cell} is outside the {inMap bounds}"
+    | DeploymentCellShared(cell, agents) -> $"cell {atCell cell} is shared by agents {agents}"
+    | DuplicateObjectiveId objective -> $"duplicate objective id {objective}"
+    | NegativeObjectiveId objective -> $"negative objective id {objective}"
+    | DuplicateAreaId area -> $"duplicate area id '{area}'"
+    | DuplicateTargetId target -> $"duplicate target id '{target}'"
+    | BlankAreaId cell -> $"blank area id at {atCell cell}"
+    | BlankTargetId cell -> $"blank target id at {atCell cell}"
+    | AreaMarkerOutOfMap(area, cell, bounds) -> $"area '{area}' at {atCell cell} is outside the {inMap bounds}"
+    | TargetMarkerOutOfMap(target, cell, bounds) -> $"target '{target}' at {atCell cell} is outside the {inMap bounds}"
+    | UnknownObjectiveKind(objective, kind) -> $"objective {objective} has unknown kind '{kind}'"
+    | ObjectiveReferencesMissingArea(objective, area) -> $"objective {objective} references unknown area '{area}'"
+    | ObjectiveReferencesMissingTarget(objective, target) ->
+        $"objective {objective} references unknown target '{target}'"
+    | ExtractionSelectsUnknownAgent(objective, agent) ->
+        $"objective {objective} selects unknown agent {agent} for extraction"
+    | MissingRequiredMarker marker -> $"missing required marker '{marker}'"
+    | TerrainLayerDimensionsMismatch(layer, map) ->
+        $"terrain layer {layer.Width}x{layer.Height} does not match the {inMap map}"
+    | TerrainFeatureOutOfMap(cell, bounds) -> $"terrain feature at {atCell cell} is outside the {inMap bounds}"
+    | DuplicateTerrainCell cell -> $"duplicate terrain cell at {atCell cell}"
+    | DuplicateCoverFeature(cell, direction) -> $"duplicate cover feature at {atCell cell} direction '{direction}'"
+    | UnknownTerrainClass(cell, className) -> $"cell {atCell cell} has unknown terrain class '{className}'"
+    | UnknownCoverClass(cell, className) -> $"cover at {atCell cell} has unknown direction '{className}'"
+    | NegativeElevation(cell, level) -> $"cell {atCell cell} has negative elevation {level}"
+    | NegativeMoveCost(cell, cost) -> $"cell {atCell cell} has negative move cost {cost}"
+    | MoveCostOutOfRange(cell, cost, min, max) -> $"cell {atCell cell} move cost {cost} is outside [{min},{max}]"
+    | NegativeCoverLevel(cell, level) -> $"cover at {atCell cell} has negative level {level}"
+    | DeploymentOnImpassableCell(agent, cell) -> $"agent {agent} is deployed on impassable cell {atCell cell}"
+    | BlankUnitTypeId -> "a unit type has a blank id"
+    | DuplicateUnitTypeId unitType -> $"duplicate unit type id '{unitType}'"
+    | NonPositiveUnitTypeMoveSpeed(unitType, value) -> $"unit type '{unitType}' has non-positive MoveSpeed {value}"
+    | DeploymentReferencesUnknownUnitType(agent, unitType) ->
+        $"agent {agent} references unknown unit type '{unitType}'"
+    | HeadquartersOutOfMap(cell, bounds) -> $"headquarters at {atCell cell} is outside the {inMap bounds}"
+    | JammerOutOfMap(index, cell, bounds) -> $"jammer {index} at {atCell cell} is outside the {inMap bounds}"
+    | NegativeJammerRadius(index, radius) -> $"jammer {index} has negative radius {radius}"
+    | InvalidJammerWindow(index, fromTick, untilTick) ->
+        $"jammer {index} has an invalid active window [{fromTick},{untilTick}]"
+    | BlankFormationId -> "a formation has a blank id"
+    | DuplicateFormationId formationId -> $"duplicate formation id '{formationId}'"
+    | FormationHasNoSlots formationId -> $"formation '{formationId}' has no slots"
+    | DeploymentReferencesUnknownFormation(agent, formationId) ->
+        $"agent {agent} references unknown formation '{formationId}'"
+    | DeploymentSlotIndexOutOfRange(agent, formationId, slotIndex, slotCount) ->
+        $"agent {agent} slot index {slotIndex} is outside formation '{formationId}''s {slotCount} slot(s)"
 
 let private agentLine (a: AgentState) =
     let dest =
@@ -769,6 +835,54 @@ let private cmdTurn (args: string list) : int =
         eprintfn "usage: cwheadless turn"
         Exit.usage
 
+/// Parses a `.cwscenario` file (`ScenarioFile.parse`), validates it
+/// (`Scenario.validate`), and prints either a summary or every fault
+/// (TASK-060, backlog B-024). Exit `usage` on a missing file or CLI
+/// mistake, `replayError` on a `.cwscenario` grammar fault (the
+/// `cmdReplayFile` precedent for a malformed content file), `scenarioInvalid`
+/// on well-formed grammar that `Scenario.validate` rejects, `ok` otherwise.
+let private cmdImport (args: string list) : int =
+    match args with
+    | [ path ] ->
+        if not (File.Exists path) then
+            eprintfn "error: scenario file not found: %s" path
+            Exit.usage
+        else
+            match ScenarioFile.parse (File.ReadAllText path) with
+            | Error e ->
+                eprintfn "parse error: %s: %s" path (ScenarioFile.describeError e)
+                Exit.replayError
+            | Ok raw ->
+                match Scenario.validate raw with
+                | Error errors ->
+                    eprintfn "error: %s: %d validation fault(s):" path errors.Length
+                    for e in errors do
+                        eprintfn "  - %s" (describeScenarioError e)
+                    Exit.scenarioInvalid
+                | Ok scenario ->
+                    printfn "ok: %s" path
+                    printfn "  id               : %s" (ScenarioId.value scenario.Id)
+                    printfn "  map              : %dx%d" scenario.Map.Width scenario.Map.Height
+                    printfn "  friendly agents  : %d" scenario.FriendlyDeployments.Length
+                    printfn "  enemy agents     : %d" scenario.EnemyDeployments.Length
+                    printfn "  objective areas  : %d" scenario.ObjectiveAreas.Length
+                    printfn "  extraction areas : %d" scenario.ExtractionAreas.Length
+                    printfn "  resupply areas   : %d" scenario.ResupplyAreas.Length
+                    printfn "  static targets   : %d" scenario.StaticTargets.Length
+                    printfn "  objectives       : %d" scenario.Objectives.Length
+
+                    printfn
+                        "  headquarters     : %s"
+                        (match scenario.Headquarters with
+                         | Some c -> $"({c.X},{c.Y})"
+                         | None -> "none")
+
+                    printfn "  jammers          : %d" scenario.Jammers.Length
+                    Exit.ok
+    | _ ->
+        eprintfn "usage: cwheadless import <path.cwscenario>"
+        Exit.usage
+
 let private usage () =
     printfn "cwheadless - framework-neutral headless reference for CommandoWar.Sim"
     printfn ""
@@ -784,9 +898,10 @@ let private usage () =
     printfn "        [--tick N] [--layer NAME] [--los AX,AY:BX,BY]... [--path AX,AY:BX,BY]... [--format ascii|svg|html] [--out PATH]"
     printfn "  cwheadless corpus [--regenerate] [--dir PATH]    check (or regenerate) the committed replay corpus (content/replays/)"
     printfn "  cwheadless turn                                  TASK-050 spike: run the TurnDemo scenario's full tick count and print every per-tick diagnostic frame"
+    printfn "  cwheadless import <path.cwscenario>              parse + validate a scenario content file (TASK-060, B-024)"
     printfn ""
-    printfn "exit codes: %d ok, %d usage/IO, %d replay error, %d divergence detected"
-        Exit.ok Exit.usage Exit.replayError Exit.diverged
+    printfn "exit codes: %d ok, %d usage/IO, %d replay/parse error, %d divergence detected, %d scenario content invalid"
+        Exit.ok Exit.usage Exit.replayError Exit.diverged Exit.scenarioInvalid
     printfn ""
     printfn "legacy command-log format (.cwlog, v%d), one directive per line:" CommandLogFile.Version
     printfn "  # comment"
@@ -812,6 +927,7 @@ let main argv =
     | "render" :: rest -> cmdRender rest
     | "corpus" :: rest -> cmdCorpus rest
     | "turn" :: rest -> cmdTurn rest
+    | "import" :: rest -> cmdImport rest
     | other :: _ ->
         eprintfn "error: unknown subcommand '%s'" other
         usage ()

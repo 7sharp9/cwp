@@ -158,6 +158,27 @@ The Godot spike should use:
 
 The adapter must fail with explicit field and object names when content is invalid. It may not pass Godot nodes, vectors, resources, or object references into the F# simulation.
 
+### Realised by TASK-060 (terrain layer, content-format half)
+
+The framework-neutral scenario file this section anticipated is the new
+`.cwscenario` format (`src/CommandoWar.Sim/ScenarioFile.fs`) — a
+deterministic, line-based text grammar in the `ReplaySerialisation.fs`
+style (not JSON, no serialisation library, matching the `.cwlog`/
+`.cwreplay` convention already established for other content), plus a
+`cwheadless import <path>` validation command that parses a file and runs
+it through the existing `Scenario.validate`. `TileMapLayer` (this
+section's own first bullet) is now real: `art/terrain.tres` (the three
+TASK-041 placeholder sprites as atlas sources, Custom Data Layers for
+`Class`/`MoveCost`/`Opaque`/`Elevation`) plus a shared F# export function
+(`CwClientCore.TerrainAuthoring.exportScenario`, no Godot type crossing
+the ADR-0004 boundary) convert a painted `TileMapLayer` into a
+`.cwscenario` file. Terrain-layer authoring only — deployment/area/object
+markers ("nodes or resources for typed deployment and area markers",
+above) have no painting UI yet, and `RawCoverFeature` turned out not to
+fit a per-tile-type Custom Data model at all (a single tile carries one
+Custom Data set; cover is up to four independent per-direction values per
+cell) — both remain open follow-on work.
+
 ## 6. Mibo and Tiled authoring path
 
 The Mibo spike should use:

@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <Compile Include="IClientScene.fs" />
+    <Compile Include="TerrainAuthoring.fs" />
     <Compile Include="RenderShared.fs" />
     <Compile Include="DemoRenderScene.fs" />
     <Compile Include="CommandDemoScene.fs" />

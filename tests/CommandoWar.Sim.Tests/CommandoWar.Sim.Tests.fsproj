@@ -17,6 +17,7 @@
     <Compile Include="SightTests.fs" />
     <Compile Include="PathfindingTests.fs" />
     <Compile Include="ScenarioTests.fs" />
+    <Compile Include="ScenarioFileTests.fs" />
     <Compile Include="DiagnosticsTests.fs" />
     <Compile Include="CorpusTests.fs" />
     <Compile Include="DeterminismPropertyTests.fs" />

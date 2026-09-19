@@ -27,6 +27,7 @@
     <Compile Include="Stress.fs" />
     <Compile Include="Commands.fs" />
     <Compile Include="Scenario.fs" />
+    <Compile Include="ScenarioFile.fs" />
     <Compile Include="Events.fs" />
     <Compile Include="Communication.fs" />
     <Compile Include="Snapshot.fs" />

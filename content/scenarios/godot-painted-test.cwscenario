@@ -1,0 +1,16 @@
+version 1
+content-version 6
+id godot painted test
+map 6 6
+fail-on-friendly-eliminated true
+terrain 6 6
+terrain-cell 1 1 passable 1 1 false
+terrain-cell 2 2 impassable 0 0 true
+terrain-cell 3 3 passable 0 3 true
+terrain-cell 4 1 passable 2 1 false
+terrain-cell 0 4 impassable 0 0 true
+unit-type standard 2
+friendly 0 0 0 true 3 standard - 0
+objective-area objective 5 5
+extraction-area exfil 5 0
+objective 1 reach objective - 0 false -

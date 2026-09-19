@@ -478,3 +478,41 @@ Effect on this decision:
   the review-trigger-1 measurement and to be resolved before B-024 commits
   framework-specific client work. No source change and no `PROJECT_STATE.yaml`
   `framework_decision` change.
+
+## 2026-09-19 note: review trigger 1 measured, B-043 closed
+
+TASK-060 (backlog B-024) built the first real Godot-editor content-authoring
+surface — a `TileSet`/`TileMapLayer` terrain-painting pipeline
+(`art/terrain.tres`, `scenes/TerrainAuthoring.tscn`,
+`tools/ExportTerrainScript.cs`) — and Dave used it live in the real 4.7.2
+editor: painted a real terrain shape, hit two genuine tool bugs (wrong tile
+shape causing a checkerboard paint pattern; missing Y-sort and texture
+anchoring causing tall tiles to overlap incorrectly and the paint cursor to
+read as offset from the tile), both root-caused and fixed same-session
+(`docs/ledger/2026-09-19-TASK-060-*.md`), then painted again successfully.
+
+His own verdict, unprompted: "its definitly easer to paint wi the mouse
+rather than typinf cells." Review trigger 1 asked exactly this — is the
+editor edit->visible-result loop materially better than the code-first
+relaunch loop (here, hand-typing `RawTerrainCell` records). It is, for the
+one thing it was tested on: placing/adjusting terrain.
+
+Important qualification Dave added immediately after, not to be flattened
+into a bare "painting beats typing" line: his actual intended workflow is
+**generate a draft, then hand-tweak it** with this tool — not hand-paint an
+entire map from nothing. This doesn't change the review-trigger-1 answer
+(the editor tooling is worth using), but it does scope *what for*: the
+editor's value is confirmed for the correction/refinement pass, not
+necessarily as the sole or primary authoring method. Whatever generates the
+first draft (a procedural generator, an AI-assisted first pass, a hand-built
+skeleton) is unscoped, separate future work — B-025 and beyond should account
+for this shape rather than assume "hand-paint the whole Bridgehead map from
+an empty canvas."
+
+**The decision stands** (Godot, not Mibo) — this was never really in doubt
+given how far client development had already progressed, but it is now
+backed by the one piece of direct evidence ADR-0001 always said it needed
+rather than an inference from schedule pressure. `B-043` is `done`.
+`B-024` (TASK-060) is unblocked and was itself already `done`, having built
+the very tool that produced this measurement. No source change to
+`CommandoWar.Sim`; no `PROJECT_STATE.yaml` `framework_decision` change.
