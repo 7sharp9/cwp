@@ -704,6 +704,23 @@ but global across every agent, not only the appraising agent's own, so a
 threat's flip reappraises a *different* agent's order that names it (`docs/05`
 section 14; `docs/07` section 8 step 6).
 
+Formation slots realised by TASK-059 (backlog B-011d): a `MoveTo` order's
+stage-2 `Pathfinding` target is resolved through
+`Appraisal.resolveFormationTarget` before the route search runs. For an
+unformationed agent (`AgentState.FormationOffset = None`, every scenario
+authored before this task) this reproduces the literal ordered cell exactly.
+For a formationed agent it treats that literal cell as the formation's
+anchor and aims for anchor + the agent's own authored slot offset, redirected
+to the nearest passable cell not currently occupied by another agent within
+`AppraisalConfig.FormationSlotSearchRadius` Chebyshev cells if the exact
+offset cell is blocked (the `bestCoverNear` precedent) — falling back to the
+literal anchor cell if nothing in radius qualifies, never a hard order
+failure from crowding or terrain at a slot alone. `Hold`/`Assault`/
+`Withdraw`/`Suppress` targets are unaffected regardless of formation
+membership. `AgentState.FormationOffset` is static authored data (`Deployment
+.FormationOffset`, resolved from a new `Scenario.Formations` table) and stays
+out of the canonical image, the `Discipline`/`MoveSpeed` precedent.
+
 ### 12.6 Commitment and local action
 
 - accepted orders create or update a commitment;

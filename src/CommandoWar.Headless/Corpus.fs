@@ -108,7 +108,14 @@ module Corpus =
           /// a non-default movement speed, so this builder authors one
           /// implicit unit type and never varies it (the `DemoScenario`
           /// precedent is where a slower speed actually matters).
-          UnitType: string }
+          UnitType: string
+          /// References a `ScenarioSpec.Formations` entry (TASK-059,
+          /// backlog B-011d), or blank for every agent that is not in a
+          /// formation -- every one of the 16 pre-existing entries.
+          FormationId: string
+          /// The index into the referenced formation's slot offsets.
+          /// Ignored when `FormationId` is blank.
+          SlotIndex: int }
 
     /// One authored order's intent (TASK-036's single-recipient-move
     /// precedent, extended by TASK-037 for a `Suppress` order — the smallest
@@ -156,6 +163,11 @@ module Corpus =
           /// and the inclusive `[fromTick, untilTick]` active window. Empty
           /// for every entry except the one demonstrating the feature.
           Jammers: (Cell * int * int64 * int64) list
+          /// Authored formations (TASK-059, backlog B-011d): a name and its
+          /// ordered slot offsets, referenced by an `inFormation` agent's
+          /// `FormationId`/`SlotIndex`. Empty for every entry except the one
+          /// demonstrating the feature.
+          Formations: (string * (int * int) list) list
           Orders: ScenarioOrder list }
 
     /// The sole unit type every builder-authored corpus entry's agents use
@@ -168,7 +180,9 @@ module Corpus =
           Cell = cell
           Discipline = AppraisalConfig.DisciplineDefault
           CommunicationAvailable = true
-          UnitType = StandardUnitType }
+          UnitType = StandardUnitType
+          FormationId = ""
+          SlotIndex = 0 }
 
     /// An agent with a non-default `Discipline` (`exposed-approach`).
     let private agentWith (id: int) (cell: Cell) (discipline: int) : ScenarioAgent =
@@ -178,6 +192,13 @@ module Corpus =
     /// Communication phase cannot reach it, so any order to it is dropped.
     let private blackedOut (id: int) (cell: Cell) : ScenarioAgent =
         { agent id cell with CommunicationAvailable = false }
+
+    /// An agent authored into a formation slot (`formation-slots`, TASK-059,
+    /// backlog B-011d).
+    let private inFormation (id: int) (cell: Cell) (formationId: string) (slotIndex: int) : ScenarioAgent =
+        { agent id cell with
+            FormationId = formationId
+            SlotIndex = slotIndex }
 
     let private order (tick: int64) (agentId: int) (target: Cell) : ScenarioOrder =
         { Tick = tick; Agent = agentId; Intent = MoveOrder target }
@@ -206,7 +227,9 @@ module Corpus =
               Cell = a.Cell
               CommunicationAvailable = a.CommunicationAvailable
               Discipline = a.Discipline
-              UnitType = a.UnitType }
+              UnitType = a.UnitType
+              FormationId = a.FormationId
+              SlotIndex = a.SlotIndex }
 
         { ContentVersion = ScenarioContent.Version
           Id = spec.Id
@@ -247,6 +270,12 @@ module Corpus =
                    Radius = radius
                    ActiveFromTick = fromTick
                    ActiveUntilTick = untilTick }: RawJammer))
+            |> List.toArray
+          Formations =
+            spec.Formations
+            |> List.map (fun (id, offsets) ->
+                ({ Id = id
+                   Offsets = offsets |> List.map (fun (dx, dy) -> { X = dx; Y = dy }) |> List.toArray }: RawFormation))
             |> List.toArray
           FailOnFriendlyForceEliminated = true }
 
@@ -309,6 +338,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 10; Y = 3 } ] }
 
     /// One friendly agent at (1,4); the target (5,4) is passable but its four
@@ -326,6 +356,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 5; Y = 4 } ] }
 
     /// Two friendly agents on open terrain: agent 0 at (3,0) -> (3,7) crosses
@@ -345,7 +376,33 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 3; Y = 7 }; order 1L 1 { X = 7; Y = 3 } ] }
+
+    /// Two friendly agents authored into a two-slot "wedge" formation
+    /// (TASK-059, backlog B-011d), both ordered to the identical nominal
+    /// cell `(5,5)` at tick 1: agent 0 (slot 0, offset `(-1,0)`) and agent 1
+    /// (slot 1, offset `(1,0)`) resolve their own real `MoveTo` destination
+    /// as that shared anchor plus their own slot offset --
+    /// `Appraisal.resolveFormationTarget` -- landing on `(4,5)` and `(6,5)`
+    /// respectively instead of colliding on `(5,5)`. Open terrain: neither
+    /// offset cell is blocked or occupied, so the plain in-range case is
+    /// exercised, not the nearest-free-cell fallback (covered directly by
+    /// `SimulationTests`' pure-function facts instead).
+    let private formationSlotsSpec: ScenarioSpec =
+        { Id = "corpus-formation-slots"
+          Width = 8
+          Height = 8
+          Friendly = [ inFormation 0 { X = 0; Y = 0 } "wedge" 0; inFormation 1 { X = 0; Y = 7 } "wedge" 1 ]
+          Enemies = []
+          Terrain = []
+          Objective = { X = 7; Y = 7 }
+          Extraction = { X = 0; Y = 0 }
+          Resupply = None
+          Headquarters = None
+          Jammers = []
+          Formations = [ "wedge", [ -1, 0; 1, 0 ] ]
+          Orders = [ order 1L 0 { X = 5; Y = 5 }; order 1L 1 { X = 5; Y = 5 } ] }
 
     /// One friendly agent at (0,0) ordered to (4,0), open terrain except
     /// (1,0), which costs 3 to enter (`Terrain.BaseMoveCost` elsewhere is 1).
@@ -364,6 +421,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 4; Y = 0 } ] }
 
     /// Three friendly agents in a line at (1,3), (2,3), (3,3), all ordered east
@@ -383,6 +441,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders =
             [ order 1L 0 { X = 11; Y = 3 }
               order 1L 1 { X = 11; Y = 3 }
@@ -404,6 +463,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 4; Y = 3 }; order 1L 1 { X = 3; Y = 3 } ] }
 
     /// One friendly agent at (1,5) ordered east to (9,5), and a stationary
@@ -427,6 +487,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 9; Y = 5 } ] }
 
     /// One friendly agent 0 at (1,4) with `CommunicationAvailable = false`
@@ -448,6 +509,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 6; Y = 4 } ] }
 
     /// Two friendlies on open ground ordered along the same exposed approach
@@ -473,6 +535,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 11; Y = 3 }; order 1L 1 { X = 11; Y = 5 } ] }
 
     /// One friendly agent at (1,4), open ground, no threats: ordered east to
@@ -498,6 +561,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 14; Y = 4 }; order 3L 0 { X = 14; Y = 8 } ] }
 
     /// Three agents: friendly 0 (Discipline 1) at (1,3) is ordered on tick 1
@@ -531,6 +595,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [ order 1L 0 { X = 11; Y = 3 }; suppressOrder 1L 1 2 ] }
 
     /// The `suppress-relieves-exposure` geometry exactly, extended with one
@@ -571,6 +636,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [] }
 
     /// One friendly agent, no hostiles -- the world half of
@@ -592,6 +658,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [] }
 
     /// `order-queue-stacking-and-cancellation`'s command log, built directly
@@ -649,6 +716,7 @@ module Corpus =
           Resupply = None
           Headquarters = None
           Jammers = []
+          Formations = []
           Orders = [] }
 
     /// Every corpus entry, in a fixed order.
@@ -875,7 +943,17 @@ module Corpus =
              InitialStateNote = "Corpus casualties-succession-and-squad-failure scenario (10 x 10, seed 20260904, 2 friendlies + 2 hostiles)"
              InitialState = fun () -> worldOfSpec casualtiesSpec
              TickCount = 65L
-             Commands = Some [||] } |]
+             Commands = Some [||] }
+           { Name = "formation-slots"
+             Description =
+               "Two friendly agents in a two-slot \"wedge\" formation, both ordered to the identical nominal cell "
+               + "(5,5) at tick 1. Each resolves its own real MoveTo destination as that shared anchor plus its "
+               + "own authored slot offset (Appraisal.resolveFormationTarget), landing on (4,5) and (6,5) instead "
+               + "of colliding on (5,5)."
+             InitialStateNote = "Corpus formation-slots scenario (8 x 8, seed 20260904, 2 friendlies, 1 formation)"
+             InitialState = fun () -> worldOfSpec formationSlotsSpec
+             TickCount = 12L
+             Commands = Some(commandsOfSpec formationSlotsSpec) } |]
 
     // --- entry paths and loading ----------------------------------------
 

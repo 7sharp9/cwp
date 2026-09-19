@@ -54,6 +54,8 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `casualties-succession-and-squad-failure-tick-005.svg` | SVG of the same frame: each agent's `AgentVitals` `Z<n>` bleed-out-countdown badge (bottom edge), no `SquadLeadership` gold ring (no leader survives). |
 | `casualties-succession-and-squad-failure-tick-065.ascii.txt` | The same corpus entry at tick 65, the full lifecycle's endpoint: every agent has finished bleeding out and reads `vitals ...: agent N  dead`, rendered as a black cross over each agent's cell in the SVG. |
 | `casualties-succession-and-squad-failure-tick-065.svg` | SVG of the same frame: four black crosses, no agent circles, no `SquadLeadership` ring. |
+| `formation-slots-tick-001.ascii.txt` | The `content/replays/formation-slots` corpus entry (TASK-059, backlog B-011d) at tick 1: both agents' `MoveTo(5,5)` order is accepted; agent 0 (slot 0, offset `(-1,0)`) resolves to `(4,5)` and agent 1 (slot 1, offset `(1,0)`) resolves to `(6,5)` instead of both aiming for the literal `(5,5)`. The overlays section carries one `formation slot (x,y): agent N  -> (x',y')` line per agent. |
+| `formation-slots-tick-001.svg` | SVG of the same frame: each agent's resolved slot destination as a small teal diamond, connected to its current position by a thin dashed line. |
 
 ## Regeneration
 
@@ -86,9 +88,9 @@ $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 `lost-comms-tick-001.*`, `exposed-approach-tick-001.*`,
 `blocked-goal-tick-001.*`, `reissued-order-tick-003.*`,
 `canonical-refusal-and-correction-tick-008.*`,
-`order-queue-stacking-and-cancellation-tick-001.*`, and
+`order-queue-stacking-and-cancellation-tick-001.*`,
 `casualties-succession-and-squad-failure-tick-005.*` /
-`-tick-065.*` are not produced by the
+`-tick-065.*`, and `formation-slots-tick-001.*` are not produced by the
 `render` verb: each entry's initial state is corpus-owned (`Corpus.all`),
 not the shared fixture or demo scenario `render` knows about. All are
 regenerated the same way — `DiagnosticRender.runFrames` over the named
@@ -98,7 +100,7 @@ and `spike-fixture`), at the tick named in the file — using the exact helper
 `swapStandoffFrames ()` / `perceptionContactFrames ()` / `lostCommsFrames ()`
 / `exposedApproachFrames ()` / `reissuedOrderFrames ()` /
 `canonicalRefusalAndCorrectionFrames ()` / `orderQueueFrames ()` /
-`casualtiesFrames ()`, and an
+`casualtiesFrames ()` / `formationSlotsFrames ()`, and an
 inline `runFrames` for `blocked-goal`) the corresponding `DiagnosticsTests.fs`
 fact uses to compare against these files, so a regeneration and its test
 cannot silently disagree.

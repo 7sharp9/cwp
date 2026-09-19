@@ -197,6 +197,14 @@ module AppraisalConfig =
     [<Literal>]
     let HoldCoverSearchRadius = 2
 
+    /// Chebyshev cells around a formationed agent's exact slot offset
+    /// (TASK-059, backlog B-011d) searched for the nearest passable,
+    /// unoccupied cell when the exact offset is blocked or occupied
+    /// (`Appraisal.resolveFormationTarget`). The `HoldCoverSearchRadius`
+    /// precedent.
+    [<Literal>]
+    let FormationSlotSearchRadius = 2
+
 [<RequireQualifiedAccess>]
 module Appraisal =
 
@@ -311,6 +319,49 @@ module Appraisal =
         |> Option.map (fun (_, _, _, _, c) -> c)
         |> Option.defaultValue area
 
+    /// A `MoveTo` order's real pathfinding target for a formationed agent
+    /// (TASK-059, backlog B-011d): `offset = None` reproduces today's
+    /// behaviour exactly, returning `anchor` (the order's own literal
+    /// target) unchanged -- every scenario authored before this task. `Some
+    /// o` treats `anchor` as the formation anchor and aims for `anchor +
+    /// o`, redirected to the nearest passable, in-bounds cell not in
+    /// `occupied` within `AppraisalConfig.FormationSlotSearchRadius`
+    /// Chebyshev cells if the exact offset cell fails any of those checks
+    /// -- the `bestCoverNear` precedent, scored by occupancy instead of
+    /// threat pressure (ties broken by nearest to the ideal offset cell,
+    /// then ascending `(Y, X)`). Falls back to the literal `anchor` cell
+    /// itself if nothing in radius qualifies, the identical `bestCoverNear`
+    /// "never a hard failure from this alone" guarantee: crowding or
+    /// terrain at a slot must never turn a `MoveTo` into a `NoKnownRoute`
+    /// refusal by itself (stage 2 still fails normally if `anchor` itself
+    /// is unreachable). `occupied` is every OTHER agent's current
+    /// `Position` — the caller's own responsibility to exclude itself.
+    let resolveFormationTarget (terrain: Terrain) (occupied: Cell[]) (offset: Cell option) (anchor: Cell) : Cell =
+        match offset with
+        | None -> anchor
+        | Some o ->
+            let ideal = { X = anchor.X + o.X; Y = anchor.Y + o.Y }
+            let r = AppraisalConfig.FormationSlotSearchRadius
+
+            let free (c: Cell) =
+                GridBounds.contains c terrain.Bounds
+                && Terrain.passable terrain c
+                && not (Array.contains c occupied)
+
+            if free ideal then
+                ideal
+            else
+                [ for dy in -r..r do
+                      for dx in -r..r do
+                          let c = { X = ideal.X + dx; Y = ideal.Y + dy }
+
+                          if free c then
+                              yield Perception.chebyshev ideal c, c.Y, c.X, c ]
+                |> List.sortBy (fun (dist, y, x, _) -> dist, y, x)
+                |> List.tryHead
+                |> Option.map (fun (_, _, _, c) -> c)
+                |> Option.defaultValue anchor
+
     /// The stage-4 resolve threshold for an agent and an order (`docs/05`
     /// section 5 stage 4). Integer, bounded, order-independent of the world.
     /// `stress` and `suppressed` (TASK-033, backlog B-021) are the agent's
@@ -380,6 +431,9 @@ module Appraisal =
     /// section 16's own "a critically wounded agent reports unable rather
     /// than refused" example — so stages 3/4 (and `resolveThreshold`'s own
     /// wound term) are only ever reached by an `Alive` agent.
+    /// `occupied`/`formationOffset` (TASK-059, backlog B-011d) are threaded
+    /// straight to `resolveFormationTarget` for a `MoveTo` order only --
+    /// `formationOffset = None` reproduces every pre-TASK-059 call exactly.
     let appraise
         (terrain: Terrain)
         (threats: Contact[])
@@ -389,6 +443,8 @@ module Appraisal =
         (suppressed: bool)
         (vitals: VitalStatus)
         (ammo: AmmoState)
+        (occupied: Cell[])
+        (formationOffset: Cell option)
         (order: ReceivedOrder)
         (fromCell: Cell)
         (budget: int)
@@ -434,7 +490,7 @@ module Appraisal =
                     | InvalidEndpoint _ -> Unable(NoKnownRoute, [||]), [||]
 
             match order.Intent with
-            | MoveTo target -> moveLike target 0
+            | MoveTo target -> moveLike (resolveFormationTarget terrain occupied formationOffset target) 0
             | Hold area -> moveLike (bestCoverNear terrain threats suppressedThreats area) 0
             | Withdraw target -> moveLike target AppraisalConfig.WithdrawResolveBonus
             | Assault target ->

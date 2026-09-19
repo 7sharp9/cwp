@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03)
-  updated: 2026-09-19 (TASK-057 and TASK-058 accepted by Dave, realising B-050 and B-016b)
+  updated: 2026-09-19 (TASK-059 accepted by Dave, realising B-011d)
 
 active_work:
   selected_task: none
@@ -15,7 +15,70 @@ active_work:
   blockers: []
   updated: 2026-09-19
   note: >-
-    2026-09-19: TASK-057 and TASK-058 both accepted by Dave on the
+    2026-09-19: TASK-059 accepted by Dave on the self-verification evidence
+    -- confirmed no client-scenario change (no formation authored in any of
+    the three scripted Godot demos), going as expected; the Godot editor's
+    `--selfcheck` hashes were not independently re-run live, but Dave
+    accepted without requiring that re-check for this task. No changes
+    requested. B-011d now `done`. `active_work.selected_task -> none`; next
+    task not yet chosen.
+    (tasks/TASK-059-FORMATION-SLOTS.md;
+    docs/ledger/2026-09-19-TASK-059-formation-slots.md)
+
+    Prior: 2026-09-19: TASK-059 (formation slots, realises B-011d) implemented and
+    self-verified -- status review, awaiting Dave's acceptance. Selected via
+    `AskUserQuestion` over B-043 (Mibo 5.x reconsideration spike, still
+    blocked on Dave's own interactive ADR-0001 review-trigger-1 measurement).
+    Five design forks resolved via two further `AskUserQuestion` rounds
+    before drafting: no new order type or multi-agent dispatch -- a
+    formation changes only how a formationed agent's own accepted `MoveTo`
+    target resolves (anchor = that agent's own ordered cell, plus its
+    authored slot offset); a blocked or occupied slot cell falls back to the
+    nearest passable/free cell in a bounded radius (the `Appraisal.
+    bestCoverNear` precedent), never a hard order failure; both `Friendly`
+    and `Hostile` agents may be authored into a formation (Dave's own
+    choice, overriding the friendly-only recommended default); formations
+    are authored per-scenario (`RawScenario.Formations`, the TASK-058
+    `Jammers`-table precedent), not hardcoded shapes. Scoped to `MoveTo`
+    only (an implementation-time call, not put to Dave) -- `Hold`/
+    `Assault`/`Withdraw`/`Suppress` keep their existing target semantics
+    unchanged for a formationed agent, composing formation offsets with
+    those is flagged as a separate future question, not built here.
+
+    New pure `Appraisal.resolveFormationTarget` (the `bestCoverNear` shape,
+    scored by occupancy instead of threat pressure), threaded into
+    `Appraisal.appraise`'s `MoveTo` case and into `Simulation.appraisal`'s
+    `Destination`-write / `fulfilled` check identically; new static,
+    non-canonical `AgentState.FormationOffset` (the `MoveSpeed` precedent)
+    resolved from a new `RawScenario.Formations`/`RawDeployment.
+    FormationId`/`.SlotIndex` (`ScenarioContent.Version` 5 -> 6, no silent
+    default on a non-blank reference); new sparse `Overlay.
+    AgentFormationSlot`; new `content/replays/formation-slots` corpus entry
+    (two agents in a "wedge" formation both ordered to one nominal cell,
+    landing on distinct offset destinations) and its `content/diagnostics/
+    formation-slots-tick-001.*` golden, generated via a temporary `dotnet
+    fsi` scratch script (removed after use) since corpus-derived goldens
+    are not reachable through the `render` CLI verb. Adding `FormationId`/
+    `SlotIndex` to `RawDeployment` required the identical mechanical
+    literal-update sweep TASK-049's `UnitType` field did (30 pre-existing
+    construction sites). No `Canonical.FormatVersion` bump (the offset is
+    static, excluded).
+
+    `dotnet build` all three `.slnx` (main Release; Godot client Debug)
+    `0/0`; `dotnet test` `377/377` (+15); `cwheadless corpus` `17/17`
+    (`--regenerate` added only the one new entry, every one of the 16
+    pre-existing entries confirmed byte-identical); `cwheadless fixture`
+    format 12 unaffected; `dotnet list CommandoWar.Sim package` `FSharp.Core`
+    only. No Godot client source change needed (confirmed by a clean build)
+    -- its `--selfcheck` scripted sequences author no formation in any of
+    the three scenes, so their pinned hashes are expected unaffected, but
+    were not independently re-run through the real Godot editor in this
+    session (no Godot install in the implementing environment) -- flagged
+    for Dave to confirm before or on accepting.
+    (tasks/TASK-059-FORMATION-SLOTS.md;
+    docs/ledger/2026-09-19-TASK-059-formation-slots.md)
+
+    Prior: 2026-09-19: TASK-057 and TASK-058 both accepted by Dave on the
     self-verification evidence (neither has client UI: TASK-057 is a
     headless CLI tool, TASK-058 is Sim-side only) -- no changes requested
     on either. These were the two tasks Dave asked for this session (B-050

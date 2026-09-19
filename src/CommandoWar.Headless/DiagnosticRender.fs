@@ -178,7 +178,8 @@ module DiagnosticRender =
                 | AgentAmmo _
                 | Divergence _
                 | AgentRadioLost _
-                | AgentPendingDelivery _ -> None)
+                | AgentPendingDelivery _
+                | AgentFormationSlot _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -216,7 +217,8 @@ module DiagnosticRender =
                 | AgentAmmo _
                 | Divergence _
                 | AgentRadioLost _
-                | AgentPendingDelivery _ -> None)
+                | AgentPendingDelivery _
+                | AgentFormationSlot _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -506,6 +508,14 @@ module DiagnosticRender =
                             (AgentId.value agent)
                             (CommandId.value command)
                             dueTick
+                    )
+                | AgentFormationSlot(agent, at, resolved) ->
+                    line (
+                        sprintf
+                            "  formation slot %s: agent %d  -> %s"
+                            (cellText at)
+                            (AgentId.value agent)
+                            (cellText resolved)
                     )
 
         line ""
@@ -1083,6 +1093,29 @@ module DiagnosticRender =
                         (at.X * s + 1)
                         (at.Y * s + 3)
                         dueTick
+                )
+            | AgentFormationSlot(_, at, resolved) ->
+                // Formation slot resolution (TASK-059, backlog B-011d): a
+                // small teal diamond at the resolved destination, connected
+                // to the agent's current position by a thin dashed line --
+                // distinguishable from PlannedPath's route line (which
+                // traces the full path, not just the endpoint) and from
+                // every other overlay's corner-badge convention.
+                let rx = resolved.X * s + mid
+                let ry = resolved.Y * s + mid
+                let ax = at.X * s + mid
+                let ay = at.Y * s + mid
+
+                line (
+                    sprintf
+                        "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#0F766E\" stroke-width=\"1\" stroke-dasharray=\"3,2\"/>"
+                        ax ay rx ry
+                )
+
+                line (
+                    sprintf
+                        "  <rect x=\"%d\" y=\"%d\" width=\"8\" height=\"8\" fill=\"none\" stroke=\"#0F766E\" stroke-width=\"2\" transform=\"rotate(45 %d %d)\"/>"
+                        (rx - 4) (ry - 4) rx ry
                 )
 
         // Footer.

@@ -437,7 +437,8 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | AgentAmmo _
         | Divergence _
         | AgentRadioLost _
-        | AgentPendingDelivery _ -> None) with
+        | AgentPendingDelivery _
+        | AgentFormationSlot _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -448,6 +449,58 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
 
     Assert.Equal(golden "converging-routes-tick-003.ascii.txt", DiagnosticRender.Ascii tick3)
     Assert.Equal(golden "converging-routes-tick-003.svg", DiagnosticRender.Svg tick3)
+
+// --- formation slots: the formation-slots corpus entry (TASK-059, backlog B-011d) --
+
+let private formationSlotsFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "formation-slots")
+
+    match Corpus.commandsOf corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives an AgentFormationSlot overlay per formationed agent for the formation-slots entry's order tick (byte-equal to the goldens)`` () =
+    // Tick 1: both agents' MoveTo(5,5) is accepted; each resolves its own
+    // Destination as (5,5) plus its own authored slot offset instead of the
+    // literal shared cell -- agent 0 (slot 0, offset (-1,0)) to (4,5), agent
+    // 1 (slot 1, offset (1,0)) to (6,5).
+    let frames = formationSlotsFrames ()
+    let tick1 = frames.[1]
+
+    let slots =
+        tick1.Overlays
+        |> Array.choose (function
+            | AgentFormationSlot(agent, _, resolved) -> Some(agent, resolved)
+            | Cells _
+            | SightRay _
+            | PlannedPath _
+            | Reserved _
+            | Obstructed _
+            | UndeliveredOrder _
+            | KnownContact _
+            | OrderAppraisal _
+            | AgentCommitment _
+            | FireLine _
+            | AgentSuppression _
+            | AgentStress _
+            | HostileKnownContact _
+            | AgentOrderQueue _
+            | AgentVitals _
+            | SquadLeadership _
+            | AgentAmmo _
+            | Divergence _
+            | AgentRadioLost _
+            | AgentPendingDelivery _ -> None)
+        |> Array.sortBy fst
+
+    Assert.Equal<_[]>([| (AgentId.ofInt 0, { X = 4; Y = 5 }); (AgentId.ofInt 1, { X = 6; Y = 5 }) |], slots)
+
+    Assert.Equal(Some { X = 4; Y = 5 }, (tick1.Agents |> Array.find (fun a -> a.Id = AgentId.ofInt 0)).Destination)
+    Assert.Equal(Some { X = 6; Y = 5 }, (tick1.Agents |> Array.find (fun a -> a.Id = AgentId.ofInt 1)).Destination)
+
+    Assert.Equal(golden "formation-slots-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
+    Assert.Equal(golden "formation-slots-tick-001.svg", DiagnosticRender.Svg tick1)
 
 // --- sub-cell movement progress: the slow-terrain corpus entry (TASK-018) --
 
@@ -512,7 +565,8 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | AgentAmmo _
             | Divergence _
             | AgentRadioLost _
-            | AgentPendingDelivery _ -> None)
+            | AgentPendingDelivery _
+            | AgentFormationSlot _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -563,7 +617,8 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | AgentAmmo _
             | Divergence _
             | AgentRadioLost _
-            | AgentPendingDelivery _ -> None)
+            | AgentPendingDelivery _
+            | AgentFormationSlot _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -651,7 +706,8 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | AgentAmmo _
             | Divergence _
             | AgentRadioLost _
-            | AgentPendingDelivery _ -> None)
+            | AgentPendingDelivery _
+            | AgentFormationSlot _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)

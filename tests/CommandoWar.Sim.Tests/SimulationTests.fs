@@ -2654,3 +2654,65 @@ let ``a radio-destroy roll is deterministic across two runs`` () =
     let r2 = run ()
     Assert.Equal<AgentState[]>(r1.Agents, r2.Agents)
     Assert.Equal(Hashing.hash r1, Hashing.hash r2)
+
+// --- Formation slots (TASK-059, backlog B-011d) -------------------------
+
+[<Fact>]
+let ``resolveFormationTarget with no offset returns the literal anchor unchanged`` () =
+    let t = Terrain.empty bounds
+    Assert.Equal({ X = 3; Y = 3 }, Appraisal.resolveFormationTarget t [||] None { X = 3; Y = 3 })
+
+[<Fact>]
+let ``resolveFormationTarget applies a free offset directly`` () =
+    let t = Terrain.empty bounds
+    let anchor = { X = 3; Y = 3 }
+    Assert.Equal({ X = 4; Y = 3 }, Appraisal.resolveFormationTarget t [||] (Some { X = 1; Y = 0 }) anchor)
+
+[<Fact>]
+let ``resolveFormationTarget redirects to the nearest free cell when the exact offset is occupied`` () =
+    let t = Terrain.empty bounds
+    let anchor = { X = 3; Y = 3 }
+    let ideal = { X = 4; Y = 3 } // anchor + (1, 0)
+    let resolved = Appraisal.resolveFormationTarget t [| ideal |] (Some { X = 1; Y = 0 }) anchor
+    Assert.NotEqual(ideal, resolved)
+    Assert.True(Perception.chebyshev ideal resolved <= AppraisalConfig.FormationSlotSearchRadius)
+
+[<Fact>]
+let ``resolveFormationTarget redirects to the nearest free cell when the exact offset is impassable`` () =
+    let ideal = { X = 4; Y = 3 } // anchor + (1, 0)
+    let t = impassable [ (ideal.X, ideal.Y) ]
+    let anchor = { X = 3; Y = 3 }
+    let resolved = Appraisal.resolveFormationTarget t [||] (Some { X = 1; Y = 0 }) anchor
+    Assert.NotEqual(ideal, resolved)
+    Assert.True(Terrain.passable t resolved)
+
+[<Fact>]
+let ``resolveFormationTarget falls back to the literal anchor when every cell in radius is blocked`` () =
+    let r = AppraisalConfig.FormationSlotSearchRadius
+    let anchor = { X = 3; Y = 3 }
+    let ideal = { X = 4; Y = 3 } // anchor + (1, 0)
+
+    let t =
+        impassable [ for dy in -r..r do
+                         for dx in -r..r -> ideal.X + dx, ideal.Y + dy ]
+
+    Assert.Equal(anchor, Appraisal.resolveFormationTarget t [||] (Some { X = 1; Y = 0 }) anchor)
+
+[<Fact>]
+let ``two formationed agents ordered to the same nominal cell resolve to distinct destinations`` () =
+    let w0 = world ()
+
+    let w =
+        { w0 with
+            Agents =
+                w0.Agents
+                |> Array.map (fun a ->
+                    if a.Id = agent 0 then { a with FormationOffset = Some { X = -1; Y = 0 } }
+                    elif a.Id = agent 1 then { a with FormationOffset = Some { X = 1; Y = 0 } }
+                    else a) }
+
+    let order = Command.moveToMany (CommandId.ofInt 1) 0L [ agent 0; agent 1 ] { X = 4; Y = 4 } Routine Standard
+    let r = stepWith [| order |] w
+
+    Assert.Equal(Some { X = 3; Y = 4 }, (agentOf (agent 0) r.State).Destination)
+    Assert.Equal(Some { X = 5; Y = 4 }, (agentOf (agent 1) r.State).Destination)

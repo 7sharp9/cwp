@@ -95,9 +95,9 @@ module DemoScenario =
           Width = bounds.Width
           Height = bounds.Height
           FriendlyDeployments =
-            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = TrooperUnitType }
-               { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = TrooperUnitType } |]
-          EnemyDeployments = [| { AgentId = 5; Cell = { X = 11; Y = 7 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = TrooperUnitType } |]
+            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = TrooperUnitType; FormationId = ""; SlotIndex = 0 }
+               { AgentId = 1; Cell = { X = 0; Y = 1 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = TrooperUnitType; FormationId = ""; SlotIndex = 0 } |]
+          EnemyDeployments = [| { AgentId = 5; Cell = { X = 11; Y = 7 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = TrooperUnitType; FormationId = ""; SlotIndex = 0 } |]
           ObjectiveAreas = [| { AreaId = "ridge-top"; Cell = { X = 4; Y = 4 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 0; Y = 7 } } |]
           ResupplyAreas = [||]
@@ -114,6 +114,7 @@ module DemoScenario =
           UnitTypes = [| { Id = TrooperUnitType; MoveSpeed = TrooperMoveSpeed } |]
           Headquarters = None
           Jammers = [||]
+          Formations = [||]
           FailOnFriendlyForceEliminated = true }
 
     /// The validated scenario. Fails hard (this is a fixed test vector, not

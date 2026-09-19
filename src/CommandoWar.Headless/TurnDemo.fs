@@ -45,12 +45,12 @@ module TurnDemo =
           Width = bounds.Width
           Height = bounds.Height
           FriendlyDeployments =
-            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType }
-               { AgentId = 1; Cell = { X = 0; Y = 3 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType }
-               { AgentId = 2; Cell = { X = 3; Y = 4 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType }
-               { AgentId = 3; Cell = { X = 0; Y = 9 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType } |]
+            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType; FormationId = ""; SlotIndex = 0 }
+               { AgentId = 1; Cell = { X = 0; Y = 3 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType; FormationId = ""; SlotIndex = 0 }
+               { AgentId = 2; Cell = { X = 3; Y = 4 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType; FormationId = ""; SlotIndex = 0 }
+               { AgentId = 3; Cell = { X = 0; Y = 9 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType; FormationId = ""; SlotIndex = 0 } |]
           EnemyDeployments =
-            [| { AgentId = 4; Cell = { X = 9; Y = 4 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType } |]
+            [| { AgentId = 4; Cell = { X = 9; Y = 4 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = StandardUnitType; FormationId = ""; SlotIndex = 0 } |]
           ObjectiveAreas = [| { AreaId = "objective"; Cell = { X = 12; Y = 0 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 15; Y = 9 } } |]
           ResupplyAreas = [||]
@@ -67,6 +67,7 @@ module TurnDemo =
           UnitTypes = [| { Id = StandardUnitType; MoveSpeed = Agent.MoveSpeedDefault } |]
           Headquarters = None
           Jammers = [||]
+          Formations = [||]
           FailOnFriendlyForceEliminated = true }
 
     /// The validated scenario. Fails hard: this is a fixed test vector, not

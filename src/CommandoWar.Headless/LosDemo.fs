@@ -69,8 +69,8 @@ module LosDemo =
           Width = bounds.Width
           Height = bounds.Height
           FriendlyDeployments =
-            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" }
-               { AgentId = 1; Cell = { X = 0; Y = 11 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard" } |]
+            [| { AgentId = 0; Cell = { X = 0; Y = 0 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard"; FormationId = ""; SlotIndex = 0 }
+               { AgentId = 1; Cell = { X = 0; Y = 11 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard"; FormationId = ""; SlotIndex = 0 } |]
           EnemyDeployments = [||]
           ObjectiveAreas = [| { AreaId = "observation-point"; Cell = { X = 11; Y = 0 } } |]
           ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 11; Y = 11 } } |]
@@ -88,6 +88,7 @@ module LosDemo =
           UnitTypes = [| { Id = "standard"; MoveSpeed = Agent.MoveSpeedDefault } |]
           Headquarters = None
           Jammers = [||]
+          Formations = [||]
           FailOnFriendlyForceEliminated = true }
 
     /// The validated scenario. Fails hard: this is a fixed test vector, not

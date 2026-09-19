@@ -319,6 +319,19 @@ module AppraisalDemo =
                         (CommandId.value command)
                         dueTick
                 )
+            | AgentFormationSlot(agent, at, resolved) ->
+                // TASK-059: not yet surfaced in this disposable P3 demo (it
+                // predates the task); exposed-approach authors no formation,
+                // so this never fires for the committed frame.
+                unhandled.Add(
+                    sprintf
+                        "formation slot agent %d (%d,%d) -> (%d,%d)"
+                        (AgentId.value agent)
+                        at.X
+                        at.Y
+                        resolved.X
+                        resolved.Y
+                )
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

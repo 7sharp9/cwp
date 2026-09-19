@@ -35,7 +35,10 @@ namespace CommandoWar.Sim
 ///   * a hostile squad picture, enemy doctrine reacting to contacts, "the
 ///     enemy does not target an unobserved position" — B-022;
 ///   * per-agent private or persistent beliefs, confidence divergence between
-///     squad members, a squad / formation grouping — `docs/05` section 17.
+///     squad members — `docs/05` section 17 (a movement-slot formation
+///     grouping is realised by TASK-059, backlog B-011d, `Scenario.
+///     Formations`/`AgentState.FormationOffset`; a squad/plan-decomposition
+///     grouping beyond that stays deferred).
 
 /// Every perception threshold, in one place (`docs/05` section 15 "Record
 /// every threshold in one configuration structure"). Module literals rather

@@ -276,6 +276,13 @@ module Canonical =
     // `Discipline`. A speed-driven behaviour difference surfaces in the hash
     // within one tick via `Position` / `Progress`.
     //
+    // `AgentState.FormationOffset` (TASK-059, backlog B-011d) is likewise
+    // NOT written -- static authored scenario data (`Deployment.
+    // FormationOffset`, resolved from the authored formation table), the
+    // `MoveSpeed` precedent exactly. A formation-driven behaviour
+    // difference surfaces in the hash within one tick via `Destination` /
+    // `Position`.
+    //
     // `WorldState.Headquarters` and `.Jammers` (TASK-058, backlog B-016b)
     // are likewise NOT written — static authored scenario data
     // (`Scenario.Headquarters`/`.Jammers`), the `Terrain`/`ResupplyAreas`

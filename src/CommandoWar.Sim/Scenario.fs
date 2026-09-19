@@ -113,13 +113,19 @@ module TargetId =
 /// command-origin cell and the authored `Jammers` table -- both optional
 /// (an absent `Headquarters` opts a scenario out of the whole range/delay/
 /// jamming/radio-destroyed feature set, `Communication.available`'s own
-/// doc comment). A version-1-2-3-or-4 scenario is rejected, not migrated
-/// (`docs/04` section 16: "does not guess migrations").
+/// doc comment). Version 6 (TASK-059, backlog B-011d) added the authored
+/// formation table (`RawScenario.Formations`) and each deployment's
+/// optional `FormationId`/`SlotIndex` reference, the source of
+/// `Deployment.FormationOffset` / `AgentState.FormationOffset` -- a blank
+/// `FormationId` (every deployment authored before this task) opts that
+/// agent out, the `UnitTypes` precedent's "no silent default" applying only
+/// to a *non-blank* reference. A version-1-through-5 scenario is rejected,
+/// not migrated (`docs/04` section 16: "does not guess migrations").
 [<RequireQualifiedAccess>]
 module ScenarioContent =
 
     [<Literal>]
-    let Version = 5
+    let Version = 6
 
 // --- validated model ---------------------------------------------------
 
@@ -155,7 +161,16 @@ type Deployment =
       /// string reference does not survive past `Scenario.validate`, only
       /// this baked scalar does. Static — carried onto `AgentState.MoveSpeed`
       /// by `World.ofScenario` and never mutated during a run.
-      MoveSpeed: int }
+      MoveSpeed: int
+      /// This agent's formation slot offset (TASK-059, backlog B-011d), or
+      /// `None` for an unformationed agent. Resolved from the authored
+      /// `RawDeployment.FormationId`/`.SlotIndex` reference against
+      /// `RawScenario.Formations` at validation time -- the `UnitType`/
+      /// `MoveSpeed` precedent: the raw string/index reference does not
+      /// survive past `Scenario.validate`, only this baked offset does.
+      /// Static — carried onto `AgentState.FormationOffset` by
+      /// `World.ofScenario` and never mutated during a run.
+      FormationOffset: Cell option }
 
 /// A named point of interest: an objective area or an extraction area. The
 /// slice needs a single cell per area; a rectangular region is a later
@@ -245,7 +260,17 @@ type RawDeployment =
       Cell: Cell
       CommunicationAvailable: bool
       Discipline: int
-      UnitType: string }
+      UnitType: string
+      /// References `RawScenario.Formations` (TASK-059, backlog B-011d), the
+      /// source of `Deployment.FormationOffset`. Blank means this agent is
+      /// not in a formation -- the `RawObjective.AreaRef`/`TargetRef`
+      /// "ignored otherwise" precedent, not the `UnitType` "always
+      /// required" one: every scenario authored before this task leaves it
+      /// blank, and must keep validating unchanged.
+      FormationId: string
+      /// The index into the referenced formation's slot offsets. Ignored
+      /// when `FormationId` is blank.
+      SlotIndex: int }
 
 /// Unvalidated authored area marker.
 type RawArea = { AreaId: string; Cell: Cell }
@@ -328,6 +353,17 @@ type RawJammer =
       ActiveFromTick: int64
       ActiveUntilTick: int64 }
 
+/// One authored formation (TASK-059, backlog B-011d): `Id` is the token a
+/// `RawDeployment.FormationId` references; `Offsets.[slotIndex]` is that
+/// slot's relative `(dx, dy)` displacement from a `MoveTo` order's own
+/// literal target cell, the formation's anchor for that order
+/// (`Appraisal.resolveFormationTarget`). `Offsets` reuses the `Cell` record
+/// purely as an `(int, int)` pair here -- a relative displacement, not an
+/// absolute grid position, so its components may be negative and are never
+/// bounds-checked on their own. Must be non-empty: a formation with no
+/// slots has no meaning.
+type RawFormation = { Id: string; Offsets: Cell[] }
+
 /// The whole unvalidated authored scenario, as a content reader (a Godot
 /// `.tscn` reader, a Tiled importer, or a test) produces it. Every field is a
 /// primitive, an array of primitives, or the optional terrain layer, so the
@@ -359,6 +395,12 @@ type RawScenario =
       /// Authored jammers (TASK-058, backlog B-016b). Empty for the
       /// overwhelming majority of scenarios.
       Jammers: RawJammer[]
+      /// Authored formations (TASK-059, backlog B-011d), referenced by each
+      /// `RawDeployment.FormationId`. A non-blank reference to no entry here
+      /// -- or a `SlotIndex` outside the referenced formation's slot count
+      /// -- is a validation error; no silent default (the `UnitTypes`
+      /// precedent). Empty for the overwhelming majority of scenarios.
+      Formations: RawFormation[]
       FailOnFriendlyForceEliminated: bool }
 
 /// Why a raw scenario is invalid (docs/03 section 17, docs/06 section 7).
@@ -427,6 +469,20 @@ type ScenarioError =
     /// negative, or where `ActiveFromTick > ActiveUntilTick` (an empty or
     /// backwards window has no meaning).
     | InvalidJammerWindow of index: int * fromTick: int64 * untilTick: int64
+    // --- formations (ScenarioContent.Version 6, TASK-059, backlog B-011d) ---
+    | BlankFormationId
+    | DuplicateFormationId of formationId: string
+    /// An authored `RawFormation.Offsets` with no entries. A formation with
+    /// no slots has no meaning (the `NonPositiveUnitTypeMoveSpeed`
+    /// precedent: a value that cannot support what references it).
+    | FormationHasNoSlots of formationId: string
+    /// A `RawDeployment.FormationId` naming no entry in
+    /// `RawScenario.Formations` -- no silent default is supplied. Never
+    /// reported for a blank `FormationId` (that means "no formation").
+    | DeploymentReferencesUnknownFormation of agent: int * formationId: string
+    /// A `RawDeployment.SlotIndex` outside `[0, slotCount)` for the
+    /// formation it references.
+    | DeploymentSlotIndexOutOfRange of agent: int * formationId: string * slotIndex: int * slotCount: int
 
 [<RequireQualifiedAccess>]
 module Scenario =
@@ -522,6 +578,27 @@ module Scenario =
             if j.ActiveFromTick < 0L || j.ActiveUntilTick < 0L || j.ActiveFromTick > j.ActiveUntilTick then
                 report (InvalidJammerWindow(i, j.ActiveFromTick, j.ActiveUntilTick)))
 
+        // --- formations (ScenarioContent.Version 6, TASK-059, backlog B-011d) ---
+        // Validated ahead of deployments, the `UnitTypes` precedent exactly,
+        // so the deployment loop below can check each non-blank
+        // `FormationId`/`SlotIndex` reference against a known-good table.
+        for f in raw.Formations do
+            if System.String.IsNullOrWhiteSpace f.Id then
+                report BlankFormationId
+
+        for dup in repeated (raw.Formations |> Array.map (fun f -> f.Id) |> Array.filter (fun id -> not (System.String.IsNullOrWhiteSpace id))) do
+            report (DuplicateFormationId dup)
+
+        for f in raw.Formations do
+            if not (System.String.IsNullOrWhiteSpace f.Id) && Array.isEmpty f.Offsets then
+                report (FormationHasNoSlots f.Id)
+
+        let formationOffsetsById =
+            raw.Formations
+            |> Array.filter (fun f -> not (System.String.IsNullOrWhiteSpace f.Id) && not (Array.isEmpty f.Offsets))
+            |> Array.map (fun f -> f.Id, f.Offsets)
+            |> Map.ofArray
+
         // --- deployments (friendly then enemy) ---------------------------
         let deployments =
             Array.append
@@ -542,6 +619,13 @@ module Scenario =
 
             if not (Map.containsKey d.UnitType unitTypesById) then
                 report (DeploymentReferencesUnknownUnitType(d.AgentId, d.UnitType))
+
+            if not (System.String.IsNullOrWhiteSpace d.FormationId) then
+                match Map.tryFind d.FormationId formationOffsetsById with
+                | None -> report (DeploymentReferencesUnknownFormation(d.AgentId, d.FormationId))
+                | Some offsets when d.SlotIndex < 0 || d.SlotIndex >= offsets.Length ->
+                    report (DeploymentSlotIndexOutOfRange(d.AgentId, d.FormationId, d.SlotIndex, offsets.Length))
+                | Some _ -> ()
 
         if mapOk then
             for d, _ in deployments do
@@ -777,7 +861,16 @@ module Scenario =
                       Discipline = d.Discipline
                       // `errors.Count = 0` here guarantees `d.UnitType` was
                       // validated against `unitTypesById` above.
-                      MoveSpeed = Map.find d.UnitType unitTypesById })
+                      MoveSpeed = Map.find d.UnitType unitTypesById
+                      // `errors.Count = 0` here guarantees a non-blank
+                      // `d.FormationId`/`d.SlotIndex` was validated against
+                      // `formationOffsetsById` above.
+                      FormationOffset =
+                        if System.String.IsNullOrWhiteSpace d.FormationId then
+                            None
+                        else
+                            let offsets = Map.find d.FormationId formationOffsetsById
+                            Some offsets.[d.SlotIndex] })
 
             Ok
                 { Id = ScenarioId.ofString raw.Id

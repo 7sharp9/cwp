@@ -326,6 +326,17 @@ type Overlay =
     /// ever present when the world's `Headquarters` is authored (the
     /// opt-in gate, `Communication.available`'s zero-delay path otherwise).
     | AgentPendingDelivery of agent: AgentId * at: Cell * command: CommandId * dueTick: int64
+    /// A formationed agent's resolved `MoveTo` slot destination (TASK-059,
+    /// backlog B-011d; `AgentState.FormationOffset`): `at` is the agent's
+    /// current `Position`, `resolved` is `Appraisal.resolveFormationTarget`
+    /// applied to its live order's literal target -- makes the anchor+
+    /// offset redirect (and any nearest-free-cell fallback) visually
+    /// inspectable rather than only inferable from `AgentMarker.Destination`.
+    /// Emitted only for an agent with `FormationOffset = Some _` and a live
+    /// `MoveTo` order (the `AgentAmmo`/`AgentSuppression` sparse shape).
+    /// Standing per-tick derived state (like `OrderAppraisal`), so both
+    /// `Diagnostics.frame` and `.frameOf` derive it.
+    | AgentFormationSlot of agent: AgentId * at: Cell * resolved: Cell
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -483,6 +494,11 @@ module Diagnostics =
         |> Array.choose (fun a ->
             match a.Order, a.Disposition with
             | Some o, Some d ->
+                // TASK-059 (backlog B-011d): every other agent's current
+                // Position, the identical Simulation.appraisal computation.
+                let occupied =
+                    world.Agents |> Array.choose (fun x -> if x.Id = a.Id then None else Some x.Position)
+
                 let _, exposed =
                     Appraisal.appraise
                         world.Terrain
@@ -493,11 +509,33 @@ module Diagnostics =
                         a.SuppressionBand
                         a.Vitals
                         a.Ammo
+                        occupied
+                        a.FormationOffset
                         o
                         a.Position
                         budget
 
                 Some(OrderAppraisal(a.Id, a.Position, d, exposed))
+            | _ -> None)
+
+    /// An `AgentFormationSlot` overlay per formationed agent with a live
+    /// `MoveTo` order (TASK-059, backlog B-011d), ascending by agent id --
+    /// the `OrderAppraisal` precedent: a pure, deterministic recomputation
+    /// from bare authoritative state, not stored. `Hold`/`Assault`/
+    /// `Withdraw`/`Suppress` orders never emit one, matching
+    /// `Appraisal.appraise`'s own scoping (only `MoveTo` reads
+    /// `FormationOffset`).
+    let private formationSlotOverlays (world: WorldState) : Overlay[] =
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.choose (fun a ->
+            match a.FormationOffset, a.Order with
+            | Some _, Some { Intent = MoveTo target } ->
+                let occupied =
+                    world.Agents |> Array.choose (fun x -> if x.Id = a.Id then None else Some x.Position)
+
+                let resolved = Appraisal.resolveFormationTarget world.Terrain occupied a.FormationOffset target
+                Some(AgentFormationSlot(a.Id, a.Position, resolved))
             | _ -> None)
 
     /// An `AgentCommitment` overlay per agent (TASK-030), ascending by agent
@@ -642,7 +680,8 @@ module Diagnostics =
                squadLeadershipOverlay world
                agentAmmoOverlays world
                agentRadioDestroyedOverlays world
-               agentPendingDeliveryOverlays world |]
+               agentPendingDeliveryOverlays world
+               formationSlotOverlays world |]
             |> Array.concat
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
@@ -852,5 +891,6 @@ module Diagnostics =
                       squadLeadershipOverlay result.State
                       agentAmmoOverlays result.State
                       agentRadioDestroyedOverlays result.State
-                      agentPendingDeliveryOverlays result.State ]
+                      agentPendingDeliveryOverlays result.State
+                      formationSlotOverlays result.State ]
             Hash = result.StateHash }

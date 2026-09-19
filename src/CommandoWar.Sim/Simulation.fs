@@ -124,7 +124,8 @@ module World =
                 { Agent.create d.Agent d.Side d.Cell with
                     CommunicationAvailable = d.CommunicationAvailable
                     Discipline = d.Discipline
-                    MoveSpeed = d.MoveSpeed })
+                    MoveSpeed = d.MoveSpeed
+                    FormationOffset = d.FormationOffset })
             |> Array.toList
 
         build
@@ -700,7 +701,9 @@ module Simulation =
     // rules").
     //
     // Instant squad sharing (docs/05 section 3): every `Friendly` agent IS the
-    // squad (no `SquadStore` — B-011d / docs/05 section 17), so every
+    // squad (still no `SquadStore` -- TASK-059 realised B-011d narrowly, as a
+    // movement-slot grouping only, `Scenario.Formations`/`AgentState.
+    // FormationOffset`, not a knowledge-sharing container), so every
     // friendly's `VisibleContacts` from the Perception phase is immediately in
     // the shared store. `Perception.mergeKnowledge` upserts every contact seen
     // this tick at `PerceptionConfig.ConfidenceFull`, drops one band after
@@ -828,6 +831,11 @@ module Simulation =
     // SuppressionBand-latched, used only by a MoveTo order's stage-3
     // exposure (Decision F) — a Suppress order's own stage-2
     // TargetNotKnown check reads `threats` directly, not this set.
+    // Appraisal.appraise also takes occupied/formationOffset (TASK-059,
+    // backlog B-011d): every other agent's current Position and this
+    // agent's own static formation slot, used only by a MoveTo order's
+    // target resolution (Appraisal.resolveFormationTarget) — None
+    // reproduces every pre-TASK-059 order exactly.
     let private appraisal (s: StepState) =
         let terrain = s.Terrain
         let threats = s.TacticalKnowledge
@@ -877,6 +885,15 @@ module Simulation =
             let a = agents.[i]
             let newBand = newBands.[i]
 
+            // TASK-059 (backlog B-011d): every other agent's current
+            // `Position` -- read only by a formationed agent's `MoveTo`
+            // resolution (`Appraisal.resolveFormationTarget`'s occupancy
+            // check). `Position` does not change within this phase (only
+            // Navigation, later, mutates it), so this is stable regardless
+            // of how far the loop has progressed.
+            let occupied =
+                agents |> Array.choose (fun x -> if x.Id = a.Id then None else Some x.Position)
+
             match a.Order with
             | None -> agents.[i] <- { a with SuppressionBand = newBand; RecentlyWounded = false }
             | Some o ->
@@ -903,7 +920,10 @@ module Simulation =
                 // be the sole owner of Destination from that point on.
                 let fulfilled =
                     match o.Intent with
-                    | MoveTo target -> a.Disposition = Some Accepted && a.Destination = None && a.Position = target
+                    | MoveTo target ->
+                        a.Disposition = Some Accepted
+                        && a.Destination = None
+                        && a.Position = Appraisal.resolveFormationTarget terrain occupied a.FormationOffset target
                     | Hold area ->
                         a.Disposition = Some Accepted
                         && a.Destination = None
@@ -951,6 +971,8 @@ module Simulation =
                             newBand
                             a.Vitals
                             a.Ammo
+                            occupied
+                            a.FormationOffset
                             o
                             a.Position
                             budget
@@ -972,10 +994,14 @@ module Simulation =
                     // to the call inside `Appraisal.appraise` above) rather
                     // than threading it back out of `appraise`'s return
                     // value, so `Destination` always matches the cell
-                    // `appraise` actually routed to.
+                    // `appraise` actually routed to. TASK-059 (backlog
+                    // B-011d): `MoveTo` writes `Appraisal.
+                    // resolveFormationTarget`'s resolved cell the identical
+                    // way -- `None` reproduces the literal `target` exactly.
                     let destination =
                         match disposition, o.Intent with
-                        | Accepted, MoveTo target -> Some target
+                        | Accepted, MoveTo target ->
+                            Some(Appraisal.resolveFormationTarget terrain occupied a.FormationOffset target)
                         | Accepted, Hold area -> Some(Appraisal.bestCoverNear terrain threats suppressedThreats area)
                         | Accepted, Assault target -> Some target
                         | Accepted, Withdraw target -> Some target
@@ -1296,9 +1322,13 @@ module Simulation =
     // (`AgentState.Progress`, `Canonical.FormatVersion` 2) because — unlike
     // `Route` — it cannot be recomputed from `Position` alone.
     //
-    // Formation slots are B-011d (split from B-011c by TASK-018, which lands
-    // sub-cell progress only). `AgentState.Route` is still a non-canonical
-    // derived cache (see `MovementPath`).
+    // Formation slots (B-011d, split from B-011c by TASK-018, which landed
+    // sub-cell progress only) are realised by TASK-059: a formationed
+    // agent's `MoveTo` target is redirected by `Appraisal.
+    // resolveFormationTarget` before this pass ever sees it (Appraisal
+    // phase, above) -- Navigation itself is unchanged, still driven purely
+    // by whatever `Destination` it is handed. `AgentState.Route` is still a
+    // non-canonical derived cache (see `MovementPath`).
 
     /// One agent's movement outcome for this tick, computed in Pass 1 before
     /// same-tick contention resolution (Pass 2). Not persisted: recomputed

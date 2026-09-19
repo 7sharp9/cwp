@@ -509,7 +509,25 @@ type AgentState =
       /// tick 0 and it cannot diverge. A speed-driven behaviour difference
       /// still surfaces in the hash within one tick through the agent's
       /// `Position`/`Progress`.
-      MoveSpeed: int }
+      MoveSpeed: int
+      /// This agent's formation slot offset (TASK-059, backlog B-011d), or
+      /// `None` for an unformationed agent -- every scenario authored before
+      /// this task. Read only by `Appraisal.appraise`'s `MoveTo` case
+      /// (`Appraisal.resolveFormationTarget`): the order's own literal
+      /// target cell is treated as the formation anchor, and the agent's
+      /// real pathfinding target becomes anchor + this offset (redirected to
+      /// the nearest passable, unoccupied cell in range if the exact offset
+      /// cell is blocked or occupied). `Hold`/`Assault`/`Withdraw`/`Suppress`
+      /// targets are unaffected regardless of this field.
+      ///
+      /// **Static authoritative data**, the `MoveSpeed` precedent exactly:
+      /// set once from the authored scenario (`Deployment.FormationOffset`,
+      /// resolved from `Scenario.validate`'s formation table; `None` by
+      /// default) and never mutated during a run. Therefore **excluded**
+      /// from `Canonical.encode`. A formation-driven behaviour difference
+      /// still surfaces in the hash within one tick through the agent's
+      /// `Destination`/`Position`.
+      FormationOffset: Cell option }
 
 /// A validated jammer (TASK-058, backlog B-016b; `Scenario.Jammers`): a
 /// recipient within `Radius` Chebyshev cells of `Position` cannot receive
@@ -673,6 +691,8 @@ module Agent =
     /// always starts `Ready (MagazineSize, ReserveStart)`. `RadioDestroyed`/
     /// `PendingDelivery` (TASK-058) follow it too: every agent always starts
     /// with an intact radio and nothing in flight, no authored override.
+    /// `FormationOffset` (TASK-059) follows the `MoveSpeed` rule instead:
+    /// `World.ofScenario` overrides it too, default `None`.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -694,4 +714,5 @@ module Agent =
           Vitals = Alive MaxHealth
           RecentlyWounded = false
           Ammo = Ready(MagazineSize, ReserveStart)
-          MoveSpeed = MoveSpeedDefault }
+          MoveSpeed = MoveSpeedDefault
+          FormationOffset = None }
