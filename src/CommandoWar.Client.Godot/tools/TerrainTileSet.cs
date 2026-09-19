@@ -103,4 +103,40 @@ public static class TerrainTileSet
 			throw new System.InvalidOperationException($"ResourceSaver.Save({resPath}) failed: {err}");
 		}
 	}
+
+	/// The reverse of <see cref="Sources"/> (TASK-061, backlog B-025): finds
+	/// the source whose (Class, MoveCost, Opaque) exactly matches an
+	/// authored <c>RawTerrainCell</c>'s, and returns its source index plus
+	/// the alternate tile id for <paramref name="elevation"/>. The source
+	/// index doubles as the atlas source id (<see cref="Build"/> calls
+	/// <c>AddSource</c> in <see cref="Sources"/> order, so source `i`'s id
+	/// is `i` — the same assumption <c>TerrainRoundTripProof.cs</c>'s own
+	/// "source index order matches TerrainTileSet.Sources" comment
+	/// documents). The alternate id equals <paramref name="elevation"/>
+	/// directly for 0/1/2: elevation 0 is the tile <see cref="Build"/>
+	/// creates with the source (alternate 0), and Godot's
+	/// <c>CreateAlternativeTile</c> assigns the next free positive id when
+	/// none is given, i.e. 1 then 2 for the two calls <see cref="Build"/>
+	/// makes per source. Returns <c>null</c> (does not throw, does not
+	/// silently pick a nearest match) when no source matches or elevation
+	/// is outside <c>[0, 2]</c> — the caller reports this, it never
+	/// silently mis-paints a cell.
+	public static (int SourceId, int AlternateId)? Resolve(string cls, int moveCost, bool opaque, int elevation)
+	{
+		if (elevation < 0 || elevation > 2)
+		{
+			return null;
+		}
+
+		for (var i = 0; i < Sources.Length; i++)
+		{
+			var (_, sourceClass, sourceMoveCost, sourceOpaque) = Sources[i];
+			if (sourceClass == cls && sourceMoveCost == moveCost && sourceOpaque == opaque)
+			{
+				return (i, elevation);
+			}
+		}
+
+		return null;
+	}
 }

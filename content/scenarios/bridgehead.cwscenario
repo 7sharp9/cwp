@@ -1,0 +1,122 @@
+# Bridgehead greybox map (TASK-061, backlog B-025): rail bridge + depot at
+# dusk (docs/07_VERTICAL_SLICE.md section 3). Physical-space and
+# force-placement greybox only -- no authored mission-sequence content
+# (that is B-032's job; Simulation.fs has no objective-evaluation logic
+# yet). Terrain stays within the three fixed TerrainTileSet.Sources
+# combinations (TASK-060): floor (passable, moveCost 1, opaque false),
+# block (impassable, moveCost 0, opaque true), crate (passable, moveCost 3,
+# opaque true).
+#
+# Layout: an impassable river runs north-south at x=8..9 for the whole map
+# height, crossed by one compact two-cell-wide rail bridge deck at y=5..6
+# (elevation 1) -- the single exposed approach. Friendly forces stage on
+# the west bank (x<8); the depot (two building clusters plus scattered
+# crate cover) occupies the east bank (x>=14), with an open lane in
+# between that the machine-gun position overwatches.
+#
+# Friendly: agent 0 is the leader, agents 1-5 are five more soldiers --
+# fireteam-alpha is agents 0/1/2, fireteam-bravo is agents 3/4/5 (TASK-059
+# formation slots). Agent 4 conceptually carries the squad's support
+# weapon (docs/07 "one support weapon suitable for suppression") and
+# agent 5 the demolition charge ("one demolition interaction owned by the
+# squad rather than a detailed inventory system") -- content labelling
+# only in this comment; neither has a distinct simulation mechanic yet
+# (task file "Inputs and assumptions").
+#
+# Enemy: agent 100 is the machine-gun team -- one agent representing the
+# team, positioned to control the open lane immediately east of the
+# bridge exit. Agents 101-104 are the four riflemen in prepared positions
+# around the depot buildings.
+#
+# `Objectives` carries exactly one placeholder "reach" entry (id 1,
+# `IsOptional=true`) referencing the `observation` landmark area -- this is
+# NOT the docs/07 section 3 mission sequence, which stays deliberately out
+# of this task's scope (B-032, per "Design decisions"). `Scenario.validate`
+# rejects a fully empty `Objectives` array with
+# `MissingRequiredMarker "Objective"` (confirmed by inspection of
+# `Scenario.fs`), so the task file's literal "Objectives = [||]" cannot
+# both hold and pass `cwheadless import` with exit 0 -- a conflict between
+# two of the task's own stated requirements discovered during
+# implementation, not a re-litigation of scope. This one placeholder is the
+# smallest change that satisfies the validator while adding no real
+# mission-sequence content, following the exact precedent already in this
+# codebase: `CwClientCore.TerrainAuthoring.exportScenario`'s own doc
+# comment describes its skeleton's single "reach" objective as existing
+# "just sufficient for Scenario.validate to accept the result", and
+# `content/scenarios/godot-painted-test.cwscenario` does the same. Flagged
+# as an explicit deviation in the task file and ledger for Dave.
+version 1
+content-version 6
+id bridgehead
+map 18 12
+fail-on-friendly-eliminated true
+terrain 18 12
+terrain-cell 8 0 impassable 0 0 true
+terrain-cell 9 0 impassable 0 0 true
+terrain-cell 8 1 impassable 0 0 true
+terrain-cell 9 1 impassable 0 0 true
+terrain-cell 8 2 impassable 0 0 true
+terrain-cell 9 2 impassable 0 0 true
+terrain-cell 8 3 impassable 0 0 true
+terrain-cell 9 3 impassable 0 0 true
+terrain-cell 8 4 impassable 0 0 true
+terrain-cell 9 4 impassable 0 0 true
+terrain-cell 8 5 passable 1 1 false
+terrain-cell 9 5 passable 1 1 false
+terrain-cell 8 6 passable 1 1 false
+terrain-cell 9 6 passable 1 1 false
+terrain-cell 8 7 impassable 0 0 true
+terrain-cell 9 7 impassable 0 0 true
+terrain-cell 8 8 impassable 0 0 true
+terrain-cell 9 8 impassable 0 0 true
+terrain-cell 8 9 impassable 0 0 true
+terrain-cell 9 9 impassable 0 0 true
+terrain-cell 8 10 impassable 0 0 true
+terrain-cell 9 10 impassable 0 0 true
+terrain-cell 8 11 impassable 0 0 true
+terrain-cell 9 11 impassable 0 0 true
+terrain-cell 14 2 impassable 0 0 true
+terrain-cell 15 2 impassable 0 0 true
+terrain-cell 16 2 impassable 0 0 true
+terrain-cell 14 3 impassable 0 0 true
+terrain-cell 15 3 impassable 0 0 true
+terrain-cell 16 3 impassable 0 0 true
+terrain-cell 14 8 impassable 0 0 true
+terrain-cell 15 8 impassable 0 0 true
+terrain-cell 16 8 impassable 0 0 true
+terrain-cell 14 9 impassable 0 0 true
+terrain-cell 15 9 impassable 0 0 true
+terrain-cell 16 9 impassable 0 0 true
+terrain-cell 10 4 passable 0 3 true
+terrain-cell 10 7 passable 0 3 true
+terrain-cell 12 4 passable 0 3 true
+terrain-cell 12 6 passable 0 3 true
+terrain-cell 14 5 passable 0 3 true
+terrain-cell 14 6 passable 0 3 true
+terrain-cell 17 5 passable 0 3 true
+terrain-cover 11 5 east 1
+terrain-cover 13 2 west 2
+terrain-cover 13 9 west 2
+terrain-cover 17 3 south 1
+terrain-cover 17 8 north 1
+terrain-cover 6 5 east 1
+terrain-cover 6 6 east 1
+unit-type trooper 2
+formation fireteam-alpha 0,0;1,0;0,1
+formation fireteam-bravo 0,0;-1,0;0,-1
+friendly 0 3 5 true 4 trooper fireteam-alpha 0
+friendly 1 2 5 true 3 trooper fireteam-alpha 1
+friendly 2 2 6 true 3 trooper fireteam-alpha 2
+friendly 3 3 7 true 3 trooper fireteam-bravo 0
+friendly 4 4 7 true 3 trooper fireteam-bravo 1
+friendly 5 4 8 true 3 trooper fireteam-bravo 2
+enemy 100 11 5 true 5 trooper - 0
+enemy 101 13 2 true 4 trooper - 0
+enemy 102 13 9 true 4 trooper - 0
+enemy 103 17 3 true 4 trooper - 0
+enemy 104 17 8 true 4 trooper - 0
+objective-area observation 4 4
+extraction-area extraction 1 9
+target bridge-charge 9 5
+target mg-position 11 5
+objective 1 reach observation - 0 true -

@@ -92,3 +92,66 @@ module TerrainAuthoring =
               FailOnFriendlyForceEliminated = true }
 
         System.IO.File.WriteAllText(outPath, ScenarioFile.serialise raw)
+
+    /// One authored terrain layer, flattened for the C# side (TASK-061,
+    /// backlog B-025) -- the `AppraisalDemo.FrameView` "no F# tuple crosses
+    /// to C#" precedent applied to `RawTerrainCell`. Parallel arrays, one
+    /// entry per authored cell.
+    [<CLIMutable>]
+    type ImportedTerrainLayer =
+        { CellX: int[]
+          CellY: int[]
+          Class: string[]
+          Elevation: int[]
+          MoveCost: int[]
+          Opaque: bool[] }
+
+    /// Reverse of `exportScenario` (TASK-061, backlog B-025): reads a
+    /// `.cwscenario` file at `path` and returns its authored terrain layer's
+    /// cells as parallel primitive arrays for the C# side
+    /// (`ImportTerrainScript.cs`) to paint onto a `TileMapLayer`, one
+    /// `TileMapLayer.SetCell` per cell once it resolves each cell's
+    /// `(Class, MoveCost, Opaque)` against `TerrainTileSet.Sources`.
+    ///
+    /// `ScenarioFile.parse` and `Scenario.validate` do the actual parsing
+    /// and validation -- this is a thin adapter, not a new parser: a
+    /// grammar or content fault throws (the `DemoScenario.scenario`/
+    /// `.initialState` "fails hard, this is a bug in this file" precedent --
+    /// an editor tool run against bad content is exactly that, not a case to
+    /// recover from silently).
+    ///
+    /// Returns the *authored, sparse* cells (`RawTerrainLayer.Cells`), not
+    /// `Scenario.validate`'s validated dense `Terrain` grid: only a cell the
+    /// author actually typed should become a painted `TileMapLayer` cell (an
+    /// unpainted cell has no tile at all -- the same sparse shape
+    /// `ExportTerrainScript.GetUsedCells()` reads back on export, so
+    /// import -> export round-trips exactly), and `RawTerrainCell.Class` is
+    /// the raw `"passable"`/`"impassable"` string token `TerrainTileSet.
+    /// Sources` is keyed on, not `Scenario.fs`'s validated `MovementClass`
+    /// DU. An absent terrain layer (`RawScenario.TerrainLayer = None`)
+    /// returns empty arrays -- nothing to paint, not a fault.
+    let importTerrainLayer (path: string) : ImportedTerrainLayer =
+        let raw =
+            match ScenarioFile.parse (System.IO.File.ReadAllText path) with
+            | Error e -> failwith $"'{path}': .cwscenario parse error: {ScenarioFile.describeError e}"
+            | Ok r -> r
+
+        match Scenario.validate raw with
+        | Error errs -> failwith $"'{path}': scenario content invalid ({errs.Length} fault(s)): {errs}"
+        | Ok _ -> ()
+
+        match raw.TerrainLayer with
+        | None ->
+            { CellX = [||]
+              CellY = [||]
+              Class = [||]
+              Elevation = [||]
+              MoveCost = [||]
+              Opaque = [||] }
+        | Some layer ->
+            { CellX = layer.Cells |> Array.map (fun c -> c.Cell.X)
+              CellY = layer.Cells |> Array.map (fun c -> c.Cell.Y)
+              Class = layer.Cells |> Array.map (fun c -> c.Class)
+              Elevation = layer.Cells |> Array.map (fun c -> c.Elevation)
+              MoveCost = layer.Cells |> Array.map (fun c -> c.MoveCost)
+              Opaque = layer.Cells |> Array.map (fun c -> c.Opaque) }

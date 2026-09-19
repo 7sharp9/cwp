@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; review trigger 1 measured and closed 2026-09-19, decision reaffirmed -- see ADR-0001's 2026-09-19 note)
-  updated: 2026-09-19 (TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
+  updated: 2026-09-19 (TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
 
 active_work:
   selected_task: none
@@ -15,7 +15,109 @@ active_work:
   blockers: []
   updated: 2026-09-19
   note: >-
-    2026-09-19: TASK-060 accepted by Dave after three live review rounds
+    2026-09-19: TASK-061 accepted by Dave ("this looks ok") after a live
+    review round in the real Godot 4.7.2 editor -- the interactive-editor
+    verification the self-verified submission below had flagged as
+    outstanding. Dave ran `ImportTerrainScript.cs` himself; a real bug
+    surfaced and was fixed same-session: the script never cleared the
+    `TileMapLayer` before painting, so it silently overlaid Bridgehead's 43
+    cells onto a large leftover hand-painted test area still baked into the
+    committed `TerrainAuthoring.tscn` from TASK-060's own review rounds
+    (visible in Dave's first screenshot as a large diamond floor/border
+    shape mixed in with the new content). Fixed with one `layerNode.Clear()`
+    call, so an import now always replaces rather than overlays. A second,
+    harder symptom followed: two further screenshots, even after Dave
+    zoomed out enough to report "nothing beyond" the painted area, showed
+    only two depot-sized blobs and a handful of crates -- missing the
+    24-cell river band that should dominate the view. Rather than keep
+    guessing from screenshots, this was run to ground directly with two
+    temporary headless diagnostics (removed after use): one loaded the
+    actual committed `art/terrain.tres` (not a freshly rebuilt copy) and
+    confirmed the resource and resolve logic were correct in isolation; the
+    other loaded Dave's own *saved* `TerrainAuthoring.tscn` from disk via
+    `PackedScene.Instantiate()` and read it back through Godot's own
+    `GetUsedCells()`/`GetCellTileData()` API -- all 43 cells were present, at
+    exactly the authored coordinates and properties, an exact match against
+    `bridgehead.cwscenario`. The data was correct throughout; the
+    screenshots most likely caught a transient/not-yet-refreshed viewport
+    state, not a real rendering or logic defect. One unrelated side effect
+    (an editor-triggered spaces-to-tabs reformat of `ExportTerrainScript.cs`,
+    plus line-ending-only noise in `project.godot`/`art/terrain.tres`) was
+    caught by `git diff`/`git status` and reverted, not committed -- the
+    TASK-060 precedent. `TerrainAuthoring.tscn`'s live-painted Bridgehead
+    state was then reset back to its documented empty starter-scene state
+    (Dave's explicit choice via `AskUserQuestion` -- a shared reusable
+    scratch canvas, not a per-map artifact; `bridgehead.cwscenario` is the
+    authoritative file regardless). No further changes requested. B-025 now
+    `done`. `active_work.selected_task -> none`; next task not yet chosen.
+    Nothing has been committed to git this session -- the working tree
+    holds TASK-061's full diff, ready for review/commit.
+    (tasks/TASK-061-BRIDGEHEAD-GREYBOX-MAP.md;
+    docs/ledger/2026-09-19-TASK-061-bridgehead-greybox-map.md)
+
+    Prior: 2026-09-19: TASK-061 implemented (self-verified, `review` -- not yet
+    accepted by Dave). `content/scenarios/bridgehead.cwscenario` hand-authored
+    (18x12; one rail-bridge chokepoint over an impassable river, a
+    two-building depot with crate cover; 6 friendly incl. two fireteams of 3,
+    5 enemy incl. one MG-team agent + 4 riflemen; landmark
+    `ObjectiveAreas`/`StaticTargets`/`ExtractionAreas` only, no authored
+    mission-sequence content), valid under `cwheadless import` (exit 0, no
+    faults). New minimal terrain-layer importer built (the
+    `ExportTerrainScript.cs`/`exportScenario` reverse):
+    `Core/TerrainAuthoring.importTerrainLayer`, `tools/ImportTerrainScript.cs`,
+    an additive `TerrainTileSet.Resolve` lookup; proven for real headless
+    through the installed Godot 4.7.2 editor by
+    `tools/BridgeheadTerrainImportProof.cs` (the `TerrainRoundTripProof.cs`
+    reverse) -- all 43 authored terrain cells resolved, painted, and
+    re-exported to an exact, order-independent match. One deviation found
+    during implementation: `Scenario.validate` unconditionally rejects an
+    empty `Objectives[]` array, conflicting with the task's own literal
+    "Objectives = [||]" instruction and its "no `Objectives[]` entries"
+    acceptance criterion -- resolved with exactly one placeholder
+    `IsOptional=true` "reach" objective (not real mission content), the exact
+    precedent `TerrainAuthoring.exportScenario`'s own skeleton already sets;
+    that acceptance criterion is marked unmet for Dave, not silently checked
+    off. A second gap: `cwheadless render` has no `.cwscenario` target, so
+    the Godot-independent visual sanity check used an ad hoc, not-committed
+    console harness instead (adding a CLI verb was out of allowed scope).
+    `dotnet build` all three `.slnx` `0/0`; `dotnet test` `395/395`
+    (unaffected); `-- corpus` `17/17` (unaffected); `CommandoWar.Sim`
+    package list unaffected (`FSharp.Core` only). Interactive-editor run of
+    `ImportTerrainScript.cs` still outstanding (no display in this
+    environment, the TASK-060 precedent). Not committed to git -- left in
+    the working tree for Dave/the parent session to review.
+    (tasks/TASK-061-BRIDGEHEAD-GREYBOX-MAP.md;
+    docs/ledger/2026-09-19-TASK-061-bridgehead-greybox-map.md)
+
+    Prior: 2026-09-19: TASK-061 (Bridgehead greybox map, realises B-025) drafted and
+    selected. Reached via `AskUserQuestion` over three rounds, not a single
+    pick: whether to scope B-025's own unscoped "generate" half now, do
+    something else, or keep polishing the terrain tool (Dave chose to scope
+    B-025); how the "generate a draft" step should actually work, given
+    `docs/07` section 7 explicitly excludes procedural maps and Bridgehead
+    is one fixed bespoke layout anyway (Dave chose hand-authoring the
+    `.cwscenario` text directly, then confirmed mid-session this means an
+    informal verbal-description-to-draft pass for now -- automating that
+    bridge with tooling or a helper LLM is his own explicitly deferred idea,
+    filed as new backlog row B-063, not built here); and, after inspecting
+    `ExportTerrainScript.cs`/`Core/TerrainAuthoring.fs` and finding the
+    terrain tool only exports (never imports), whether B-025 also builds a
+    minimal reverse importer so the hand-authored draft can actually be
+    hand-tweaked visually as intended (Dave chose yes). Also confirmed:
+    B-025 stays scoped to terrain + deployments only, no authored
+    `Objectives[]` -- confirmed by inspecting `Simulation.fs` that no
+    objective-evaluation logic exists anywhere yet, so mission-sequence
+    content is B-032's job (which already depends on B-025). A stale
+    untracked leftover, `content/scenarios/bridgehead-test.cwscenario`
+    (a pre-fix test export from TASK-060 review round 3, superseded by the
+    exporter fix, never committed), was deleted per Dave's own choice before
+    scoping began. `docs/11_BACKLOG.md` B-025 row updated with the scoping
+    rationale and re-sized M -> M-L (the added importer tooling, the B-027
+    "M undercounts new capability" precedent); new B-063 row added. Not yet
+    implemented.
+    (tasks/TASK-061-BRIDGEHEAD-GREYBOX-MAP.md)
+
+    Prior: 2026-09-19: TASK-060 accepted by Dave after three live review rounds
     (tile-shape checkerboard; Y-sort/texture-anchor overlap and mouse
     offset; map-sizing/negative-coordinate export gap -- each found live,
     fixed, and re-verified same-session). B-024 and B-043 both now `done`;
