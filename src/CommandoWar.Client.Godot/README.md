@@ -804,6 +804,43 @@ applying to the group order instead of automatically redirecting every
 lone individual order -- is parked as backlog B-067, proposed only, not
 scoped here per his explicit instruction.
 
+### Formation redirect applies only to group orders (TASK-067, backlog B-067)
+
+The sim-side half of B-067: `ReceivedOrder.AsGroup` (`Canonical.
+FormatVersion` 14 -> 15) is now derived once at command intake from the
+originating `PlayerCommand`'s own recipient count (`Recipients.Length >
+1`) and gates every `Appraisal.resolveFormationTarget` call site --
+`Appraisal.appraise` itself, `Simulation.fs`'s two mirrored calls, and
+`Diagnostics.formationSlotOverlays`. A single-recipient `MoveTo` order
+(everything this client issues today -- no multi-select UI exists yet,
+the still-unscoped second half of B-067) now always resolves to the
+literal clicked cell, regardless of the recipient's own `FormationOffset`;
+`CommandDemoScene.fs`'s `OnHover` preview no longer needs to call
+`resolveFormationTarget` at all for that reason, simplifying back to a
+direct pathfind against the hovered cell.
+
+`CommandDemoDrive.runScriptedSelfCheck`'s six-agent Bridgehead sequence
+relied on the old unconditional redirect to spread agents 0/1/5 and 2/4
+(whose original literal target cells coincided) onto distinct real
+destinations; with redirect now solo-order-exempt, its six target cells
+were updated to the *pre-TASK-067 resolved* cells directly (computed once
+via a temporary `dotnet fsi` probe against the real scenario, removed
+after use) so the sequence keeps reproducing its own prior outcome --
+confirmed byte-for-byte via the same probe re-run with the client's own
+`CommandId` numbering, matching the real `--selfcheck` hash exactly. The
+outcome ("no friendly casualties, machine gun neutralised") is unchanged;
+several agents still end the run mid-route, queued behind each other at
+shared target cells -- the same live-agent chokepoint contention TASK-066
+already found and parked as B-067's still-unscoped second half.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x6213D672BC36FDB8
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x2629A1FE165F94BB
+"$GODOT" --headless --path . scenes/AppraisalDemo.tscn -- --selfcheck  # MATCH 0xA1354EB998FC1B95
+```
+
 ## Pinned versions
 
 | Component | Version |

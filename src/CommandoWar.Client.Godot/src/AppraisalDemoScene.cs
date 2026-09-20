@@ -55,7 +55,7 @@ public partial class AppraisalDemoScene : Node2D
     private bool _selfCheck;
     private bool _screenshot;
     private string _screenshotPath;
-    private ulong _expectHash = 0xF0169E93B40D5546UL; // exposed-approach tick 1 (TASK-065 re-pin: Canonical.FormatVersion 13 -> 14, AgentState.StalledTicks added -- byte-layout only, this fixture never sustains a movement freeze)
+    private ulong _expectHash = 0xA1354EB998FC1B95UL; // exposed-approach tick 1 (TASK-067 re-pin: Canonical.FormatVersion 14 -> 15, ReceivedOrder.AsGroup added -- byte-layout only, this fixture authors no formation)
     private int? _headlessExit;
     private int _screenshotFrames;
 

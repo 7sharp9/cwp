@@ -16,20 +16,20 @@ See `content/replays/CORPUS.md`.
 | Command log | `order-queue-stacking-and-cancellation.cwreplay` |
 | Initial state | Corpus order-queue-stacking-and-cancellation scenario (12 x 3, seed 20260904, 1 friendly) |
 | Tick count | 9 |
-| Initial hash (tick 0) | `0x1A9E1DE486ABF1C0` |
-| Final hash (tick 9) | `0x91BCB6A5F7CFFEC0` |
+| Initial hash (tick 0) | `0x0A2334D2C34FA797` |
+| Final hash (tick 9) | `0x50B5CE755D774947` |
 | Domain events | 20 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xDB959CB4175F9FE0` |
-|    2 | `0x1849C5649E93AFAA` |
-|    3 | `0xF99657C7F2957420` |
-|    4 | `0x5692B6E0A2FA42F5` |
-|    5 | `0x2638B51214196EEC` |
-|    6 | `0xADA0B3A4D4E14B12` |
-|    7 | `0xD57D8479EBED7CCA` |
-|    8 | `0x393C70314D7C91A7` |
-|    9 | `0x91BCB6A5F7CFFEC0` |
+|    1 | `0x174054167B87AA0B` |
+|    2 | `0x233BE73A3DC57F6B` |
+|    3 | `0xA9279F5C7541F9DD` |
+|    4 | `0xFBDE710A10FAF7EC` |
+|    5 | `0xDAEE8E6642F9E331` |
+|    6 | `0x01C6ABC6084D1B6B` |
+|    7 | `0x0E992BE75F7E0C61` |
+|    8 | `0x4F137D98B4DE7EE0` |
+|    9 | `0x50B5CE755D774947` |

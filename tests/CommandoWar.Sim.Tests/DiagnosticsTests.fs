@@ -111,7 +111,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0x672815D313E0AE51UL, f.Hash.Value)
+    Assert.Equal(0x5049F6F0E9FCA1E2UL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -1237,7 +1237,7 @@ let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` ()
 let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
     let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
     Assert.Equal(13, frames.Length)
-    Assert.Equal(0xF0169E93B40D5546UL, frames.[1].Hash.Value)
+    Assert.Equal(0xA1354EB998FC1B95UL, frames.[1].Hash.Value)
 
     let appraisals =
         frames.[1].Overlays
@@ -1305,8 +1305,8 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0x672815D313E0AE51UL, frames.[0].Hash.Value)
-    Assert.Equal(0x27FC9F2AA2CA441EUL, frames.[40].Hash.Value)
+    Assert.Equal(0x5049F6F0E9FCA1E2UL, frames.[0].Hash.Value)
+    Assert.Equal(0xD2A6A1AE46AD76A5UL, frames.[40].Hash.Value)
     // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
     // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
     // since Commitment is derived, not canonical (Decision B).
@@ -1315,7 +1315,7 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x27FC9F2AA2CA441EUL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0xD2A6A1AE46AD76A5UL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(36, outcome.Events.Length)
 
 // --- divergence rendering (TASK-057, backlog B-050) --------------------
@@ -1394,7 +1394,8 @@ let ``Diagnostics.frame renders a radio-destroyed and an in-flight-order agent v
           Intent = MoveTo { X = 5; Y = 5 }
           IssuedAtTick = 1L
           Urgency = Routine
-          RiskTolerance = Standard }
+          RiskTolerance = Standard
+          AsGroup = false }
 
     let pending =
         { Agent.create (AgentId.ofInt 1) Friendly { X = 2; Y = 2 } with

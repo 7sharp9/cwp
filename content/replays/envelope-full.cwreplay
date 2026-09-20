@@ -9,43 +9,44 @@
 # Initial state: the shared spike fixture (Setup.sixAgentWorld, 32 x 32,
 # seed 20260902) — resolved by name from Corpus.all, not serialised.
 #
-# canonical 14 and every hash below were re-pinned by TASK-065 (backlog
-# B-065; Canonical.FormatVersion 13 -> 14, AgentState.StalledTicks added).
-# This entry's one command is an ordinary MoveTo with no rival agent and no
-# occupied route cell anywhere near it, so the new counter stays 0 at every
-# checkpoint: the byte-layout change is the only difference, the 24 ticks
-# and 78 domain events are unchanged. Prior re-pin: TASK-062 (Canonical.
-# FormatVersion 12 -> 13, AgentState.Extracted and WorldState.MissionOutcome/
-# .CompletedObjectives/.ObjectiveProgress added).
+# canonical 15 and every hash below were re-pinned by TASK-067 (backlog
+# B-067; Canonical.FormatVersion 14 -> 15, ReceivedOrder.AsGroup added).
+# This entry's one command addresses three recipients (3, 4, 5) with a
+# genuine Command.moveToMany, but none of them authors a FormationOffset
+# (Setup.sixAgentWorld has no formation), so AsGroup being true or false
+# makes no difference to the resolved target either way: the byte-layout
+# change is the only difference, the 24 ticks and 78 domain events are
+# unchanged. Prior re-pin: TASK-065 (Canonical.FormatVersion 13 -> 14,
+# AgentState.StalledTicks added).
 version 1
 seed 20260902
 ticks 24
-canonical 14
+canonical 15
 build cwheadless
 scenario spike-fixture
-initial-hash 0x672815D313E0AE51
-checkpoint 1 0xEDEEE60A8D387982
-checkpoint 2 0xB019F3CF1627688A
-checkpoint 3 0xE8A42FF36E1C083C
-checkpoint 4 0x2BC447A90AA5EDB2
-checkpoint 5 0xD4C4440F6F3645C0
-checkpoint 6 0xAC2928E7A02C513A
-checkpoint 7 0x6BAB4B2EA8E3AEBC
-checkpoint 8 0x272EF1D2801CEF62
-checkpoint 9 0x0A3ADDDCC8376CA8
-checkpoint 10 0x2A9CA370FBA72A4A
-checkpoint 11 0x3C24F692CA2C51DC
-checkpoint 12 0x61F93BE96B378EB2
-checkpoint 13 0x7B3FD1D4C86DB600
-checkpoint 14 0x2B5A6D8F57507F9A
-checkpoint 15 0x560C8396B2A0AD3C
-checkpoint 16 0x38CA548EAB702502
-checkpoint 17 0xFFB0F910D0FC3458
-checkpoint 18 0x38D738CF80A2BB4A
-checkpoint 19 0x7FDE64A19CB5407C
-checkpoint 20 0x380F778500FE44F2
-checkpoint 21 0x1D8147B54DEB7F40
-checkpoint 22 0x655817AF44F47D6E
-checkpoint 23 0xB1656C4DB2568AF8
-checkpoint 24 0xDF048B77995D0552
+initial-hash 0x5049F6F0E9FCA1E2
+checkpoint 1 0x38F956EF2922EFB1
+checkpoint 2 0x6D80C63D50E94D3E
+checkpoint 3 0xD7C7A94E8E366EDE
+checkpoint 4 0x101615A573F46652
+checkpoint 5 0xD80BFF89A689D592
+checkpoint 6 0x387AD441DFD84906
+checkpoint 7 0x2D9DEEF28607B26E
+checkpoint 8 0x78F48930CF1B5AA2
+checkpoint 9 0x3454E9D586F36F4A
+checkpoint 10 0x224D85ADFE79D83E
+checkpoint 11 0xC1E0585D6374098E
+checkpoint 12 0x6230FC63BE34D5B2
+checkpoint 13 0xDF7C1225C3D57822
+checkpoint 14 0x785771D5FE9D4C76
+checkpoint 15 0xCC747A7BD6C8A47E
+checkpoint 16 0x12179943729F0662
+checkpoint 17 0xDC979B576A4EDBAA
+checkpoint 18 0xDB772A8A292167DE
+checkpoint 19 0xFC26B4223453F5BE
+checkpoint 20 0x7B4BAE35F1974CD2
+checkpoint 21 0x267AF7E96D2B5AF2
+checkpoint 22 0x3E13748C0DCA2E3E
+checkpoint 23 0xE51651C869CD3B4A
+checkpoint 24 0xA99BAC28A2BF7296
 command 2 0 1 1 immediate aggressive fixture:spike 3,4,5 move 20 14

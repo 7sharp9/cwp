@@ -681,12 +681,15 @@ type CommandDemoScene() =
             // immediately; only the fall-back to "no order" is delayed.
             // TASK-064 review (backlog B-035): `dispositionText` alone says
             // only "accepted", which reads as "your soldier is doing what
-            // you clicked" -- not true for a formationed agent redirected
-            // by `Appraisal.resolveFormationTarget` (see `OnHover`'s own
-            // comment above). Appending the agent's real, already-canonical
-            // `Destination` whenever one is active tells the player exactly
-            // where the soldier is actually headed, regardless of whether
-            // that matches the clicked cell.
+            // you clicked" -- not always true (a `Hold` order redirects
+            // through `Appraisal.bestCoverNear`, and before TASK-067, a
+            // solo `MoveTo` for a formationed agent could redirect through
+            // `Appraisal.resolveFormationTarget` too -- see `OnHover`'s own
+            // comment above for why that no longer happens here).
+            // Appending the agent's real, already-canonical `Destination`
+            // whenever one is active tells the player exactly where the
+            // soldier is actually headed, regardless of whether that
+            // matches the clicked cell.
             // TASK-065 (backlog B-065): an abandoned order clears
             // `Destination` exactly like a fulfilled one (`AgentState.
             // StalledTicks` and `.Route` are the only fields that
@@ -1416,44 +1419,27 @@ type CommandDemoScene() =
             // Dead/Incapacitated -- see `OnClick`'s matching order-issue
             // guard.
             //
-            // TASK-064 review (backlog B-035): live-testing on Bridgehead,
-            // Dave reported issuing orders across the bridge that "seemed
-            // to register" but produced no visible movement or combat.
-            // Root cause: a `MoveTo` order (`orderMode = 0`) for a
-            // formationed agent (any non-zero `AgentState.FormationOffset`
-            // -- every slot but each fireteam's own leader) does not target
-            // the clicked cell at all; `Appraisal.resolveFormationTarget`
-            // resolves the *real* destination sim-side, which can land far
-            // short of what was clicked (its own bounded-radius fallback,
-            // TASK-059) with no client-side indication this happened --
-            // the agent then reports `Accepted` and genuinely arrives, just
-            // not where the player thought. Previewing the same resolution
-            // here, using the identical `occupied`/tie-break inputs
-            // `Simulation.appraisal` itself uses (`Simulation.fs`'s own
-            // `occupied` computation, mirrored), means the hover route now
-            // shows the truth before the player commits to a click. `Hold`/
-            // `Assault`/`Withdraw`/`Suppress` are unaffected: only `MoveTo`
-            // resolves through `resolveFormationTarget` at all
-            // (`Appraisal.appraise`'s own `Intent` match).
+            // TASK-064 review (backlog B-035) found a `MoveTo` order for a
+            // formationed agent could silently redirect short of the
+            // clicked cell (`Appraisal.resolveFormationTarget`'s own
+            // bounded-radius fallback, TASK-059), with no client-side
+            // indication -- fixed at the time by previewing that same
+            // resolution here. TASK-067 (backlog B-067) removed the root
+            // cause instead of just previewing around it: formation
+            // redirect now only applies to a genuine multi-recipient
+            // (`ReceivedOrder.AsGroup`) order, and this scene's `OnClick`
+            // only ever issues a single-recipient `Command.moveTo`/`.hold`/
+            // `.assault`/`.withdraw`/`.suppress` (no multi-select UI exists
+            // yet, backlog B-067's own deferred second half) -- so every
+            // order this client can issue today resolves to the literal
+            // clicked cell regardless of `FormationOffset`, and the preview
+            // now shows exactly that, with no redirect computation needed.
             previewPath <-
                 match selected with
                 | Some id when Casualty.isAlive (vitalsOf id) ->
                     agentPosition id
                     |> Option.bind (fun pos ->
-                        let target =
-                            if orderMode = 0 then
-                                match state.Agents |> Array.tryFind (fun a -> a.Id = id) with
-                                | Some agent ->
-                                    let occupied =
-                                        state.Agents
-                                        |> Array.choose (fun a -> if a.Id = id then None else Some a.Position)
-
-                                    Appraisal.resolveFormationTarget state.Terrain occupied agent.FormationOffset cell
-                                | None -> cell
-                            else
-                                cell
-
-                        match Pathfinding.find state.Terrain pos target with
+                        match Pathfinding.find state.Terrain pos cell with
                         | Found(cells, _) -> Some cells
                         | NoPath
                         | BudgetExhausted _
@@ -1554,20 +1540,31 @@ module CommandDemoDrive =
         asScene.Ready(scenarioContentPath)
 
         // Each click pair is (select at the agent's own authored starting
-        // cell, target cell) -- formation-slot offsets (TASK-059) resolve
-        // each agent's *actual* destination from here, not the literal
-        // clicked cell; see the task file for the offset arithmetic behind
-        // each choice.
+        // cell, target cell). Before TASK-067, formation-slot offsets
+        // (TASK-059) resolved each agent's *actual* destination from a
+        // shared literal target -- this script relied on that redirect to
+        // spread agents 0/1/5 and 2/4 (whose original literal targets
+        // coincided) onto distinct real cells. TASK-067 (backlog B-067)
+        // makes that redirect apply only to a genuine multi-recipient
+        // command; every order here is single-recipient, so it no longer
+        // fires -- a literal click now always lands exactly where clicked,
+        // by design. Each target below is therefore the *pre-TASK-067
+        // resolved* cell (computed once via `Appraisal.resolveFormationTarget`
+        // against this exact scenario, a temporary probe, removed after
+        // use), so this script reproduces its own prior real destinations
+        // directly instead of relying on a redirect that no longer exists
+        // -- the "no friendly casualties, machine gun neutralised" outcome
+        // is unchanged, confirmed by re-running the sequence.
         let order (selectCell: Cell) (targetCell: Cell) =
             asScene.OnClick(true, selectCell.X, selectCell.Y)
             asScene.OnHover(targetCell.X, targetCell.Y)
             asScene.OnClick(true, targetCell.X, targetCell.Y)
 
         order { X = 3; Y = 5 } { X = 8; Y = 5 } // agent 0 (fireteam-alpha, slot 0)
-        order { X = 2; Y = 5 } { X = 7; Y = 5 } // agent 1 (fireteam-alpha, slot 1)
-        order { X = 2; Y = 6 } { X = 8; Y = 5 } // agent 2 (fireteam-alpha, slot 2)
+        order { X = 2; Y = 5 } { X = 8; Y = 5 } // agent 1 (fireteam-alpha, slot 1)
+        order { X = 2; Y = 6 } { X = 8; Y = 6 } // agent 2 (fireteam-alpha, slot 2)
         order { X = 3; Y = 7 } { X = 9; Y = 6 } // agent 3 (fireteam-bravo, slot 0)
-        order { X = 4; Y = 7 } { X = 9; Y = 6 } // agent 4 (fireteam-bravo, slot 1)
-        order { X = 4; Y = 8 } { X = 8; Y = 6 } // agent 5 (fireteam-bravo, slot 2)
+        order { X = 4; Y = 7 } { X = 8; Y = 6 } // agent 4 (fireteam-bravo, slot 1)
+        order { X = 4; Y = 8 } { X = 8; Y = 5 } // agent 5 (fireteam-bravo, slot 2)
 
         scene.StepTicksHeadless(90L)

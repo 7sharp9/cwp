@@ -341,12 +341,12 @@ public partial class FSharpSceneHost : Node2D
             case "CwClientCore.DemoRenderScene":
                 label = "demo-render-scene self-check (DemoScenario, terrain-demo)";
                 sequence = DemoDrive.runFullSequence();
-                expected = 0x49E4CD73C85D1B47UL; // DemoScenario tick 20 (TASK-065 re-pin: Canonical.FormatVersion 13 -> 14, AgentState.StalledTicks added -- byte-layout only, DemoScenario's 20-tick run never sustains a movement freeze)
+                expected = 0x6213D672BC36FDB8UL; // DemoScenario tick 20 (TASK-067 re-pin: Canonical.FormatVersion 14 -> 15, ReceivedOrder.AsGroup added -- byte-layout only, DemoScenario authors no formation)
                 break;
             case "CwClientCore.CommandDemoScene":
                 label = "command-demo-scene self-check (real bridgehead.cwscenario content: all six friendly agents ordered toward the bridge, neutralising the machine-gun team through real automatic engagement with no friendly casualties)";
                 sequence = CommandDemoDrive.runScriptedSelfCheck(ResolveContentPath(Path.Combine("scenarios", "bridgehead.cwscenario")));
-                expected = 0x047FF3080AD3EBCBUL; // CommandDemoScene tick 90 (TASK-065 re-pin: Canonical.FormatVersion 13 -> 14, AgentState.StalledTicks added -- byte-layout only, the self-check's own scripted sequence never sustains a movement freeze long enough to abandon)
+                expected = 0x2629A1FE165F94BBUL; // CommandDemoScene tick 90 (TASK-067 re-pin: Canonical.FormatVersion 14 -> 15, ReceivedOrder.AsGroup added -- a genuine behaviour change, not byte-layout only: every order this scene issues is single-recipient, so formation redirect no longer applies to any of them, and the script's six target cells were updated to the pre-TASK-067 *resolved* cells directly (a temporary probe confirmed this reproduces the identical final state, "no friendly casualties, machine gun neutralised", byte-for-byte -- see CommandDemoScene.fs's runScriptedSelfCheck comment)
                 break;
             default:
                 GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");

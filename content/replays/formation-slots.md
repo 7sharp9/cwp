@@ -16,23 +16,23 @@ See `content/replays/CORPUS.md`.
 | Command log | `formation-slots.cwreplay` |
 | Initial state | Corpus formation-slots scenario (8 x 8, seed 20260904, 2 friendlies, 1 formation) |
 | Tick count | 12 |
-| Initial hash (tick 0) | `0x70DE45B0EA19DF19` |
-| Final hash (tick 12) | `0xAA82FF57497F6853` |
+| Initial hash (tick 0) | `0xC16CF876AC742EE2` |
+| Final hash (tick 12) | `0x2C1E10709A627773` |
 | Domain events | 25 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xFD01FE9798196F4D` |
-|    2 | `0xE2FC2668C7546ECC` |
-|    3 | `0x0DF17A880EED2DAB` |
-|    4 | `0x03614553DF17964E` |
-|    5 | `0xAD9F6503E6DD96AD` |
-|    6 | `0xCD6BB8D5C1F954B8` |
-|    7 | `0xFAD8A4BFB78410C7` |
-|    8 | `0xA97A00AB50993974` |
-|    9 | `0x3A2BD23968A2FD08` |
-|   10 | `0xD29ADD6DFB0EE3F9` |
-|   11 | `0x8171283DD32A45F2` |
-|   12 | `0xAA82FF57497F6853` |
+|    1 | `0xE5C8701DFE1A464F` |
+|    2 | `0x08838D76CF735490` |
+|    3 | `0x96ED07ED5193FFD5` |
+|    4 | `0xABCA82F8FA6D2352` |
+|    5 | `0x342632DF5AFA3097` |
+|    6 | `0x8098D5F49FEA48C4` |
+|    7 | `0x3A8CCA2E6CF627C9` |
+|    8 | `0x7FD6346020E896C8` |
+|    9 | `0x4BEAF2C215700B94` |
+|   10 | `0x503EEFF95995777D` |
+|   11 | `0xEFB4DC796670949A` |
+|   12 | `0x2C1E10709A627773` |

@@ -48,4 +48,4 @@ overlays:
 
 events: command-accepted@(5,5); command-accepted@(5,5); order-appraised; order-appraised; commitment-established@(5,5); commitment-established@(5,5); movement-stepped@(0,0),(1,0); movement-stepped@(0,7),(0,6)
 
-tick 1 | hash 0xFD01FE9798196F4D (format 14) | draws 0 | agents 2 | cover-edges 0 | events 8
+tick 1 | hash 0xE5C8701DFE1A464F (format 15) | draws 0 | agents 2 | cover-edges 0 | events 8

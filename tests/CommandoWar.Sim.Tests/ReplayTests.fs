@@ -457,7 +457,7 @@ let ``ReplaySerialisation.parse rejects a command log that is not in (tick, sequ
             [ "version 1"
               "seed 1"
               "ticks 8"
-              "canonical 14"
+              "canonical 15"
               "build b"
               "scenario s"
               "command 5 0 1 5 routine standard test 0 move 1 1"
@@ -477,7 +477,7 @@ let ``ReplaySerialisation parses a hand-written full envelope the legacy cwlog c
               "version 1"
               "seed 20260902"
               "ticks 12"
-              "canonical 14"
+              "canonical 15"
               "build cwheadless"
               "scenario spike-fixture"
               "initial-hash 0xB25FE816BCB67A11"
@@ -515,12 +515,12 @@ let private replaysDir = Path.Combine(AppContext.BaseDirectory, "replays")
 /// `checkpoint` lines) and envelope-full.md (as the per-tick table). Pinned
 /// here a third way so a determinism regression fails this fact directly.
 let private envelopeFullHashes =
-    [| 0xEDEEE60A8D387982UL; 0xB019F3CF1627688AUL; 0xE8A42FF36E1C083CUL; 0x2BC447A90AA5EDB2UL
-       0xD4C4440F6F3645C0UL; 0xAC2928E7A02C513AUL; 0x6BAB4B2EA8E3AEBCUL; 0x272EF1D2801CEF62UL
-       0x0A3ADDDCC8376CA8UL; 0x2A9CA370FBA72A4AUL; 0x3C24F692CA2C51DCUL; 0x61F93BE96B378EB2UL
-       0x7B3FD1D4C86DB600UL; 0x2B5A6D8F57507F9AUL; 0x560C8396B2A0AD3CUL; 0x38CA548EAB702502UL
-       0xFFB0F910D0FC3458UL; 0x38D738CF80A2BB4AUL; 0x7FDE64A19CB5407CUL; 0x380F778500FE44F2UL
-       0x1D8147B54DEB7F40UL; 0x655817AF44F47D6EUL; 0xB1656C4DB2568AF8UL; 0xDF048B77995D0552UL |]
+    [| 0x38F956EF2922EFB1UL; 0x6D80C63D50E94D3EUL; 0xD7C7A94E8E366EDEUL; 0x101615A573F46652UL
+       0xD80BFF89A689D592UL; 0x387AD441DFD84906UL; 0x2D9DEEF28607B26EUL; 0x78F48930CF1B5AA2UL
+       0x3454E9D586F36F4AUL; 0x224D85ADFE79D83EUL; 0xC1E0585D6374098EUL; 0x6230FC63BE34D5B2UL
+       0xDF7C1225C3D57822UL; 0x785771D5FE9D4C76UL; 0xCC747A7BD6C8A47EUL; 0x12179943729F0662UL
+       0xDC979B576A4EDBAAUL; 0xDB772A8A292167DEUL; 0xFC26B4223453F5BEUL; 0x7B4BAE35F1974CD2UL
+       0x267AF7E96D2B5AF2UL; 0x3E13748C0DCA2E3EUL; 0xE51651C869CD3B4AUL; 0xA99BAC28A2BF7296UL |]
 
 [<Fact>]
 let ``the committed envelope-full replay parses, replays, and matches its file checkpoints, its md table, and a fresh run`` () =

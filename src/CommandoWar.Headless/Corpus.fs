@@ -128,6 +128,13 @@ module Corpus =
         | HoldOrder of area: Cell
         | AssaultOrder of target: Cell
         | WithdrawOrder of target: Cell
+        /// A single `MoveTo` order addressed to several agents at once via
+        /// `Command.moveToMany` (TASK-067, backlog B-067): the corpus
+        /// equivalent of a genuine multi-select joint order, as opposed to
+        /// several single-recipient `MoveOrder`s that happen to share a
+        /// tick and target. `ScenarioOrder.Agent` is unused (a sentinel) for
+        /// this case -- the real recipient list lives here.
+        | MoveOrderGroup of agents: int list * target: Cell
 
     /// One authored order, delivered on `Tick` to `Agent`, with the default
     /// envelope (`Command.moveTo` / `Command.suppress`'s
@@ -202,6 +209,14 @@ module Corpus =
 
     let private order (tick: int64) (agentId: int) (target: Cell) : ScenarioOrder =
         { Tick = tick; Agent = agentId; Intent = MoveOrder target }
+
+    /// A single joint `MoveTo` order addressed to several agents at once
+    /// (TASK-067, backlog B-067) -- the `order` precedent, generalised to a
+    /// multi-recipient command via `Command.moveToMany`.
+    let private groupMoveOrder (tick: int64) (agentIds: int list) (target: Cell) : ScenarioOrder =
+        { Tick = tick
+          Agent = List.head agentIds
+          Intent = MoveOrderGroup(agentIds, target) }
 
     /// A `Suppress` order (TASK-037, a thin B-030 slice) targeting a known
     /// contact by its `AgentId` (the `order` precedent for `MoveTo`).
@@ -316,6 +331,14 @@ module Corpus =
                         Command.assault (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) target
                     | WithdrawOrder target ->
                         Command.withdraw (CommandId.ofInt appearanceId) tick (AgentId.ofInt o.Agent) target
+                    | MoveOrderGroup(agents, target) ->
+                        Command.moveToMany
+                            (CommandId.ofInt appearanceId)
+                            tick
+                            (agents |> List.map AgentId.ofInt)
+                            target
+                            Routine
+                            Standard
 
                 { Tick = tick
                   Sequence = seq
@@ -380,15 +403,21 @@ module Corpus =
           Orders = [ order 1L 0 { X = 3; Y = 7 }; order 1L 1 { X = 7; Y = 3 } ] }
 
     /// Two friendly agents authored into a two-slot "wedge" formation
-    /// (TASK-059, backlog B-011d), both ordered to the identical nominal
-    /// cell `(5,5)` at tick 1: agent 0 (slot 0, offset `(-1,0)`) and agent 1
-    /// (slot 1, offset `(1,0)`) resolve their own real `MoveTo` destination
-    /// as that shared anchor plus their own slot offset --
-    /// `Appraisal.resolveFormationTarget` -- landing on `(4,5)` and `(6,5)`
-    /// respectively instead of colliding on `(5,5)`. Open terrain: neither
-    /// offset cell is blocked or occupied, so the plain in-range case is
-    /// exercised, not the nearest-free-cell fallback (covered directly by
-    /// `SimulationTests`' pure-function facts instead).
+    /// (TASK-059, backlog B-011d), both addressed by ONE joint `MoveTo`
+    /// order to the nominal cell `(5,5)` at tick 1 (`groupMoveOrder`,
+    /// `Command.moveToMany` -- TASK-067, backlog B-067: a genuine
+    /// multi-recipient command, not two single-recipient orders that
+    /// happen to share a tick and target, since a solo order no longer
+    /// redirects through formation regardless of the recipient's own
+    /// `FormationOffset`). Because this order's `Recipients.Length > 1`,
+    /// `ReceivedOrder.AsGroup = true` for both recipients, and each still
+    /// resolves its own real `MoveTo` destination as the shared anchor plus
+    /// its own slot offset -- `Appraisal.resolveFormationTarget` -- landing
+    /// on `(4,5)` (slot 0, offset `(-1,0)`) and `(6,5)` (slot 1, offset
+    /// `(1,0)`) respectively instead of colliding on `(5,5)`. Open terrain:
+    /// neither offset cell is blocked or occupied, so the plain in-range
+    /// case is exercised, not the nearest-free-cell fallback (covered
+    /// directly by `SimulationTests`' pure-function facts instead).
     let private formationSlotsSpec: ScenarioSpec =
         { Id = "corpus-formation-slots"
           Width = 8
@@ -402,7 +431,7 @@ module Corpus =
           Headquarters = None
           Jammers = []
           Formations = [ "wedge", [ -1, 0; 1, 0 ] ]
-          Orders = [ order 1L 0 { X = 5; Y = 5 }; order 1L 1 { X = 5; Y = 5 } ] }
+          Orders = [ groupMoveOrder 1L [ 0; 1 ] { X = 5; Y = 5 } ] }
 
     /// One friendly agent at (0,0) ordered to (4,0), open terrain except
     /// (1,0), which costs 3 to enter (`Terrain.BaseMoveCost` elsewhere is 1).

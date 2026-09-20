@@ -1450,7 +1450,8 @@ let ``Commitment.ofAgent matches every reachable (Order, Disposition, Destinatio
               Intent = MoveTo { X = 5; Y = 5 }
               IssuedAtTick = 0L
               Urgency = Routine
-              RiskTolerance = Standard }
+              RiskTolerance = Standard
+              AsGroup = false }
 
     let ofAgent = Commitment.ofAgent [||] [||] { X = 0; Y = 0 }
 
@@ -1477,7 +1478,8 @@ let ``Commitment.ofAgent matches every reachable (Order, Disposition, Destinatio
               Intent = Suppress(agent 9)
               IssuedAtTick = 0L
               Urgency = Routine
-              RiskTolerance = Standard }
+              RiskTolerance = Standard
+              AsGroup = false }
 
     Assert.Equal(Suppressing { Command = CommandId.ofInt 2; Target = agent 9 }, ofAgent suppressOrder (Some Accepted) None)
 
@@ -1489,7 +1491,8 @@ let ``Commitment.ofAgent matches every reachable (Order, Disposition, Destinatio
               Intent = Withdraw { X = 0; Y = 0 }
               IssuedAtTick = 0L
               Urgency = Routine
-              RiskTolerance = Standard }
+              RiskTolerance = Standard
+              AsGroup = false }
 
     Assert.Equal(
         Withdrawing { Command = CommandId.ofInt 3; Target = { X = 0; Y = 0 } },
@@ -1503,7 +1506,8 @@ let ``Commitment.ofAgent matches every reachable (Order, Disposition, Destinatio
               Intent = Assault { X = 20; Y = 20 }
               IssuedAtTick = 0L
               Urgency = Routine
-              RiskTolerance = Standard }
+              RiskTolerance = Standard
+              AsGroup = false }
 
     Assert.Equal(
         Assaulting
@@ -1763,7 +1767,8 @@ let private testOrder (risk: RiskTolerance) (urgency: Urgency) : ReceivedOrder =
       Intent = MoveTo { X = 0; Y = 0 }
       IssuedAtTick = 0L
       Urgency = urgency
-      RiskTolerance = risk }
+      RiskTolerance = risk
+      AsGroup = false }
 
 [<Fact>]
 let ``Stress.gain returns GainPerTick in contact, 0 otherwise`` () =
@@ -2852,6 +2857,27 @@ let ``two formationed agents ordered to the same nominal cell resolve to distinc
 
     Assert.Equal(Some { X = 3; Y = 4 }, (agentOf (agent 0) r.State).Destination)
     Assert.Equal(Some { X = 5; Y = 4 }, (agentOf (agent 1) r.State).Destination)
+
+[<Fact>]
+let ``a solo MoveTo order for a formationed agent goes to the literal clicked cell, not its slot offset`` () =
+    // TASK-067 (backlog B-067): formation redirect is keyed off the
+    // originating command's own recipient count (ReceivedOrder.AsGroup),
+    // not the agent's static FormationOffset alone -- a single-recipient
+    // order always resolves to the literal target, even for a formationed
+    // agent, matching "when moving a single agent you just want them to go
+    // where you click."
+    let w0 = world ()
+
+    let w =
+        { w0 with
+            Agents =
+                w0.Agents
+                |> Array.map (fun a -> if a.Id = agent 0 then { a with FormationOffset = Some { X = -1; Y = 0 } } else a) }
+
+    let order = Command.moveTo (CommandId.ofInt 1) 0L (agent 0) { X = 4; Y = 4 }
+    let r = stepWith [| order |] w
+
+    Assert.Equal(Some { X = 4; Y = 4 }, (agentOf (agent 0) r.State).Destination)
 
 // --- Mission phase: demolition objective, extraction, mission outcome (TASK-062, backlog B-032) ---
 

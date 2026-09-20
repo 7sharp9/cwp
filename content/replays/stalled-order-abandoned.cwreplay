@@ -1,7 +1,7 @@
 version 1
 seed 20260904
 ticks 42
-canonical 14
+canonical 15
 build cwheadless
 scenario stalled-order-abandoned
 command 1 0 1 1 routine standard corpus 0 move 4 0

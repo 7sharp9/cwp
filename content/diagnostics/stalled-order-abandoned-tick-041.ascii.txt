@@ -44,4 +44,4 @@ overlays:
 
 events: movement-abandoned@(1,0),(4,0)
 
-tick 41 | hash 0x5306D6C09EBAD2B3 (format 14) | draws 0 | agents 2 | cover-edges 0 | events 1
+tick 41 | hash 0xA35517BD105CB608 (format 15) | draws 0 | agents 2 | cover-edges 0 | events 1

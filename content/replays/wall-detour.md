@@ -16,35 +16,35 @@ See `content/replays/CORPUS.md`.
 | Command log | `wall-detour.cwreplay` |
 | Initial state | Corpus wall-detour scenario (12 x 9, seed 20260904) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0x6C54A74A1EA36EFC` |
-| Final hash (tick 24) | `0x5DD5FE598B55B889` |
+| Initial hash (tick 0) | `0x5010D7A06758BFB3` |
+| Final hash (tick 24) | `0x9446D7E488BDDD0A` |
 | Domain events | 22 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x2044904040B89FFC` |
-|    2 | `0xD44914C3E018E3DA` |
-|    3 | `0x93F5DE2F05603B9C` |
-|    4 | `0xBC0046F3EA69B5BC` |
-|    5 | `0x229155F647BB8C90` |
-|    6 | `0x43B807D1B0D8EEC8` |
-|    7 | `0x2DC568553E2A314C` |
-|    8 | `0x22B95A6923A29816` |
-|    9 | `0x1370C835E6BB1194` |
-|   10 | `0xEA017995C65F9602` |
-|   11 | `0x282131B18DCD46A0` |
-|   12 | `0xB17978AFBAB02ECA` |
-|   13 | `0x93E755797880011C` |
-|   14 | `0xDF1523BD9784279A` |
-|   15 | `0xDDDB36D8EC7080CC` |
-|   16 | `0x650E0C18859A97A6` |
-|   17 | `0x9AB0C041885B9C7C` |
-|   18 | `0x6C4F0AD90D5EC0B3` |
-|   19 | `0xAE8DBC97BA4E7C54` |
-|   20 | `0x077DE5D30ECDD765` |
-|   21 | `0x68C72E915A9136C6` |
-|   22 | `0x283CA00DF01D0287` |
-|   23 | `0x055BE5E2530F6A08` |
-|   24 | `0x5DD5FE598B55B889` |
+|    1 | `0x802942907DCB85C5` |
+|    2 | `0xEE570863FBBE5397` |
+|    3 | `0x578F823F58ACFE6D` |
+|    4 | `0x560861B7602985FD` |
+|    5 | `0x1365F499BD9DC9D1` |
+|    6 | `0x4486804A06648E81` |
+|    7 | `0x9896A04D328C5D65` |
+|    8 | `0xD77D4F23874FF45B` |
+|    9 | `0xD39788028A8335CD` |
+|   10 | `0xC9F4A4215875912F` |
+|   11 | `0x51232402AD2F88A1` |
+|   12 | `0x68FD6763E38A19E7` |
+|   13 | `0x2F3B26EC617CC54D` |
+|   14 | `0x9F84EF7EEA6004EF` |
+|   15 | `0x0D998891CB38BA05` |
+|   16 | `0x274F6A5D3579CC8B` |
+|   17 | `0x4822E94BC08E1F25` |
+|   18 | `0xE75B0653A4581CF4` |
+|   19 | `0x29A5D1CBCA6D40D3` |
+|   20 | `0x261DF584179FB6E6` |
+|   21 | `0x04D2CCBF9EF47B85` |
+|   22 | `0x31CE6BE2EB4920A8` |
+|   23 | `0x5AFD1F81264DC027` |
+|   24 | `0x9446D7E488BDDD0A` |

@@ -244,8 +244,31 @@ module Canonical =
     /// so every one of them keeps `StalledTicks = 0` at every pinned
     /// tick — the moved hashes are a byte-layout change, not a behaviour
     /// change, for every entry except this task's own new corpus entry.
+    ///
+    /// 15 (TASK-067, backlog B-067): `writeOrder` gained a `ReceivedOrder.
+    /// AsGroup` boolean, written inside `AgentState.Order`/`.OrderQueue`/
+    /// `.PendingDelivery`'s already-canonical encoding — genuine per-tick
+    /// memory (the `RecentlyWounded`/`RadioDestroyed` "changes from a
+    /// gameplay event, the originating command's own recipient count, and
+    /// cannot be recomputed from any other field" precedent): a `MoveTo`
+    /// order now only redirects through `Appraisal.resolveFormationTarget`
+    /// when `AsGroup = true` (the order's own command addressed more than
+    /// one recipient), never unconditionally from the recipient's static
+    /// `FormationOffset` alone. `Command.moveTo`/`.hold`/`.assault`/
+    /// `.withdraw`/`.suppress` (every single-recipient builder) always
+    /// produce `AsGroup = false`; only `Command.moveToMany` with 2+
+    /// recipients produces `AsGroup = true`. This is a genuine behaviour
+    /// change, not merely a byte-layout one, for the one corpus entry that
+    /// exercises formation redirect at all (`formation-slots`): it was
+    /// re-authored in the same task to issue its two agents ONE joint
+    /// `Command.moveToMany` order instead of two coincidentally-same-tick
+    /// solo orders, so it continues to demonstrate real slot resolution
+    /// (`AsGroup = true`) and its own pinned tick-by-tick outcome is
+    /// unchanged. Every other corpus/fixture/diagnostics entry authors no
+    /// formation at all, so `AsGroup` stays `false` throughout and the
+    /// moved hashes are byte-layout only for all of them.
     [<Literal>]
-    let FormatVersion = 14
+    let FormatVersion = 15
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -418,6 +441,8 @@ module Canonical =
             w.I32 4
             w.I32 target.X
             w.I32 target.Y
+
+        w.U8(if o.AsGroup then 1uy else 0uy)
 
         w.I64 o.IssuedAtTick
 

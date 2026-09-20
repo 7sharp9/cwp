@@ -16,16 +16,16 @@ See `content/replays/CORPUS.md`.
 | Command log | `blocked-goal.cwreplay` |
 | Initial state | Corpus blocked-goal scenario (8 x 8, seed 20260904) |
 | Tick count | 5 |
-| Initial hash (tick 0) | `0x4CDCE0037E91B932` |
-| Final hash (tick 5) | `0xD785EB611DACA269` |
+| Initial hash (tick 0) | `0x119D5A8A53790B29` |
+| Final hash (tick 5) | `0x7D8A735B333A990E` |
 | Domain events | 2 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xEB12F1DDFE03AAE5` |
-|    2 | `0xFF844CC6AB95274C` |
-|    3 | `0xDC4BBEDB943E3443` |
-|    4 | `0xDD370FA4CA0D72FA` |
-|    5 | `0xD785EB611DACA269` |
+|    1 | `0x6C31C3FBBC0DC942` |
+|    2 | `0x3D6B7497D7399821` |
+|    3 | `0x453689069DD5894C` |
+|    4 | `0xCFE5E5A1421F09E3` |
+|    5 | `0x7D8A735B333A990E` |

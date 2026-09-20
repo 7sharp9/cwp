@@ -432,8 +432,12 @@ module Appraisal =
     /// than refused" example — so stages 3/4 (and `resolveThreshold`'s own
     /// wound term) are only ever reached by an `Alive` agent.
     /// `occupied`/`formationOffset` (TASK-059, backlog B-011d) are threaded
-    /// straight to `resolveFormationTarget` for a `MoveTo` order only --
-    /// `formationOffset = None` reproduces every pre-TASK-059 call exactly.
+    /// to `resolveFormationTarget` for a `MoveTo` order only when `order.
+    /// AsGroup` is `true` (TASK-067, backlog B-067: the originating
+    /// command addressed more than one recipient) -- a solo order
+    /// (`AsGroup = false`) always resolves to the literal `target`
+    /// regardless of `formationOffset`, and `formationOffset = None`
+    /// reproduces every pre-TASK-059 call exactly either way.
     let appraise
         (terrain: Terrain)
         (threats: Contact[])
@@ -490,7 +494,14 @@ module Appraisal =
                     | InvalidEndpoint _ -> Unable(NoKnownRoute, [||]), [||]
 
             match order.Intent with
-            | MoveTo target -> moveLike (resolveFormationTarget terrain occupied formationOffset target) 0
+            | MoveTo target ->
+                let resolved =
+                    if order.AsGroup then
+                        resolveFormationTarget terrain occupied formationOffset target
+                    else
+                        target
+
+                moveLike resolved 0
             | Hold area -> moveLike (bestCoverNear terrain threats suppressedThreats area) 0
             | Withdraw target -> moveLike target AppraisalConfig.WithdrawResolveBonus
             | Assault target ->

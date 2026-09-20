@@ -48,7 +48,7 @@
   <text x="57" y="9" font-family="monospace" font-size="9" font-weight="bold" fill="#2f855a">A</text>
   <circle cx="52" cy="4" r="3" fill="#2c7a7b" stroke="#2c7a7b" stroke-width="1"/>
   <circle cx="56" cy="8" r="8" fill="none" stroke="#d4af37" stroke-width="2"/>
-  <text x="4" y="64" font-family="monospace" font-size="11" fill="#111111">tick 3  hash 0xFB1D4A0DB392C987  draws 0</text>
+  <text x="4" y="64" font-family="monospace" font-size="11" fill="#111111">tick 3  hash 0xA1F3D11F470F6CAA  draws 0</text>
   <text x="4" y="78" font-family="monospace" font-size="11" fill="#111111">agents 1  cover-edges 0  events 2</text>
   <text x="4" y="92" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
   <text x="4" y="106" font-family="monospace" font-size="11" fill="#111111">mission: in-progress  in-progress 1:1</text>

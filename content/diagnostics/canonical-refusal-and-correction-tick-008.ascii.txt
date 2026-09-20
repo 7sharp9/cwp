@@ -60,4 +60,4 @@ overlays:
 
 events: command-accepted@(11,3); order-appraised; commitment-established@(11,3); movement-stepped@(5,3),(6,3)
 
-tick 8 | hash 0xFD9AD69AFD47EDB6 (format 14) | draws 10 | agents 3 | cover-edges 0 | events 4
+tick 8 | hash 0x9E49F378044ACF03 (format 15) | draws 10 | agents 3 | cover-edges 0 | events 4

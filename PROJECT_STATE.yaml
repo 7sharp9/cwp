@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; review trigger 1 measured and closed 2026-09-19, decision reaffirmed -- see ADR-0001's 2026-09-19 note)
-  updated: 2026-09-20 (TASK-065 and TASK-066 both accepted by Dave on the self-verification evidence alone, confirmed via AskUserQuestion in one round: commit the combined working tree now, accept both tasks without a live playtest first, and hold B-067 as a proposed, unscoped backlog row rather than start design work on it; prior: TASK-066 implemented and self-verified, realising B-066 -- occupantOf now excludes non-Alive agents, so a corpse no longer blocks movement forever, found via a new --screenshot-squad capture tool Dave asked for to watch a scripted playthrough visually; correct and proven at the SimulationTests level, but does NOT fix the specific squad-jam Dave watched (that is live-agent formation contention at the chokepoint, none of the six ever dying in that repro) -- parked separately as B-067 (multi-select + joint squad orders), not scoped or touched; prior: TASK-065 implemented and self-verified, realising B-065 -- a new AgentState.StalledTicks counter turns a permanently frozen movement order into a visible MovementAbandoned failure after Simulation.StallAbandonTicks (40) consecutive freezes, instead of retrying forever; Canonical.FormatVersion 13 -> 14; re-run against the exact original six-agent Bridgehead repro now reaches a real abort by tick 42 instead of freezing past tick 500; prior: TASK-064 accepted by Dave, realising B-035 -- round 2's live-testing legibility fixes confirmed by his own further playtest, which separately found this movement deadlock (R-010 materialising for real); the pre-existing criterion-3/7 finding accepted as a known, tracked gap (no map rebalance, no corpse-occupancy fix), B-022 kept descoped as-is; prior: TASK-063 accepted by Dave, realising narrowed B-033; prior: TASK-062 accepted by Dave, realising B-032; prior: TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
+  updated: 2026-09-20 (TASK-067 accepted by Dave on the self-verification evidence, realising the sim-side half of B-067 -- ReceivedOrder.AsGroup (Canonical.FormatVersion 14 -> 15) keys formation redirect off the originating command's own recipient count instead of the agent's static FormationOffset alone, so a solo click always goes exactly where clicked; two genuine, non-byte-layout behaviour changes found and fixed, not smoothed over -- the formation-slots corpus entry re-authored to a real Command.moveToMany, and CommandDemo.tscn's scripted self-check re-aimed at its own pre-fix resolved cells after the old target cells produced a real friendly casualty; the multi-select UI half of B-067 remains unscoped; prior: TASK-065 and TASK-066 both accepted by Dave on the self-verification evidence alone, confirmed via AskUserQuestion in one round: commit the combined working tree now, accept both tasks without a live playtest first, and hold B-067 as a proposed, unscoped backlog row rather than start design work on it; prior: TASK-066 implemented and self-verified, realising B-066 -- occupantOf now excludes non-Alive agents, so a corpse no longer blocks movement forever, found via a new --screenshot-squad capture tool Dave asked for to watch a scripted playthrough visually; correct and proven at the SimulationTests level, but does NOT fix the specific squad-jam Dave watched (that is live-agent formation contention at the chokepoint, none of the six ever dying in that repro) -- parked separately as B-067 (multi-select + joint squad orders), not scoped or touched; prior: TASK-065 implemented and self-verified, realising B-065 -- a new AgentState.StalledTicks counter turns a permanently frozen movement order into a visible MovementAbandoned failure after Simulation.StallAbandonTicks (40) consecutive freezes, instead of retrying forever; Canonical.FormatVersion 13 -> 14; re-run against the exact original six-agent Bridgehead repro now reaches a real abort by tick 42 instead of freezing past tick 500; prior: TASK-064 accepted by Dave, realising B-035 -- round 2's live-testing legibility fixes confirmed by his own further playtest, which separately found this movement deadlock (R-010 materialising for real); the pre-existing criterion-3/7 finding accepted as a known, tracked gap (no map rebalance, no corpse-occupancy fix), B-022 kept descoped as-is; prior: TASK-063 accepted by Dave, realising narrowed B-033; prior: TASK-062 accepted by Dave, realising B-032; prior: TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
 
 active_work:
   selected_task: none
@@ -15,7 +15,68 @@ active_work:
   blockers: []
   updated: 2026-09-20
   note: >-
-    2026-09-20: TASK-065 and TASK-066 both accepted by Dave. Via
+    2026-09-20: TASK-067 accepted by Dave on the self-verification
+    evidence ("if it looks good then accept"). No further changes
+    requested. B-067's sim-side half is now `done`; the multi-select UI
+    half remains unscoped, proposed only. `active_work.selected_task ->
+    none`; next task not yet chosen.
+    (tasks/TASK-067-FORMATION-APPLIES-ONLY-TO-GROUP-ORDERS.md;
+    docs/ledger/2026-09-20-TASK-067-formation-applies-only-to-group-orders.md)
+
+    Prior: 2026-09-20: TASK-067 (formation redirect applies only to group orders,
+    realises the sim-side half of B-067) implemented and self-verified --
+    status `review`, awaiting Dave's acceptance. Drafted and selected via
+    two parallel research passes (one tracing the client click/selection/
+    order pipeline and every `Appraisal.resolveFormationTarget` call site;
+    one tracing the TASK-047/048 pattern for adding a new order mechanism
+    end to end and confirming `PlayerCommand.Recipients`/`Command.
+    moveToMany` already address multiple agents with one command since
+    TASK-020) plus `AskUserQuestion` to resolve two design forks: formation
+    for a group order uses each agent's own authored `FormationOffset`
+    only (no ad-hoc/computed formation for an arbitrary selection), and
+    the eventual multi-select gesture will be both drag rubber-band-select
+    and shift-click (both deferred, unscoped follow-up). Split into two
+    tasks, the B-030/B-059 sim-then-client precedent: this task ships the
+    sim-side fix alone -- a new `ReceivedOrder.AsGroup: bool` (`Canonical.
+    FormatVersion` 14 -> 15), derived from `Recipients.Length > 1` at
+    command-intake time, gates every `resolveFormationTarget` call site
+    instead of the agent's static field -- no new UI needed, delivers the
+    "solo click always goes where clicked" fix by itself;
+    `CommandDemoScene.fs`'s `OnHover` preview no longer calls
+    `resolveFormationTarget` at all as a result, a net simplification.
+
+    Two real, genuine (not byte-layout-only) behaviour changes were found
+    while re-verifying and fixed rather than smoothed over: (1) the
+    `formation-slots` corpus entry issued two single-recipient orders that
+    happened to share a tick and target -- exactly what this task stops
+    redirecting -- re-authored to one real `Command.moveToMany`
+    (`Corpus.fs`'s new `MoveOrderGroup`), its own outcome unchanged; (2)
+    `CommandDemoDrive.runScriptedSelfCheck`'s six-agent Bridgehead
+    sequence relied on the old unconditional redirect to keep agents with
+    coincidentally-shared literal targets apart -- re-running it unchanged
+    produced a genuine friendly casualty, confirmed via a temporary
+    `dotnet fsi` probe (removed after use); fixed by aiming each order at
+    its own pre-TASK-067 resolved cell directly, a second probe run
+    (matching the client's own `CommandId` numbering) reproducing the real
+    `--selfcheck` hash exactly -- "no friendly casualties, machine gun
+    neutralised" unchanged. A third, unrelated staleness was found and
+    fixed: `content/fixtures/SPIKE-FIXTURE.md` was still pinned at format
+    4 despite a prior TASK-065 note here claiming it had already been
+    corrected to format 14 -- that claim did not match the committed file
+    (`git log` confirms its last real edit was TASK-028) -- corrected for
+    real this time, straight to format 15, flagged for Dave.
+
+    `dotnet build` `0/0`; `dotnet test` `415/415` (+1); `-- corpus`
+    `19/19`; `envelope-full` replay checkpoints OK after re-pinning; all
+    three Godot `--selfcheck` hashes re-pinned and reconfirmed `MATCH`
+    through the real Godot 4.7.2 editor. The multi-select UI (drag-select
+    + shift-click, joint dispatch via the existing `Command.moveToMany`)
+    remains deferred to a follow-up task once this one is accepted.
+    (tasks/TASK-067-FORMATION-APPLIES-ONLY-TO-GROUP-ORDERS.md;
+    docs/11_BACKLOG.md B-067 row;
+    docs/ledger/2026-09-20-TASK-067-formation-applies-only-to-group-orders.md)
+
+    Prior: 2026-09-20: TASK-065 and TASK-066 both accepted by Dave. Via
     `AskUserQuestion`, Dave resolved all three open items from the same
     session in one round: (1) commit the combined TASK-065 + TASK-066
     working tree now, rather than review the diff first; (2) accept both

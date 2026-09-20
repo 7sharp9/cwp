@@ -550,19 +550,22 @@ module Diagnostics =
                 Some(OrderAppraisal(a.Id, a.Position, d, exposed))
             | _ -> None)
 
-    /// An `AgentFormationSlot` overlay per formationed agent with a live
-    /// `MoveTo` order (TASK-059, backlog B-011d), ascending by agent id --
-    /// the `OrderAppraisal` precedent: a pure, deterministic recomputation
-    /// from bare authoritative state, not stored. `Hold`/`Assault`/
-    /// `Withdraw`/`Suppress` orders never emit one, matching
-    /// `Appraisal.appraise`'s own scoping (only `MoveTo` reads
-    /// `FormationOffset`).
+    /// An `AgentFormationSlot` overlay per formationed agent with a live,
+    /// genuinely redirected `MoveTo` order (TASK-059, backlog B-011d;
+    /// TASK-067, backlog B-067), ascending by agent id -- the
+    /// `OrderAppraisal` precedent: a pure, deterministic recomputation from
+    /// bare authoritative state, not stored. `Hold`/`Assault`/`Withdraw`/
+    /// `Suppress` orders never emit one, matching `Appraisal.appraise`'s
+    /// own scoping (only `MoveTo` reads `FormationOffset`); neither does a
+    /// solo (`AsGroup = false`) `MoveTo` order, since `appraise` no longer
+    /// redirects it regardless of `FormationOffset` -- there is no slot
+    /// resolution happening for this overlay to show.
     let private formationSlotOverlays (world: WorldState) : Overlay[] =
         world.Agents
         |> Array.sortBy (fun a -> a.Id)
         |> Array.choose (fun a ->
             match a.FormationOffset, a.Order with
-            | Some _, Some { Intent = MoveTo target } ->
+            | Some _, Some { Intent = MoveTo target; AsGroup = true } ->
                 let occupied =
                     world.Agents |> Array.choose (fun x -> if x.Id = a.Id then None else Some x.Position)
 

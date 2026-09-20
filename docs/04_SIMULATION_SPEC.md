@@ -736,6 +736,22 @@ membership. `AgentState.FormationOffset` is static authored data (`Deployment
 .FormationOffset`, resolved from a new `Scenario.Formations` table) and stays
 out of the canonical image, the `Discipline`/`MoveSpeed` precedent.
 
+Narrowed by TASK-067 (backlog B-067): the redirect above now only runs when
+`ReceivedOrder.AsGroup` is `true` — the originating `PlayerCommand` addressed
+more than one recipient (`Recipients.Length > 1`, captured once at command
+intake, the `IssuedAtTick`/`Urgency` "captured once, carried by the record"
+precedent). A single-recipient `MoveTo` order always resolves to the literal
+ordered cell, regardless of the recipient's own `FormationOffset` — a solo
+order goes exactly where ordered, full stop. This corrects a gap TASK-059
+itself did not consider: formation *membership* (a static, order-independent
+scenario fact) is not the same thing as an order actually being a
+coordinated group move, and conflating the two meant every solo order for a
+formationed agent silently redirected regardless of player intent. No new
+`PlayerIntent`/`Command` shape was needed — `PlayerCommand.Recipients`/
+`Command.moveToMany` (TASK-020) already address several agents with one
+command; this task only changed what happens once such a command reaches
+appraisal.
+
 ### 12.6 Commitment and local action
 
 - accepted orders create or update a commitment;

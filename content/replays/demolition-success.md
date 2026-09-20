@@ -16,27 +16,27 @@ See `content/replays/CORPUS.md`.
 | Command log | `demolition-success.cwreplay` |
 | Initial state | Corpus demolition-success scenario (12 x 3, seed 20260904, 1 friendly) |
 | Tick count | 16 |
-| Initial hash (tick 0) | `0x1A9E1DE486ABF1C0` |
-| Final hash (tick 16) | `0x00774FE0B0EA0E15` |
+| Initial hash (tick 0) | `0x0A2334D2C34FA797` |
+| Final hash (tick 16) | `0xA5E4B19EAEDCE706` |
 | Domain events | 24 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xFDA57B56529D8ECE` |
-|    2 | `0x5D13B199CA379A5E` |
-|    3 | `0xFB1D4A0DB392C987` |
-|    4 | `0xD6AF6DB929A18641` |
-|    5 | `0x60DE82C060B37002` |
-|    6 | `0x4B0EBCAFB176348B` |
-|    7 | `0x0C5C1E3FB14865EC` |
-|    8 | `0x94F84A0110F5D0E6` |
-|    9 | `0xEBD28AB6335005F2` |
-|   10 | `0xAD2BE3001BE25B42` |
-|   11 | `0x008A18D24C02B7AE` |
-|   12 | `0x4491A498D2EE3F06` |
-|   13 | `0x98F27EDC9D6F592A` |
-|   14 | `0xFE18CD54464B09EE` |
-|   15 | `0x11C104B891AFB0AC` |
-|   16 | `0x00774FE0B0EA0E15` |
+|    1 | `0xD6C776FF979858CF` |
+|    2 | `0xF7959D7E4BE15357` |
+|    3 | `0xA1F3D11F470F6CAA` |
+|    4 | `0x93BB5398DFB057A2` |
+|    5 | `0x0E9F69EDA42B2261` |
+|    6 | `0xC9B519DBA4C61A0C` |
+|    7 | `0x41F863DBBB0136AB` |
+|    8 | `0xC8D396CD2C00F139` |
+|    9 | `0x4FBB6AE005A7FD55` |
+|   10 | `0x46E488E57D3AB74D` |
+|   11 | `0xC3A9778732D39969` |
+|   12 | `0x314C4A539189B5E1` |
+|   13 | `0xF407A9014A5AD9B5` |
+|   14 | `0xD72BB2721A14C233` |
+|   15 | `0xB686F1814EF8C0CB` |
+|   16 | `0xA5E4B19EAEDCE706` |

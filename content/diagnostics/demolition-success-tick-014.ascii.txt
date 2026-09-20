@@ -31,4 +31,4 @@ overlays:
 
 events: movement-stepped@(9,0),(10,0); movement-completed@(10,0); agent-extracted; objective-completed:2; mission-succeeded
 
-tick 14 | hash 0xFE18CD54464B09EE (format 14) | draws 0 | agents 1 | cover-edges 0 | events 5
+tick 14 | hash 0xD72BB2721A14C233 (format 15) | draws 0 | agents 1 | cover-edges 0 | events 5

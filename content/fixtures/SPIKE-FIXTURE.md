@@ -28,14 +28,14 @@ per-environment determinism contract (`docs/09_TEST_STRATEGY.md` section 3).
 | Grid bounds | 32 x 32 |
 | Seed | `20260902` (`0x0000000001352826`) |
 | PRNG | SplitMix64 v1 |
-| Canonical format version | 4 (TASK-028: `AgentState.Order` + `AgentState.Disposition` sections added to `Canonical.encode`. TASK-026 added the tactical-knowledge section; TASK-018 added `AgentState.Progress`. This fixture is enemy-free, so its one order is `Accepted` at appraisal with an empty route exposure — the layout changed, and one `OrderAppraised` event now fires at tick 1) |
+| Canonical format version | 15 (TASK-067, backlog B-067: `ReceivedOrder.AsGroup` added. This table was found still pinned at its format-4/TASK-028 values -- nine intervening `Canonical.FormatVersion` bumps between TASK-028 and TASK-067 were never actually applied here, despite `FixtureTests.fs`'s own hashes staying correctly current throughout and a prior session's ledger note claiming this file had already been corrected to format 14; that claim did not match the committed file, confirmed by `git log` showing this file's last real edit was TASK-028. Corrected straight to format 15 here rather than backfilled through every intervening version, flagged for Dave.) |
 | State hash | FNV-1a-64 over the canonical encoding |
 | Replay format version | 1 |
 | Command-log format version | 1 |
 | Tick count | 40 |
 | Agents at tick 0 | 6 friendly, `Setup.sixAgentWorld`, column `x = 0`, rows `y = 0..5` |
 | Command | tick 1: agent 3 `MoveTo (20, 14)`, `CommandId 1` |
-| Initial state hash (tick 0) | `0x55F43D66C7AECB7F` |
+| Initial state hash (tick 0) | `0x5049F6F0E9FCA1E2` |
 
 Under the pathfinding-driven movement executor (TASK-015; a straight cardinal
 line here, X axis then Y axis since the grid is flat) agent 3 travels 20
@@ -49,58 +49,62 @@ per-tick progress increment: agent 3 still advances exactly one cell per tick,
 and `AgentState.Progress` is 0 at every post-tick checkpoint. This fixture has
 **zero enemy deployments**, so `WorldState.TacticalKnowledge` (TASK-026) is
 empty at every tick and agent 3's order is `Accepted` at appraisal (TASK-028)
-with an empty route exposure. The hashes below moved from the format-3 fixture
-because the canonical byte layout gained the `Order` / `Disposition` sections
-and one `OrderAppraised` event now fires at tick 1 — agent 3 still reaches
-`(20, 14)` at tick 31, tick 40 unchanged (TASK-028 ledger, following the
-TASK-018 / TASK-026 precedent).
+with an empty route exposure. Every hash below is a byte-layout-only re-pin
+through format 15 (TASK-067): this fixture's one command addresses a single
+agent with no formation, so `ReceivedOrder.AsGroup` stays `false` and every
+other bumped field along the way (`Suppression`, `Stress`,
+`HostileTacticalKnowledge`, `OrderQueue`, `Vitals`, `Ammo`, `RadioDestroyed`,
+`PendingDelivery`, `Extracted`, `MissionOutcome`/`.CompletedObjectives`/
+`.ObjectiveProgress`, `StalledTicks`) stays at its neutral default throughout
+-- agent 3 still reaches `(20, 14)` at tick 31, tick 40 unchanged, and the
+event count (34) is unchanged from the TASK-028 note below.
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x23FA85415EE0A275` |
-|    2 | `0xDA3DC8626CCFE94F` |
-|    3 | `0xB77FC590A55481A5` |
-|    4 | `0x67937588E323C583` |
-|    5 | `0x4C0263ACC3F24A95` |
-|    6 | `0x0245A6CDD1E1916F` |
-|    7 | `0x95B0F132A95662D5` |
-|    8 | `0x534A7BC93D469A3B` |
-|    9 | `0x93737E122F456385` |
-|   10 | `0xB9BFB830C5DBC77F` |
-|   11 | `0xA718E9B5C398C835` |
-|   12 | `0x2F29D546948736D3` |
-|   13 | `0xC352D3C550EB7AC5` |
-|   14 | `0xC42FC7F0831D3BBF` |
-|   15 | `0x153446DCBE647EA5` |
-|   16 | `0x832D13F0D5D5501B` |
-|   17 | `0x6ECB9E744009BF15` |
-|   18 | `0x6FB3891C7EF8B7AF` |
-|   19 | `0xB99D64F9055720E5` |
-|   20 | `0x49D63F9E519D4383` |
-|   21 | `0xE9975C686BB7C743` |
-|   22 | `0x25494D683C4C6E33` |
-|   23 | `0x96B2DE2AC10D48E3` |
-|   24 | `0xF5B0F1E38A5CE783` |
-|   25 | `0x8DB6A62B58BB64D3` |
-|   26 | `0xB10211A1D0AFBC63` |
-|   27 | `0x4985793356CDDE03` |
-|   28 | `0xCDD0993A2CAD08B3` |
-|   29 | `0x5FB77AF78CE0A4D3` |
-|   30 | `0xB079FEC2B1D483A3` |
-|   31 | `0xB34D44EB81F19872` |
-|   32 | `0xB96C3175923DAA6E` |
-|   33 | `0x89EA477670CDF419` |
-|   34 | `0x91986E5FE0C03A20` |
-|   35 | `0x3BAAE0A5153FA59B` |
-|   36 | `0x83C343F7B1AD4BE2` |
-|   37 | `0xC801C1012DF69D9D` |
-|   38 | `0xCFAFE7EA9DE8E3A4` |
-|   39 | `0x6B66A57F7D2A1F4F` |
-|   40 | `0x7737282578E821C6` |
+|    1 | `0x77ECA4A6947C3342` |
+|    2 | `0x0572D3D1E15322A6` |
+|    3 | `0xA337EE31F2A8DA3A` |
+|    4 | `0x855F7CB4911738D6` |
+|    5 | `0x5BA922E646352FE2` |
+|    6 | `0x57ACCC895E0CBD1E` |
+|    7 | `0xAD2673422C2FBE3A` |
+|    8 | `0xB7F911EFB050562E` |
+|    9 | `0x8FD6E3C055E270F2` |
+|   10 | `0x8D9DA671CB539DA6` |
+|   11 | `0xF73D6BCC22548D5A` |
+|   12 | `0x1ABFAAB93D168776` |
+|   13 | `0x625BC5FBF5E83A92` |
+|   14 | `0xBD0C4494915A874E` |
+|   15 | `0x6958C2E9A7709B7A` |
+|   16 | `0x53B58CCB2D321B9E` |
+|   17 | `0x68C7314DD67FDC62` |
+|   18 | `0x8FFAE7964D1017C6` |
+|   19 | `0xDE515CDCA63C9C5A` |
+|   20 | `0xE5CAEAAB0466DB96` |
+|   21 | `0xAF65423BD2CF8F68` |
+|   22 | `0xEACFBA8DBF18CE12` |
+|   23 | `0x314B80E7340FEFE0` |
+|   24 | `0x4EFA0DA2805A8B06` |
+|   25 | `0xDEF9B2B149745FD8` |
+|   26 | `0x876B3B2EE49AF6FA` |
+|   27 | `0x40A533323E701A00` |
+|   28 | `0x3D7DCF0506435CF6` |
+|   29 | `0x1EFAEA1B1AB8DC38` |
+|   30 | `0xC078730259340122` |
+|   31 | `0x46ED110085AC43D1` |
+|   32 | `0xC4B75F7DCF0C05FD` |
+|   33 | `0xDB03594AF35A69D6` |
+|   34 | `0x322D994F91A5432B` |
+|   35 | `0x296AADAF16EBFE64` |
+|   36 | `0xCBF1A0CC4B375121` |
+|   37 | `0xE4FE34308693355A` |
+|   38 | `0xA7A293834FFD7A9F` |
+|   39 | `0x752C7261B0AD7928` |
+|   40 | `0xD2A6A1AE46AD76A5` |
 
-**Final state (tick 40) hash: `0x7737282578E821C6`.** This is the value each
+**Final state (tick 40) hash: `0xD2A6A1AE46AD76A5`.** This is the value each
 framework host prints in its tick/hash overlay after running the fixture
 command to completion.
 

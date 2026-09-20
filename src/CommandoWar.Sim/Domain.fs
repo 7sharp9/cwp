@@ -136,7 +136,18 @@ type ReceivedOrder =
       Intent: PlayerIntent
       IssuedAtTick: int64
       Urgency: Urgency
-      RiskTolerance: RiskTolerance }
+      RiskTolerance: RiskTolerance
+      /// Whether the originating `PlayerCommand` addressed more than one
+      /// recipient (TASK-067, backlog B-067; `Simulation.commandIntake`'s
+      /// own validated `Recipients.Length > 1`, captured once per recipient
+      /// at intake, the `IssuedAtTick`/`Urgency` "captured once, carried by
+      /// the record" precedent). A `MoveTo` order only redirects through
+      /// `Appraisal.resolveFormationTarget` when this is `true` -- a solo
+      /// order (one recipient) always resolves to the literal target,
+      /// regardless of the recipient's own static `AgentState.
+      /// FormationOffset`. Ignored by every other `PlayerIntent`, matching
+      /// `resolveFormationTarget`'s existing `MoveTo`-only scope.
+      AsGroup: bool }
 
 /// A typed reason for an appraisal outcome (TASK-028; `docs/05` section 7
 /// "structured reasons" — "do not add prose-only reasons; UI text is derived

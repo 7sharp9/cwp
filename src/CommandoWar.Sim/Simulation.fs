@@ -440,7 +440,16 @@ module Simulation =
                                               Intent = intent
                                               IssuedAtTick = cmd.IssuedAtTick
                                               Urgency = cmd.Urgency
-                                              RiskTolerance = cmd.RiskTolerance }
+                                              RiskTolerance = cmd.RiskTolerance
+                                              // TASK-067 (backlog B-067): the
+                                              // validated `recipients` list
+                                              // this loop is already
+                                              // iterating -- 2+ recipients
+                                              // means the player issued one
+                                              // genuine group order, not
+                                              // several coincidentally
+                                              // simultaneous solo ones.
+                                              AsGroup = recipients.Length > 1 }
 
                                         pending.Add(recipient, cmd.Id, PendingOrder(order, mode))
                             | Cancel target ->
@@ -954,9 +963,13 @@ module Simulation =
                 let fulfilled =
                     match o.Intent with
                     | MoveTo target ->
-                        a.Disposition = Some Accepted
-                        && a.Destination = None
-                        && a.Position = Appraisal.resolveFormationTarget terrain occupied a.FormationOffset target
+                        let resolved =
+                            if o.AsGroup then
+                                Appraisal.resolveFormationTarget terrain occupied a.FormationOffset target
+                            else
+                                target
+
+                        a.Disposition = Some Accepted && a.Destination = None && a.Position = resolved
                     | Hold area ->
                         a.Disposition = Some Accepted
                         && a.Destination = None
@@ -1031,10 +1044,18 @@ module Simulation =
                     // B-011d): `MoveTo` writes `Appraisal.
                     // resolveFormationTarget`'s resolved cell the identical
                     // way -- `None` reproduces the literal `target` exactly.
+                    // TASK-067 (backlog B-067): only when `o.AsGroup` (the
+                    // originating command addressed more than one
+                    // recipient) -- a solo order writes the literal
+                    // `target` regardless of the recipient's own
+                    // `FormationOffset`.
                     let destination =
                         match disposition, o.Intent with
                         | Accepted, MoveTo target ->
-                            Some(Appraisal.resolveFormationTarget terrain occupied a.FormationOffset target)
+                            if o.AsGroup then
+                                Some(Appraisal.resolveFormationTarget terrain occupied a.FormationOffset target)
+                            else
+                                Some target
                         | Accepted, Hold area -> Some(Appraisal.bestCoverNear terrain threats suppressedThreats area)
                         | Accepted, Assault target -> Some target
                         | Accepted, Withdraw target -> Some target

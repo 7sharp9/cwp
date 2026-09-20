@@ -1,8 +1,7 @@
 version 1
 seed 20260904
 ticks 12
-canonical 14
+canonical 15
 build cwheadless
 scenario formation-slots
-command 1 0 1 1 routine standard corpus 0 move 5 5
-command 1 1 2 1 routine standard corpus 1 move 5 5
+command 1 0 1 1 routine standard corpus 0,1 move 5 5
