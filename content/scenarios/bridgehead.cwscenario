@@ -1,11 +1,11 @@
 # Bridgehead greybox map (TASK-061, backlog B-025): rail bridge + depot at
-# dusk (docs/07_VERTICAL_SLICE.md section 3). Physical-space and
-# force-placement greybox only -- no authored mission-sequence content
-# (that is B-032's job; Simulation.fs has no objective-evaluation logic
-# yet). Terrain stays within the three fixed TerrainTileSet.Sources
-# combinations (TASK-060): floor (passable, moveCost 1, opaque false),
-# block (impassable, moveCost 0, opaque true), crate (passable, moveCost 3,
-# opaque true).
+# dusk (docs/07_VERTICAL_SLICE.md section 3). Terrain and force placement
+# were built greybox-only by TASK-061; TASK-062 (backlog B-032) then added
+# the real mission-sequence content once objective evaluation existed to
+# consume it (see the `Objectives` note below). Terrain stays within the
+# three fixed TerrainTileSet.Sources combinations (TASK-060): floor
+# (passable, moveCost 1, opaque false), block (impassable, moveCost 0,
+# opaque true), crate (passable, moveCost 3, opaque true).
 #
 # Layout: an impassable river runs north-south at x=8..9 for the whole map
 # height, crossed by one compact two-cell-wide rail bridge deck at y=5..6
@@ -28,25 +28,20 @@
 # bridge exit. Agents 101-104 are the four riflemen in prepared positions
 # around the depot buildings.
 #
-# `Objectives` carries exactly one placeholder "reach" entry (id 1,
-# `IsOptional=true`) referencing the `observation` landmark area -- this is
-# NOT the docs/07 section 3 mission sequence, which stays deliberately out
-# of this task's scope (B-032, per "Design decisions"). `Scenario.validate`
-# rejects a fully empty `Objectives` array with
-# `MissingRequiredMarker "Objective"` (confirmed by inspection of
-# `Scenario.fs`), so the task file's literal "Objectives = [||]" cannot
-# both hold and pass `cwheadless import` with exit 0 -- a conflict between
-# two of the task's own stated requirements discovered during
-# implementation, not a re-litigation of scope. This one placeholder is the
-# smallest change that satisfies the validator while adding no real
-# mission-sequence content, following the exact precedent already in this
-# codebase: `CwClientCore.TerrainAuthoring.exportScenario`'s own doc
-# comment describes its skeleton's single "reach" objective as existing
-# "just sufficient for Scenario.validate to accept the result", and
-# `content/scenarios/godot-painted-test.cwscenario` does the same. Flagged
-# as an explicit deviation in the task file and ledger for Dave.
+# `Objectives` (TASK-062, backlog B-032) carries the real mission content
+# TASK-061 deferred: the original placeholder optional `reach observation`
+# entry (id 1, flavour/progress only -- observing the bridge area before
+# committing, docs/07 section 3 step 1 -- never a success gate); a
+# non-optional `destroy` against the `bridge-charge` target (id 2, 10-tick
+# plant duration -- any Alive friendly agent occupying the target's own
+# cell for 10 consecutive ticks satisfies it, `Simulation.mission`'s
+# occupancy-based demolition, no new order type); a non-optional `extract`
+# against the `extraction` area for every surviving friendly agent (id 3).
+# Both id 2 and id 3 must be satisfied for `MissionOutcome` to reach
+# `Succeeded`; `fail-on-friendly-eliminated true` (already authored) reaches
+# `Failed` if every friendly agent goes down first.
 version 1
-content-version 6
+content-version 7
 id bridgehead
 map 18 12
 fail-on-friendly-eliminated true
@@ -120,3 +115,5 @@ extraction-area extraction 1 9
 target bridge-charge 9 5
 target mg-position 11 5
 objective 1 reach observation - 0 true -
+objective 2 destroy - bridge-charge 10 false -
+objective 3 extract extraction - 0 false -

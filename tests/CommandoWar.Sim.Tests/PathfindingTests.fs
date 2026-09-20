@@ -276,13 +276,13 @@ let ``producing pathfinding diagnostics for the shared fixture leaves its hashes
     let w = Fixture.initialState ()
     // A pure query over the fixture's (empty) terrain: no mutation, no draw.
     let _ = Pathfinding.find w.Terrain { X = 0; Y = 0 } { X = 20; Y = 14 }
-    Assert.Equal(0xB25FE816BCB67A11UL, (Hashing.hash w).Value)
-    Assert.Equal(12, Canonical.FormatVersion)
+    Assert.Equal(0xC0A53D46AE5D7C80UL, (Hashing.hash w).Value)
+    Assert.Equal(13, Canonical.FormatVersion)
 
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x0A822498317E0958UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0x447C32A5D599EAB3UL, (Hashing.hash outcome.FinalState).Value)
         // TASK-030: 34 -> 36 (+1 CommitmentEstablished, +1 CommitmentCompleted).
         Assert.Equal(36, outcome.Events.Length)
 

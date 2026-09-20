@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; review trigger 1 measured and closed 2026-09-19, decision reaffirmed -- see ADR-0001's 2026-09-19 note)
-  updated: 2026-09-19 (TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
+  updated: 2026-09-20 (TASK-062 accepted by Dave, realising B-032; prior: TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
 
 active_work:
   selected_task: none
@@ -13,9 +13,121 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-19
+  updated: 2026-09-20
   note: >-
-    2026-09-19: TASK-061 accepted by Dave ("this looks ok") after a live
+    2026-09-20: TASK-062 accepted by Dave on the self-verification evidence
+    ("ok if you are happy then i am") and committed to `main`. No changes
+    requested. B-032 now `done`. `active_work.selected_task -> none`; next
+    task not yet chosen.
+    (tasks/TASK-062-DEMOLITION-OBJECTIVE-EXTRACTION-AND-MISSION-OUTCOME.md;
+    docs/ledger/2026-09-19-TASK-062-demolition-objective-extraction-and-mission-outcome.md)
+
+    Prior: 2026-09-19: TASK-062 (demolition objective, extraction, mission success/
+    failure, realises B-032) implemented and self-verified -- status review,
+    awaiting Dave's acceptance. Turns `Simulation.fs`'s `Mission` phase (an
+    explicit no-op reserved for exactly this) and `Scenario.fs`'s fully-
+    authored-but-never-evaluated `Objective`/`ScenarioRules` algebra into real
+    behaviour, on the four design decisions Dave confirmed at drafting time
+    (occupancy-based planting, no new order type; failure = the existing
+    `FailOnFriendlyForceEliminated` wired up; sticky extraction; Bridgehead's
+    placeholder objective replaced with real content now).
+
+    A real bug found and fixed before it reached a test: the naive success
+    gate (`Array.forall` over the scenario's `Objectives`) is vacuously true
+    on an empty array, which would have made every pre-existing test fixture
+    (`World.create`/`Setup.sixAgentWorld`, none of which authors objectives)
+    instantly "succeed" on tick 1 -- caught immediately by the 34 test
+    failures a first full run produced, fixed with one non-empty guard. A
+    second, subtler instance in test content rather than product code:
+    `ScenarioTests.fs`'s `fixtureScenario()` (a `Scenario`-validated
+    expression of the shared six-agent fixture) already authored a real
+    `reach observation` objective at agent 3's own scripted `MoveTo` target,
+    on its own doc comment's explicit (now-false) assumption that
+    `World.ofScenario` read neither objectives nor extraction areas --
+    that fixture now genuinely reaches `MissionOutcome = Succeeded` at tick
+    31, confirmed by running it, not assumed. `ObjectiveId`/`AreaId`/
+    `TargetId`/`Area`/`StaticTarget`/`AgentSelection`/`Objective`/
+    `ScenarioRules` moved `Scenario.fs -> Domain.fs` (the `Jammer` precedent
+    -- `WorldState` needs to reference them and `Domain.fs` compiles first).
+    New canonical `AgentState.Extracted` / `WorldState.MissionOutcome`/
+    `.CompletedObjectives`/`.ObjectiveProgress` (`Canonical.FormatVersion`
+    12 -> 13, full re-pin across every corpus/fixture/diagnostics golden --
+    byte-layout-only for all of them except `casualties-succession-and-
+    squad-failure`, which now also emits a genuine `mission-failed` event on
+    its own pre-existing scripted wipeout, and the new `fixtureScenario`
+    case above); `ScenarioContent.Version` 6 -> 7 (`"destroy"` now requires
+    positive `HoldTicks`, reusing the existing grammar column). New sparse
+    `Overlay.MissionStatus` (renamed from a first-draft `Mission`, which
+    collided with the pre-existing `Phase.Mission` case and broke every
+    consumer match in `CommandoWar.Headless`). `content/scenarios/
+    bridgehead.cwscenario` now carries real `destroy`/`extract` objectives
+    alongside its existing optional `reach` placeholder, re-validates clean.
+    New `demolition-success` corpus entry (hand-built outside the shared
+    `ScenarioSpec` builder, the `LosDemo`/`PathDemo` precedent) proves
+    `MissionOutcome -> Succeeded` end to end including a genuine mid-plant
+    in-progress frame. `dotnet build` all three `.slnx` 0/0; `dotnet test`
+    408/408 (+13); `-- corpus` 18/18 (`--regenerate` idempotent, confirmed by
+    `md5sum`); `-- import bridgehead.cwscenario` exit 0, 3 objectives;
+    `dotnet list CommandoWar.Sim package` `FSharp.Core` only. B-032 marked
+    `done` in the backlog on this self-verification evidence, the recent
+    Sim-only-task precedent; not yet reviewed by Dave.
+    (tasks/TASK-062-DEMOLITION-OBJECTIVE-EXTRACTION-AND-MISSION-OUTCOME.md;
+    docs/ledger/2026-09-19-TASK-062-demolition-objective-extraction-and-mission-outcome.md)
+
+    Prior: 2026-09-19: TASK-062 (demolition objective, extraction, mission success/
+    failure, realises B-032) drafted and selected. Reached via `AskUserQuestion`
+    over two rounds: whether to scope B-032 now, hand-tweak the Bridgehead map
+    first, push the 5 unpushed local commits, or something else (Dave chose
+    scoping B-032 now); then one round of four design-fork questions, all
+    answered with the recommended option -- charge-planting is occupancy-based
+    (any `Alive` friendly agent on the target's own cell for a configured tick
+    count, no new order type, reusing `MoveTo`/`Hold` exactly as authored
+    today); failure is exactly the existing, never-consumed
+    `ScenarioRules.FailOnFriendlyForceEliminated` wired up, no new timeout
+    mechanism; extraction is sticky (once an agent reaches the extraction
+    area it stays counted even after walking off); Bridgehead's TASK-061
+    placeholder single optional "reach" objective is replaced with real
+    content now (a non-optional `destroy` against the already-authored
+    `bridge-charge` target and a non-optional `extract` against the
+    already-authored `extraction` area), not deferred further.
+
+    Investigation before drafting found the architecture already reserves
+    this exact slot: `Phases.fs`'s fixed phase order already has a `Mission`
+    case, and `Simulation.fs`'s `runPhase` already has an explicit
+    `Mission -> ()` no-op with the phase order comment "even when a phase is
+    currently a no-op"; `docs/04_SIMULATION_SPEC.md` section 12.10 already
+    specifies (never implemented) "evaluate objective conditions; emit
+    completion or failure once; prevent accidental repeated completion
+    events"; `Scenario.fs`'s `Objective`/`ScenarioRules` algebra
+    (`ReachArea`/`HoldArea`/`DestroyTarget`/`ExtractAgents`/`AllOf`/
+    `Optional`, `FailOnFriendlyForceEliminated`) is fully authored and
+    validated but nothing evaluates it; `Events.fs`'s existing `SquadFailure`
+    doc comment says outright "consuming it into a mission-failure outcome is
+    B-032's job." `Objective.DestroyTarget`'s own doc comment already names
+    the exact planned shape: "`ReachArea` then a fixed-duration plant (a
+    later task) then `DestroyTarget`" -- this task adds that `ticks` field.
+
+    Task file scopes (beyond Dave's four confirmed answers, my own
+    implementation-level decisions, documented and flagged for review, not
+    separately asked): sticky one-shot completion generalised uniformly to
+    every objective kind (a new canonical `WorldState.CompletedObjectives`),
+    not just extraction; a new canonical `WorldState.ObjectiveProgress`
+    consecutive-tick counter for `HoldArea`/`DestroyTarget`; a new canonical
+    `AgentState.Extracted` per-agent sticky flag (the `RadioDestroyed`/
+    `PendingDelivery` precedent); a new canonical `WorldState.MissionOutcome`
+    (`InProgress`/`Succeeded`/`Failed`, one-way once decided, the
+    `SquadFailure` "cannot become false again" precedent generalised); new
+    events `ObjectiveCompleted`/`AgentExtracted`/`MissionSucceeded`/
+    `MissionFailed`; a new `Diagnostics.Overlay.Mission` case (the
+    `Divergence` non-spatial-summary precedent). `ScenarioContent.Version`
+    6 -> 7 (destroy's new `HoldTicks > 0` validation rule, reusing the
+    existing `HoldTicks` grammar column rather than adding one);
+    `Canonical.FormatVersion` bumps from 12 for the new canonical fields.
+    Not yet implemented -- no code changed this session beyond the task file,
+    `docs/11_BACKLOG.md` B-032 row, and this note.
+    (tasks/TASK-062-DEMOLITION-OBJECTIVE-EXTRACTION-AND-MISSION-OUTCOME.md)
+
+    Prior: 2026-09-19: TASK-061 accepted by Dave ("this looks ok") after a live
     review round in the real Godot 4.7.2 editor -- the interactive-editor
     verification the self-verified submission below had flagged as
     outstanding. Dave ran `ImportTerrainScript.cs` himself; a real bug

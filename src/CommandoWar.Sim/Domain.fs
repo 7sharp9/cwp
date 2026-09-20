@@ -374,6 +374,20 @@ type AgentState =
       /// **Genuine canonical per-tick state**: real per-tick memory no
       /// other field reproduces. Defaults to `None`.
       PendingDelivery: (ReceivedOrder * QueueMode * int64) option
+      /// Whether this agent has ever been `Alive` on an authored
+      /// `WorldState.ExtractionAreas` cell (TASK-062, backlog B-032): once
+      /// `true`, it stays `true` even after the agent walks off that cell —
+      /// `ExtractAgents` objective evaluation reads this rather than a
+      /// live per-tick position check, so a required agent is not un-
+      /// extracted by later movement. Set by the Mission phase. One global
+      /// flag, not tracked per authored extraction area — a scenario
+      /// authoring more than one `ExtractAgents` objective against distinct
+      /// areas is not specially disambiguated (`AGENTS.md` "do not build
+      /// speculative type machinery").
+      ///
+      /// **Genuine canonical per-tick state** (the `RadioDestroyed`/
+      /// `Vitals.Dead` one-way-door precedent). Defaults to `false`.
+      Extracted: bool
       /// This agent's current suppression on the `0..1000` scale (TASK-032,
       /// backlog B-020; `docs/05` section 8 "immediate effect of hostile fire
       /// and impacts"). The Combat phase raises it on a qualifying shot
@@ -529,6 +543,111 @@ type AgentState =
       /// `Destination`/`Position`.
       FormationOffset: Cell option }
 
+/// Identifies one objective within a scenario. Moved here from `Scenario.fs`
+/// by TASK-062 (backlog B-032), the `Jammer` precedent immediately below:
+/// `WorldState.Objectives`/`.CompletedObjectives`/`.ObjectiveProgress` need
+/// to reference `Objective`/`ObjectiveId`, and `Domain.fs` compiles before
+/// `Scenario.fs`.
+[<Struct>]
+type ObjectiveId = private ObjectiveId of int
+
+/// Identifies one authored area (an objective area or an extraction area).
+[<Struct>]
+type AreaId = private AreaId of string
+
+/// Identifies one authored static target.
+[<Struct>]
+type TargetId = private TargetId of string
+
+[<RequireQualifiedAccess>]
+module ObjectiveId =
+
+    /// Creates an objective id from a non-negative integer.
+    let ofInt (value: int) : ObjectiveId =
+        if value < 0 then
+            invalidArg (nameof value) "ObjectiveId must be non-negative"
+
+        ObjectiveId value
+
+    /// The underlying integer. For explicit ordering and diagnostics only.
+    let value (ObjectiveId v) : int = v
+
+[<RequireQualifiedAccess>]
+module AreaId =
+
+    /// Creates an area id from a non-blank string.
+    let ofString (value: string) : AreaId =
+        if System.String.IsNullOrWhiteSpace value then
+            invalidArg (nameof value) "AreaId must not be blank"
+
+        AreaId value
+
+    /// The underlying string. For diagnostics and content round-tripping only.
+    let value (AreaId v) : string = v
+
+[<RequireQualifiedAccess>]
+module TargetId =
+
+    /// Creates a target id from a non-blank string.
+    let ofString (value: string) : TargetId =
+        if System.String.IsNullOrWhiteSpace value then
+            invalidArg (nameof value) "TargetId must not be blank"
+
+        TargetId value
+
+    /// The underlying string. For diagnostics and content round-tripping only.
+    let value (TargetId v) : string = v
+
+/// A named point of interest: an objective area or an extraction area. The
+/// slice needs a single cell per area; a rectangular region is a later
+/// refinement if the mission proves the need.
+type Area = { Id: AreaId; Cell: Cell }
+
+/// A static objective target: the bridge, a machine-gun position. A single
+/// cell; destruction state is deferred with combat (B-019).
+type StaticTarget = { Id: TargetId; Cell: Cell }
+
+/// Which agents an extraction objective requires (docs/07 section 3,
+/// "surviving required personnel").
+type AgentSelection =
+    | AllFriendlyAgents
+    | SpecificAgents of AgentId[]
+
+/// The Bridgehead objective algebra (docs/06 section 3, docs/07 section 3).
+///
+/// Evaluated by `Simulation.mission` (TASK-062, backlog B-032; the `Mission`
+/// phase, previously an explicit no-op). The slice's mission is the implicit
+/// "all of" a scenario's `Objectives` array; `AllOf` / `Optional` are in the
+/// algebra for nested composition (`AllOf` has generic evaluation support
+/// but no authoring support yet -- no `RawObjective` builds one). The
+/// bridge-demolition interaction is `ReachArea` then a fixed-duration plant
+/// then `DestroyTarget`; there is no general interaction scripting language.
+type Objective =
+    | ReachArea of objective: ObjectiveId * area: AreaId
+    | HoldArea of objective: ObjectiveId * area: AreaId * ticks: int
+    /// `ticks` (TASK-062, backlog B-032) is the fixed-duration plant this
+    /// type's own doc comment above named as future work: any `Alive`
+    /// `Friendly` agent occupying `target`'s cell for `ticks` consecutive
+    /// ticks satisfies this objective. Authored via the existing
+    /// `RawObjective.HoldTicks` column (`ScenarioContent.Version` 7).
+    | DestroyTarget of objective: ObjectiveId * target: TargetId * ticks: int
+    | ExtractAgents of objective: ObjectiveId * agents: AgentSelection * area: AreaId
+    | AllOf of objective: ObjectiveId * parts: Objective[]
+    | Optional of Objective
+
+/// Scenario-wide rules, exercised by `Simulation.mission`'s failure check
+/// (TASK-062, backlog B-032; docs/07 section 9, criterion 7). One field.
+type ScenarioRules = { FailOnFriendlyForceEliminated: bool }
+
+/// The Mission phase's one-way outcome (TASK-062, backlog B-032; docs/04
+/// section 12.10). Once not `InProgress`, `Simulation.mission` is a no-op
+/// for the rest of the run -- the `Vitals.Dead`/`SquadFailure` "cannot
+/// become false again" precedent, generalised to the whole mission.
+type MissionOutcome =
+    | InProgress
+    | Succeeded
+    | Failed
+
 /// A validated jammer (TASK-058, backlog B-016b; `Scenario.Jammers`): a
 /// recipient within `Radius` Chebyshev cells of `Position` cannot receive
 /// an order while the current tick lies in `[ActiveFromTick,
@@ -620,6 +739,67 @@ type WorldState =
       /// authored data**, the `ResupplyAreas`/`Terrain` precedent —
       /// **excluded** from `Canonical.encode`.
       Jammers: Jammer[]
+      /// The scenario's authored mission objectives (TASK-062, backlog
+      /// B-032; `Scenario.Objectives`), evaluated by the Mission phase.
+      /// **Static authored data**, the `ResupplyAreas`/`Jammers` precedent —
+      /// **excluded** from `Canonical.encode` (both runs load the identical
+      /// array at tick 0 and it never mutates). A completion-driven
+      /// behaviour difference still surfaces in the hash within one tick
+      /// through `CompletedObjectives`/`MissionOutcome` below.
+      Objectives: Objective[]
+      /// Authored objective-area markers (TASK-062, backlog B-032;
+      /// `Scenario.ObjectiveAreas`), resolved by `ReachArea`/`HoldArea`
+      /// objectives via their `AreaId`. **Static authored data**, the
+      /// `ResupplyAreas` precedent — **excluded** from `Canonical.encode`.
+      ObjectiveAreas: Area[]
+      /// Authored extraction-area markers (TASK-062, backlog B-032;
+      /// `Scenario.ExtractionAreas`), resolved by `ExtractAgents` objectives
+      /// via their `AreaId` and by `AgentState.Extracted`'s own occupancy
+      /// check. **Static authored data**, the `ResupplyAreas` precedent —
+      /// **excluded** from `Canonical.encode`.
+      ExtractionAreas: Area[]
+      /// Authored static targets (TASK-062, backlog B-032;
+      /// `Scenario.StaticTargets`), resolved by `DestroyTarget` objectives
+      /// via their `TargetId`. **Static authored data**, the `ResupplyAreas`
+      /// precedent — **excluded** from `Canonical.encode`.
+      StaticTargets: StaticTarget[]
+      /// Scenario-wide mission rules (TASK-062, backlog B-032;
+      /// `Scenario.Rules`). **Static authored data**, the `ResupplyAreas`
+      /// precedent — **excluded** from `Canonical.encode`.
+      Rules: ScenarioRules
+      /// The Mission phase's one-way outcome (TASK-062, backlog B-032;
+      /// `docs/04` section 12.10). Starts `InProgress`; once `Succeeded` or
+      /// `Failed` it never changes again for the rest of the run.
+      ///
+      /// **Genuine per-tick canonical state** (the `Vitals`/`RadioDestroyed`
+      /// precedent): it changes from a gameplay-derived condition and cannot
+      /// be recomputed from any other single field in isolation (it is the
+      /// Mission phase's own summary judgement). Defaults to `InProgress`.
+      MissionOutcome: MissionOutcome
+      /// Every `ObjectiveId` that has ever been satisfied (TASK-062,
+      /// backlog B-032), ascending, the `TacticalKnowledge` "sorted by id"
+      /// precedent. Sticky: an id, once added, is never removed — an
+      /// `Optional`-wrapped objective can appear here too (tracked for
+      /// completeness/diagnostics) without contributing to
+      /// `MissionOutcome`. `Simulation.mission`'s own success gate reads
+      /// this against the scenario's top-level `Objectives`.
+      ///
+      /// **Genuine per-tick canonical state**, the `TacticalKnowledge`
+      /// precedent: real per-tick memory no other field reproduces.
+      /// Defaults to empty.
+      CompletedObjectives: ObjectiveId[]
+      /// In-progress consecutive-tick occupancy counters for every not-yet-
+      /// completed `HoldArea`/`DestroyTarget` objective (TASK-062, backlog
+      /// B-032), ascending by `ObjectiveId`, the `TacticalKnowledge`
+      /// precedent. An objective's counter resets to `0` (not removed) on
+      /// any tick with no qualifying occupant — the `Suppression`/`Stress`
+      /// decay-precedent shape, not a sticky value; once an objective's
+      /// counter reaches its authored tick count it moves into
+      /// `CompletedObjectives` instead and its entry here is dropped.
+      ///
+      /// **Genuine per-tick canonical state**, the `TacticalKnowledge`
+      /// precedent. Defaults to empty.
+      ObjectiveProgress: (ObjectiveId * int)[]
       /// The authoritative deterministic random stream. It is threaded through
       /// every step and is part of the canonical state hash. No gameplay phase
       /// draws from it yet (TASK-003 wires the stream; gameplay draws arrive
@@ -692,7 +872,9 @@ module Agent =
     /// `PendingDelivery` (TASK-058) follow it too: every agent always starts
     /// with an intact radio and nothing in flight, no authored override.
     /// `FormationOffset` (TASK-059) follows the `MoveSpeed` rule instead:
-    /// `World.ofScenario` overrides it too, default `None`.
+    /// `World.ofScenario` overrides it too, default `None`. `Extracted`
+    /// (TASK-062) follows the `RadioDestroyed`/`PendingDelivery` rule:
+    /// every agent always starts `false`, no authored override.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -715,4 +897,5 @@ module Agent =
           RecentlyWounded = false
           Ammo = Ready(MagazineSize, ReserveStart)
           MoveSpeed = MoveSpeedDefault
-          FormationOffset = None }
+          FormationOffset = None
+          Extracted = false }

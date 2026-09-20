@@ -337,6 +337,17 @@ type Overlay =
     /// Standing per-tick derived state (like `OrderAppraisal`), so both
     /// `Diagnostics.frame` and `.frameOf` derive it.
     | AgentFormationSlot of agent: AgentId * at: Cell * resolved: Cell
+    /// A summary of `Simulation.mission`'s own outcome (TASK-062, backlog
+    /// B-032; `WorldState.MissionOutcome`/`.CompletedObjectives`/
+    /// `.ObjectiveProgress`), ascending by `ObjectiveId` within each array.
+    /// The `AgentSuppression`/`AgentRadioLost` sparse shape: emitted only
+    /// when there is something to show -- `outcome` is not `InProgress`, or
+    /// at least one objective has completed or has non-zero in-progress
+    /// occupancy. Every pre-`ScenarioContent.Version` 7 scenario authors no
+    /// `Objectives` at all, so this never appears for it. Standing canonical
+    /// state, so both `Diagnostics.frame` and `.frameOf` derive it
+    /// identically.
+    | MissionStatus of outcome: MissionOutcome * completed: ObjectiveId[] * inProgress: (ObjectiveId * int)[]
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -460,6 +471,11 @@ module Diagnostics =
         | ReloadStarted agent -> { Kind = "reload-started"; Cells = [||]; Agents = [| agent |] }
         | ReloadCompleted agent -> { Kind = "reload-completed"; Cells = [||]; Agents = [| agent |] }
         | AgentResupplied agent -> { Kind = "agent-resupplied"; Cells = [||]; Agents = [| agent |] }
+        | AgentExtracted agent -> { Kind = "agent-extracted"; Cells = [||]; Agents = [| agent |] }
+        | ObjectiveCompleted objective ->
+            { Kind = $"objective-completed:{ObjectiveId.value objective}"; Cells = [||]; Agents = [||] }
+        | MissionSucceeded -> { Kind = "mission-succeeded"; Cells = [||]; Agents = [||] }
+        | MissionFailed -> { Kind = "mission-failed"; Cells = [||]; Agents = [||] }
 
     /// A `KnownContact` overlay per contact in the friendly squad's shared
     /// tactical picture (TASK-026), ascending by contact id. Reads
@@ -654,6 +670,20 @@ module Diagnostics =
             | Some(order, _, dueTick) -> Some(AgentPendingDelivery(a.Id, a.Position, order.Command, dueTick))
             | None -> None)
 
+    /// A `MissionStatus` overlay summarising `WorldState.MissionOutcome`/
+    /// `.CompletedObjectives`/`.ObjectiveProgress` (TASK-062, backlog B-032)
+    /// -- see the `Overlay.MissionStatus` case's own doc comment for the
+    /// sparse-emission rule (nothing to show yet is nothing shown).
+    let private missionOverlay (world: WorldState) : Overlay[] =
+        if
+            world.MissionOutcome = InProgress
+            && Array.isEmpty world.CompletedObjectives
+            && Array.isEmpty world.ObjectiveProgress
+        then
+            [||]
+        else
+            [| MissionStatus(world.MissionOutcome, world.CompletedObjectives, world.ObjectiveProgress) |]
+
     /// The diagnostic frame for a world state. Total, pure, deterministic:
     /// no mutation, no random draw, no wall-clock read. `Events` is empty
     /// (a bare `WorldState` carries no per-tick event history); use
@@ -681,7 +711,8 @@ module Diagnostics =
                agentAmmoOverlays world
                agentRadioDestroyedOverlays world
                agentPendingDeliveryOverlays world
-               formationSlotOverlays world |]
+               formationSlotOverlays world
+               missionOverlay world |]
             |> Array.concat
           Hash = Hashing.hash world
           RandomDraws = world.Random.Draws }
@@ -733,7 +764,11 @@ module Diagnostics =
             | SquadFailure
             | ReloadStarted _
             | ReloadCompleted _
-            | AgentResupplied _ -> None)
+            | AgentResupplied _
+            | AgentExtracted _
+            | ObjectiveCompleted _
+            | MissionSucceeded
+            | MissionFailed -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, winner) -> Reserved(cell, winner, result.State.Tick))
 
@@ -770,7 +805,11 @@ module Diagnostics =
             | SquadFailure
             | ReloadStarted _
             | ReloadCompleted _
-            | AgentResupplied _ -> None)
+            | AgentResupplied _
+            | AgentExtracted _
+            | ObjectiveCompleted _
+            | MissionSucceeded
+            | MissionFailed -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, occupant) -> Obstructed(cell, occupant))
 
@@ -809,7 +848,11 @@ module Diagnostics =
             | SquadFailure
             | ReloadStarted _
             | ReloadCompleted _
-            | AgentResupplied _ -> None)
+            | AgentResupplied _
+            | AgentExtracted _
+            | ObjectiveCompleted _
+            | MissionSucceeded
+            | MissionFailed -> None)
         |> Array.distinctBy fst
         |> Array.choose (fun (recipient, command) ->
             result.State.Agents
@@ -848,7 +891,11 @@ module Diagnostics =
             | SquadFailure
             | ReloadStarted _
             | ReloadCompleted _
-            | AgentResupplied _ -> None)
+            | AgentResupplied _
+            | AgentExtracted _
+            | ObjectiveCompleted _
+            | MissionSucceeded
+            | MissionFailed -> None)
         |> Array.choose (fun (shooter, target, hit) ->
             match
                 result.State.Agents |> Array.tryFind (fun a -> a.Id = shooter),
@@ -892,5 +939,6 @@ module Diagnostics =
                       agentAmmoOverlays result.State
                       agentRadioDestroyedOverlays result.State
                       agentPendingDeliveryOverlays result.State
-                      formationSlotOverlays result.State ]
+                      formationSlotOverlays result.State
+                      missionOverlay result.State ]
             Hash = result.StateHash }

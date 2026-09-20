@@ -2716,3 +2716,173 @@ let ``two formationed agents ordered to the same nominal cell resolve to distinc
 
     Assert.Equal(Some { X = 3; Y = 4 }, (agentOf (agent 0) r.State).Destination)
     Assert.Equal(Some { X = 5; Y = 4 }, (agentOf (agent 1) r.State).Destination)
+
+// --- Mission phase: demolition objective, extraction, mission outcome (TASK-062, backlog B-032) ---
+
+let private missionWorld
+    (objectives: Objective[])
+    (objectiveAreas: Area[])
+    (extractionAreas: Area[])
+    (staticTargets: StaticTarget[])
+    (rules: ScenarioRules)
+    (agents: AgentState list)
+    : WorldState =
+    { worldOf agents with
+        Objectives = objectives
+        ObjectiveAreas = objectiveAreas
+        ExtractionAreas = extractionAreas
+        StaticTargets = staticTargets
+        Rules = rules }
+
+let private noFailRules: ScenarioRules = { FailOnFriendlyForceEliminated = false }
+
+[<Fact>]
+let ``an Alive friendly agent occupying a DestroyTarget's cell for its authored ticks completes it`` () =
+    let target: StaticTarget = { Id = TargetId.ofString "t"; Cell = { X = 5; Y = 5 } }
+    let objective = DestroyTarget(ObjectiveId.ofInt 1, target.Id, 3)
+    let a = Agent.create (agent 0) Friendly target.Cell
+    let w = missionWorld [| objective |] [||] [||] [| target |] noFailRules [ a ]
+
+    let r1 = stepIdle w
+    Assert.Empty(r1.State.CompletedObjectives)
+    Assert.Equal<(ObjectiveId * int)[]>([| ObjectiveId.ofInt 1, 1 |], r1.State.ObjectiveProgress)
+
+    let r2 = stepIdle r1.State
+    Assert.Equal<(ObjectiveId * int)[]>([| ObjectiveId.ofInt 1, 2 |], r2.State.ObjectiveProgress)
+
+    let r3 = stepIdle r2.State
+    Assert.Equal<ObjectiveId[]>([| ObjectiveId.ofInt 1 |], r3.State.CompletedObjectives)
+    Assert.Empty(r3.State.ObjectiveProgress)
+    Assert.Contains(bodies r3, fun b -> b = ObjectiveCompleted(ObjectiveId.ofInt 1))
+
+[<Fact>]
+let ``vacating a DestroyTarget's cell before its authored ticks resets progress to 0`` () =
+    let target: StaticTarget = { Id = TargetId.ofString "t"; Cell = { X = 5; Y = 5 } }
+    let objective = DestroyTarget(ObjectiveId.ofInt 1, target.Id, 3)
+    let a = Agent.create (agent 0) Friendly target.Cell
+    let w = missionWorld [| objective |] [||] [||] [| target |] noFailRules [ a ]
+
+    let r1 = stepIdle w
+    Assert.Equal<(ObjectiveId * int)[]>([| ObjectiveId.ofInt 1, 1 |], r1.State.ObjectiveProgress)
+
+    // Move the agent off the target's cell before it completes.
+    let vacated =
+        { r1.State with
+            Agents = r1.State.Agents |> Array.map (fun a -> { a with Position = { X = 0; Y = 0 } }) }
+
+    let r2 = stepIdle vacated
+    Assert.Empty(r2.State.ObjectiveProgress)
+    Assert.Empty(r2.State.CompletedObjectives)
+
+[<Fact>]
+let ``a completed objective stays completed after the agent leaves its cell (sticky)`` () =
+    let target: StaticTarget = { Id = TargetId.ofString "t"; Cell = { X = 5; Y = 5 } }
+    let objective = DestroyTarget(ObjectiveId.ofInt 1, target.Id, 1)
+    let a = Agent.create (agent 0) Friendly target.Cell
+    let w = missionWorld [| objective |] [||] [||] [| target |] noFailRules [ a ]
+
+    let r1 = stepIdle w
+    Assert.Equal<ObjectiveId[]>([| ObjectiveId.ofInt 1 |], r1.State.CompletedObjectives)
+
+    let departed =
+        { r1.State with
+            Agents = r1.State.Agents |> Array.map (fun a -> { a with Position = { X = 0; Y = 0 } }) }
+
+    let r2 = stepIdle departed
+    Assert.Equal<ObjectiveId[]>([| ObjectiveId.ofInt 1 |], r2.State.CompletedObjectives)
+
+[<Fact>]
+let ``ExtractAgents excludes a non-Alive agent from its requirement`` () =
+    let area: Area = { Id = AreaId.ofString "exfil"; Cell = { X = 0; Y = 0 } }
+    let objective = ExtractAgents(ObjectiveId.ofInt 1, AllFriendlyAgents, area.Id)
+    let survivor = { Agent.create (agent 0) Friendly area.Cell with Vitals = Alive 1000 }
+    let casualty = { Agent.create (agent 1) Friendly { X = 3; Y = 3 } with Vitals = Dead }
+    let w = missionWorld [| objective |] [||] [| area |] [||] noFailRules [ survivor; casualty ]
+
+    let r = stepIdle w
+    Assert.Equal<ObjectiveId[]>([| ObjectiveId.ofInt 1 |], r.State.CompletedObjectives)
+    Assert.True((agentOf (agent 0) r.State).Extracted)
+    Assert.False((agentOf (agent 1) r.State).Extracted)
+
+[<Fact>]
+let ``ExtractAgents stays satisfied once a required agent has visited the extraction cell (sticky)`` () =
+    let area: Area = { Id = AreaId.ofString "exfil"; Cell = { X = 0; Y = 0 } }
+    let objective = ExtractAgents(ObjectiveId.ofInt 1, AllFriendlyAgents, area.Id)
+    let a = Agent.create (agent 0) Friendly area.Cell
+    let w = missionWorld [| objective |] [||] [| area |] [||] noFailRules [ a ]
+
+    let r1 = stepIdle w
+    Assert.True((agentOf (agent 0) r1.State).Extracted)
+
+    let departed =
+        { r1.State with
+            Agents = r1.State.Agents |> Array.map (fun a -> { a with Position = { X = 5; Y = 5 } }) }
+
+    let r2 = stepIdle departed
+    Assert.True((agentOf (agent 0) r2.State).Extracted)
+    Assert.Equal<ObjectiveId[]>([| ObjectiveId.ofInt 1 |], r2.State.CompletedObjectives)
+
+[<Fact>]
+let ``an empty Objectives array never reaches MissionOutcome.Succeeded`` () =
+    let a = Agent.create (agent 0) Friendly { X = 0; Y = 0 }
+    let w = missionWorld [||] [||] [||] [||] { FailOnFriendlyForceEliminated = true } [ a ]
+    let r = stepIdle w
+    Assert.Equal(InProgress, r.State.MissionOutcome)
+
+[<Fact>]
+let ``every non-Optional objective completing reaches MissionOutcome.Succeeded exactly once`` () =
+    let area: Area = { Id = AreaId.ofString "obs"; Cell = { X = 2; Y = 2 } }
+    let target: StaticTarget = { Id = TargetId.ofString "t"; Cell = { X = 5; Y = 5 } }
+    let extraction: Area = { Id = AreaId.ofString "exfil"; Cell = { X = 0; Y = 0 } }
+
+    let objectives =
+        [| Optional(ReachArea(ObjectiveId.ofInt 1, area.Id)) // never visited -- must not block success
+           DestroyTarget(ObjectiveId.ofInt 2, target.Id, 1)
+           ExtractAgents(ObjectiveId.ofInt 3, AllFriendlyAgents, extraction.Id) |]
+
+    let a = Agent.create (agent 0) Friendly target.Cell
+
+    let w =
+        missionWorld objectives [| area |] [| extraction |] [| target |] noFailRules [ a ]
+
+    // Tick 1: agent 0 is on the target's cell -- DestroyTarget (1 tick) completes.
+    let r1 = stepIdle w
+    Assert.Equal<ObjectiveId[]>([| ObjectiveId.ofInt 2 |], r1.State.CompletedObjectives)
+    Assert.Equal(InProgress, r1.State.MissionOutcome)
+
+    // Tick 2: move to the extraction cell -- ExtractAgents completes, mission succeeds.
+    let atExtraction =
+        { r1.State with
+            Agents = r1.State.Agents |> Array.map (fun a -> { a with Position = extraction.Cell }) }
+
+    let r2 = stepIdle atExtraction
+    Assert.Equal(Succeeded, r2.State.MissionOutcome)
+    Assert.Contains(bodies r2, fun b -> b = MissionSucceeded)
+    Assert.DoesNotContain(ObjectiveId.ofInt 1, r2.State.CompletedObjectives)
+
+    // Tick 3: outcome is one-way -- no further evaluation, no repeated event.
+    let r3 = stepIdle r2.State
+    Assert.Equal(Succeeded, r3.State.MissionOutcome)
+    Assert.DoesNotContain(bodies r3, fun b -> b = MissionSucceeded)
+
+[<Fact>]
+let ``every Friendly agent going non-Alive with FailOnFriendlyForceEliminated reaches MissionOutcome.Failed`` () =
+    let objective = ExtractAgents(ObjectiveId.ofInt 1, AllFriendlyAgents, AreaId.ofString "exfil")
+    let a = { Agent.create (agent 0) Friendly { X = 0; Y = 0 } with Vitals = Alive 1 }
+
+    let rules: ScenarioRules = { FailOnFriendlyForceEliminated = true }
+    let w = missionWorld [| objective |] [||] [||] [||] rules [ a ]
+
+    let downed =
+        { w with
+            Agents = w.Agents |> Array.map (fun a -> { a with Vitals = Dead }) }
+
+    let r = stepIdle downed
+    Assert.Equal(Failed, r.State.MissionOutcome)
+    Assert.Contains(bodies r, fun b -> b = MissionFailed)
+    Assert.DoesNotContain(bodies r, fun b -> b = MissionSucceeded)
+
+    // One-way: a further tick does not re-evaluate or repeat the event.
+    let r2 = stepIdle r.State
+    Assert.Equal(Failed, r2.State.MissionOutcome)
+    Assert.DoesNotContain(bodies r2, fun b -> b = MissionFailed)

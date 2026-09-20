@@ -113,6 +113,14 @@ let private randomCaseGen: Gen<RandomCase> =
               ResupplyAreas = [||]
               Headquarters = None
               Jammers = [||]
+              Objectives = [||]
+              ObjectiveAreas = [||]
+              ExtractionAreas = [||]
+              StaticTargets = [||]
+              Rules = { FailOnFriendlyForceEliminated = false }
+              MissionOutcome = InProgress
+              CompletedObjectives = [||]
+              ObjectiveProgress = [||]
               Random = SplitMix64.create (uint64 seed) }
 
         let! tickCount = Gen.choose (5, 15)
@@ -388,6 +396,14 @@ let private perceptionCaseGen: Gen<RandomCase> =
               ResupplyAreas = [||]
               Headquarters = None
               Jammers = [||]
+              Objectives = [||]
+              ObjectiveAreas = [||]
+              ExtractionAreas = [||]
+              StaticTargets = [||]
+              Rules = { FailOnFriendlyForceEliminated = false }
+              MissionOutcome = InProgress
+              CompletedObjectives = [||]
+              ObjectiveProgress = [||]
               Random = SplitMix64.create (uint64 seed) }
 
         let! tickCount = Gen.choose (5, 15)

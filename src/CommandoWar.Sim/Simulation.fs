@@ -58,6 +58,11 @@ module World =
         (resupplyAreas: Cell[])
         (headquarters: Cell option)
         (jammers: Jammer[])
+        (objectives: Objective[])
+        (objectiveAreas: Area[])
+        (extractionAreas: Area[])
+        (staticTargets: StaticTarget[])
+        (rules: ScenarioRules)
         : Result<WorldState, WorldError> =
         if bounds.Width <= 0 || bounds.Height <= 0 then
             Error(EmptyGrid bounds)
@@ -96,6 +101,14 @@ module World =
                               ResupplyAreas = resupplyAreas
                               Headquarters = headquarters
                               Jammers = jammers
+                              Objectives = objectives
+                              ObjectiveAreas = objectiveAreas
+                              ExtractionAreas = extractionAreas
+                              StaticTargets = staticTargets
+                              Rules = rules
+                              MissionOutcome = InProgress
+                              CompletedObjectives = [||]
+                              ObjectiveProgress = [||]
                               Random = SplitMix64.create seed }
 
     /// Builds a validated world at tick 0 with a SplitMix64 random stream
@@ -104,7 +117,8 @@ module World =
     /// Fails explicitly on an empty grid, duplicate ids, or an agent placed
     /// outside the grid.
     let create (bounds: GridBounds) (seed: uint64) (agents: AgentState list) : Result<WorldState, WorldError> =
-        build bounds (Terrain.empty bounds) seed agents [||] None [||]
+        build bounds (Terrain.empty bounds) seed agents [||] None [||] [||] [||] [||] [||]
+            { FailOnFriendlyForceEliminated = false }
 
     /// Builds the authoritative world at tick 0 from a validated scenario
     /// (docs/04_SIMULATION_SPEC.md section 21). Friendly then enemy deployments
@@ -113,9 +127,9 @@ module World =
     /// terrain layer) becomes `WorldState.Terrain`. Both are handed to the
     /// shared construction core, which owns the empty-grid, duplicate-id, and
     /// in-bounds guards. The scenario's objectives, areas, targets, and rules
-    /// are not consumed here, and no tick phase reads the terrain yet: line of
-    /// sight and pathfinding are out of scope (backlog B-009, B-010) and
-    /// objective evaluation is deferred (B-032).
+    /// are carried onto `WorldState` unchanged (TASK-062, backlog B-032) for
+    /// the Mission phase to evaluate; no tick phase reads the terrain yet:
+    /// line of sight and pathfinding are out of scope (backlog B-009, B-010).
     let ofScenario (scenario: Scenario) (seed: uint64) : Result<WorldState, WorldError> =
         let agents =
             Array.append scenario.FriendlyDeployments scenario.EnemyDeployments
@@ -136,6 +150,11 @@ module World =
             (scenario.ResupplyAreas |> Array.map (fun a -> a.Cell))
             scenario.Headquarters
             scenario.Jammers
+            scenario.Objectives
+            scenario.ObjectiveAreas
+            scenario.ExtractionAreas
+            scenario.StaticTargets
+            scenario.Rules
 
 [<RequireQualifiedAccess>]
 module Setup =
@@ -192,6 +211,15 @@ module Simulation =
           /// (TASK-058, backlog B-016b). Static within a run, the
           /// `ResupplyAreas` precedent.
           Jammers: Jammer[]
+          /// The scenario's authored objectives/areas/targets/rules,
+          /// carried in from the input `WorldState` (TASK-062, backlog
+          /// B-032). Static within a run, the `ResupplyAreas` precedent --
+          /// read by the Mission phase only.
+          Objectives: Objective[]
+          ObjectiveAreas: Area[]
+          ExtractionAreas: Area[]
+          StaticTargets: StaticTarget[]
+          Rules: ScenarioRules
           mutable Agents: AgentState[]
           /// Commands accepted by Command intake this tick and not yet
           /// applied to their recipients, as `(recipient, commandId, body)`
@@ -244,7 +272,12 @@ module Simulation =
           /// "must span every phase, not just StateConsequences's own"
           /// reasoning as `InitialLeader` above, for the `SquadFailure`
           /// latch.
-          InitialFriendlyAlive: bool }
+          InitialFriendlyAlive: bool
+          /// The mission outcome, carried in from the input `WorldState` and
+          /// written by the Mission phase (TASK-062, backlog B-032).
+          mutable MissionOutcome: MissionOutcome
+          mutable CompletedObjectives: ObjectiveId[]
+          mutable ObjectiveProgress: (ObjectiveId * int)[] }
 
     let private emit (body: EventBody) (s: StepState) =
         s.EventsRev <- { Tick = s.Tick; Body = body } :: s.EventsRev
@@ -1870,6 +1903,176 @@ module Simulation =
 
         s.Agents <- agents
 
+    // --- Phase: mission --------------------------------------------------
+    // Realises docs/04 section 12.10 (TASK-062, backlog B-032): "evaluate
+    // objective conditions; emit completion or failure once; prevent
+    // accidental repeated completion events." Runs after State consequences,
+    // so it sees this tick's final `Agents` (post bleed-out/reload/resupply).
+    //
+    // A no-op once `s.MissionOutcome` is not `InProgress` — a one-way
+    // transition, the `Vitals.Dead`/`SquadFailure` "cannot become false
+    // again" precedent generalised to the whole mission outcome.
+    //
+    // Order: (1) update each Friendly agent's sticky `Extracted` flag from
+    // this tick's positions, emitting `AgentExtracted` ascending by agent id;
+    // (2) recursively resolve the objective algebra bottom-up (`AllOf`'s own
+    // completion depends on its parts' completions being resolved first),
+    // advancing `HoldArea`/`DestroyTarget` occupancy counters and marking
+    // newly-satisfied objectives, emitting `ObjectiveCompleted` ascending by
+    // objective id; (3) the friendly-force-eliminated failure check (checked
+    // first, mirroring `stateConsequences`'s own "specific facts, then the
+    // terminal signal" ordering); (4) the success gate: every top-level
+    // `Objectives` entry that is not `Optional` must have its id in
+    // `CompletedObjectives`.
+    let private mission (s: StepState) =
+        if s.MissionOutcome <> InProgress then
+            ()
+        else
+            // --- (1) extraction: sticky per-agent Extracted flag -----------
+            let extractionCells = s.ExtractionAreas |> Array.map (fun a -> a.Cell)
+            let extractedNow = ResizeArray<AgentId>()
+
+            let agents =
+                s.Agents
+                |> Array.map (fun a ->
+                    if
+                        not a.Extracted
+                        && a.Side = Friendly
+                        && Casualty.isAlive a.Vitals
+                        && Array.contains a.Position extractionCells
+                    then
+                        extractedNow.Add a.Id
+                        { a with Extracted = true }
+                    else
+                        a)
+
+            for id in extractedNow |> Seq.sortBy AgentId.value do
+                emit (AgentExtracted id) s
+
+            s.Agents <- agents
+
+            let agentsById = agents |> Array.map (fun a -> a.Id, a) |> Map.ofArray
+
+            let anyAliveFriendlyAt (cell: Cell) : bool =
+                agents |> Array.exists (fun a -> a.Side = Friendly && Casualty.isAlive a.Vitals && a.Position = cell)
+
+            // Resolves against `ObjectiveAreas ++ ExtractionAreas` only. An
+            // objective authored to reference a `ResupplyAreas` id (the
+            // shared `AreaId` namespace `Scenario.validate` allows) would
+            // not resolve here — no authored content does this.
+            let areaCell (id: AreaId) : Cell option =
+                Array.append s.ObjectiveAreas s.ExtractionAreas
+                |> Array.tryPick (fun a -> if a.Id = id then Some a.Cell else None)
+
+            let targetCell (id: TargetId) : Cell option =
+                s.StaticTargets |> Array.tryPick (fun t -> if t.Id = id then Some t.Cell else None)
+
+            // --- (2) recursive objective resolution -------------------------
+            let rec objectiveId (o: Objective) : ObjectiveId =
+                match o with
+                | ReachArea(id, _)
+                | HoldArea(id, _, _)
+                | DestroyTarget(id, _, _)
+                | ExtractAgents(id, _, _)
+                | AllOf(id, _) -> id
+                | Optional inner -> objectiveId inner
+
+            let completed = System.Collections.Generic.HashSet<ObjectiveId>(s.CompletedObjectives)
+            let newlyCompleted = ResizeArray<ObjectiveId>()
+            let progressById = s.ObjectiveProgress |> Map.ofArray
+            let nextProgress = ResizeArray<ObjectiveId * int>()
+
+            let markCompleted (id: ObjectiveId) =
+                if completed.Add id then
+                    newlyCompleted.Add id
+
+            // Any `Alive` `Friendly` agent occupying `cell` this tick
+            // advances `id`'s counter by one; any tick with no qualifying
+            // occupant resets it to 0 (the `Suppression`/`Stress` decay
+            // shape, not sticky) until it reaches `ticks`, at which point
+            // `id` completes. A `0` counter is never stored -- `nextProgress`
+            // (and so `Overlay.MissionStatus`'s sparse-emission check) only
+            // ever carries genuinely nonzero in-progress occupancy.
+            let advanceOccupancy (id: ObjectiveId) (cell: Cell) (ticks: int) =
+                let soFar = progressById |> Map.tryFind id |> Option.defaultValue 0
+                let soFar' = if anyAliveFriendlyAt cell then soFar + 1 else 0
+
+                if soFar' >= ticks then
+                    markCompleted id
+                elif soFar' > 0 then
+                    nextProgress.Add(id, soFar')
+
+            let rec resolve (o: Objective) : unit =
+                let id = objectiveId o
+
+                if not (completed.Contains id) then
+                    match o with
+                    | ReachArea(_, area) ->
+                        match areaCell area with
+                        | Some cell when anyAliveFriendlyAt cell -> markCompleted id
+                        | _ -> ()
+                    | HoldArea(_, area, ticks) ->
+                        areaCell area |> Option.iter (fun cell -> advanceOccupancy id cell ticks)
+                    | DestroyTarget(_, target, ticks) ->
+                        targetCell target |> Option.iter (fun cell -> advanceOccupancy id cell ticks)
+                    | ExtractAgents(_, selection, _) ->
+                        let required =
+                            match selection with
+                            | AllFriendlyAgents -> agents |> Array.filter (fun a -> a.Side = Friendly) |> Array.map (fun a -> a.Id)
+                            | SpecificAgents ids -> ids
+
+                        let satisfied =
+                            required
+                            |> Array.forall (fun rid ->
+                                match Map.tryFind rid agentsById with
+                                | Some a -> not (Casualty.isAlive a.Vitals) || a.Extracted
+                                | None -> true)
+
+                        if satisfied then
+                            markCompleted id
+                    | AllOf(_, parts) ->
+                        for p in parts do
+                            resolve p
+
+                        if parts |> Array.forall (fun p -> completed.Contains(objectiveId p)) then
+                            markCompleted id
+                    | Optional inner -> resolve inner
+
+            for o in s.Objectives do
+                resolve o
+
+            s.CompletedObjectives <- completed |> Seq.sortBy ObjectiveId.value |> Seq.toArray
+            s.ObjectiveProgress <- nextProgress |> Seq.sortBy (fun (id, _) -> ObjectiveId.value id) |> Seq.toArray
+
+            for id in newlyCompleted |> Seq.sortBy ObjectiveId.value do
+                emit (ObjectiveCompleted id) s
+
+            // --- (3)/(4) outcome ---------------------------------------------
+            let friendlyForceEliminated =
+                s.Rules.FailOnFriendlyForceEliminated
+                && not (agents |> Array.exists (fun a -> a.Side = Friendly && Casualty.isAlive a.Vitals))
+
+            // An empty `Objectives` array (every world built via `World.create`
+            // /`Setup.sixAgentWorld`, and every pre-`ScenarioContent.Version` 7
+            // corpus/fixture scenario) authors no win condition at all -- it
+            // must never vacuously succeed (`Array.forall` on an empty array is
+            // `true`), so `MissionOutcome` stays `InProgress` forever for these,
+            // exactly as before this task (Mission was a no-op).
+            let allRequiredComplete =
+                s.Objectives.Length > 0
+                && s.Objectives
+                   |> Array.forall (fun o ->
+                       match o with
+                       | Optional _ -> true
+                       | _ -> completed.Contains(objectiveId o))
+
+            if friendlyForceEliminated then
+                s.MissionOutcome <- Failed
+                emit MissionFailed s
+            elif allRequiredComplete then
+                s.MissionOutcome <- Succeeded
+                emit MissionSucceeded s
+
     // --- Phase: output -----------------------------------------------------
     // Build the render snapshot from authoritative state. Agents are already
     // held in ascending id order; the sort is a cheap defensive guarantee for
@@ -1903,7 +2106,7 @@ module Simulation =
         | Combat -> combat s
         | Output -> output s
         | StateConsequences -> stateConsequences s
-        | Mission -> ()
+        | Mission -> mission s
 
         s.TraceRev <- phase :: s.TraceRev
 
@@ -1933,6 +2136,11 @@ module Simulation =
               ResupplyAreas = state.ResupplyAreas
               Headquarters = state.Headquarters
               Jammers = state.Jammers
+              Objectives = state.Objectives
+              ObjectiveAreas = state.ObjectiveAreas
+              ExtractionAreas = state.ExtractionAreas
+              StaticTargets = state.StaticTargets
+              Rules = state.Rules
               Agents = state.Agents
               PendingCommands = []
               TacticalKnowledge = state.TacticalKnowledge
@@ -1947,7 +2155,10 @@ module Simulation =
               // needs this instead of its own entry-state snapshot.
               InitialLeader = Casualty.currentLeader state.Agents
               InitialFriendlyAlive =
-                state.Agents |> Array.exists (fun a -> a.Side = Friendly && Casualty.isAlive a.Vitals) }
+                state.Agents |> Array.exists (fun a -> a.Side = Friendly && Casualty.isAlive a.Vitals)
+              MissionOutcome = state.MissionOutcome
+              CompletedObjectives = state.CompletedObjectives
+              ObjectiveProgress = state.ObjectiveProgress }
 
         for phase in Phases.order do
             runPhase ordered acc phase
@@ -1958,7 +2169,10 @@ module Simulation =
                 Agents = acc.Agents
                 TacticalKnowledge = acc.TacticalKnowledge
                 HostileTacticalKnowledge = acc.HostileTacticalKnowledge
-                Random = acc.Random }
+                Random = acc.Random
+                MissionOutcome = acc.MissionOutcome
+                CompletedObjectives = acc.CompletedObjectives
+                ObjectiveProgress = acc.ObjectiveProgress }
 
         // Hashing runs strictly after the phase loop. `finalState` is already
         // fully determined; the hash is a read-only checkpoint and no

@@ -16,35 +16,35 @@ See `content/replays/CORPUS.md`.
 | Command log | `wall-detour.cwreplay` |
 | Initial state | Corpus wall-detour scenario (12 x 9, seed 20260904) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0x030D633EA769BBE6` |
-| Final hash (tick 24) | `0x588D1B76BC421D09` |
+| Initial hash (tick 0) | `0x8789C9DBCF895C69` |
+| Final hash (tick 24) | `0x753BB46D5A6365EC` |
 | Domain events | 22 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x0DBAB0594E1171AA` |
-|    2 | `0x9C94EA9CCC2855F8` |
-|    3 | `0xF64C60A537E28A4A` |
-|    4 | `0x095B6E6A873DC4AA` |
-|    5 | `0x878B1DFB66AC4866` |
-|    6 | `0x0F2F1F6EFC9229B6` |
-|    7 | `0x16CEA4DAA669E5C2` |
-|    8 | `0x4E20BE67ED128944` |
-|    9 | `0xA4410377E4557D72` |
-|   10 | `0x59E0F231CE8EA390` |
-|   11 | `0xAF36D885CC2C1FBE` |
-|   12 | `0xAEBEAF6E28441F10` |
-|   13 | `0x8C5DDE81F6625DE2` |
-|   14 | `0x33EC0F5929A5D580` |
-|   15 | `0xB4CB8B27A0C18052` |
-|   16 | `0x893576EA7E89E104` |
-|   17 | `0x4D1EE6E0C9B72F2A` |
-|   18 | `0x3DF26B3F9C928E6B` |
-|   19 | `0x76C817D46504A826` |
-|   20 | `0x4613AD556D6C342D` |
-|   21 | `0x07FCAE8CA17FAD08` |
-|   22 | `0x3086C6022152AC57` |
-|   23 | `0x5AA993C0B219DA12` |
-|   24 | `0x588D1B76BC421D09` |
+|    1 | `0x43F7F434BFD77319` |
+|    2 | `0x8EFAD984BDF44C4B` |
+|    3 | `0x1343412B6A6ADC01` |
+|    4 | `0xA26754BB6B0AC2D1` |
+|    5 | `0x5CBFC8E6BE0F012D` |
+|    6 | `0xB7DCC6C70C8080F5` |
+|    7 | `0xC3349F0D235AF741` |
+|    8 | `0x254095F7EC8509FF` |
+|    9 | `0x0446BFCB33CF30B1` |
+|   10 | `0x6002111AF76E55B3` |
+|   11 | `0x1D01934AA0804E25` |
+|   12 | `0xDBB8BF6EAD250903` |
+|   13 | `0x922BB480437FB359` |
+|   14 | `0x12F26668860A146B` |
+|   15 | `0x584C144749FB0721` |
+|   16 | `0xADB3AF007537AF0F` |
+|   17 | `0x175B36B7B34C28A9` |
+|   18 | `0x47164426C8BCB912` |
+|   19 | `0x51AA8A0ACDD09421` |
+|   20 | `0x236212B3622B5DB8` |
+|   21 | `0x742BA7602B610CE7` |
+|   22 | `0xDB4CFF8394A56556` |
+|   23 | `0x8F4D8EC991EC7DE5` |
+|   24 | `0x753BB46D5A6365EC` |

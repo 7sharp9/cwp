@@ -53,7 +53,8 @@ overlays:
   ammo (5,0): agent 1  ammo 25/reserve 90
   ammo (0,3): agent 2  ammo 25/reserve 90
   ammo (5,3): agent 3  ammo 27/reserve 90
+  mission: failed
 
 events: contact-expired@(0,3); contact-expired@(5,0)
 
-tick 65 | hash 0x99E04CA6BA623140 (format 12) | draws 17 | agents 4 | cover-edges 0 | events 2
+tick 65 | hash 0x3139C4A44AB28D65 (format 13) | draws 17 | agents 4 | cover-edges 0 | events 2

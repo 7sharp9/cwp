@@ -332,6 +332,20 @@ module AppraisalDemo =
                         resolved.X
                         resolved.Y
                 )
+            | MissionStatus(outcome, completed, inProgress) ->
+                // TASK-062: not yet surfaced in this disposable P3 demo (it
+                // predates the task); reaching the demo's objective takes far
+                // more than the one committed tick, so this never fires for
+                // the committed frame.
+                unhandled.Add(
+                    sprintf
+                        "mission %A completed=%s in-progress=%s"
+                        outcome
+                        (completed |> Array.map (ObjectiveId.value >> string) |> String.concat ",")
+                        (inProgress
+                         |> Array.map (fun (id, ticks) -> sprintf "%d:%d" (ObjectiveId.value id) ticks)
+                         |> String.concat ",")
+                )
 
         { Tick = frame.Tick
           Width = frame.Bounds.Width

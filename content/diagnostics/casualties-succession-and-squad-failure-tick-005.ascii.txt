@@ -67,7 +67,8 @@ overlays:
   ammo (5,0): agent 1  ammo 25/reserve 90
   ammo (0,3): agent 2  ammo 25/reserve 90
   ammo (5,3): agent 3  ammo 27/reserve 90
+  mission: failed
 
-events: shot-fired-hit; agent-incapacitated@(0,3); shot-fired-hit; agent-incapacitated@(5,0); leadership-transferred; squad-failure
+events: shot-fired-hit; agent-incapacitated@(0,3); shot-fired-hit; agent-incapacitated@(5,0); leadership-transferred; squad-failure; mission-failed
 
-tick 5 | hash 0xCBA7396B183853BC (format 12) | draws 17 | agents 4 | cover-edges 0 | events 6
+tick 5 | hash 0x7D37DD758DF2B41B (format 13) | draws 17 | agents 4 | cover-edges 0 | events 7

@@ -38,7 +38,7 @@ let private goodRaw () : RawScenario =
              Kind = "destroy"
              AreaRef = ""
              TargetRef = "bridge"
-             HoldTicks = 0
+             HoldTicks = 5
              ExtractAgentIds = [||]
              IsOptional = true }
            { Id = 3
@@ -105,17 +105,19 @@ let private errorsOf (raw: RawScenario) : ScenarioError list =
 [<Fact>]
 let ``the content version is independent of the canonical and replay versions`` () =
     // The three version constants move independently: ScenarioContent.Version
-    // is 6 (TASK-010 authored terrain layer; TASK-047 ResupplyAreas;
+    // is 7 (TASK-010 authored terrain layer; TASK-047 ResupplyAreas;
     // TASK-049 unit types; TASK-058 Headquarters/Jammers; TASK-059
-    // formations), Canonical.FormatVersion is 12 (TASK-018 / TASK-026 /
-    // TASK-028 / TASK-032 / TASK-033 / TASK-034 / TASK-037 / TASK-044 /
-    // TASK-045 / TASK-047 / TASK-058 -- TASK-049's MoveSpeed and TASK-058's
+    // formations; TASK-062 destroy's HoldTicks validation), Canonical.
+    // FormatVersion is bumped by TASK-062 (TASK-018 / TASK-026 / TASK-028 /
+    // TASK-032 / TASK-033 / TASK-034 / TASK-037 / TASK-044 / TASK-045 /
+    // TASK-047 / TASK-058 / TASK-062 -- TASK-049's MoveSpeed and TASK-058's
     // Headquarters/Jammers and TASK-059's FormationOffset are all static,
     // excluded, so none of them move this one; RadioDestroyed/
-    // PendingDelivery do), Replay.FormatVersion is 1. This test documents
-    // the intent, not an inequality.
-    Assert.Equal(6, ScenarioContent.Version)
-    Assert.Equal(12, Canonical.FormatVersion)
+    // PendingDelivery/MissionOutcome/CompletedObjectives/ObjectiveProgress/
+    // Extracted do), Replay.FormatVersion is 1. This test documents the
+    // intent, not an inequality.
+    Assert.Equal(7, ScenarioContent.Version)
+    Assert.Equal(13, Canonical.FormatVersion)
     Assert.Equal(1, Replay.FormatVersion)
 
 // --- the happy path -------------------------------------------------
@@ -169,6 +171,28 @@ let ``an optional objective keeps its Optional wrapper`` () =
     )
 
 [<Fact>]
+let ``a destroy objective carries its authored HoldTicks as the plant duration`` () =
+    let s = validated (goodRaw ())
+
+    Assert.True(
+        s.Objectives
+        |> Array.exists (function
+            | Optional(DestroyTarget(_, _, ticks)) -> ticks = 5
+            | _ -> false)
+    )
+
+[<Fact>]
+let ``a destroy objective with non-positive HoldTicks is a typed error, no silent default`` () =
+    let raw =
+        { goodRaw () with
+            Objectives = [| { objective 2 "destroy" with TargetRef = "bridge"; HoldTicks = 0 } |] }
+
+    Assert.Contains(NonPositivePlantTicks(2, 0), errorsOf raw)
+
+    let s = validated { raw with Objectives = [| { objective 2 "destroy" with TargetRef = "bridge"; HoldTicks = 5 } |] }
+    Assert.Equal(1, s.Objectives.Length)
+
+[<Fact>]
 let ``an extraction with no listed agents validates to AllFriendlyAgents`` () =
     let raw =
         { goodRaw () with
@@ -189,13 +213,13 @@ let ``an extraction with no listed agents validates to AllFriendlyAgents`` () =
 
 [<Fact>]
 let ``an unsupported content version is a typed error`` () =
-    Assert.Contains(UnsupportedContentVersion(99, 6), errorsOf { goodRaw () with ContentVersion = 99 })
+    Assert.Contains(UnsupportedContentVersion(99, 7), errorsOf { goodRaw () with ContentVersion = 99 })
 
 [<Fact>]
 let ``a version-1 scenario is rejected, not migrated`` () =
     // ScenarioContent.Version 1 predates the authored terrain layer. The
     // validator does not migrate it (docs/04 section 16).
-    Assert.Contains(UnsupportedContentVersion(1, 6), errorsOf { goodRaw () with ContentVersion = 1 })
+    Assert.Contains(UnsupportedContentVersion(1, 7), errorsOf { goodRaw () with ContentVersion = 1 })
 
 [<Fact>]
 let ``a blank scenario id is reported`` () =
@@ -332,7 +356,7 @@ let ``a missing required marker is reported for each of the three kinds`` () =
 let ``validation reports every fault in one pass`` () =
     let raw =
         { goodRaw () with
-            ContentVersion = 7
+            ContentVersion = 8
             EnemyDeployments = [| { AgentId = 1; Cell = { X = 99; Y = 99 }; CommunicationAvailable = true; Discipline = AppraisalConfig.DisciplineDefault; UnitType = "standard"; FormationId = ""; SlotIndex = 0 } |]
             Objectives = [| objective 2 "orbit" |]
             TerrainLayer =
@@ -341,7 +365,7 @@ let ``validation reports every fault in one pass`` () =
                         Cover = [| { Cell = { X = 40; Y = 40 }; Direction = "up"; Level = -1 } |] } }
 
     let es = errorsOf raw
-    Assert.Contains(UnsupportedContentVersion(7, 6), es)
+    Assert.Contains(UnsupportedContentVersion(8, 7), es)
     Assert.Contains(DuplicateDeploymentId 1, es)
     Assert.Contains(DeploymentOutOfMap(1, { X = 99; Y = 99 }, { Width = 16; Height = 16 }), es)
     Assert.Contains(UnknownObjectiveKind(2, "orbit"), es)
@@ -863,8 +887,14 @@ let ``a deployment's SlotIndex outside its formation's slot count is reported`` 
 
 /// The shared spike fixture (src/CommandoWar.Headless/Fixture.fs,
 /// content/fixtures/SPIKE-FIXTURE.md) expressed as an authored scenario. The
-/// token objective and extraction area exist only to satisfy the required
-/// markers; World.ofScenario reads neither, so they cannot affect the hash.
+/// extraction area is never reached (agent 3's own MoveTo target, (20,14),
+/// is the objective area, not the extraction area at (0,0)) and so never
+/// affects the hash. The `reach observation` objective, however, DOES now
+/// affect it (TASK-062, backlog B-032): agent 3 reaches (20,14) at tick 31
+/// (SPIKE-FIXTURE.md's own math), which is that objective's own area, so
+/// `Simulation.mission` completes it and `MissionOutcome` becomes
+/// `Succeeded` the same tick -- both pinned hashes below reflect this real
+/// behaviour, not just Canonical.FormatVersion's byte-layout change.
 let private fixtureScenario () : Scenario =
     { ContentVersion = ScenarioContent.Version
       Id = "spike-fixture"
@@ -889,7 +919,7 @@ let private fixtureScenario () : Scenario =
 let ``the six-agent fixture as a Scenario reproduces the pinned initial hash`` () =
     match World.ofScenario (fixtureScenario ()) Fixture.Seed with
     | Error e -> Assert.Fail($"World.ofScenario failed: {e}")
-    | Ok world -> Assert.Equal(0xB25FE816BCB67A11UL, (Hashing.hash world).Value)
+    | Ok world -> Assert.Equal(0xC0A53D46AE5D7C80UL, (Hashing.hash world).Value)
 
 [<Fact>]
 let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the pinned final hash`` () =
@@ -907,4 +937,9 @@ let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the
         let cmds = if tick = Fixture.CommandIssueTick then [| command |] else [||]
         state <- (Simulation.step SimConfig.standard cmds state).State
 
-    Assert.Equal(0x0A822498317E0958UL, (Hashing.hash state).Value)
+    // TASK-062 (backlog B-032): agent 3 arrives at tick 31, completing the
+    // scenario's own `reach observation` objective and reaching
+    // `MissionOutcome = Succeeded` the same tick -- see fixtureScenario's
+    // own doc comment.
+    Assert.Equal(Succeeded, state.MissionOutcome)
+    Assert.Equal(0xA2E8ACEB6116A803UL, (Hashing.hash state).Value)

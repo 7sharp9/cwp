@@ -881,9 +881,47 @@ is static authored scenario data (`Scenario.ResupplyAreas`), excluded from
 
 ### 12.10 Mission
 
-- evaluate objective conditions;
-- emit completion or failure once;
-- prevent accidental repeated completion events.
+Realised by TASK-062 (backlog B-032). Runs after State consequences, against
+this tick's final `Agents`; a no-op once `WorldState.MissionOutcome` is not
+`InProgress` (a one-way transition, the `Vitals.Dead`/`SquadFailure`
+"cannot become false again" precedent generalised to the whole mission).
+
+- **evaluate objective conditions**: every Friendly agent's sticky
+  `AgentState.Extracted` flag is updated first (`Alive` on an authored
+  `WorldState.ExtractionAreas` cell, emitting `AgentExtracted` once, on the
+  transition); then the scenario's `Objectives` algebra is resolved
+  recursively, bottom-up (`AllOf`'s own completion depends on its parts'):
+  `ReachArea` completes the instant a qualifying agent occupies its area;
+  `HoldArea`/`DestroyTarget` advance a per-objective consecutive-tick
+  occupancy counter (`WorldState.ObjectiveProgress`, the `Suppression`/
+  `Stress` decay shape — reset to 0, not sticky, on a tick with no
+  qualifying occupant) until it reaches the authored tick count;
+  `ExtractAgents` completes once every required, still-Alive agent's own
+  `Extracted` flag is `true` (a `Dead`/`Incapacitated` agent is excluded
+  from the requirement, not a blocker); `Optional` tracks/completes exactly
+  like its wrapped objective, using the same id, but never gates success;
+- **emit completion or failure once**: a newly-satisfied objective's id is
+  added to `WorldState.CompletedObjectives` and `ObjectiveCompleted` is
+  emitted, ascending by `ObjectiveId`. Failure is checked first: every
+  Friendly agent non-`Alive` and `ScenarioRules.
+  FailOnFriendlyForceEliminated` (re-derived from `WorldState.Agents`, the
+  same computation `StateConsequences`'s own signal-only `SquadFailure`
+  event already makes) sets `MissionOutcome = Failed` and emits
+  `MissionFailed`. Otherwise, the success gate — every non-`Optional`
+  top-level `Objectives` entry has its id in `CompletedObjectives` (vacuously
+  false for an empty `Objectives` array: no win condition authored means
+  never won) — sets `MissionOutcome = Succeeded` and emits
+  `MissionSucceeded`;
+- **prevent accidental repeated completion events**: `CompletedObjectives`
+  is sticky (an id, once added, is never removed) and `MissionOutcome` is a
+  one-way latch, so every event above fires at most once per run.
+
+`WorldState.Objectives`/`.ObjectiveAreas`/`.ExtractionAreas`/
+`.StaticTargets`/`.Rules` are static authored scenario data (the
+`ResupplyAreas`/`Headquarters`/`Jammers` precedent) — excluded from
+`Canonical.encode`. `AgentState.Extracted`, `WorldState.MissionOutcome`,
+`.CompletedObjectives`, and `.ObjectiveProgress` are genuine per-tick
+canonical state (`Canonical.FormatVersion` 12 -> 13).
 
 ### 12.11 Output
 
@@ -1248,10 +1286,12 @@ objective algebra, objective, extraction, and resupply areas, static
 targets, an authored unit-type table, scenario-wide rules, and an optional
 authored terrain layer (TASK-010; elevation, passability and movement cost,
 opacity, directional low cover). Line of sight and pathfinding are still not
-part of it (sections 8 to 9; backlog B-009, B-010), and objective evaluation
-and mission success/failure are deferred (backlog B-032) so the objective
-algebra is a data-only type at this stage; the terrain grid the layer
-produces is likewise not consumed by any tick phase. `ResupplyAreas`
+part of it (sections 8 to 9; backlog B-009, B-010). Objective evaluation and
+mission success/failure are realised by TASK-062 (backlog B-032; section
+12.10) — `Objectives`, `ObjectiveAreas`, `ExtractionAreas`, `StaticTargets`,
+and `Rules` are carried onto `WorldState` by `World.ofScenario` and consumed
+by the Mission phase; the terrain grid the layer produces is still not
+consumed by any tick phase. `ResupplyAreas`
 (TASK-047, backlog B-030 proper; `ScenarioContent.Version` 2 -> 3) is the
 first authored area type an actual phase consumes:
 `Simulation.stateConsequences`'s ammo-resupply check (12.9). `UnitTypes`

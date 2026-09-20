@@ -98,6 +98,7 @@ let private describeScenarioError (e: ScenarioError) : string =
         $"agent {agent} references unknown formation '{formationId}'"
     | DeploymentSlotIndexOutOfRange(agent, formationId, slotIndex, slotCount) ->
         $"agent {agent} slot index {slotIndex} is outside formation '{formationId}''s {slotCount} slot(s)"
+    | NonPositivePlantTicks(objective, value) -> $"objective {objective} has non-positive plant ticks {value}"
 
 let private agentLine (a: AgentState) =
     let dest =

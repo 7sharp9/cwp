@@ -16,17 +16,17 @@ See `content/replays/CORPUS.md`.
 | Command log | `reissued-order.cwreplay` |
 | Initial state | Corpus reissued-order scenario (16 x 9, seed 20260904, 1 friendly) |
 | Tick count | 6 |
-| Initial hash (tick 0) | `0xE41A049099D00AA9` |
-| Final hash (tick 6) | `0xC874DE39072A96B8` |
+| Initial hash (tick 0) | `0xF9935653B2A16284` |
+| Final hash (tick 6) | `0xDDE755946CC08F7B` |
 | Domain events | 12 |
 
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0x0C438E0F1BECAF1B` |
-|    2 | `0xC8AEA7EA4909E04D` |
-|    3 | `0xEFC98EDAD9EF646E` |
-|    4 | `0x6C4B3A0E2D9867FC` |
-|    5 | `0x9B90D394D898A1B6` |
-|    6 | `0xC874DE39072A96B8` |
+|    1 | `0x6194C8F56DC0705E` |
+|    2 | `0x17632F4197AA58A4` |
+|    3 | `0x6DAE6C38FE4BC185` |
+|    4 | `0x5EFC091FF5381E07` |
+|    5 | `0x8ED445317C36DEBD` |
+|    6 | `0xDDE755946CC08F7B` |

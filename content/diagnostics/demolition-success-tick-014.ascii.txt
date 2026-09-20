@@ -1,0 +1,34 @@
+# CommandoWar diagnostic frame
+tick 14
+
+              11
+    012345678901
+  0 ..........@.
+  1 ............
+  2 ............
+
+cover edges (N/E/S/W per cell, * for more than one):
+    012345678901
+  0 ............
+  1 ............
+  2 ............
+
+legend:
+  @ friendly agent   X hostile agent
+  # impassable        o opaque (passable)
+  1-9 elevation       . open flat ground
+movement-cost: uniform
+
+agents:
+  agent 0  friendly  (10,0)  at rest
+
+overlays:
+  order appraisal (10,0): agent 0  accepted
+  commitment (10,0): agent 0  holding
+  vitals (10,0): agent 0  alive 1000/1000
+  squad leader: agent 0
+  mission: succeeded  completed 1,2
+
+events: movement-stepped@(9,0),(10,0); movement-completed@(10,0); agent-extracted; objective-completed:2; mission-succeeded
+
+tick 14 | hash 0x36E7D9658C65FF8F (format 13) | draws 0 | agents 1 | cover-edges 0 | events 5

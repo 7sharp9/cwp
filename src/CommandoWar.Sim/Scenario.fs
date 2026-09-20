@@ -29,17 +29,12 @@ namespace CommandoWar.Sim
 [<Struct>]
 type ScenarioId = private ScenarioId of string
 
-/// Identifies one objective within a scenario.
-[<Struct>]
-type ObjectiveId = private ObjectiveId of int
-
-/// Identifies one authored area (an objective area or an extraction area).
-[<Struct>]
-type AreaId = private AreaId of string
-
-/// Identifies one authored static target.
-[<Struct>]
-type TargetId = private TargetId of string
+// `ObjectiveId`, `AreaId`, and `TargetId` (and their smart-constructor
+// modules) moved to `Domain.fs` by TASK-062 (backlog B-032), the `Jammer`/
+// `QueueMode` precedent: `WorldState` needs to carry `Objective`/`Area`/
+// `StaticTarget` values (threaded by `World.ofScenario`), and `Domain.fs`
+// compiles before `Scenario.fs`, so the types those reference cannot live
+// here.
 
 [<RequireQualifiedAccess>]
 module ScenarioId =
@@ -53,45 +48,6 @@ module ScenarioId =
 
     /// The underlying string. For diagnostics and content round-tripping only.
     let value (ScenarioId v) : string = v
-
-[<RequireQualifiedAccess>]
-module ObjectiveId =
-
-    /// Creates an objective id from a non-negative integer.
-    let ofInt (value: int) : ObjectiveId =
-        if value < 0 then
-            invalidArg (nameof value) "ObjectiveId must be non-negative"
-
-        ObjectiveId value
-
-    /// The underlying integer. For explicit ordering and diagnostics only.
-    let value (ObjectiveId v) : int = v
-
-[<RequireQualifiedAccess>]
-module AreaId =
-
-    /// Creates an area id from a non-blank string.
-    let ofString (value: string) : AreaId =
-        if System.String.IsNullOrWhiteSpace value then
-            invalidArg (nameof value) "AreaId must not be blank"
-
-        AreaId value
-
-    /// The underlying string. For diagnostics and content round-tripping only.
-    let value (AreaId v) : string = v
-
-[<RequireQualifiedAccess>]
-module TargetId =
-
-    /// Creates a target id from a non-blank string.
-    let ofString (value: string) : TargetId =
-        if System.String.IsNullOrWhiteSpace value then
-            invalidArg (nameof value) "TargetId must not be blank"
-
-        TargetId value
-
-    /// The underlying string. For diagnostics and content round-tripping only.
-    let value (TargetId v) : string = v
 
 /// The authored-scenario content-format version.
 ///
@@ -119,13 +75,19 @@ module TargetId =
 /// `Deployment.FormationOffset` / `AgentState.FormationOffset` -- a blank
 /// `FormationId` (every deployment authored before this task) opts that
 /// agent out, the `UnitTypes` precedent's "no silent default" applying only
-/// to a *non-blank* reference. A version-1-through-5 scenario is rejected,
+/// to a *non-blank* reference. Version 7 (TASK-062, backlog B-032) added a
+/// validation rule, not a new authored field: a `"destroy"` `RawObjective`
+/// now requires `HoldTicks > 0` (`NonPositivePlantTicks`) -- the column
+/// already exists on every objective line (previously "ignored otherwise"
+/// for this kind) and is reused as the demolition charge's fixed plant
+/// duration, `Objective.DestroyTarget`'s own doc comment's long-planned
+/// "fixed-duration plant" step. A version-1-through-6 scenario is rejected,
 /// not migrated (`docs/04` section 16: "does not guess migrations").
 [<RequireQualifiedAccess>]
 module ScenarioContent =
 
     [<Literal>]
-    let Version = 6
+    let Version = 7
 
 // --- validated model ---------------------------------------------------
 
@@ -172,42 +134,9 @@ type Deployment =
       /// `World.ofScenario` and never mutated during a run.
       FormationOffset: Cell option }
 
-/// A named point of interest: an objective area or an extraction area. The
-/// slice needs a single cell per area; a rectangular region is a later
-/// refinement if the mission proves the need.
-type Area = { Id: AreaId; Cell: Cell }
-
-/// A static objective target: the bridge, a machine-gun position. A single
-/// cell; destruction state is deferred with combat (B-019).
-type StaticTarget = { Id: TargetId; Cell: Cell }
-
-/// Which agents an extraction objective requires (docs/07 section 3,
-/// "surviving required personnel").
-type AgentSelection =
-    | AllFriendlyAgents
-    | SpecificAgents of AgentId[]
-
-/// The Bridgehead objective algebra (docs/06 section 3, docs/07 section 3).
-///
-/// EVALUATION IS DEFERRED (backlog B-032). Nothing in the simulation reads
-/// this type yet; it exists so authored content can express the mission
-/// shape. The slice's mission is the implicit "all of" a scenario's
-/// `Objectives` array; `AllOf` / `Optional` are in the algebra for nested
-/// composition when a later task needs them. The bridge-demolition
-/// interaction is `ReachArea` then a fixed-duration plant (a later task) then
-/// `DestroyTarget`; there is no general interaction scripting language.
-type Objective =
-    | ReachArea of objective: ObjectiveId * area: AreaId
-    | HoldArea of objective: ObjectiveId * area: AreaId * ticks: int
-    | DestroyTarget of objective: ObjectiveId * target: TargetId
-    | ExtractAgents of objective: ObjectiveId * agents: AgentSelection * area: AreaId
-    | AllOf of objective: ObjectiveId * parts: Objective[]
-    | Optional of Objective
-
-/// Scenario-wide rules. Evaluation is deferred with the mission task (B-032);
-/// this is data only. One field, exercised by the slice's squad-loss failure
-/// condition (docs/07 section 9, criterion 7).
-type ScenarioRules = { FailOnFriendlyForceEliminated: bool }
+// `Area`, `StaticTarget`, `AgentSelection`, `Objective`, and `ScenarioRules`
+// moved to `Domain.fs` by TASK-062 (backlog B-032) alongside `ObjectiveId`/
+// `AreaId`/`TargetId` — see the note above.
 
 /// A validated authored scenario.
 ///
@@ -433,6 +362,12 @@ type ScenarioError =
     | ObjectiveReferencesMissingTarget of objective: int * target: string
     | ExtractionSelectsUnknownAgent of objective: int * agent: int
     | MissingRequiredMarker of marker: string
+    /// A `"destroy"` `RawObjective` whose `HoldTicks` is `<= 0` (TASK-062,
+    /// backlog B-032, `ScenarioContent.Version` 7). A non-positive plant
+    /// duration would either complete instantly (no plant at all) or never
+    /// complete -- neither has a meaning, the `NonPositiveUnitTypeMoveSpeed`
+    /// precedent.
+    | NonPositivePlantTicks of objective: int * value: int
     // --- terrain layer (ScenarioContent.Version 2, TASK-010) ---
     | TerrainLayerDimensionsMismatch of layer: GridBounds * map: GridBounds
     | TerrainFeatureOutOfMap of cell: Cell * bounds: GridBounds
@@ -718,11 +653,17 @@ module Scenario =
                 else
                     report (ObjectiveReferencesMissingArea(o.Id, o.AreaRef))
             | "destroy" ->
-                if knownTargetIds.Contains o.TargetRef then
-                    if idOk then
-                        built.Add(wrap (DestroyTarget(ObjectiveId.ofInt o.Id, TargetId.ofString o.TargetRef)))
-                else
+                let targetKnown = knownTargetIds.Contains o.TargetRef
+                let ticksOk = o.HoldTicks > 0
+
+                if not targetKnown then
                     report (ObjectiveReferencesMissingTarget(o.Id, o.TargetRef))
+
+                if not ticksOk then
+                    report (NonPositivePlantTicks(o.Id, o.HoldTicks))
+
+                if targetKnown && ticksOk && idOk then
+                    built.Add(wrap (DestroyTarget(ObjectiveId.ofInt o.Id, TargetId.ofString o.TargetRef, o.HoldTicks)))
             | "extract" ->
                 let areaKnown = knownAreaIds.Contains o.AreaRef
 

@@ -56,6 +56,10 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `casualties-succession-and-squad-failure-tick-065.svg` | SVG of the same frame: four black crosses, no agent circles, no `SquadLeadership` ring. |
 | `formation-slots-tick-001.ascii.txt` | The `content/replays/formation-slots` corpus entry (TASK-059, backlog B-011d) at tick 1: both agents' `MoveTo(5,5)` order is accepted; agent 0 (slot 0, offset `(-1,0)`) resolves to `(4,5)` and agent 1 (slot 1, offset `(1,0)`) resolves to `(6,5)` instead of both aiming for the literal `(5,5)`. The overlays section carries one `formation slot (x,y): agent N  -> (x',y')` line per agent. |
 | `formation-slots-tick-001.svg` | SVG of the same frame: each agent's resolved slot destination as a small teal diamond, connected to its current position by a thin dashed line. |
+| `demolition-success-tick-003.ascii.txt` | The `content/replays/demolition-success` corpus entry (TASK-062, backlog B-032) at tick 3: agent 0 has just arrived on the `charge` target's cell, one tick into the authored 2-tick plant. `Diagnostics.frameOf` derives a sparse `MissionStatus` overlay only once there is something to show; the overlays section carries `mission: in-progress  in-progress 1:1`. |
+| `demolition-success-tick-003.svg` | SVG of the same frame: the footer's extra `mission: ...` line (the `Divergence`-footer precedent — no single cell to anchor a mission-wide summary on). |
+| `demolition-success-tick-014.ascii.txt` | The same corpus entry at tick 14: agent 0 has reached the `exit` extraction area, completing `ExtractAgents` on top of the already-completed `DestroyTarget` — `WorldState.MissionOutcome` reaches `Succeeded` this tick. The overlays section carries `mission: succeeded  completed 1,2` and the events line carries `agent-extracted`, `objective-completed:2`, and `mission-succeeded`. |
+| `demolition-success-tick-014.svg` | SVG of the same frame: the footer's `mission: succeeded ...` line. |
 
 ## Regeneration
 
@@ -90,7 +94,8 @@ $R render path $PATHS --format svg   --out content/diagnostics/path.svg
 `canonical-refusal-and-correction-tick-008.*`,
 `order-queue-stacking-and-cancellation-tick-001.*`,
 `casualties-succession-and-squad-failure-tick-005.*` /
-`-tick-065.*`, and `formation-slots-tick-001.*` are not produced by the
+`-tick-065.*`, `formation-slots-tick-001.*`, and
+`demolition-success-tick-003.*` / `-tick-014.*` are not produced by the
 `render` verb: each entry's initial state is corpus-owned (`Corpus.all`),
 not the shared fixture or demo scenario `render` knows about. All are
 regenerated the same way — `DiagnosticRender.runFrames` over the named

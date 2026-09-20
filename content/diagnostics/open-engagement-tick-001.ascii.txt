@@ -56,4 +56,4 @@ overlays:
 
 events: contact-observed@(7,2); contact-observed@(2,2); shot-fired-miss; shot-fired-hit
 
-tick 1 | hash 0xAF16C385EDFAFB40 (format 12) | draws 2 | agents 2 | cover-edges 0 | events 4
+tick 1 | hash 0x086AC62B49D205FD (format 13) | draws 2 | agents 2 | cover-edges 0 | events 4

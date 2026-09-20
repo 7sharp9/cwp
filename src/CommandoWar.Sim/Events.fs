@@ -209,6 +209,33 @@ type EventBody =
     /// agent happens to stand on the cell — the `Suppression`/`Stress`
     /// silent-decay precedent for avoiding every-tick no-op spam.
     | AgentResupplied of agent: AgentId
+    /// `agent` became sticky-extracted this tick (TASK-062, backlog B-032):
+    /// the first tick it was `Alive` on an authored `WorldState.
+    /// ExtractionAreas` cell. Emitted once, on the transition — the
+    /// `AgentResupplied` precedent. Emitted by the Mission phase.
+    | AgentExtracted of agent: AgentId
+    /// `objective` was satisfied for the first time this tick (TASK-062,
+    /// backlog B-032; docs/04 section 12.10's "emit completion ... once;
+    /// prevent accidental repeated completion events"). Emitted for both a
+    /// required and an `Optional`-wrapped objective — this event reports
+    /// completion, not mission-gating. Emitted by the Mission phase.
+    | ObjectiveCompleted of objective: ObjectiveId
+    /// Every non-`Optional` top-level `WorldState.Objectives` entry has been
+    /// satisfied (TASK-062, backlog B-032). Emitted at most once per run,
+    /// the tick `WorldState.MissionOutcome` first becomes `Succeeded` — a
+    /// one-way transition, never emitted again afterward. Mutually
+    /// exclusive with `MissionFailed` within a run. Emitted by the Mission
+    /// phase, after `StateConsequences`'s own `SquadFailure`.
+    | MissionSucceeded
+    /// Every `Friendly` agent is non-`Alive` and the scenario authored
+    /// `ScenarioRules.FailOnFriendlyForceEliminated = true` (TASK-062,
+    /// backlog B-032) — the "signal event only" `SquadFailure` (emitted the
+    /// same tick by `StateConsequences`) consumed into an actual mission
+    /// outcome, as that event's own doc comment named as B-032's job.
+    /// Emitted at most once per run, the tick `WorldState.MissionOutcome`
+    /// first becomes `Failed`. Mutually exclusive with `MissionSucceeded`.
+    /// Emitted by the Mission phase.
+    | MissionFailed
 
 /// An immutable domain event tagged with the tick it occurred on. Within a
 /// single step, events are emitted in a stable order:
@@ -248,16 +275,24 @@ type EventBody =
 ///      transition — mutually exclusive per agent per tick, `Ammo.fs`'s own
 ///      "resupply short-circuits reload" rule), then at most one
 ///      `LeadershipTransferred` (a squad-wide fact, not per-agent — no
-///      ordering to pick), then at most one `SquadFailure`.
+///      ordering to pick), then at most one `SquadFailure`;
+///   9. mission outcomes (TASK-062, backlog B-032; from the Mission phase,
+///      runs after State consequences, a no-op once `WorldState.
+///      MissionOutcome` is not `InProgress`): every `AgentExtracted` this
+///      tick ascending agent id, then every `ObjectiveCompleted` this tick
+///      ascending objective id, then at most one of `MissionSucceeded` /
+///      `MissionFailed` (failure checked first).
 /// The order follows `Phases.order` (Command intake, Communication,
 /// Perception, Tactical knowledge, Appraisal, Commitment and local action,
-/// Navigation and movement, Combat, State consequences), so a contact is
-/// observed at its start-of-tick position, an order is appraised against
-/// this tick's tactical picture, a commitment begins or ends the same tick
-/// its order is appraised, a delivered-and-accepted order takes effect the
-/// same tick, a shot is resolved against this tick's post-movement
-/// positions, and casualty/leadership/squad-failure consequences are
-/// resolved last, after that shot's own `Suppression` gain and decay.
+/// Navigation and movement, Combat, State consequences, Mission), so a
+/// contact is observed at its start-of-tick position, an order is appraised
+/// against this tick's tactical picture, a commitment begins or ends the
+/// same tick its order is appraised, a delivered-and-accepted order takes
+/// effect the same tick, a shot is resolved against this tick's
+/// post-movement positions, casualty/leadership/squad-failure consequences
+/// are resolved after that shot's own `Suppression` gain and decay, and the
+/// mission's own outcome is resolved last, against this tick's final
+/// `Agents`.
 type DomainEvent =
     { Tick: int64
       Body: EventBody }

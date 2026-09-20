@@ -207,8 +207,29 @@ module Canonical =
     /// the whole run — the moved hashes are a byte-layout change, not a
     /// behaviour change, for every entry except this task's own new corpus
     /// entry (TASK-058 ledger).
+    ///
+    /// 13 (TASK-062, backlog B-032): `writeAgent` gained an `AgentState.
+    /// Extracted` flag; `encode` gained `WorldState.MissionOutcome`,
+    /// `.CompletedObjectives` (ascending by `ObjectiveId`), and
+    /// `.ObjectiveProgress` (ascending by `ObjectiveId`) sections — all
+    /// genuine per-tick memory (the `RadioDestroyed`/`TacticalKnowledge`
+    /// precedent): `MissionOutcome` changes from a gameplay-derived
+    /// condition, `CompletedObjectives` is a sticky set no other field
+    /// reproduces, and `ObjectiveProgress` is a decaying counter like
+    /// `Suppression`/`Stress` but per-objective rather than per-agent.
+    /// `WorldState.Objectives`/`.ObjectiveAreas`/`.ExtractionAreas`/
+    /// `.StaticTargets`/`.Rules` are NOT written: static authored scenario
+    /// data, the `Terrain`/`Headquarters`/`Jammers` precedent. Every
+    /// scenario pinned before this version authors no `Objectives` at all
+    /// (`ScenarioContent.Version` < 7 predates the destroy-ticks validation
+    /// rule, but every one of them predates any authored content actually
+    /// exercising this task's own new fields regardless), so every agent's
+    /// `Extracted` stays `false`, `MissionOutcome` stays `InProgress`,
+    /// `CompletedObjectives`/`ObjectiveProgress` stay empty for the whole
+    /// run — the moved hashes are a byte-layout change, not a behaviour
+    /// change, for every entry except this task's own new corpus entry.
     [<Literal>]
-    let FormatVersion = 12
+    let FormatVersion = 13
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -478,6 +499,10 @@ module Canonical =
 
             w.I64 dueTick
 
+        // AgentState.Extracted (TASK-062, backlog B-032) — see the
+        // FormatVersion 13 doc comment above.
+        w.U8(if a.Extracted then 1uy else 0uy)
+
     // The friendly squad's shared tactical picture (TASK-026,
     // `WorldState.TacticalKnowledge`, docs/04 section 12.4). Genuine per-tick
     // canonical state: `LastSeenTick` and the decaying `Confidence` cannot be
@@ -491,6 +516,32 @@ module Canonical =
         w.I32 c.LastKnownCell.Y
         w.I64 c.LastSeenTick
         w.I32 c.Confidence
+
+    /// The Mission phase's own canonical state (TASK-062, backlog B-032) —
+    /// see the FormatVersion 13 doc comment above. `CompletedObjectives`/
+    /// `ObjectiveProgress` are written ascending by `ObjectiveId`,
+    /// explicitly re-sorted here (the `TacticalKnowledge` precedent) rather
+    /// than trusted to already be sorted.
+    let private writeMission (w: Writer) (world: WorldState) =
+        w.I32(
+            match world.MissionOutcome with
+            | InProgress -> 0
+            | Succeeded -> 1
+            | Failed -> 2
+        )
+
+        let completed = world.CompletedObjectives |> Array.sortBy ObjectiveId.value
+        w.I32 completed.Length
+
+        for id in completed do
+            w.I32(ObjectiveId.value id)
+
+        let progress = world.ObjectiveProgress |> Array.sortBy (fun (id, _) -> ObjectiveId.value id)
+        w.I32 progress.Length
+
+        for id, ticks in progress do
+            w.I32(ObjectiveId.value id)
+            w.I32 ticks
 
     /// Encodes authoritative world state to its canonical byte form.
     let encode (world: WorldState) : byte[] =
@@ -519,6 +570,8 @@ module Canonical =
         for c in hostileContacts do
             writeContact w c
 
+        writeMission w world
+
         w.ToArray()
 
     /// Names of the top-level canonical sections, in encoding order. Used by
@@ -544,7 +597,8 @@ module Canonical =
               let contacts = world.HostileTacticalKnowledge |> Array.sortBy (fun c -> c.Contact)
               w.I32 contacts.Length
               for c in contacts do
-                  writeContact w c) ]
+                  writeContact w c)
+          section "Mission" (fun w -> writeMission w world) ]
 
     /// Best-effort identification of the first canonical section (or agent)
     /// that differs between two states. Returns `None` when the canonical

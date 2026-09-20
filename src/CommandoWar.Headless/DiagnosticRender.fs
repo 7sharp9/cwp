@@ -179,7 +179,8 @@ module DiagnosticRender =
                 | Divergence _
                 | AgentRadioLost _
                 | AgentPendingDelivery _
-                | AgentFormationSlot _ -> None)
+                | AgentFormationSlot _
+                | MissionStatus _ -> None)
 
         let onRay (x: int) (y: int) =
             sightRays
@@ -218,7 +219,8 @@ module DiagnosticRender =
                 | Divergence _
                 | AgentRadioLost _
                 | AgentPendingDelivery _
-                | AgentFormationSlot _ -> None)
+                | AgentFormationSlot _
+                | MissionStatus _ -> None)
 
         let onPath (x: int) (y: int) =
             plannedPaths
@@ -517,6 +519,29 @@ module DiagnosticRender =
                             (AgentId.value agent)
                             (cellText resolved)
                     )
+                | MissionStatus(outcome, completed, inProgress) ->
+                    let outcomeText =
+                        match outcome with
+                        | InProgress -> "in-progress"
+                        | Succeeded -> "succeeded"
+                        | Failed -> "failed"
+
+                    let completedText =
+                        if completed.Length = 0 then
+                            ""
+                        else
+                            "  completed " + (completed |> Array.map (ObjectiveId.value >> string) |> String.concat ",")
+
+                    let progressText =
+                        if inProgress.Length = 0 then
+                            ""
+                        else
+                            "  in-progress "
+                            + (inProgress
+                               |> Array.map (fun (id, ticks) -> sprintf "%d:%d" (ObjectiveId.value id) ticks)
+                               |> String.concat ",")
+
+                    line (sprintf "  mission: %s%s%s" outcomeText completedText progressText)
 
         line ""
 
@@ -575,7 +600,41 @@ module DiagnosticRender =
                 | Divergence(section, _) -> Some section
                 | _ -> None)
 
-        let footerH = if divergenceText.IsSome then 66 else 52
+        // A `MissionStatus` overlay (TASK-062, backlog B-032) adds one extra
+        // footer line, the `Divergence` precedent -- there is no single cell
+        // to anchor a mission-wide outcome on.
+        let missionText =
+            frame.Overlays
+            |> Array.tryPick (function
+                | MissionStatus(outcome, completed, inProgress) ->
+                    let outcomeText =
+                        match outcome with
+                        | InProgress -> "in-progress"
+                        | Succeeded -> "succeeded"
+                        | Failed -> "failed"
+
+                    let completedText =
+                        if completed.Length = 0 then
+                            ""
+                        else
+                            "  completed " + (completed |> Array.map (ObjectiveId.value >> string) |> String.concat ",")
+
+                    let progressText =
+                        if inProgress.Length = 0 then
+                            ""
+                        else
+                            "  in-progress "
+                            + (inProgress
+                               |> Array.map (fun (id, ticks) -> sprintf "%d:%d" (ObjectiveId.value id) ticks)
+                               |> String.concat ",")
+
+                    Some(sprintf "mission: %s%s%s" outcomeText completedText progressText)
+                | _ -> None)
+
+        let extraFooterLines =
+            (if divergenceText.IsSome then 1 else 0) + (if missionText.IsSome then 1 else 0)
+
+        let footerH = 52 + extraFooterLines * 14
         let h = gridH + footerH
 
         let elevation = layer LayerName.Elevation frame
@@ -1117,6 +1176,7 @@ module DiagnosticRender =
                         "  <rect x=\"%d\" y=\"%d\" width=\"8\" height=\"8\" fill=\"none\" stroke=\"#0F766E\" stroke-width=\"2\" transform=\"rotate(45 %d %d)\"/>"
                         (rx - 4) (ry - 4) rx ry
                 )
+            | MissionStatus _ -> () // footer-only, the Divergence precedent (no single cell to anchor on)
 
         // Footer.
         let footerText (dy: int) (str: string) =
@@ -1130,6 +1190,10 @@ module DiagnosticRender =
         footerText 44 "hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent"
         match divergenceText with
         | Some section -> footerText 58 (sprintf "DIVERGED: first differing section %s" section)
+        | None -> ()
+
+        match missionText with
+        | Some text -> footerText (58 + (if divergenceText.IsSome then 14 else 0)) text
         | None -> ()
 
         line "</svg>"

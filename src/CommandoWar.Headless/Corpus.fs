@@ -719,6 +719,82 @@ module Corpus =
           Formations = []
           Orders = [] }
 
+    // --- demolition and extraction (TASK-062, backlog B-032) ---------------
+    // Not a `ScenarioSpec` (which always authors exactly one non-optional
+    // `reach` objective, `rawOf`'s own hardcoded `Objectives`): this entry
+    // needs a real `destroy`/`extract` pair, so its `RawScenario` is
+    // hand-built directly -- the `LosDemo`/`PathDemo` precedent for a
+    // bespoke scenario outside the shared builder.
+
+    /// One friendly agent at (0,0), a `bridge-charge`-style static target at
+    /// (3,0), and an extraction area at (10,0). Proves `Simulation.mission`
+    /// end to end: `MoveTo (3,0)` (tick 1), a 2-tick occupancy plant
+    /// completes `DestroyTarget` at tick 4 (arrives tick 3, so tick 3's own
+    /// occupancy is the first of the 2 required ticks -- a real in-progress
+    /// frame exists at tick 3, `ObjectiveProgress = [(1, 1)]`), then
+    /// `MoveTo (10,0)` (tick 8, well after the plant, to keep the two
+    /// objectives' own ticks visually distinct) reaches the extraction area
+    /// at tick 14, completing `ExtractAgents` and `MissionOutcome ->
+    /// Succeeded` the same tick -- verified by running it, not derived by
+    /// hand (`dotnet fsi`, removed after use).
+    let private demolitionSuccessRaw: RawScenario =
+        { ContentVersion = ScenarioContent.Version
+          Id = "corpus-demolition-success"
+          Width = 12
+          Height = 3
+          FriendlyDeployments =
+            [| { AgentId = 0
+                 Cell = { X = 0; Y = 0 }
+                 CommunicationAvailable = true
+                 Discipline = AppraisalConfig.DisciplineDefault
+                 UnitType = StandardUnitType
+                 FormationId = ""
+                 SlotIndex = 0 } |]
+          EnemyDeployments = [||]
+          ObjectiveAreas = [||]
+          ExtractionAreas = [| { AreaId = "exit"; Cell = { X = 10; Y = 0 } } |]
+          ResupplyAreas = [||]
+          StaticTargets = [| { TargetId = "charge"; Cell = { X = 3; Y = 0 } } |]
+          Objectives =
+            [| { Id = 1
+                 Kind = "destroy"
+                 AreaRef = ""
+                 TargetRef = "charge"
+                 HoldTicks = 2
+                 ExtractAgentIds = [||]
+                 IsOptional = false }
+               { Id = 2
+                 Kind = "extract"
+                 AreaRef = "exit"
+                 TargetRef = ""
+                 HoldTicks = 0
+                 ExtractAgentIds = [||]
+                 IsOptional = false } |]
+          TerrainLayer = None
+          UnitTypes = [| { Id = StandardUnitType; MoveSpeed = Agent.MoveSpeedDefault } |]
+          Headquarters = None
+          Jammers = [||]
+          Formations = [||]
+          FailOnFriendlyForceEliminated = true }
+
+    let private demolitionSuccessInitialState () : WorldState =
+        match Scenario.validate demolitionSuccessRaw with
+        | Error es -> failwith $"corpus scenario '{demolitionSuccessRaw.Id}' is malformed: {es}"
+        | Ok scenario ->
+            match World.ofScenario scenario Seed with
+            | Ok w -> w
+            | Error e -> failwith $"corpus world '{demolitionSuccessRaw.Id}' build failed: {e}"
+
+    let private demolitionSuccessCommands: RecordedCommand[] =
+        [| { Tick = 1L
+             Sequence = 0
+             Command = Command.moveTo (CommandId.ofInt 1) 1L (AgentId.ofInt 0) { X = 3; Y = 0 }
+             Issuer = "corpus" }
+           { Tick = 8L
+             Sequence = 0
+             Command = Command.moveTo (CommandId.ofInt 2) 8L (AgentId.ofInt 0) { X = 10; Y = 0 }
+             Issuer = "corpus" } |]
+
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
         [| { Name = "spike-fixture"
@@ -953,7 +1029,18 @@ module Corpus =
              InitialStateNote = "Corpus formation-slots scenario (8 x 8, seed 20260904, 2 friendlies, 1 formation)"
              InitialState = fun () -> worldOfSpec formationSlotsSpec
              TickCount = 12L
-             Commands = Some(commandsOfSpec formationSlotsSpec) } |]
+             Commands = Some(commandsOfSpec formationSlotsSpec) }
+           { Name = "demolition-success"
+             Description =
+               "One friendly agent at (0,0), a static target at (3,0), and an extraction area at (10,0) "
+               + "(TASK-062, backlog B-032): MoveTo (3,0) at tick 1 reaches the target at tick 3, a 2-tick "
+               + "occupancy plant completes the DestroyTarget objective at tick 4; MoveTo (10,0) at tick 8 "
+               + "reaches the extraction area at tick 14, completing ExtractAgents and reaching "
+               + "MissionOutcome = Succeeded the same tick -- the Mission phase's first end-to-end corpus proof."
+             InitialStateNote = "Corpus demolition-success scenario (12 x 3, seed 20260904, 1 friendly)"
+             InitialState = demolitionSuccessInitialState
+             TickCount = 16L
+             Commands = Some demolitionSuccessCommands } |]
 
     // --- entry paths and loading ----------------------------------------
 

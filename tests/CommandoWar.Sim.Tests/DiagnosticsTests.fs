@@ -111,7 +111,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0xB25FE816BCB67A11UL, f.Hash.Value)
+    Assert.Equal(0xC0A53D46AE5D7C80UL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -438,7 +438,8 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | Divergence _
         | AgentRadioLost _
         | AgentPendingDelivery _
-        | AgentFormationSlot _ -> None) with
+        | AgentFormationSlot _
+        | MissionStatus _ -> None) with
     | Some(cell, winner, untilTick) ->
         Assert.Equal({ X = 3; Y = 3 }, cell)
         Assert.Equal(AgentId.ofInt 0, winner)
@@ -491,7 +492,8 @@ let ``frameOf derives an AgentFormationSlot overlay per formationed agent for th
             | AgentAmmo _
             | Divergence _
             | AgentRadioLost _
-            | AgentPendingDelivery _ -> None)
+            | AgentPendingDelivery _
+            | MissionStatus _ -> None)
         |> Array.sortBy fst
 
     Assert.Equal<_[]>([| (AgentId.ofInt 0, { X = 4; Y = 5 }); (AgentId.ofInt 1, { X = 6; Y = 5 }) |], slots)
@@ -566,7 +568,8 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | Divergence _
             | AgentRadioLost _
             | AgentPendingDelivery _
-            | AgentFormationSlot _ -> None)
+            | AgentFormationSlot _
+            | MissionStatus _ -> None)
         |> Array.sortBy (fun (c, _) -> c.X, c.Y)
 
     Assert.Equal<(Cell * int)[]>([| ({ X = 3; Y = 3 }, 0); ({ X = 4; Y = 3 }, 1) |], obstructed)
@@ -618,7 +621,8 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | Divergence _
             | AgentRadioLost _
             | AgentPendingDelivery _
-            | AgentFormationSlot _ -> None)
+            | AgentFormationSlot _
+            | MissionStatus _ -> None)
     with
     | Some(cell, contact, confidence, lastSeenTick) ->
         Assert.Equal({ X = 9; Y = 1 }, cell)
@@ -707,7 +711,8 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | Divergence _
             | AgentRadioLost _
             | AgentPendingDelivery _
-            | AgentFormationSlot _ -> None)
+            | AgentFormationSlot _
+            | MissionStatus _ -> None)
     with
     | Some(recipient, at, command) ->
         Assert.Equal(AgentId.ofInt 0, recipient)
@@ -1173,7 +1178,7 @@ let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` ()
 let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
     let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
     Assert.Equal(13, frames.Length)
-    Assert.Equal(0xC5EB3D123661F874UL, frames.[1].Hash.Value)
+    Assert.Equal(0xC382CACA830CCC35UL, frames.[1].Hash.Value)
 
     let appraisals =
         frames.[1].Overlays
@@ -1241,8 +1246,8 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0xB25FE816BCB67A11UL, frames.[0].Hash.Value)
-    Assert.Equal(0x0A822498317E0958UL, frames.[40].Hash.Value)
+    Assert.Equal(0xC0A53D46AE5D7C80UL, frames.[0].Hash.Value)
+    Assert.Equal(0x447C32A5D599EAB3UL, frames.[40].Hash.Value)
     // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
     // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
     // since Commitment is derived, not canonical (Decision B).
@@ -1251,7 +1256,7 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x0A822498317E0958UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0x447C32A5D599EAB3UL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(36, outcome.Events.Length)
 
 // --- divergence rendering (TASK-057, backlog B-050) --------------------
@@ -1366,3 +1371,62 @@ let ``Diagnostics.frame renders a radio-destroyed and an in-flight-order agent v
         | AgentPendingDelivery _ -> true
         | _ -> false)
     )
+
+// --- mission outcome: the demolition-success corpus entry (TASK-062, backlog B-032) ---
+
+let private demolitionSuccessFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "demolition-success")
+
+    match Corpus.commandsOf corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives an in-progress MissionStatus overlay while the demolition-success entry's charge is being planted (byte-equal to the goldens)`` () =
+    // Tick 3: agent 0 has just arrived on the target's cell, one tick into
+    // the authored 2-tick plant -- MissionStatus reports InProgress with an
+    // empty CompletedObjectives and one (ObjectiveId 1, 1) in-progress entry.
+    let tick3 = (demolitionSuccessFrames ()).[3]
+
+    match
+        tick3.Overlays
+        |> Array.tryPick (function
+            | MissionStatus(outcome, completed, inProgress) -> Some(outcome, completed, inProgress)
+            | _ -> None)
+    with
+    | Some(outcome, completed, inProgress) ->
+        Assert.Equal(InProgress, outcome)
+        Assert.Empty(completed)
+        Assert.Equal<(ObjectiveId * int)[]>([| ObjectiveId.ofInt 1, 1 |], inProgress)
+    | None -> Assert.Fail($"expected one MissionStatus overlay, got {tick3.Overlays}")
+
+    Assert.Equal(golden "demolition-success-tick-003.ascii.txt", DiagnosticRender.Ascii tick3)
+    Assert.Equal(golden "demolition-success-tick-003.svg", DiagnosticRender.Svg tick3)
+
+[<Fact>]
+let ``frameOf derives a Succeeded MissionStatus overlay once the demolition-success entry completes both objectives (byte-equal to the goldens)`` () =
+    // Tick 14: agent 0 reaches the extraction area, completing ExtractAgents
+    // (ObjectiveId 2) on top of DestroyTarget (ObjectiveId 1, already
+    // completed at tick 4) -- MissionOutcome reaches Succeeded the same tick.
+    let frames = demolitionSuccessFrames ()
+    let tick4 = frames.[4]
+    let tick14 = frames.[14]
+
+    Assert.Contains(tick4.Events, fun (e: EventMarker) -> e.Kind = "objective-completed:1")
+
+    match
+        tick14.Overlays
+        |> Array.tryPick (function
+            | MissionStatus(outcome, completed, inProgress) -> Some(outcome, completed, inProgress)
+            | _ -> None)
+    with
+    | Some(outcome, completed, inProgress) ->
+        Assert.Equal(Succeeded, outcome)
+        Assert.Equal<ObjectiveId[]>([| ObjectiveId.ofInt 1; ObjectiveId.ofInt 2 |], completed)
+        Assert.Empty(inProgress)
+    | None -> Assert.Fail($"expected one MissionStatus overlay, got {tick14.Overlays}")
+
+    Assert.Contains(tick14.Events, fun (e: EventMarker) -> e.Kind = "mission-succeeded")
+
+    Assert.Equal(golden "demolition-success-tick-014.ascii.txt", DiagnosticRender.Ascii tick14)
+    Assert.Equal(golden "demolition-success-tick-014.svg", DiagnosticRender.Svg tick14)

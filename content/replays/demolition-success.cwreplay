@@ -1,0 +1,8 @@
+version 1
+seed 20260904
+ticks 16
+canonical 13
+build cwheadless
+scenario demolition-success
+command 1 0 1 1 routine standard corpus 0 move 3 0
+command 8 0 2 8 routine standard corpus 0 move 10 0
