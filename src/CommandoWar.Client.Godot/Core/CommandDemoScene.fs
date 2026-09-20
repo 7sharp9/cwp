@@ -1,16 +1,25 @@
 namespace CwClientCore
 
 open CommandoWar.Sim
-open CommandoWar.Headless
 
 /// Live selection, input-mapped `MoveTo` orders, a real-`Pathfinding.find`
-/// route preview, and tactical pause over `DemoScenario` (TASK-040, backlog
-/// B-026) -- the first scene where the player, not a canned command log,
-/// drives `Simulation.step`. Reuses TASK-039's terrain-item/depth-sort
-/// helpers (`RenderShared`) rather than duplicating them.
+/// route preview, and tactical pause (TASK-040, backlog B-026) -- the first
+/// scene where the player, not a canned command log, drives
+/// `Simulation.step`. Loads the real vertical-slice content
+/// (`content/scenarios/bridgehead.cwscenario`, TASK-064, backlog B-035) via
+/// `Ready`'s `scenarioContentPath`, not the `DemoScenario` diagnostic
+/// fixture `DemoRenderScene` still uses. Reuses TASK-039's terrain-item/
+/// depth-sort helpers (`RenderShared`) rather than duplicating them.
 type CommandDemoScene() =
     let simHz = 20.0
     let maxCatchUpStepsPerFrame = 5
+
+    // No seed is authored inside a `.cwscenario` file itself (confirmed by
+    // inspection of `ScenarioFile.fs`'s grammar) -- `World.ofScenario` always
+    // takes one from its caller, the `DemoScenario.Seed` precedent. Value
+    // only has to be stable; nothing in this scene's own behaviour depends
+    // on which draws the RNG stream produces.
+    let bridgeheadSeed = 20260920UL
 
     // The on-screen radius (pixels) a real agent figure draws at (TASK-052,
     // backlog B-054: doubled from the original `10.0f` alongside
@@ -40,6 +49,7 @@ type CommandDemoScene() =
     // recomputed every tick, since neither array ever changes after world
     // creation.
     let mutable objectiveMarkerItems: DrawItem[] = [||]
+    let mutable coverIndicatorItems: DrawItem[] = [||]
     // Violet, not gold: the selection halo already draws a near-identical
     // gold/yellow ring (R=1.0,G=0.95,B=0.30) around whichever agent is
     // selected, so an objective marker that colour would be indistinguishable
@@ -57,6 +67,50 @@ type CommandDemoScene() =
 
         Array.append (markersFor state.ObjectiveAreas objectiveAreaColor) (markersFor state.ExtractionAreas extractionAreaColor)
 
+    // Cover indicator (TASK-064 review, backlog B-035): Dave's live
+    // feedback -- "no cover" -- `Terrain.Cover` (directional low cover,
+    // mitigating hit chance and route-exposure) has never been rendered
+    // anywhere, player-facing or developer overlay, since it was found
+    // unpaintable through the current tileset at TASK-060. Static
+    // authored content, the `objectiveMarkerItems`/`terrainItems`
+    // precedent -- built once in `Ready`, never recomputed per tick. A
+    // short spoke from the cell centre toward the covered direction (the
+    // isometric projection already turns a cardinal `Cell` offset into the
+    // correct on-screen edge), thicker for a higher `Level` -- shape
+    // (which edge, how thick) carries the meaning, not colour alone.
+    let coverColor = (0.55f, 0.85f, 1.0f)
+
+    let buildCoverIndicatorItems (terrain: Terrain) : DrawItem[] =
+        let offsetFor (d: Direction) : float32 * float32 =
+            match d with
+            | North -> 0.0f, -0.5f
+            | East -> 0.5f, 0.0f
+            | South -> 0.0f, 0.5f
+            | West -> -0.5f, 0.0f
+
+        [| for y in 0 .. terrain.Bounds.Height - 1 do
+               for x in 0 .. terrain.Bounds.Width - 1 do
+                   for d in Direction.all do
+                       let level = Terrain.cover terrain { X = x; Y = y } d
+
+                       if level > 0 then
+                           let dx, dy = offsetFor d
+                           let r, g, b = coverColor
+
+                           yield
+                               { Kind = 2
+                                 TextureId = 0
+                                 Cx = float32 x
+                                 Cy = float32 y
+                                 Cx2 = float32 x + dx
+                                 Cy2 = float32 y + dy
+                                 Text = ""
+                                 R = r
+                                 G = g
+                                 B = b
+                                 A = 0.85f
+                                 Radius = 1.5f + float32 level } |]
+
     let mutable accum = 0.0
     let mutable alpha = 0.0
     let mutable hash = 0UL
@@ -65,15 +119,18 @@ type CommandDemoScene() =
     let mutable previewPath: Cell[] option = None
     let mutable hoveredCell: Cell option = None
 
-    // XCOM-style HUD order-mode icons (TASK-048, backlog B-059): which order
-    // type the next non-agent left-click issues -- `0 = MoveTo` (the
-    // default, unarmed state), `1 = Hold`, `2 = Assault`, `3 = Withdraw`.
-    // Armed by `OnOrderModeClick` (a HUD-icon click, resolved by the C#
-    // host's fixed icon rects, the `OnClick`/`ScreenToCell` "primitives
-    // only" precedent); consumed and reset back to `0` the instant an order
-    // is actually issued (an XCOM ability-consumed-on-use idiom), so the
-    // player re-arms explicitly for each non-default order rather than it
-    // silently staying armed across multiple orders.
+    // XCOM-style HUD order-mode icons (TASK-048, backlog B-059; `4 =
+    // Suppress` added by TASK-064, backlog B-035): which order type the
+    // next non-agent left-click issues -- `0 = MoveTo` (the default,
+    // unarmed state), `1 = Hold`, `2 = Assault`, `3 = Withdraw`,
+    // `4 = Suppress` (targets the clicked cell's occupant, not the cell
+    // itself -- see `OnClick`). Armed by `OnOrderModeClick` (a HUD-icon
+    // click, resolved by the C# host's fixed icon rects, the
+    // `OnClick`/`ScreenToCell` "primitives only" precedent); consumed and
+    // reset back to `0` the instant an order is actually issued (an XCOM
+    // ability-consumed-on-use idiom), so the player re-arms explicitly for
+    // each non-default order rather than it silently staying armed across
+    // multiple orders.
     let mutable orderMode = 0
 
     // Developer overlay (TASK-043, backlog B-029 proper): the same
@@ -116,6 +173,17 @@ type CommandDemoScene() =
     // (`remaining / fireEffectHoldSeconds`) rather than vanishing abruptly.
     let fireEffectHoldSeconds = 0.4
     let heldFireLines = ResizeArray<Cell * Cell * bool * float>() // from, at, hit, remaining
+
+    // Hit-flash (TASK-064 review, backlog B-035): Dave's live feedback --
+    // "no reaction under fire" -- a hit target's own wound dot (a small,
+    // low-opacity marker in `renderVitals`) reads as no reaction at all.
+    // A brief bright tint on the figure itself, on every landed hit
+    // (either side, the `heldFireLines`/`hostileKnownContactIdsBefore`
+    // precedent of reacting to combat regardless of side), makes "you are
+    // being shot at right now" legible without needing to read a health
+    // bar. Same wall-clock hold/fade shape as `heldFireLines`.
+    let hitFlashHoldSeconds = 0.3
+    let heldHitFlashes = ResizeArray<int * float>() // agent id, remaining
 
     // Agent-facing bins (TASK-054, backlog B-052), one authoritative tick at
     // a time (the `heldFireLines`/`devFrame` precedent: computed once per
@@ -161,11 +229,10 @@ type CommandDemoScene() =
     let mutable prevProgress: Map<int, int> = Map.empty
 
     // Default guess before any edge has completed (the Trooper half-speed
-    // ratio DemoScenario's own `UnitTypes` table authors, TASK-049 --
-    // this file already couples to `DemoScenario` throughout, so assuming
-    // its own unit type here is consistent, not a new dependency). Only
-    // ever used for the very first tick of an agent's very first move this
-    // session; every edge after that uses its own learned estimate.
+    // ratio both `DemoScenario` and `bridgehead.cwscenario` author for their
+    // own "trooper" unit type, TASK-049/TASK-061 -- `MoveSpeed = 2` in both).
+    // Only ever used for the very first tick of an agent's very first move
+    // this session; every edge after that uses its own learned estimate.
     let defaultEdgeTickEstimate = 2
     let mutable edgeTickEstimate: Map<int, int> = Map.empty
 
@@ -376,8 +443,14 @@ type CommandDemoScene() =
 
         for overlay in devFrame.Overlays do
             match overlay with
-            | FireLine(shooter, from, _, at, hit) ->
+            | FireLine(shooter, from, target, at, hit) ->
                 heldFireLines.Add(from, at, hit, fireEffectHoldSeconds)
+
+                if hit then
+                    let targetId = AgentId.value target
+                    let idx = heldHitFlashes.FindIndex(fun (id, _) -> id = targetId)
+                    if idx >= 0 then heldHitFlashes.[idx] <- (targetId, hitFlashHoldSeconds)
+                    else heldHitFlashes.Add(targetId, hitFlashHoldSeconds)
 
                 let shooterWasUnknownHostile =
                     currAgents
@@ -397,6 +470,17 @@ type CommandDemoScene() =
 
     let friendlyAt (cell: Cell) : AgentSnapshot option =
         currAgents |> Array.tryFind (fun a -> a.Side = Friendly && a.Position = cell)
+
+    /// `Suppress`'s own target-resolution helper (TASK-064, backlog B-035):
+    /// `Command.suppress` takes an `AgentId`, not a `Cell`, so arming
+    /// Suppress and clicking a cell needs to resolve whichever agent (any
+    /// side -- the enemy being suppressed) occupies it. `Appraisal.appraise`
+    /// itself is what actually gates this on the target being a real known
+    /// contact (`Unable(TargetNotKnown)` otherwise, `Appraisal.fs`); this
+    /// helper only resolves "who is standing here", the same
+    /// already-rendered `currAgents` `friendlyAt` reads.
+    let enemyAt (cell: Cell) : AgentSnapshot option =
+        currAgents |> Array.tryFind (fun a -> a.Side = Hostile && a.Position = cell)
 
     let agentPosition (id: AgentId) : Cell option =
         currAgents |> Array.tryFind (fun a -> a.Id = id) |> Option.map (fun a -> a.Position)
@@ -471,10 +555,32 @@ type CommandDemoScene() =
               Radius = radius })
 
     interface IClientScene with
-        member _.Ready() =
-            state <- DemoScenario.initialState ()
+        // TASK-064 (backlog B-035): loads the real vertical-slice content
+        // (`content/scenarios/bridgehead.cwscenario`) instead of
+        // `DemoScenario` -- this is the first task to run the docs/07
+        // mission itself in a play scene, not a hand-authored diagnostic
+        // fixture. Fails hard (`failwith`, the `DemoScenario.initialState()`
+        // precedent) on a parse/validation/world-build error: this is
+        // fixed, already-validated project content (`cwheadless import`
+        // exits 0), not user-supplied input needing graceful degradation.
+        member _.Ready(scenarioContentPath: string) =
+            let scenario =
+                match ScenarioFile.parse (System.IO.File.ReadAllText scenarioContentPath) with
+                | Error e ->
+                    failwith $"CommandDemoScene: scenario parse failed for '{scenarioContentPath}': {ScenarioFile.describeError e}"
+                | Ok raw ->
+                    match Scenario.validate raw with
+                    | Error es -> failwith $"CommandDemoScene: scenario invalid for '{scenarioContentPath}': {es}"
+                    | Ok s -> s
+
+            state <-
+                match World.ofScenario scenario bridgeheadSeed with
+                | Ok w -> w
+                | Error e -> failwith $"CommandDemoScene: scenario world build failed for '{scenarioContentPath}': {e}"
+
             terrainItems <- RenderShared.buildTerrainItems state.Terrain
             objectiveMarkerItems <- buildObjectiveMarkerItems state
+            coverIndicatorItems <- buildCoverIndicatorItems state.Terrain
             devFrame <- Diagnostics.frame state
             currAgents <-
                 state.Agents
@@ -532,6 +638,12 @@ type CommandDemoScene() =
                 if remaining' <= 0.0 then heldFireLines.RemoveAt(i)
                 else heldFireLines.[i] <- (from, at, hit, remaining')
 
+            for i in heldHitFlashes.Count - 1 .. -1 .. 0 do
+                let id, remaining = heldHitFlashes.[i]
+                let remaining' = remaining - deltaSeconds
+                if remaining' <= 0.0 then heldHitFlashes.RemoveAt(i)
+                else heldHitFlashes.[i] <- (id, remaining')
+
             // Audio-localised threat cues (TASK-054, backlog B-056) decay by
             // real wall-clock time the same way, independent of `paused`.
             for i in heldAudioCues.Count - 1 .. -1 .. 0 do
@@ -546,10 +658,22 @@ type CommandDemoScene() =
             // field comment above. A genuinely new message (a fresh order,
             // or a reappraisal flipping the outcome) always overrides
             // immediately; only the fall-back to "no order" is delayed.
+            // TASK-064 review (backlog B-035): `dispositionText` alone says
+            // only "accepted", which reads as "your soldier is doing what
+            // you clicked" -- not true for a formationed agent redirected
+            // by `Appraisal.resolveFormationTarget` (see `OnHover`'s own
+            // comment above). Appending the agent's real, already-canonical
+            // `Destination` whenever one is active tells the player exactly
+            // where the soldier is actually headed, regardless of whether
+            // that matches the clicked cell.
             let liveOrderText =
                 selected
                 |> Option.bind (fun id -> currAgents |> Array.tryFind (fun a -> a.Id = id))
-                |> Option.map (fun a -> RenderShared.dispositionText a.Disposition)
+                |> Option.map (fun a ->
+                    let baseText = RenderShared.dispositionText a.Disposition
+                    match a.Disposition, a.Destination with
+                    | Some Accepted, Some dest -> sprintf "%s -> (%d,%d)" baseText dest.X dest.Y
+                    | _ -> baseText)
                 |> Option.defaultValue ""
 
             if liveOrderText <> "" && liveOrderText <> "no order" then
@@ -681,6 +805,22 @@ type CommandDemoScene() =
                     // `renderPos`'s own doc comment.
                     let cx, cy = renderPos a
 
+                    // Hit flash (TASK-064 review, backlog B-035): Dave's
+                    // live feedback -- "no reaction under fire" -- blends
+                    // the figure's own colour toward white, fading back
+                    // over `hitFlashHoldSeconds`, the instant a `FireLine`
+                    // lands on this agent (either side). A colour blend on
+                    // the existing figure, not a new draw item, so it never
+                    // competes with the wound dot/selection halo/etc. for
+                    // depth-sort or screen space.
+                    let flash =
+                        heldHitFlashes
+                        |> Seq.tryPick (fun (fid, remaining) -> if fid = id then Some remaining else None)
+                        |> Option.map (fun remaining -> float32 (remaining / hitFlashHoldSeconds))
+                        |> Option.defaultValue 0.0f
+
+                    let blend (c: float32) = c + (1.0f - c) * flash
+
                     let figure =
                         { Kind = 1
                           TextureId = facingBin
@@ -689,9 +829,9 @@ type CommandDemoScene() =
                           Cx2 = float32 runFrame
                           Cy2 = 0.0f
                           Text = ""
-                          R = r
-                          G = g
-                          B = b
+                          R = blend r
+                          G = blend g
+                          B = blend b
                           A = 1.0f
                           Radius = agentRadius }
 
@@ -803,6 +943,55 @@ type CommandDemoScene() =
                 |> Option.map (fun a ->
                     RenderShared.cellRing a.Position (0.95f, 0.95f, 1.0f) 0.8f (agentRadius + 3.0f))
                 |> Option.map (fun item -> [| item |])
+                |> Option.defaultValue [||]
+
+            // Leader marker (TASK-064 review, backlog B-035): Dave's live
+            // feedback -- "you cant visually tell who is a leader" -- every
+            // agent renders identically regardless of role.
+            // `Casualty.currentLeader` (the TASK-045 succession rule:
+            // lowest-id `Alive` `Friendly` agent) is a pure function over
+            // already-held `state.Agents`, so no `CommandoWar.Sim` change
+            // is needed to read it here; it also updates the instant
+            // leadership actually transfers, for free. A distinct green
+            // ring plus a ground-level text label -- shape and colour both
+            // (docs/06's "status indicators that do not rely on colour
+            // alone"), not easily confused with the gold selection halo,
+            // the near-white hover highlight, or the violet/cyan
+            // objective/extraction markers.
+            let leaderMarkerItems : DrawItem[] =
+                Casualty.currentLeader state.Agents
+                |> Option.bind (fun leaderId -> currAgents |> Array.tryFind (fun a -> a.Id = leaderId))
+                |> Option.map (fun a ->
+                    // Both items share `renderPos`, not raw `Position` --
+                    // the TASK-056 review 2 "halo jumps between cells"
+                    // lesson applies identically to a second marker on a
+                    // moving agent.
+                    let cx, cy = renderPos a
+
+                    [| { Kind = 5
+                         TextureId = 0
+                         Cx = cx
+                         Cy = cy
+                         Cx2 = 0.0f
+                         Cy2 = 0.0f
+                         Text = ""
+                         R = 0.25f
+                         G = 0.95f
+                         B = 0.45f
+                         A = 0.9f
+                         Radius = agentRadius + 6.0f }
+                       { Kind = 3
+                         TextureId = 0
+                         Cx = cx
+                         Cy = cy
+                         Cx2 = 0.0f
+                         Cy2 = 0.0f
+                         Text = "LEADER"
+                         R = 0.25f
+                         G = 0.95f
+                         B = 0.45f
+                         A = 0.9f
+                         Radius = 8.0f } |])
                 |> Option.defaultValue [||]
 
             // Three distinct route states, each its own colour (Dave's review
@@ -1043,8 +1232,8 @@ type CommandDemoScene() =
             // no single meaningful depth.
             let sorted =
                 Array.concat
-                    [ terrainItems; objectiveMarkerItems; haloItems; agentItems; hoverHighlightItems; previewItems
-                      pendingItems; committedItems ]
+                    [ terrainItems; coverIndicatorItems; objectiveMarkerItems; haloItems; agentItems
+                      leaderMarkerItems; hoverHighlightItems; previewItems; pendingItems; committedItems ]
                 |> Array.sortBy RenderShared.depthKey
 
             Array.concat [ sorted; fireEffects; audioCueItems; holdOutlineItems; devItems ]
@@ -1130,37 +1319,51 @@ type CommandDemoScene() =
                         && state.MissionOutcome = InProgress
                         ->
                         // Dispatch on the armed HUD order mode (TASK-048,
-                        // backlog B-059) -- `0 = MoveTo` is both the default
-                        // unarmed state and an explicit icon, so a plain
-                        // click with nothing armed keeps issuing `MoveTo`
-                        // exactly as before this task.
+                        // backlog B-059; index 4 added by TASK-064, backlog
+                        // B-035) -- `0 = MoveTo` is both the default unarmed
+                        // state and an explicit icon, so a plain click with
+                        // nothing armed keeps issuing `MoveTo` exactly as
+                        // before this task. `4 = Suppress` targets whichever
+                        // agent occupies the clicked cell instead of the
+                        // bare cell itself -- `None` (no agent there) leaves
+                        // Suppress armed rather than issuing a meaningless
+                        // command, the "need a valid target" idiom.
                         let cmd =
                             match orderMode with
-                            | 1 -> Command.hold (CommandId.ofInt nextCommandId) state.Tick agentId cell
-                            | 2 -> Command.assault (CommandId.ofInt nextCommandId) state.Tick agentId cell
-                            | 3 -> Command.withdraw (CommandId.ofInt nextCommandId) state.Tick agentId cell
-                            | _ -> Command.moveTo (CommandId.ofInt nextCommandId) state.Tick agentId cell
+                            | 1 -> Some(Command.hold (CommandId.ofInt nextCommandId) state.Tick agentId cell)
+                            | 2 -> Some(Command.assault (CommandId.ofInt nextCommandId) state.Tick agentId cell)
+                            | 3 -> Some(Command.withdraw (CommandId.ofInt nextCommandId) state.Tick agentId cell)
+                            | 4 ->
+                                enemyAt cell
+                                |> Option.map (fun target ->
+                                    Command.suppress (CommandId.ofInt nextCommandId) state.Tick agentId target.Id)
+                            | _ -> Some(Command.moveTo (CommandId.ofInt nextCommandId) state.Tick agentId cell)
 
-                        nextCommandId <- nextCommandId + 1
+                        match cmd with
+                        | Some cmd ->
+                            nextCommandId <- nextCommandId + 1
 
-                        // Replace, not stack: an agent has at most one
-                        // undelivered order at a time today (no waypoint
-                        // queue yet -- see the TASK-040 review follow-up).
-                        // Without this, two clicks before the next delivery
-                        // tick (easy while paused) would hand Simulation.step
-                        // two different commands both addressing the same
-                        // agent in one tick's batch, an untested combination.
-                        pending.RemoveAll(fun c -> c.Command.Agent = agentId) |> ignore
+                            // Replace, not stack: an agent has at most one
+                            // undelivered order at a time today (no waypoint
+                            // queue yet -- see the TASK-040 review follow-up).
+                            // Without this, two clicks before the next
+                            // delivery tick (easy while paused) would hand
+                            // Simulation.step two different commands both
+                            // addressing the same agent in one tick's batch,
+                            // an untested combination.
+                            pending.RemoveAll(fun c -> c.Command.Agent = agentId) |> ignore
 
-                        pending.Add
-                            { Tick = state.Tick + 1L
-                              Sequence = pending.Count
-                              Command = cmd
-                              Issuer = "player" }
+                            pending.Add
+                                { Tick = state.Tick + 1L
+                                  Sequence = pending.Count
+                                  Command = cmd
+                                  Issuer = "player" }
 
-                        // An armed non-default mode is consumed by issuing
-                        // one order (see the field comment on `orderMode`).
-                        orderMode <- 0
+                            // An armed non-default mode is consumed by
+                            // issuing one order (see the field comment on
+                            // `orderMode`).
+                            orderMode <- 0
+                        | None -> ()
                     | _ -> ()
 
         member _.OnHover(cellX: int, cellY: int) =
@@ -1172,12 +1375,45 @@ type CommandDemoScene() =
             // would move it, which is no longer true once it is
             // Dead/Incapacitated -- see `OnClick`'s matching order-issue
             // guard.
+            //
+            // TASK-064 review (backlog B-035): live-testing on Bridgehead,
+            // Dave reported issuing orders across the bridge that "seemed
+            // to register" but produced no visible movement or combat.
+            // Root cause: a `MoveTo` order (`orderMode = 0`) for a
+            // formationed agent (any non-zero `AgentState.FormationOffset`
+            // -- every slot but each fireteam's own leader) does not target
+            // the clicked cell at all; `Appraisal.resolveFormationTarget`
+            // resolves the *real* destination sim-side, which can land far
+            // short of what was clicked (its own bounded-radius fallback,
+            // TASK-059) with no client-side indication this happened --
+            // the agent then reports `Accepted` and genuinely arrives, just
+            // not where the player thought. Previewing the same resolution
+            // here, using the identical `occupied`/tie-break inputs
+            // `Simulation.appraisal` itself uses (`Simulation.fs`'s own
+            // `occupied` computation, mirrored), means the hover route now
+            // shows the truth before the player commits to a click. `Hold`/
+            // `Assault`/`Withdraw`/`Suppress` are unaffected: only `MoveTo`
+            // resolves through `resolveFormationTarget` at all
+            // (`Appraisal.appraise`'s own `Intent` match).
             previewPath <-
                 match selected with
                 | Some id when Casualty.isAlive (vitalsOf id) ->
                     agentPosition id
                     |> Option.bind (fun pos ->
-                        match Pathfinding.find state.Terrain pos cell with
+                        let target =
+                            if orderMode = 0 then
+                                match state.Agents |> Array.tryFind (fun a -> a.Id = id) with
+                                | Some agent ->
+                                    let occupied =
+                                        state.Agents
+                                        |> Array.choose (fun a -> if a.Id = id then None else Some a.Position)
+
+                                    Appraisal.resolveFormationTarget state.Terrain occupied agent.FormationOffset cell
+                                | None -> cell
+                            else
+                                cell
+
+                        match Pathfinding.find state.Terrain pos target with
                         | Found(cells, _) -> Some cells
                         | NoPath
                         | BudgetExhausted _
@@ -1241,37 +1477,57 @@ type CommandDemoScene() =
 [<RequireQualifiedAccess>]
 module CommandDemoDrive =
 
-    /// Selects friendly agent 0 (at (0,0)), previews and issues a short
-    /// `MoveTo(3,0)` clear of the ridge and the impassable block; then
-    /// selects friendly agent 1 (at (0,1)), arms the `Hold` HUD order mode
-    /// (TASK-048, backlog B-059, the same `OnOrderModeClick` an icon click
-    /// resolves to) and issues `Hold(2,1)` -- proving the order-mode icon
-    /// dispatch reaches a real, non-`MoveTo` `Command.hold` through the
-    /// identical click path a player uses, not just a direct sim-side call
-    /// (the TASK-037/047 `SimulationTests`-only precedent already proves the
-    /// sim side; this proves the click wiring on top of it).
+    /// TASK-064 (backlog B-035): drives all six friendly agents from their
+    /// own authored `bridgehead.cwscenario` starting cells toward the
+    /// bridge, exercising formation-slot resolution (TASK-059) for all six
+    /// at once against real terrain rather than a hand-built fixture.
+    /// Investigated live (a temporary `dotnet fsi` probe against this exact
+    /// scene/content, removed after use, the TASK-042/051/052/053
+    /// precedent) before settling on this sequence: sending every agent at
+    /// once gives the machine-gun team (`AgentId 100`) more simultaneous
+    /// targets than a lone agent would, so real automatic engagement
+    /// (TASK-031/032) brings it down to `Dead` (through
+    /// `Incapacitated`/bleed-out) while every friendly agent stays `Alive`
+    /// -- a real, reproducible, casualty-free neutralisation of the
+    /// scenario's central threat through the click path, not a direct
+    /// sim-side call. `ObjectiveId 1` (the optional `reach observation`
+    /// objective) also completes for free, since agent 0's own route
+    /// passes through (4,4).
     ///
-    /// TASK-063 (backlog B-033 narrowed): once agent 0 has had time to
-    /// arrive at (3,0), it is reselected and sent on to (4,4) -- the
-    /// ridge-top objective area `DemoScenario`'s own sole authored
-    /// objective (a non-optional `ReachArea`) targets -- so the run reaches
-    /// a real `MissionOutcome = Succeeded`, proving the mission-summary
-    /// panel's data end to end through the same click path, not a direct
-    /// sim-side call.
-    let runScriptedSelfCheck () : TickHash[] =
+    /// This does not reach `MissionOutcome <> InProgress`: reaching the
+    /// `destroy`/`extract` objectives (`ObjectiveId 2`/`3`) turned out to
+    /// need more than "the machine gun is dead" -- something else (most
+    /// likely one of the depot riflemen, `AgentId 101`-`104`) also has a
+    /// clear shot at the `bridge-charge` target cell (9,5) itself, which
+    /// the same investigation found but did not resolve within this task
+    /// (see the task file's own findings; flagged for Dave, not silently
+    /// dropped). A friendly agent's own corpse also turned out to make a
+    /// cell permanently unenterable (an occupied cell is never vacated,
+    /// `Simulation.navigationAndMovement`'s vacation-chain rule, and a
+    /// dead friendly's cell is still `friendlyAt`-selectable, so a click
+    /// there re-selects it for status view rather than ever issuing a new
+    /// order) -- avoided here by never routing an agent's *final*
+    /// destination onto (9,5)/(9,6) themselves, only adjacent to them.
+    let runScriptedSelfCheck (scenarioContentPath: string) : TickHash[] =
         let scene = CommandDemoScene()
         let asScene = scene :> IClientScene
-        asScene.Ready()
-        asScene.OnClick(true, 0, 0)
-        asScene.OnHover(3, 0)
-        asScene.OnClick(true, 3, 0)
-        asScene.OnClick(true, 0, 1)
-        asScene.OnOrderModeClick(1)
-        asScene.OnHover(2, 1)
-        asScene.OnClick(true, 2, 1)
-        let phase1 = scene.StepTicksHeadless(12L)
-        asScene.OnClick(true, 3, 0)
-        asScene.OnHover(4, 4)
-        asScene.OnClick(true, 4, 4)
-        let phase2 = scene.StepTicksHeadless(28L)
-        Array.append phase1 phase2
+        asScene.Ready(scenarioContentPath)
+
+        // Each click pair is (select at the agent's own authored starting
+        // cell, target cell) -- formation-slot offsets (TASK-059) resolve
+        // each agent's *actual* destination from here, not the literal
+        // clicked cell; see the task file for the offset arithmetic behind
+        // each choice.
+        let order (selectCell: Cell) (targetCell: Cell) =
+            asScene.OnClick(true, selectCell.X, selectCell.Y)
+            asScene.OnHover(targetCell.X, targetCell.Y)
+            asScene.OnClick(true, targetCell.X, targetCell.Y)
+
+        order { X = 3; Y = 5 } { X = 8; Y = 5 } // agent 0 (fireteam-alpha, slot 0)
+        order { X = 2; Y = 5 } { X = 7; Y = 5 } // agent 1 (fireteam-alpha, slot 1)
+        order { X = 2; Y = 6 } { X = 8; Y = 5 } // agent 2 (fireteam-alpha, slot 2)
+        order { X = 3; Y = 7 } { X = 9; Y = 6 } // agent 3 (fireteam-bravo, slot 0)
+        order { X = 4; Y = 7 } { X = 9; Y = 6 } // agent 4 (fireteam-bravo, slot 1)
+        order { X = 4; Y = 8 } { X = 8; Y = 6 } // agent 5 (fireteam-bravo, slot 2)
+
+        scene.StepTicksHeadless(90L)

@@ -247,6 +247,45 @@ The slice is feature-complete only when:
 11. The developer overlay can explain any appraisal and major state transition.
 12. Placeholder-art play is understandable before final visual production.
 
+### Realised (and partially not) by TASK-064 (backlog B-035)
+
+TASK-064 is the first task to run the mission content this section
+describes -- `bridgehead.cwscenario` -- inside the actual play scene
+(`CommandDemoScene`) rather than as a headless import check or a separate
+hand-built fixture. `IClientScene.Ready` gained a `scenarioContentPath`
+parameter; `CommandDemoScene` now parses/validates/builds the world from
+the real file (the `DemoScenario.fs` pipeline shape) instead of loading
+`DemoScenario`. It also added the client's missing `Suppress` order-mode
+icon (section 4's fifth required command had no HUD path at all before
+this task, B-059's own backlog text having said so outright) and rewrote
+`CommandDemoScene`'s scripted self-check against real Bridgehead
+coordinates, reaching a genuine, reproducible, casualty-free
+neutralisation of the machine-gun team through the real click path
+(`0xB99E7F74EA1C3CDE` at tick 90).
+
+Criteria 1, 2, 4, 5, 6, 8, 9, 10, 11, and 12 are met -- some newly
+demonstrated on Bridgehead itself (1, 4, 9, 12), the rest via existing
+evidence this task confirmed still holds (2, 5, 6, 8, 10, 11). **Criteria 3
+and 7 are not closed on Bridgehead**, despite extensive investigation (a
+series of temporary `dotnet fsi` probes, removed after use): every
+Bridgehead `MoveTo` order tested was `Accepted` outright, since no contact
+with the machine gun exists until an agent is already inside its own
+engagement range (no intermediate "spotted but not yet fired on" cell
+exists on this map) -- so criterion 3's canonical refusal sequence, though
+proven end to end on a separate fixture (TASK-038), was never triggered on
+Bridgehead itself; and criterion 7 (mission succeeds/fails without
+developer intervention) was not reached in either direction -- a full
+`Succeeded` run was blocked by an apparent additional threat covering the
+`bridge-charge` target cell itself, and a full `Failed` run turned out to
+be geometrically capped well short of all six friendly agents by the
+bridge's own two-lane chokepoint. See `tasks/TASK-064-INTEGRATE-AND-VERIFY-
+VERTICAL-SLICE.md` for the full record and the two concrete mechanism
+findings behind this (a corpse permanently blocking a cell; the
+target-cell threat). **Accepted by Dave (2026-09-20, via `AskUserQuestion`)
+as a known, tracked gap** rather than pursued further -- no Bridgehead map
+rebalance and no corpse-occupancy fix were made; TASK-064 was accepted with
+this gap on record.
+
 ## 10. Performance budgets
 
 These are initial budgets and may be revised only with measured evidence.

@@ -5,17 +5,239 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; review trigger 1 measured and closed 2026-09-19, decision reaffirmed -- see ADR-0001's 2026-09-19 note)
-  updated: 2026-09-20 (TASK-063 accepted by Dave, realising narrowed B-033; prior: TASK-062 accepted by Dave, realising B-032; prior: TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
+  updated: 2026-09-20 (TASK-064 accepted by Dave, realising B-035 -- round 2's live-testing legibility fixes confirmed by his own further playtest, which separately found a genuine sim-side movement deadlock (R-010 materialising for real), scoped as new B-065/TASK-065; the pre-existing criterion-3/7 finding accepted as a known, tracked gap (no map rebalance, no corpse-occupancy fix), B-022 kept descoped as-is; TASK-065 selected next, not yet implemented; prior: TASK-063 accepted by Dave, realising narrowed B-033; prior: TASK-062 accepted by Dave, realising B-032; prior: TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
 
 active_work:
-  selected_task: none
-  task_file: null
+  selected_task: TASK-065
+  task_file: tasks/TASK-065-STALLED-ORDER-VISIBLE-FAILURE.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-09-20
   note: >-
-    2026-09-20: TASK-063 accepted by Dave ("ok it works") after one live
+    2026-09-20: TASK-064 accepted by Dave. Round 2's three live-testing
+    legibility fixes (leader marker, hit-flash, cover indicator) were
+    confirmed by his own further live playtest of Bridgehead -- no further
+    complaint about any of the three. That same playtest surfaced a
+    separate, genuine problem instead (see the TASK-065 note below).
+    Confirmed via `AskUserQuestion`: the pre-existing criterion-3/7 finding
+    (canonical refusal and full mission succeed/fail not demonstrated on
+    Bridgehead) is accepted as a known, tracked gap, not pursued further --
+    no Bridgehead map rebalance, no corpse-occupancy fix; B-022 (enemy
+    doctrine) stays descoped exactly as before, no action taken. This
+    session's full working tree (TASK-064 rounds 1 and 2) was committed to
+    `main` per Dave's explicit instruction. `docs/11_BACKLOG.md` B-035 row
+    and `docs/07_VERTICAL_SLICE.md` section 9 criteria 3/7 both updated;
+    `tasks/TASK-064-*.md` status -> `done`.
+    (tasks/TASK-064-INTEGRATE-AND-VERIFY-VERTICAL-SLICE.md;
+    docs/ledger/2026-09-20-TASK-064-integrate-and-verify-vertical-slice.md)
+
+    `active_work.selected_task -> TASK-065` (realises B-065): turn a
+    permanently stalled movement order into a visible failure, selected via
+    `AskUserQuestion` as the one concrete, already-scoped follow-up from
+    Dave's own live playtest ("i expected the ai to be more autonomous,
+    they all seem to just get stuck"). Root cause and design were already
+    confirmed in the prior session (see the entry below) -- a visible-
+    failure fix (abandon a too-long-stalled order after a bounded number of
+    frozen ticks, clear `Destination`/`Route`, emit a new event) rather than
+    occupancy-aware pathfinding (bigger, `Pathfinding`-contract-changing,
+    deferred as further follow-up if this alone proves insufficient). Not
+    yet implemented as of this note.
+    (tasks/TASK-065-STALLED-ORDER-VISIBLE-FAILURE.md; docs/11_BACKLOG.md
+    B-065 row)
+
+    Prior: 2026-09-20: Dave playtested TASK-064's round-2 fixes live and reported:
+    "you can see whos in charge, i expected the ai to be more autonomous,
+    they all seem to just get stuck ... you should ply test it." Rather
+    than reason from the report alone, drove the exact same click path
+    with a `dotnet fsi` probe (removed after use): an ordinary six-agent
+    squad-movement order (not toward the bridge, not adversarial in any
+    way) left two agents permanently stalled from tick ~30 through tick
+    500 (25 real seconds at 20Hz) with zero recovery and zero indication
+    anything was wrong.
+
+    Root cause is a known, already-documented, already-`open` risk
+    materialising for the first time, not a fresh defect:
+    `docs/04_SIMULATION_SPEC.md`'s own movement spec names "replan when
+    the next path cell becomes invalid" as step 6, but TASK-015/017's own
+    realisation note says outright that a same-tick reservation yield
+    never forces that replan, so ordinary multi-agent contention never
+    exercises it either; `Pathfinding.fs` itself has no concept of agent
+    occupancy at all, so a cached route whose next cell is permanently
+    occupied by an agent that has itself already stopped moving is a dead
+    end forever. This is exactly `docs/10_RISK_REGISTER.md` R-010
+    ("reservation deadlocks", impact/probability 4/4, `open`) and
+    `docs/01_ADVERSARIAL_REVIEW.md`'s own pre-mortem -- B-011b's title
+    promised "deadlock avoidance" but TASK-017 narrowed it to same-tick
+    reservation alone, and no follow-up row ever picked the rest back up.
+    Small synthetic fixtures never had enough agents sharing enough
+    narrow terrain to trigger it; Bridgehead's real six-agent squad
+    (TASK-064) is the first content that does.
+
+    Scoped, not implemented: confirmed via `AskUserQuestion` to pursue the
+    smaller, safer of two fix directions -- turn a too-long-stalled order
+    into a visible failure (clear `Destination`, emit a new event) rather
+    than making `Pathfinding` itself occupancy-aware (bigger, contract-
+    changing, corpus/determinism-risking, deferred as a further, larger
+    follow-up if this alone proves insufficient). New backlog row B-065;
+    new `tasks/TASK-065-STALLED-ORDER-VISIBLE-FAILURE.md` (status
+    `proposed`) -- no `CommandoWar.Sim` code changed yet.
+
+    `active_work.selected_task` stays `TASK-064` (still `review`, still
+    awaiting Dave on the pre-existing criterion-7/3 finding and B-022);
+    TASK-065 is scoped but not yet selected/started.
+    (tasks/TASK-065-STALLED-ORDER-VISIBLE-FAILURE.md;
+    docs/11_BACKLOG.md B-065 row)
+
+    Prior: 2026-09-20: TASK-064 review round 2 (live): after round 1's fix, Dave
+    confirmed it worked, then raised four further points: "you cant
+    visually tell who is a leader, still no sense of a fight, just
+    blindly moving men to die, no reaction under fire, no cover, no enemy
+    response either." Confirmed via `AskUserQuestion` to fix three now
+    (cheap, real, client-only) and leave the fourth as the already-
+    existing, explicitly-descoped backlog row B-022 (enemy doctrine --
+    repositioning, seeking cover, calling for backup -- deferred since
+    TASK-037, a genuinely separate AI-design initiative). "No sense of a
+    fight" is the aggregate effect of these plus the pre-existing fog-of-
+    war/no-tutorial gaps already on record, not separately actionable.
+
+    Fixed, all client-side only, no `CommandoWar.Sim` change: a leader
+    marker (`Casualty.currentLeader state.Agents`, a pure function over
+    already-held state -- a green ring plus a "LEADER" label, updating
+    automatically on succession); an under-fire hit-flash (the target's
+    figure blends toward white for 0.3s on a landed `FireLine`, fading
+    back, reusing the existing `heldFireLines` timer pattern); and a
+    cover indicator (`Terrain.Cover` -- never rendered anywhere,
+    player-facing or dev-overlay, since found unpaintable through the
+    tileset at TASK-060 -- a short cyan spoke per covered cell/direction,
+    thicker for a higher level, built once in `Ready`). A suspected
+    fourth issue (a "grey" figure in the recaptured screenshot) was
+    investigated with a temporary `dotnet fsi` probe (removed after use)
+    and found to be the pre-existing, correctly-functioning selection
+    halo, not a defect.
+
+    `dotnet build`/`test`/`corpus` unaffected (`0/0`/`408/408`/`18/18`);
+    all three scenes' `--selfcheck` reconfirmed `MATCH` unchanged
+    (render-only/local-timer additions); screenshot recaptured:
+    `docs/evidence/task-064-bridgehead-integration.png`. Same recurring
+    unrelated editor-triggered reformat (`ExportTerrainScript.cs`/
+    `project.godot`) caught and reverted again, not committed. Still
+    `review`, not accepted -- awaiting Dave's next live try, and
+    separately, unchanged by this round, his own decision on criterion 7
+    and on B-022.
+    (tasks/TASK-064-INTEGRATE-AND-VERIFY-VERTICAL-SLICE.md;
+    docs/ledger/2026-09-20-TASK-064-integrate-and-verify-vertical-slice.md)
+
+    Prior: 2026-09-20: TASK-064 review round 1 (live): Dave tried the real editor
+    and reported it felt static and out of control -- "everything seemed
+    static, no movement from enemies etc, no idea or fire lines etc" --
+    despite orders visibly registering and him trying to move across the
+    bridge. `AskUserQuestion` ruled out "never got close enough", pointing
+    at something actually broken rather than only the pre-existing fog-of-
+    war/no-enemy-patrol design reading as confusing. Root cause, confirmed
+    by a fresh temporary `dotnet fsi` probe (removed after use): a `MoveTo`
+    order for any agent other than a fireteam leader (a non-zero
+    `AgentState.FormationOffset`, TASK-059) does not target the literal
+    clicked cell -- `Appraisal.resolveFormationTarget`'s own bounded-radius
+    fallback can land the real destination well short of the click
+    (confirmed exactly: agent 2 ordered to `(8,6)` actually resolves to
+    `(7,6)`, outside the machine gun's engagement range), `Disposition =
+    Accepted` throughout, with zero client-side indication this happened.
+    Fixed, client-side only, no `CommandoWar.Sim` change: `CommandDemoScene.
+    OnHover`'s route preview now resolves through `Appraisal.
+    resolveFormationTarget` (the identical inputs `Simulation.fs`'s own
+    appraisal phase uses) whenever `MoveTo` is armed, so the preview shows
+    the real destination before the click; the order-status HUD text now
+    appends the agent's real `Destination` (`"accepted -> (7,6)"`) instead
+    of bare `"accepted"`. `dotnet build`/`test`/`corpus` unaffected (`0/0`/
+    `408/408`/`18/18`); `CommandDemo.tscn --selfcheck` reconfirmed `MATCH
+    0xB99E7F74EA1C3CDE` unchanged (presentational only, no `stepOnce`
+    change); `SnapshotDemo.tscn`/`AppraisalDemo.tscn` unaffected. One
+    unrelated editor-triggered reformat (`ExportTerrainScript.cs`/
+    `project.godot`) caught by `git status`/`git diff` and reverted, not
+    committed. Still `review`, not accepted -- awaiting Dave's next live
+    try of this fix, and separately, unchanged by this round, his own
+    decision on the original submission's criterion-7 finding (a full
+    `Succeeded`/`Failed` run on Bridgehead, not yet demonstrated).
+    (tasks/TASK-064-INTEGRATE-AND-VERIFY-VERTICAL-SLICE.md;
+    docs/ledger/2026-09-20-TASK-064-integrate-and-verify-vertical-slice.md)
+
+    Prior: 2026-09-20: TASK-064 (integrate and verify the Bridgehead vertical slice,
+    realises B-035) implemented and self-verified -- status `review`,
+    awaiting Dave's decision on one real, unresolved finding (not a clean
+    pass). `CommandDemoScene.fs`'s `Ready()` now loads
+    `content/scenarios/bridgehead.cwscenario` for real (`ScenarioFile.parse`
+    -> `Scenario.validate` -> `World.ofScenario`, the `DemoScenario.fs`
+    pipeline shape) instead of the small hand-authored `DemoScenario`
+    fixture -- the first task to run the actual docs/07 mission content in
+    the actual play scene. `IClientScene.Ready` gained a
+    `scenarioContentPath` parameter; `FSharpSceneHost.cs` resolves the path
+    via `ProjectSettings.GlobalizePath` (the `AppraisalDemoScene.cs`
+    precedent). A real, material gap was found and fixed, confirmed with
+    Dave via `AskUserQuestion`: the order-mode HUD had no way to issue
+    `Suppress` at all (only indices 0-3 existed, TASK-048; B-059's own
+    backlog text said outright "not part of Dave's task selection") --
+    Suppress is one of docs/07's five required commands and the mechanism
+    the whole product question rests on. Added index 4 (a procedural
+    crosshair icon, no new art asset -- docs/07 permits placeholders until
+    the integration gate, and this task is that gate); a new `enemyAt`
+    helper resolves the clicked cell's occupant as the `Command.suppress`
+    target.
+
+    `CommandDemoDrive.runScriptedSelfCheck` rewritten entirely against real
+    Bridgehead coordinates (all six agents, exercising all six formation-
+    slot resolutions against real terrain for the first time, TASK-059).
+    Investigated live via a series of temporary `dotnet fsi` probes
+    against the built client assembly (removed after use): sending every
+    agent at once gives the machine-gun team more simultaneous targets
+    than a lone agent, so real automatic engagement brings it down to
+    `Dead` while every friendly agent stays `Alive` -- a genuine,
+    reproducible, casualty-free neutralisation of the scenario's central
+    threat through the real click path, confirmed deterministic
+    (`0xB99E7F74EA1C3CDE` at tick 90) by repeated re-runs and through the
+    real Godot 4.7.2 editor.
+
+    Despite extensive investigation, a full `Succeeded` run (destroy +
+    extract) was not reduced to a reliable scripted sequence, and is
+    reported as a real, unresolved finding rather than smoothed over: the
+    `bridge-charge` target cell (9,5) itself appears covered by a threat
+    beyond the machine gun (most likely a depot rifleman); and a friendly
+    agent's own corpse permanently blocks its cell (never vacated, and
+    still `friendlyAt`-selectable, so a click there re-selects it for
+    status view rather than ever issuing a new order elsewhere) -- a scout
+    who dies exactly on an objective/target cell can make that objective
+    permanently unreachable. A full `Failed` run (all six eliminated) is
+    also geometrically capped well short of six by the bridge's own
+    two-lane chokepoint. Two of docs/07 section 9's 12 functional
+    acceptance criteria (3: canonical refusal; 7: mission succeeds/fails
+    without developer intervention) are therefore not closed on Bridgehead
+    itself -- flagged for Dave's own decision (map rebalance? more tactical
+    exploration? accept as a known gap?), not silently marked complete. The
+    other ten criteria are met, some newly demonstrated on Bridgehead, the
+    rest via existing evidence this task confirmed still holds.
+
+    `dotnet build` both `.slnx` (main Release; Godot client Debug) `0/0`;
+    `dotnet test` `408/408` (unaffected, no `CommandoWar.Sim` change); `--
+    corpus` `18/18` (unaffected); `-- import bridgehead.cwscenario` exit 0
+    (unaffected). `CommandDemo.tscn --selfcheck` re-pinned and confirmed
+    `MATCH 0xB99E7F74EA1C3CDE` through the real Godot 4.7.2 editor;
+    `SnapshotDemo.tscn`/`AppraisalDemo.tscn` reconfirmed unaffected.
+    Screenshot evidence: `docs/evidence/task-064-bridgehead-integration.
+    png`. `docs/07_VERTICAL_SLICE.md` section 9 and `docs/11_BACKLOG.md`'s
+    B-035 row both updated with the full criterion-by-criterion record.
+    (tasks/TASK-064-INTEGRATE-AND-VERIFY-VERTICAL-SLICE.md;
+    docs/ledger/2026-09-20-TASK-064-integrate-and-verify-vertical-slice.md)
+
+    Prior: 2026-09-20: TASK-064 drafted and selected. Reached via
+    `AskUserQuestion` over two rounds after B-025 through B-034 were
+    confirmed all `done` for the first time (TASK-063/B-033 accepted): (1)
+    scope B-035 now rather than pulling B-064 (replay playback) forward
+    first; (2) include real client wiring (wire `CommandDemoScene` to load
+    Bridgehead for real), not a sim-side-only verification pass. Not yet
+    implemented at that point.
+    (tasks/TASK-064-INTEGRATE-AND-VERIFY-VERTICAL-SLICE.md)
+
+    Prior: 2026-09-20: TASK-063 accepted by Dave ("ok it works") after one live
     review round found and fixed a real, blocking gap -- `WorldState.
     ObjectiveAreas`/`.ExtractionAreas` were never rendered anywhere in
     `CommandDemoScene`, so the objective cell looked like ordinary terrain

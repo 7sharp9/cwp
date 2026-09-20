@@ -66,8 +66,14 @@ type TickHash = { Tick: int64; Hash: uint64 }
 /// whole client, no per-scene C#, `[Export] SceneType` names the
 /// implementation).
 type IClientScene =
-    /// Called once from the host's `_Ready`.
-    abstract Ready: unit -> unit
+    /// Called once from the host's `_Ready`. `scenarioContentPath` is the
+    /// already-resolved absolute path to a `.cwscenario` content file (the
+    /// host resolves `content/` via `ProjectSettings.GlobalizePath`, the
+    /// `AppraisalDemoScene.cs` precedent -- file-path resolution is a
+    /// Godot/C# concern per ADR-0004, parsing stays framework-neutral F#).
+    /// A scene with no real content to load (like `DemoRenderScene`, which
+    /// still loads its own hand-authored `DemoScenario`) ignores it.
+    abstract Ready: scenarioContentPath: string -> unit
     /// Called once per host `_Process(delta)`, wall-clock seconds since the
     /// last call. Owns the fixed-step authoritative-tick accumulator; the
     /// simulation never sees a wall-clock value directly (ADR-0004's
@@ -89,15 +95,18 @@ type IClientScene =
     /// (like `DemoRenderScene`) may no-op.
     abstract OnTogglePause: unit -> unit
     /// An XCOM-style HUD order-mode icon was clicked (TASK-048, backlog
-    /// B-059): `index` is `0 = MoveTo`, `1 = Hold`, `2 = Assault`,
-    /// `3 = Withdraw` -- the C# host owns the fixed on-screen icon rects and
+    /// B-059; index 4 added by TASK-064, backlog B-035): `index` is
+    /// `0 = MoveTo`, `1 = Hold`, `2 = Assault`, `3 = Withdraw`,
+    /// `4 = Suppress` -- the C# host owns the fixed on-screen icon rects and
     /// their hit-testing (a HUD-chrome layout concern, not a world-grid
     /// projection); this call only ever carries the resolved index, the
     /// `OnClick`/`ScreenToCell` precedent of primitives-only across the
     /// boundary. A scene with no order-mode concept (like `DemoRenderScene`)
-    /// may no-op.
+    /// may no-op. While armed, `Suppress`'s own next `OnClick` targets
+    /// whichever agent occupies the clicked cell (any side), not a bare
+    /// cell -- `Command.suppress` takes an `AgentId`, not a `Cell`.
     abstract OnOrderModeClick: index: int -> unit
-    /// The currently armed order mode (the same `0..3` vocabulary as
+    /// The currently armed order mode (the same `0..4` vocabulary as
     /// `OnOrderModeClick`), read once per frame so the host can highlight the
     /// active icon. `0` (`MoveTo`) for a scene with no order-mode concept.
     abstract OrderMode: unit -> int

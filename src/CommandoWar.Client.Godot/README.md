@@ -569,6 +569,128 @@ formatting and the extracted-agent line -- `DemoScenario` authors only a
 `ReachArea` objective, so no in-scope scripted sequence reaches those
 branches; correct by inspection (exhaustively matched), not confirmed live.
 
+### `CommandDemoScene` loads real Bridgehead content (TASK-064, backlog B-035)
+
+`CommandDemoScene`'s `Ready()` (now `Ready(scenarioContentPath)`) loads
+`content/scenarios/bridgehead.cwscenario` for real -- `ScenarioFile.parse`
+-> `Scenario.validate` -> `World.ofScenario`, the `DemoScenario.fs`
+pipeline shape, with a new `bridgeheadSeed` literal (no seed is authored in
+a `.cwscenario` file itself) -- instead of the small hand-authored
+`DemoScenario` fixture. `FSharpSceneHost.cs` resolves the absolute path via
+`ProjectSettings.GlobalizePath("res://")` + `Path.Combine(.., "..", "..",
+"content", ...)`, the `AppraisalDemoScene.cs` precedent for reading
+`content/` at runtime from a real play scene, not just an editor tool.
+`DemoRenderScene` (`SnapshotDemo.tscn`) is unaffected -- it ignores the new
+parameter and still loads `DemoScenario` for its own diagnostic-renderer
+purpose.
+
+A real, material gap was found and fixed, confirmed with Dave via
+`AskUserQuestion`: the order-mode HUD had no way to issue `Suppress` at all
+(only `0..3` = Move/Hold/Assault/Withdraw existed, TASK-048) -- one of
+docs/07's five required commands, and the mechanism the whole "can
+suppressing a machine-gun position change the outcome" product question
+rests on. Added index `4`: a procedural crosshair icon (no new Kenney
+texture -- docs/07 section 6 permits presentation placeholders until the
+integration gate, and this task is that gate), and a new `enemyAt` helper
+(the `friendlyAt` precedent) so arming it and clicking a cell resolves to
+whichever agent occupies it and issues `Command.suppress` against that
+agent id; `Appraisal.appraise` still gates it on the target being a real
+known contact exactly as before (TASK-037).
+
+`CommandDemoDrive.runScriptedSelfCheck` was rewritten entirely against real
+Bridgehead coordinates (all six friendly agents, exercising all six
+formation-slot resolutions against real terrain for the first time,
+TASK-059). Investigated live via a series of temporary `dotnet fsi` probes
+against the built `CommandoWar.Client.Godot.Core.dll` (removed after use):
+sending every agent at once gives the machine-gun team more simultaneous
+targets than a lone agent, so real automatic engagement brings it down to
+`Dead` while every friendly agent stays `Alive` -- a reproducible,
+casualty-free neutralisation of the scenario's central threat through the
+real click path.
+
+**Investigated but not closed, flagged for Dave:** a full `Succeeded` run
+(destroy + extract) was not reduced to a reliable scripted sequence despite
+extensive investigation. Two concrete findings: the `bridge-charge` target
+cell (9,5) itself appears covered by a threat beyond the machine gun (most
+likely one of the depot riflemen); and a friendly agent's own corpse
+permanently blocks its cell (never vacated, and still `friendlyAt`-
+selectable, so a click there re-selects it for status view rather than
+ever issuing a new order elsewhere) -- a scout who dies exactly on an
+objective/target cell can make that objective permanently unreachable. A
+full `Failed` run (all six eliminated) is also geometrically capped well
+short of six by the bridge's own two-lane chokepoint. See the task file
+(`tasks/TASK-064-INTEGRATE-AND-VERIFY-VERTICAL-SLICE.md`) for the complete
+docs/07 section 9 criterion-by-criterion record.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0xB99E7F74EA1C3CDE (re-pinned: real Bridgehead content)
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0xEC8F01D781AB2122 (unaffected)
+"$GODOT" --headless --path . scenes/AppraisalDemo.tscn -- --selfcheck  # MATCH 0xC382CACA830CCC35 (unaffected)
+```
+
+No `CommandoWar.Sim`/`CommandoWar.Headless` change; `dotnet test` `408/408`
+unaffected; `-- corpus` `18/18` unaffected; `-- import
+content/scenarios/bridgehead.cwscenario` still exits 0. Committed
+screenshot `docs/evidence/task-064-bridgehead-integration.png` (real
+terrain/depot/agents, the objective/extraction markers, and the new
+Suppress icon armed and highlighted in the HUD bar).
+
+**Review round 1 (2026-09-20, live):** Dave reported the game felt static
+and out of control -- "no movement from enemies etc, no idea or fire lines
+etc" -- despite orders visibly registering and him trying to move across
+the bridge. Root cause: a `MoveTo` order for any agent other than a
+fireteam leader (a non-zero `AgentState.FormationOffset`, TASK-059) does
+not target the literal clicked cell -- `Appraisal.resolveFormationTarget`'s
+own bounded-radius fallback can land the real destination well short of
+the click (confirmed exactly with a temporary `dotnet fsi` probe: agent 2
+ordered to `(8,6)` actually resolves to `(7,6)`, outside the machine gun's
+engagement range), with `Disposition = Accepted` throughout and zero
+client-side indication this happened. Fixed, client-side only:
+`CommandDemoScene.OnHover`'s route preview now resolves through
+`Appraisal.resolveFormationTarget` (the identical inputs `Simulation.fs`'s
+own appraisal phase uses) whenever `MoveTo` is armed, so the previewed
+route shows the real destination before the click; the order-status HUD
+text now appends the agent's real `Destination` (`"accepted -> (7,6)"`)
+instead of bare `"accepted"`. `dotnet build`/`test`/`corpus` unaffected;
+`CommandDemo.tscn --selfcheck` reconfirmed `MATCH 0xB99E7F74EA1C3CDE`
+unchanged (presentational only, never touches `stepOnce`).
+
+**Review round 2 (2026-09-20, live):** Dave confirmed round 1's fix
+worked, then raised four further points: "you cant visually tell who is a
+leader, still no sense of a fight, just blindly moving men to die, no
+reaction under fire, no cover, no enemy response either." Fixed three,
+client-side only, no `CommandoWar.Sim` change:
+
+- A leader marker: `Casualty.currentLeader state.Agents` (the TASK-045
+  succession rule, a pure function over already-held state) drives a
+  green ring plus a "LEADER" label that follows whichever agent currently
+  holds it, updating on succession for free.
+- An under-fire hit-flash: a new `heldHitFlashes` timer (the
+  `heldFireLines` precedent) blends a hit target's own figure toward white
+  for `hitFlashHoldSeconds` (0.3s) on every landed `FireLine`, fading back
+  -- a colour blend on the existing figure, not a new draw item.
+- A cover indicator: `Terrain.Cover` had never been rendered anywhere,
+  player-facing or dev-overlay, since found unpaintable through the
+  tileset back at TASK-060. A short cyan spoke per covered cell/direction
+  (built once in `Ready`, the `buildObjectiveMarkerItems` precedent),
+  thicker for a higher `Level`.
+
+The fourth point ("no enemy response") is by design, not a bug: enemy
+doctrine is backlog B-022, explicitly descoped since TASK-037. A suspected
+fifth issue -- a "grey" figure in the recaptured screenshot -- turned out
+to be the pre-existing, correctly-functioning selection halo (gold, radius
+34) drawn under the selected agent's own opaque figure (radius 20),
+confirmed via a temporary `dotnet fsi` `DrawList()` inspection (removed
+after use), not a defect.
+
+`dotnet build`/`test`/`corpus` unaffected; all three scenes' `--selfcheck`
+reconfirmed `MATCH` unchanged. Screenshot recaptured:
+`docs/evidence/task-064-bridgehead-integration.png`.
+
 ## Pinned versions
 
 | Component | Version |

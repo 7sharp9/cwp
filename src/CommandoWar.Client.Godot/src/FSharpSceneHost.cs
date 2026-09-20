@@ -12,6 +12,7 @@
 // deviation, the latter the disposable TASK-004 spike).
 
 using System;
+using System.IO;
 using System.Linq;
 using CwClientCore;
 using Godot;
@@ -122,6 +123,19 @@ public partial class FSharpSceneHost : Node2D
         GD.Load<Texture2D>("res://art/hud_withdraw.png"),
     ];
 
+    // Index 4 = Suppress (TASK-064, backlog B-035): deliberately no texture
+    // asset -- `docs/07_VERTICAL_SLICE.md` section 6 explicitly permits
+    // presentation placeholders "until the integration gate", and this task
+    // is the integration gate itself. Drawn procedurally (a crosshair, the
+    // `DrawArc`/`DrawLine` primitives `_Draw`'s `Kind = 2`/`5` items already
+    // use) in `DrawOrderModeBar` below instead of adding a fifth Kenney
+    // texture -- a real icon is a follow-up, not blocking this task's own
+    // acceptance criteria. `OrderModeIconCount` (not `OrderModeTextures.
+    // Length`) is what the hit-test and draw loops both size themselves to,
+    // so this one procedural icon still arms/highlights exactly like the
+    // other four.
+    private const int OrderModeIconCount = 5;
+
     private const float OrderModeIconSize = 48f;
     private const float OrderModeIconGap = 8f;
     private static readonly Vector2 OrderModeBarOrigin = new(12f, 720f);
@@ -154,9 +168,20 @@ public partial class FSharpSceneHost : Node2D
     private bool _screenshotMissionMode;
     private const int MissionScreenshotFrameCount = 400;
 
+    // TASK-064 (backlog B-035): resolves `content/<relativePath>` the same
+    // way `AppraisalDemoScene.cs` already does for `content/replays` -- the
+    // Godot project root sits two levels under the repo root
+    // (`src/CommandoWar.Client.Godot/`), and `res://` paths do not reliably
+    // support `..` traversal, so the absolute path is globalized first.
+    private static string ResolveContentPath(string relativePath) =>
+        Path.GetFullPath(Path.Combine(
+            ProjectSettings.GlobalizePath("res://"), "..", "..", "content", relativePath));
+
     public override void _Ready()
     {
         ParseCommandLine();
+
+        string bridgeheadScenarioPath = ResolveContentPath(Path.Combine("scenarios", "bridgehead.cwscenario"));
 
         if (string.IsNullOrEmpty(SceneType))
         {
@@ -177,7 +202,7 @@ public partial class FSharpSceneHost : Node2D
         }
 
         _scene = (IClientScene)Activator.CreateInstance(sceneClrType);
-        _scene.Ready();
+        _scene.Ready(bridgeheadScenarioPath);
 
         // Screenshot evidence for CommandDemoScene needs a selection, a
         // route preview, and an issued order actually visible -- with no
@@ -194,23 +219,35 @@ public partial class FSharpSceneHost : Node2D
         // pieces of evidence, alongside the pre-existing pending-route proof.
         if (_screenshotMode && SceneType == "CwClientCore.CommandDemoScene")
         {
-            _scene.OnClick(true, 0, 0);
+            // TASK-064 (backlog B-035): coordinates updated for the real
+            // `bridgehead.cwscenario` layout -- agent 0 (leader) starts at
+            // (3,5), agent 1 at (2,5); (5,5) is open west-bank ground well
+            // short of the bridge, safe for a still evidence capture.
+            _scene.OnClick(true, 3, 5);
             _scene.OnTogglePause();
-            _scene.OnHover(3, 0);
-            _scene.OnClick(true, 3, 0);
-            _scene.OnClick(true, 0, 1);
+            _scene.OnHover(5, 5);
+            _scene.OnClick(true, 5, 5);
+            _scene.OnClick(true, 2, 5);
             _scene.OnOrderModeClick(1);
-            _scene.OnHover(2, 1);
+            _scene.OnHover(2, 4);
         }
 
         // TASK-063, backlog B-033 narrowed: select agent 0 and send it
-        // straight to the ridge-top objective area -- deliberately left
-        // unpaused (unlike `_screenshotMode` above), so `_Process`'s normal
-        // `Update(delta)` calls keep advancing real ticks until the
-        // objective completes and the mission-summary panel appears.
+        // straight to the optional `reach observation` objective area
+        // (4,4) -- deliberately left unpaused (unlike `_screenshotMode`
+        // above), so `_Process`'s normal `Update(delta)` calls keep
+        // advancing real ticks. TASK-064 (backlog B-035) updated the
+        // selection coordinate for the real `bridgehead.cwscenario` layout
+        // (agent 0 starts at (3,5), not (0,0)) -- reaching (4,4) still
+        // completes `ObjectiveId 1`, but that objective is optional and
+        // does not end the mission on Bridgehead's real content, so this
+        // mode no longer reaches the mission-summary panel the way it did
+        // against `DemoScenario`'s single non-optional objective; the
+        // panel's own evidence (`docs/evidence/task-063-mission-summary.
+        // png`) is unaffected, captured against that earlier content.
         if (_screenshotMissionMode && SceneType == "CwClientCore.CommandDemoScene")
         {
-            _scene.OnClick(true, 0, 0);
+            _scene.OnClick(true, 3, 5);
             _scene.OnHover(4, 4);
             _scene.OnClick(true, 4, 4);
         }
@@ -273,9 +310,9 @@ public partial class FSharpSceneHost : Node2D
                 expected = 0xEC8F01D781AB2122UL; // DemoScenario tick 20 (TASK-063 re-pin: a real, pre-existing stale pin found while verifying TASK-063 -- TASK-062's Canonical.FormatVersion 12 -> 13 bump changed every canonical byte layout, including DemoScenario's, but TASK-062 never touched CommandoWar.Client.Godot and so never re-ran this self-check; behaviour is unaffected, this is the same format-version-only re-pin every corpus/fixture/diagnostics golden already got)
                 break;
             case "CwClientCore.CommandDemoScene":
-                label = "command-demo-scene self-check (scripted MoveTo(3,0) + Hold(2,1) via order-mode icon, then MoveTo(4,4) reaching the ridge-top objective)";
-                sequence = CommandDemoDrive.runScriptedSelfCheck();
-                expected = 0xED5437A8773C92B2UL; // CommandDemoScene tick 40 (TASK-063 re-pin: the scripted sequence now sends agent 0 on to (4,4), completing DemoScenario's sole authored objective and reaching MissionOutcome = Succeeded; extended from 20 to 40 ticks to give the extra leg time to complete and settle)
+                label = "command-demo-scene self-check (real bridgehead.cwscenario content: all six friendly agents ordered toward the bridge, neutralising the machine-gun team through real automatic engagement with no friendly casualties)";
+                sequence = CommandDemoDrive.runScriptedSelfCheck(ResolveContentPath(Path.Combine("scenarios", "bridgehead.cwscenario")));
+                expected = 0xB99E7F74EA1C3CDEUL; // CommandDemoScene tick 90 (TASK-064, backlog B-035: CommandDemoScene now loads the real Bridgehead scenario instead of DemoScenario -- see the task file for the full sequence and its findings)
                 break;
             default:
                 GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");
@@ -347,7 +384,7 @@ public partial class FSharpSceneHost : Node2D
     // existing world-cell OnClick unchanged").
     private static bool TryHitOrderModeIcon(Vector2 screenPos, out int index)
     {
-        for (int i = 0; i < OrderModeTextures.Length; i++)
+        for (int i = 0; i < OrderModeIconCount; i++)
         {
             if (OrderModeIconRect(i).HasPoint(screenPos))
             {
@@ -527,13 +564,30 @@ public partial class FSharpSceneHost : Node2D
     {
         int armed = _scene.OrderMode();
 
-        for (int i = 0; i < OrderModeTextures.Length; i++)
+        for (int i = 0; i < OrderModeIconCount; i++)
         {
             Rect2 rect = OrderModeIconRect(i);
             DrawRect(rect, new Color(0f, 0f, 0f, 0.55f));
-            DrawTextureRect(OrderModeTextures[i], rect.Grow(-6f), false, Colors.White);
+            if (i < OrderModeTextures.Length)
+                DrawTextureRect(OrderModeTextures[i], rect.Grow(-6f), false, Colors.White);
+            else
+                DrawSuppressIcon(rect.Grow(-6f));
             DrawRect(rect, i == armed ? new Color(1f, 0.85f, 0.2f) : new Color(1f, 1f, 1f, 0.25f), false, i == armed ? 3f : 1f);
         }
+    }
+
+    // The procedural Suppress icon (index 4, see OrderModeTextures above): a
+    // crosshair -- a hollow ring plus a cross through its centre, orange to
+    // read as "suppressive fire" distinctly from the other four icons' cool
+    // Kenney palette.
+    private void DrawSuppressIcon(Rect2 area)
+    {
+        var color = new Color(1f, 0.55f, 0.15f);
+        Vector2 center = area.GetCenter();
+        float radius = area.Size.X * 0.35f;
+        DrawArc(center, radius, 0, Mathf.Tau, 20, color, 3f);
+        DrawLine(center - new Vector2(radius * 1.4f, 0), center + new Vector2(radius * 1.4f, 0), color, 3f);
+        DrawLine(center - new Vector2(0, radius * 1.4f), center + new Vector2(0, radius * 1.4f), color, 3f);
     }
 
     // A terrain tile's Kenney texture is a tall, bottom-anchored canvas (room

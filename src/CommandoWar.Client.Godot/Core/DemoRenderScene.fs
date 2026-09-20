@@ -143,7 +143,10 @@ type DemoRenderScene() =
                 facing
 
     interface IClientScene with
-        member _.Ready() =
+        // `scenarioContentPath` is irrelevant here (TASK-064): this scene's
+        // whole purpose is exercising the diagnostic renderers against
+        // `DemoScenario`'s own hand-built terrain, not real mission content.
+        member _.Ready(_scenarioContentPath: string) =
             state <- DemoScenario.initialState ()
             terrainItems <- RenderShared.buildTerrainItems state.Terrain
             currAgents <-
