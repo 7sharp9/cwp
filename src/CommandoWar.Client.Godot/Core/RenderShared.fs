@@ -403,3 +403,61 @@ module RenderShared =
     /// the reused hues on screen.
     let devLegendText: string =
         "[legend] cells: cyan=reserved red=obstructed yellow=known-contact orange=exposed-route | lines: green=visible/hit red=blocked grey=miss"
+
+    /// A player-facing plain-language label for one objective (TASK-063,
+    /// backlog B-033 narrowed): `Objective` carries no authored display
+    /// name, so the label is derived from its own `AreaId`/`TargetId`
+    /// string and DU case. `AllOf`/`Optional` recurse into their own
+    /// parts/inner objective.
+    let rec private objectiveLabel (o: Objective) : string =
+        match o with
+        | ReachArea(_, area) -> sprintf "reach %s" (AreaId.value area)
+        | HoldArea(_, area, ticks) -> sprintf "hold %s for %d ticks" (AreaId.value area) ticks
+        | DestroyTarget(_, target, ticks) -> sprintf "destroy %s (%d ticks)" (TargetId.value target) ticks
+        | ExtractAgents(_, _, area) -> sprintf "extract via %s" (AreaId.value area)
+        | AllOf(_, parts) -> parts |> Array.map objectiveLabel |> String.concat " and "
+        | Optional inner -> sprintf "%s (optional)" (objectiveLabel inner)
+
+    /// The same `ObjectiveId` extraction `Simulation.mission`'s own private
+    /// recursive helper performs -- duplicated here rather than exposed
+    /// across the assembly boundary, the `devReasonText`/`reasonText` "two
+    /// audiences, not one shared function" precedent above.
+    let rec private objectiveIdOf (o: Objective) : ObjectiveId =
+        match o with
+        | ReachArea(id, _)
+        | HoldArea(id, _, _)
+        | DestroyTarget(id, _, _)
+        | ExtractAgents(id, _, _)
+        | AllOf(id, _) -> id
+        | Optional inner -> objectiveIdOf inner
+
+    /// The mission-summary panel's lines (TASK-063, backlog B-033
+    /// narrowed), or an empty array while `WorldState.MissionOutcome` is
+    /// still `InProgress` -- `IClientScene.MissionSummaryLines`'s own
+    /// "nothing to show yet" contract. First line is always the outcome
+    /// headline; `Extracted` is read directly from `WorldState.Agents`
+    /// (not added to `AgentSnapshot`, which carries no such field).
+    let missionSummaryLines (state: WorldState) : string[] =
+        match state.MissionOutcome with
+        | InProgress -> [||]
+        | outcome ->
+            let headline = if outcome = Succeeded then "MISSION SUCCESS" else "MISSION FAILED"
+
+            let labelOf (id: ObjectiveId) : string option =
+                state.Objectives |> Array.tryFind (fun o -> objectiveIdOf o = id) |> Option.map objectiveLabel
+
+            let completedLines =
+                state.CompletedObjectives
+                |> Array.choose (fun id -> labelOf id |> Option.map (sprintf "completed: %s"))
+
+            let inProgressLines =
+                state.ObjectiveProgress
+                |> Array.choose (fun (id, ticks) ->
+                    labelOf id |> Option.map (fun label -> sprintf "in progress: %s (%d ticks)" label ticks))
+
+            let extractedLines =
+                state.Agents
+                |> Array.filter (fun a -> a.Extracted)
+                |> Array.map (fun a -> sprintf "extracted: agent %d" (AgentId.value a.Id))
+
+            Array.concat [ [| headline |]; completedLines; inProgressLines; extractedLines ]

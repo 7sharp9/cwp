@@ -494,6 +494,81 @@ real Godot 4.7.2 editor. Committed screenshot
 `docs/evidence/task-052-scale-and-hover.png` (captured with `--dev-overlay`
 to show the HUD's worst-case three-line height alongside the new scale).
 
+## Mission summary panel (TASK-063, backlog B-033 narrowed)
+
+The first client presentation of `WorldState.MissionOutcome`
+(`AgentState.Extracted`/`.CompletedObjectives`/`.ObjectiveProgress`, all
+done since TASK-062, backlog B-032) -- previously invisible outside the
+developer-only `Overlay.MissionStatus` diagnostic. `CommandDemoScene` now
+auto-pauses and shows a fixed screen-space panel the instant
+`MissionOutcome` leaves `InProgress`: an outcome headline (`MISSION
+SUCCESS`/`MISSION FAILED`), one line per completed objective, one per
+in-progress objective (with its tick count), and one per extracted agent.
+`IClientScene` gains `MissionSummaryLines: unit -> string[]` (empty =
+nothing to show, the `OnOrderModeClick`/`OrderMode` primitives-only
+precedent); `RenderShared.missionSummaryLines` builds the lines directly
+from `WorldState` (no `CommandoWar.Sim` change), deriving a plain-language
+label for each `Objective` from its own `AreaId`/`TargetId` since the
+domain type carries no authored display name. `OnClick`'s order-issuing
+guard also checks `MissionOutcome = InProgress` directly, so a manual
+un-pause afterward still cannot issue a new order.
+
+`CommandDemoDrive.runScriptedSelfCheck` (20 -> 40 ticks) now sends agent 0
+on from its existing `MoveTo(3,0)` to `DemoScenario`'s own sole authored
+objective at `(4,4)` (a non-optional `ReachArea` at `"ridge-top"`), reaching
+a real `MissionOutcome = Succeeded` through the same click path a player
+uses. A new `--screenshot-mission <path>` capture mode was needed for
+evidence: the existing `--screenshot` priming deliberately re-pauses right
+after issuing an order to hold a pending-route preview, the opposite of
+what this needed, so this mode selects agent 0, sends it straight to the
+objective, and stays unpaused with a longer capture-frame threshold (400 vs
+45) so the walk has time to finish.
+
+Two real, pre-existing bugs were found and fixed while verifying this task,
+neither caused by it: `SnapshotDemo.tscn`/`AppraisalDemo.tscn`'s own
+`--selfcheck` pins had gone stale since TASK-062's `Canonical.
+FormatVersion` 12 -> 13 bump (confirmed by reproducing the identical
+mismatch against committed `main` before any change here -- TASK-062
+never touched `CommandoWar.Client.Godot`, so never re-ran or re-pinned
+these), now re-pinned; and the panel's first draft anchored its
+`DrawString` box to the screen centre instead of the panel's own left
+edge, rendering every line a half-panel-width to the right of the panel it
+was meant to sit inside (visible immediately in the first evidence
+screenshot, fixed, re-captured).
+
+**Review round 1 (2026-09-20, live):** Dave tried it in the real editor and
+could not trigger the panel -- a real gap, not a fluke: `WorldState.
+ObjectiveAreas`/`.ExtractionAreas` were never rendered anywhere in
+`CommandDemoScene`, so the objective cell looked like ordinary terrain with
+nothing to click toward precisely. Fixed by adding an always-on marker for
+each objective/extraction area cell -- a hollow ring (`RenderShared.
+cellRing`) plus its `AreaId` as a label, built once in `Ready` from
+`WorldState` fields already held (static authored content, the `state.
+Terrain`/`.Bounds` precedent for reading `WorldState` directly). No
+`IClientScene`/interaction change, purely additive rendering; all three
+scenes' `--selfcheck` hashes reconfirmed `MATCH` unchanged. The first
+colour choice (gold) turned out visually identical to the selection halo's
+own gold ring exactly where it matters most (a selected agent standing on
+the objective) -- changed to violet; extraction stays a distinct cyan.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0xED5437A8773C92B2
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0xEC8F01D781AB2122 (re-pinned, stale from TASK-062)
+"$GODOT" --headless --path . scenes/AppraisalDemo.tscn -- --selfcheck  # MATCH 0xC382CACA830CCC35 (re-pinned, stale from TASK-062)
+```
+
+No `CommandoWar.Sim`/`CommandoWar.Headless` change; `dotnet test` `408/408`
+unaffected; `-- corpus` `18/18` unaffected. Committed screenshot
+`docs/evidence/task-063-mission-summary.png`. Not exercised live, flagged:
+`HoldArea`/`DestroyTarget`/`ExtractAgents`/`AllOf`/`Optional` objective-label
+formatting and the extracted-agent line -- `DemoScenario` authors only a
+`ReachArea` objective, so no in-scope scripted sequence reaches those
+branches; correct by inspection (exhaustively matched), not confirmed live.
+
 ## Pinned versions
 
 | Component | Version |

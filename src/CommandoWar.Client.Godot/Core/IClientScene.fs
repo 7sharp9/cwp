@@ -105,4 +105,13 @@ type IClientScene =
     /// scene with no live input to overlay (like `DemoRenderScene`) may
     /// no-op -- the `OnTogglePause` precedent.
     abstract OnToggleDevOverlay: unit -> unit
+    /// The mission-summary panel's lines (TASK-063, backlog B-033 narrowed),
+    /// read once per frame the same way `OrderMode` is (primitives only,
+    /// the `OnOrderModeClick`/`OrderMode` boundary precedent). An empty
+    /// array means nothing to show -- either `WorldState.MissionOutcome`
+    /// is still `InProgress`, or (like `DemoRenderScene`) the scene has no
+    /// mission-outcome concept at all. Non-empty means the mission has
+    /// ended: the host draws a panel with these exact lines and the scene
+    /// itself is expected to have already stopped accepting further orders.
+    abstract MissionSummaryLines: unit -> string[]
     abstract Dispose: unit -> unit

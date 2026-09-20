@@ -55,7 +55,7 @@ public partial class AppraisalDemoScene : Node2D
     private bool _selfCheck;
     private bool _screenshot;
     private string _screenshotPath;
-    private ulong _expectHash = 0x194805888CBE240DUL; // exposed-approach tick 1 (Canonical.FormatVersion 11, TASK-047 re-pin)
+    private ulong _expectHash = 0xC382CACA830CCC35UL; // exposed-approach tick 1 (TASK-063 re-pin: a real, pre-existing stale pin found while verifying TASK-063 -- TASK-062's Canonical.FormatVersion 12 -> 13 bump changed every canonical byte layout, but TASK-062 never touched CommandoWar.Client.Godot and so never re-ran this self-check; behaviour is unaffected)
     private int? _headlessExit;
     private int _screenshotFrames;
 

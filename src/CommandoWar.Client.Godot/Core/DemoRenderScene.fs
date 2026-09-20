@@ -243,5 +243,6 @@ type DemoRenderScene() =
         member _.OnToggleDevOverlay() = ()
         member _.OnOrderModeClick(_index: int) = ()
         member _.OrderMode() = 0
+        member _.MissionSummaryLines() = [||]
 
         member _.Dispose() = ()

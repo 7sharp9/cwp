@@ -141,6 +141,19 @@ public partial class FSharpSceneHost : Node2D
     private int? _headlessExit;
     private int _screenshotFrameCount;
 
+    // TASK-063 (backlog B-033 narrowed): a second, separate screenshot mode
+    // rather than folding into `--screenshot` above -- that existing
+    // priming immediately re-pauses to hold a pending/hover-preview state
+    // (TASK-040/048's own evidence), which is the opposite of what mission-
+    // summary evidence needs: the sim must keep advancing, unpaused, long
+    // enough for DemoScenario's sole authored objective (a non-optional
+    // `ReachArea` at "ridge-top", (4,4)) to actually complete. A longer
+    // frame threshold (`MissionScreenshotFrameCount`) gives an 8-cell
+    // Manhattan walk from (0,0) at this demo's half agent speed real time
+    // to finish, with margin.
+    private bool _screenshotMissionMode;
+    private const int MissionScreenshotFrameCount = 400;
+
     public override void _Ready()
     {
         ParseCommandLine();
@@ -190,6 +203,18 @@ public partial class FSharpSceneHost : Node2D
             _scene.OnHover(2, 1);
         }
 
+        // TASK-063, backlog B-033 narrowed: select agent 0 and send it
+        // straight to the ridge-top objective area -- deliberately left
+        // unpaused (unlike `_screenshotMode` above), so `_Process`'s normal
+        // `Update(delta)` calls keep advancing real ticks until the
+        // objective completes and the mission-summary panel appears.
+        if (_screenshotMissionMode && SceneType == "CwClientCore.CommandDemoScene")
+        {
+            _scene.OnClick(true, 0, 0);
+            _scene.OnHover(4, 4);
+            _scene.OnClick(true, 4, 4);
+        }
+
         // `--dev-overlay` (TASK-043, backlog B-029): a separate opt-in flag,
         // not folded into the priming above, so a plain `--screenshot`
         // capture keeps producing TASK-042's existing evidence unchanged.
@@ -222,6 +247,8 @@ public partial class FSharpSceneHost : Node2D
         // scene is still stepping at this point, DemoRenderScene's precedent.
         if (_screenshotMode && ++_screenshotFrameCount >= 45)
             CaptureScreenshot();
+        else if (_screenshotMissionMode && ++_screenshotFrameCount >= MissionScreenshotFrameCount)
+            CaptureScreenshot();
     }
 
     public override void _ExitTree() => _scene?.Dispose();
@@ -243,12 +270,12 @@ public partial class FSharpSceneHost : Node2D
             case "CwClientCore.DemoRenderScene":
                 label = "demo-render-scene self-check (DemoScenario, terrain-demo)";
                 sequence = DemoDrive.runFullSequence();
-                expected = 0xF422ACB8D5A86FF0UL; // DemoScenario tick 20 (TASK-049 re-pin: DemoScenario's agents now move at half Agent.MoveSpeedDefault)
+                expected = 0xEC8F01D781AB2122UL; // DemoScenario tick 20 (TASK-063 re-pin: a real, pre-existing stale pin found while verifying TASK-063 -- TASK-062's Canonical.FormatVersion 12 -> 13 bump changed every canonical byte layout, including DemoScenario's, but TASK-062 never touched CommandoWar.Client.Godot and so never re-ran this self-check; behaviour is unaffected, this is the same format-version-only re-pin every corpus/fixture/diagnostics golden already got)
                 break;
             case "CwClientCore.CommandDemoScene":
-                label = "command-demo-scene self-check (scripted MoveTo(3,0) + Hold(2,1) via order-mode icon)";
+                label = "command-demo-scene self-check (scripted MoveTo(3,0) + Hold(2,1) via order-mode icon, then MoveTo(4,4) reaching the ridge-top objective)";
                 sequence = CommandDemoDrive.runScriptedSelfCheck();
-                expected = 0x00D3D471EF7354BCUL; // CommandDemoScene tick 20 (unchanged by TASK-049: both scripted orders complete within a handful of ticks even at half speed, well inside the 20-tick window, so the tick-20 rest state is unaffected)
+                expected = 0xED5437A8773C92B2UL; // CommandDemoScene tick 40 (TASK-063 re-pin: the scripted sequence now sends agent 0 on to (4,4), completing DemoScenario's sole authored objective and reaching MissionOutcome = Succeeded; extended from 20 to 40 ticks to give the extra leg time to complete and settle)
                 break;
             default:
                 GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");
@@ -335,7 +362,7 @@ public partial class FSharpSceneHost : Node2D
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (_scene == null || _selfCheck || _screenshotMode)
+        if (_scene == null || _selfCheck || _screenshotMode || _screenshotMissionMode)
             return;
 
         if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mbIcon
@@ -445,6 +472,47 @@ public partial class FSharpSceneHost : Node2D
         }
 
         DrawOrderModeBar();
+        DrawMissionSummaryPanel();
+    }
+
+    // Mission summary panel (TASK-063, backlog B-033 narrowed): fixed
+    // screen-space chrome, the `DrawOrderModeBar` precedent -- drawn last
+    // (on top of everything, including the order-mode bar) so it is never
+    // obscured. Only ever drawn once `_scene.MissionSummaryLines()` is
+    // non-empty (`WorldState.MissionOutcome` has left `InProgress`); a dark
+    // backing panel sized to its exact line count, first line (the outcome
+    // headline) drawn larger than the rest.
+    private void DrawMissionSummaryPanel()
+    {
+        string[] lines = _scene.MissionSummaryLines();
+        if (lines.Length == 0)
+            return;
+
+        const float lineHeight = 26f;
+        const float paddingX = 24f;
+        const float paddingY = 20f;
+        const float panelWidth = 460f;
+        float panelHeight = paddingY * 2f + lineHeight * lines.Length;
+        var origin = new Vector2(640f - panelWidth * 0.5f, 400f - panelHeight * 0.5f);
+        var size = new Vector2(panelWidth, panelHeight);
+
+        DrawRect(new Rect2(origin, size), new Color(0f, 0f, 0f, 0.8f));
+        DrawRect(new Rect2(origin, size), Colors.White, false, 2f);
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            bool headline = i == 0;
+            int fontSize = headline ? 22 : 15;
+            Color color = headline ? Colors.White : new Color(0.85f, 0.85f, 0.85f);
+            // `DrawString`'s `pos` is the text box's own LEFT edge, not a
+            // centre point -- `HorizontalAlignment.Center` then centres the
+            // text within `[pos.X, pos.X + width]`, so the box must start at
+            // the panel's own left edge (`origin.X`), not the screen centre
+            // (640f), or the text renders shifted a full half-panel-width to
+            // the right of the panel it is meant to sit inside.
+            var pos = new Vector2(origin.X + paddingX * 0.5f, origin.Y + paddingY + lineHeight * i + fontSize);
+            DrawString(ThemeDB.FallbackFont, pos, lines[i], HorizontalAlignment.Center, panelWidth - paddingX, fontSize, color);
+        }
     }
 
     // XCOM-style HUD order-mode icon bar (TASK-048, backlog B-059): fixed
@@ -576,6 +644,11 @@ public partial class FSharpSceneHost : Node2D
                     break;
                 case "--screenshot":
                     _screenshotMode = true;
+                    if (i + 1 < args.Length)
+                        _screenshotPath = args[++i];
+                    break;
+                case "--screenshot-mission":
+                    _screenshotMissionMode = true;
                     if (i + 1 < args.Length)
                         _screenshotPath = args[++i];
                     break;

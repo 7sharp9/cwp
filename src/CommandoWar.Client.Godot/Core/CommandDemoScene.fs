@@ -28,6 +28,35 @@ type CommandDemoScene() =
     let mutable prevAgents: Map<int, Cell> = Map.empty
     let mutable currAgents: AgentSnapshot[] = [||]
     let mutable terrainItems: DrawItem[] = [||]
+
+    // Objective/extraction area markers (TASK-063, backlog B-033 narrowed;
+    // raised live by Dave testing the mission-summary panel -- with nothing
+    // marking `WorldState.ObjectiveAreas`/`.ExtractionAreas` on the map, a
+    // player has no way to tell where an objective actually is short of the
+    // `F1` developer overlay, so the panel this task adds is unreachable in
+    // practice). Static authored content, the `state.Terrain`/`.Bounds`
+    // precedent for reading `WorldState` fields directly rather than
+    // routing through a diagnostic overlay -- built once in `Ready`, not
+    // recomputed every tick, since neither array ever changes after world
+    // creation.
+    let mutable objectiveMarkerItems: DrawItem[] = [||]
+    // Violet, not gold: the selection halo already draws a near-identical
+    // gold/yellow ring (R=1.0,G=0.95,B=0.30) around whichever agent is
+    // selected, so an objective marker that colour would be indistinguishable
+    // from it the moment a selected agent stands on the objective cell --
+    // exactly the case that matters most (an agent that just arrived).
+    let objectiveAreaColor = (0.75f, 0.35f, 1.0f)
+    let extractionAreaColor = (0.3f, 0.85f, 1.0f)
+
+    let buildObjectiveMarkerItems (state: WorldState) : DrawItem[] =
+        let markersFor (areas: Area[]) (color: float32 * float32 * float32) : DrawItem[] =
+            areas
+            |> Array.collect (fun area ->
+                [| RenderShared.cellRing area.Cell color 0.85f (agentRadius * 0.9f)
+                   RenderShared.cellLabel area.Cell (AreaId.value area.Id) color 0.9f 9.0f |])
+
+        Array.append (markersFor state.ObjectiveAreas objectiveAreaColor) (markersFor state.ExtractionAreas extractionAreaColor)
+
     let mutable accum = 0.0
     let mutable alpha = 0.0
     let mutable hash = 0UL
@@ -274,6 +303,16 @@ type CommandDemoScene() =
         hash <- r.StateHash.Value
         devFrame <- Diagnostics.frameOf r
 
+        // Mission summary panel (TASK-063, backlog B-033 narrowed): the
+        // instant `MissionOutcome` leaves `InProgress` (a one-way
+        // transition, `Simulation.mission`'s own precedent), tactical
+        // pause engages on its own -- the same field `Space` toggles --
+        // so the sim stops advancing and `OnClick`'s order-issuing guard
+        // below (which also checks `MissionOutcome` directly, in case the
+        // player un-pauses) has nothing further to resolve.
+        if state.MissionOutcome <> InProgress then
+            paused <- true
+
         // The immediate next path cell (not the far-off final `Destination`)
         // for every currently-moving agent -- see the field comment on
         // `nextStepCell` above. `Array.skip 1` on the returned route would
@@ -435,6 +474,7 @@ type CommandDemoScene() =
         member _.Ready() =
             state <- DemoScenario.initialState ()
             terrainItems <- RenderShared.buildTerrainItems state.Terrain
+            objectiveMarkerItems <- buildObjectiveMarkerItems state
             devFrame <- Diagnostics.frame state
             currAgents <-
                 state.Agents
@@ -1003,8 +1043,8 @@ type CommandDemoScene() =
             // no single meaningful depth.
             let sorted =
                 Array.concat
-                    [ terrainItems; haloItems; agentItems; hoverHighlightItems; previewItems; pendingItems
-                      committedItems ]
+                    [ terrainItems; objectiveMarkerItems; haloItems; agentItems; hoverHighlightItems; previewItems
+                      pendingItems; committedItems ]
                 |> Array.sortBy RenderShared.depthKey
 
             Array.concat [ sorted; fireEffects; audioCueItems; holdOutlineItems; devItems ]
@@ -1087,6 +1127,7 @@ type CommandDemoScene() =
                         GridBounds.contains cell state.Bounds
                         && agentPosition agentId <> Some cell
                         && Casualty.isAlive (vitalsOf agentId)
+                        && state.MissionOutcome = InProgress
                         ->
                         // Dispatch on the armed HUD order mode (TASK-048,
                         // backlog B-059) -- `0 = MoveTo` is both the default
@@ -1176,6 +1217,13 @@ type CommandDemoScene() =
         member _.OnOrderModeClick(index: int) = orderMode <- (if orderMode = index then 0 else index)
         member _.OrderMode() = orderMode
 
+        // Mission summary panel (TASK-063, backlog B-033 narrowed): reads
+        // the live `state` directly (`RenderShared.missionSummaryLines`
+        // returns `[||]` while still `InProgress`), the same "read
+        // supplementary state once per frame" shape `OrderMode` above
+        // already establishes.
+        member _.MissionSummaryLines() = RenderShared.missionSummaryLines state
+
         member _.Dispose() = ()
 
     /// Steps exactly `count` ticks with no wall clock involved -- the
@@ -1201,8 +1249,15 @@ module CommandDemoDrive =
     /// dispatch reaches a real, non-`MoveTo` `Command.hold` through the
     /// identical click path a player uses, not just a direct sim-side call
     /// (the TASK-037/047 `SimulationTests`-only precedent already proves the
-    /// sim side; this proves the click wiring on top of it). Then steps the
-    /// full `DemoScenario` run.
+    /// sim side; this proves the click wiring on top of it).
+    ///
+    /// TASK-063 (backlog B-033 narrowed): once agent 0 has had time to
+    /// arrive at (3,0), it is reselected and sent on to (4,4) -- the
+    /// ridge-top objective area `DemoScenario`'s own sole authored
+    /// objective (a non-optional `ReachArea`) targets -- so the run reaches
+    /// a real `MissionOutcome = Succeeded`, proving the mission-summary
+    /// panel's data end to end through the same click path, not a direct
+    /// sim-side call.
     let runScriptedSelfCheck () : TickHash[] =
         let scene = CommandDemoScene()
         let asScene = scene :> IClientScene
@@ -1214,4 +1269,9 @@ module CommandDemoDrive =
         asScene.OnOrderModeClick(1)
         asScene.OnHover(2, 1)
         asScene.OnClick(true, 2, 1)
-        scene.StepTicksHeadless(DemoScenario.TickCount)
+        let phase1 = scene.StepTicksHeadless(12L)
+        asScene.OnClick(true, 3, 0)
+        asScene.OnHover(4, 4)
+        asScene.OnClick(true, 4, 4)
+        let phase2 = scene.StepTicksHeadless(28L)
+        Array.append phase1 phase2
