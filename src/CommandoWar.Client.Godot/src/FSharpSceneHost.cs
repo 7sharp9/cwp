@@ -168,6 +168,18 @@ public partial class FSharpSceneHost : Node2D
     private bool _screenshotMissionMode;
     private const int MissionScreenshotFrameCount = 400;
 
+    // TASK-065 (backlog B-065): a scriptable evaluation tool, not evidence
+    // for a specific task -- Dave asked directly to be able to watch the
+    // real six-agent Bridgehead squad-advance-and-engage play out visually,
+    // not just read a headless hash. Reuses `CommandDemoDrive.
+    // runScriptedSelfCheck`'s own click sequence (the proven "advance on
+    // the bridge, neutralise the machine gun" case) through the real
+    // `OnClick`/`OnHover` UI path instead of `StepTicksHeadless`, then
+    // stays unpaused (the `_screenshotMissionMode` precedent) so repeated
+    // invocations at different frame counts build a filmstrip.
+    private bool _screenshotSquadMode;
+    private int _screenshotSquadFrameCount = 400;
+
     // TASK-064 (backlog B-035): resolves `content/<relativePath>` the same
     // way `AppraisalDemoScene.cs` already does for `content/replays` -- the
     // Godot project root sits two levels under the repo root
@@ -252,6 +264,26 @@ public partial class FSharpSceneHost : Node2D
             _scene.OnClick(true, 4, 4);
         }
 
+        // `--screenshot-squad` (TASK-065): the real all-six-agents-advance
+        // order through the actual click path, the
+        // `CommandDemoDrive.runScriptedSelfCheck` sequence.
+        if (_screenshotSquadMode && SceneType == "CwClientCore.CommandDemoScene")
+        {
+            void Order(int selectX, int selectY, int targetX, int targetY)
+            {
+                _scene.OnClick(true, selectX, selectY);
+                _scene.OnHover(targetX, targetY);
+                _scene.OnClick(true, targetX, targetY);
+            }
+
+            Order(3, 5, 8, 5); // agent 0 (fireteam-alpha, slot 0)
+            Order(2, 5, 7, 5); // agent 1 (fireteam-alpha, slot 1)
+            Order(2, 6, 8, 5); // agent 2 (fireteam-alpha, slot 2)
+            Order(3, 7, 9, 6); // agent 3 (fireteam-bravo, slot 0)
+            Order(4, 7, 9, 6); // agent 4 (fireteam-bravo, slot 1)
+            Order(4, 8, 8, 6); // agent 5 (fireteam-bravo, slot 2)
+        }
+
         // `--dev-overlay` (TASK-043, backlog B-029): a separate opt-in flag,
         // not folded into the priming above, so a plain `--screenshot`
         // capture keeps producing TASK-042's existing evidence unchanged.
@@ -286,6 +318,8 @@ public partial class FSharpSceneHost : Node2D
             CaptureScreenshot();
         else if (_screenshotMissionMode && ++_screenshotFrameCount >= MissionScreenshotFrameCount)
             CaptureScreenshot();
+        else if (_screenshotSquadMode && ++_screenshotFrameCount >= _screenshotSquadFrameCount)
+            CaptureScreenshot();
     }
 
     public override void _ExitTree() => _scene?.Dispose();
@@ -307,12 +341,12 @@ public partial class FSharpSceneHost : Node2D
             case "CwClientCore.DemoRenderScene":
                 label = "demo-render-scene self-check (DemoScenario, terrain-demo)";
                 sequence = DemoDrive.runFullSequence();
-                expected = 0xEC8F01D781AB2122UL; // DemoScenario tick 20 (TASK-063 re-pin: a real, pre-existing stale pin found while verifying TASK-063 -- TASK-062's Canonical.FormatVersion 12 -> 13 bump changed every canonical byte layout, including DemoScenario's, but TASK-062 never touched CommandoWar.Client.Godot and so never re-ran this self-check; behaviour is unaffected, this is the same format-version-only re-pin every corpus/fixture/diagnostics golden already got)
+                expected = 0x49E4CD73C85D1B47UL; // DemoScenario tick 20 (TASK-065 re-pin: Canonical.FormatVersion 13 -> 14, AgentState.StalledTicks added -- byte-layout only, DemoScenario's 20-tick run never sustains a movement freeze)
                 break;
             case "CwClientCore.CommandDemoScene":
                 label = "command-demo-scene self-check (real bridgehead.cwscenario content: all six friendly agents ordered toward the bridge, neutralising the machine-gun team through real automatic engagement with no friendly casualties)";
                 sequence = CommandDemoDrive.runScriptedSelfCheck(ResolveContentPath(Path.Combine("scenarios", "bridgehead.cwscenario")));
-                expected = 0xB99E7F74EA1C3CDEUL; // CommandDemoScene tick 90 (TASK-064, backlog B-035: CommandDemoScene now loads the real Bridgehead scenario instead of DemoScenario -- see the task file for the full sequence and its findings)
+                expected = 0x047FF3080AD3EBCBUL; // CommandDemoScene tick 90 (TASK-065 re-pin: Canonical.FormatVersion 13 -> 14, AgentState.StalledTicks added -- byte-layout only, the self-check's own scripted sequence never sustains a movement freeze long enough to abandon)
                 break;
             default:
                 GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");
@@ -399,7 +433,7 @@ public partial class FSharpSceneHost : Node2D
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (_scene == null || _selfCheck || _screenshotMode || _screenshotMissionMode)
+        if (_scene == null || _selfCheck || _screenshotMode || _screenshotMissionMode || _screenshotSquadMode)
             return;
 
         if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mbIcon
@@ -703,6 +737,16 @@ public partial class FSharpSceneHost : Node2D
                     break;
                 case "--screenshot-mission":
                     _screenshotMissionMode = true;
+                    if (i + 1 < args.Length)
+                        _screenshotPath = args[++i];
+                    break;
+                case "--screenshot-squad":
+                    _screenshotSquadMode = true;
+                    if (i + 1 < args.Length && int.TryParse(args[i + 1], out int frames))
+                    {
+                        _screenshotSquadFrameCount = frames;
+                        i++;
+                    }
                     if (i + 1 < args.Length)
                         _screenshotPath = args[++i];
                     break;

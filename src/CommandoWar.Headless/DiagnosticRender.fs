@@ -164,6 +164,7 @@ module DiagnosticRender =
                 | PlannedPath _
                 | Reserved _
                 | Obstructed _
+                | Abandoned _
                 | KnownContact _
                 | UndeliveredOrder _
                 | OrderAppraisal _
@@ -204,6 +205,7 @@ module DiagnosticRender =
                 | SightRay _
                 | Reserved _
                 | Obstructed _
+                | Abandoned _
                 | KnownContact _
                 | UndeliveredOrder _
                 | OrderAppraisal _
@@ -399,6 +401,14 @@ module DiagnosticRender =
                     )
                 | Obstructed(cell, occupant) ->
                     line (sprintf "  obstructed %s: held by agent %d" (cellText cell) (AgentId.value occupant))
+                | Abandoned(agent, cell, target) ->
+                    line (
+                        sprintf
+                            "  abandoned %s: agent %d gave up on %s"
+                            (cellText cell)
+                            (AgentId.value agent)
+                            (cellText target)
+                    )
                 | KnownContact(cell, contact, confidence, lastSeenTick) ->
                     line (
                         sprintf
@@ -841,6 +851,20 @@ module DiagnosticRender =
                         (cell.X * s + 1)
                         (cell.Y * s + s - 2)
                         (AgentId.value occupant)
+                )
+            | Abandoned(agent, cell, _) ->
+                line (
+                    sprintf
+                        "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#9c4221\" stroke-width=\"2\" stroke-dasharray=\"1,1\"/>"
+                        (cell.X * s) (cell.Y * s) s s
+                )
+
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"9\" fill=\"#9c4221\">A%d</text>"
+                        (cell.X * s + 1)
+                        (cell.Y * s + s - 2)
+                        (AgentId.value agent)
                 )
             | KnownContact(cell, contact, _, _) ->
                 // The squad's last-known cell for a contact: a purple dashed

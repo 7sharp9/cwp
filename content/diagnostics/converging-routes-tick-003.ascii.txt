@@ -47,4 +47,4 @@ overlays:
 
 events: movement-stepped@(3,2),(3,3); movement-yielded@(2,3),(3,3)
 
-tick 3 | hash 0xA767BA291C4C99BA (format 13) | draws 0 | agents 2 | cover-edges 0 | events 2
+tick 3 | hash 0x10B445A22298CDF4 (format 14) | draws 0 | agents 2 | cover-edges 0 | events 2

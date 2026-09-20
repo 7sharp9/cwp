@@ -1,7 +1,7 @@
 version 1
 seed 20260904
 ticks 16
-canonical 13
+canonical 14
 build cwheadless
 scenario demolition-success
 command 1 0 1 1 routine standard corpus 0 move 3 0

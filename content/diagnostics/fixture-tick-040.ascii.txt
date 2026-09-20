@@ -102,4 +102,4 @@ overlays:
 
 events: none
 
-tick 40 | hash 0x447C32A5D599EAB3 (format 13) | draws 0 | agents 6 | cover-edges 0 | events 0
+tick 40 | hash 0x27FC9F2AA2CA441E (format 14) | draws 0 | agents 6 | cover-edges 0 | events 0

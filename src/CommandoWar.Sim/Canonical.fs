@@ -228,8 +228,24 @@ module Canonical =
     /// `CompletedObjectives`/`ObjectiveProgress` stay empty for the whole
     /// run — the moved hashes are a byte-layout change, not a behaviour
     /// change, for every entry except this task's own new corpus entry.
+    ///
+    /// 14 (TASK-065, backlog B-065): `writeAgent` gained an `AgentState.
+    /// StalledTicks` counter — genuine per-tick memory (the `Progress`/
+    /// `Suppression` precedent): how long the agent's current movement
+    /// freeze has persisted, which cannot be recomputed from `Position`
+    /// alone. Every agent always starts at `0` and it is only ever
+    /// nonzero mid-freeze (`MovementYielded`/`MovementObstructed`),
+    /// clearing back to `0` the instant the agent advances, arrives, is
+    /// blocked outright, or the freeze is abandoned outright
+    /// (`MovementAbandoned`). None of the 18 corpus entries pinned before
+    /// this version ever sustains a same-tick reservation loss or a
+    /// stationary-occupant block for more than a couple of ticks (small
+    /// synthetic fixtures, `docs/10_RISK_REGISTER.md` R-010's own note),
+    /// so every one of them keeps `StalledTicks = 0` at every pinned
+    /// tick — the moved hashes are a byte-layout change, not a behaviour
+    /// change, for every entry except this task's own new corpus entry.
     [<Literal>]
-    let FormatVersion = 13
+    let FormatVersion = 14
 
     /// Fixed-width big-endian byte sink. Kept private: callers see only
     /// `encode`.
@@ -424,6 +440,10 @@ module Canonical =
         w.I32 a.Position.X
         w.I32 a.Position.Y
         w.I32 a.Progress
+
+        // AgentState.StalledTicks (TASK-065, backlog B-065) — see the
+        // FormatVersion 14 doc comment above.
+        w.I32 a.StalledTicks
 
         match a.Destination with
         | None -> w.U8 0uy

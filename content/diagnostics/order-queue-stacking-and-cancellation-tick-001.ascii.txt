@@ -32,4 +32,4 @@ overlays:
 
 events: command-accepted@(3,0); command-accepted@(7,0); command-accepted@(10,0); order-queued; order-queued; order-appraised; commitment-established@(3,0); movement-stepped@(0,0),(1,0)
 
-tick 1 | hash 0xB7748709127E7565 (format 13) | draws 0 | agents 1 | cover-edges 0 | events 8
+tick 1 | hash 0xDB959CB4175F9FE0 (format 14) | draws 0 | agents 1 | cover-edges 0 | events 8

@@ -137,7 +137,7 @@
   <text x="84" y="14" font-family="monospace" font-size="8" fill="#718096">Z59</text>
   <text x="4" y="62" font-family="monospace" font-size="8" fill="#718096">Z59</text>
   <text x="84" y="62" font-family="monospace" font-size="8" fill="#718096">Z57</text>
-  <text x="4" y="176" font-family="monospace" font-size="11" fill="#111111">tick 5  hash 0x7D37DD758DF2B41B  draws 17</text>
+  <text x="4" y="176" font-family="monospace" font-size="11" fill="#111111">tick 5  hash 0x7E534CA1931CE2EA  draws 17</text>
   <text x="4" y="190" font-family="monospace" font-size="11" fill="#111111">agents 4  cover-edges 0  events 7</text>
   <text x="4" y="204" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
   <text x="4" y="218" font-family="monospace" font-size="11" fill="#111111">mission: failed</text>

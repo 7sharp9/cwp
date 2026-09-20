@@ -108,16 +108,16 @@ let ``the content version is independent of the canonical and replay versions`` 
     // is 7 (TASK-010 authored terrain layer; TASK-047 ResupplyAreas;
     // TASK-049 unit types; TASK-058 Headquarters/Jammers; TASK-059
     // formations; TASK-062 destroy's HoldTicks validation), Canonical.
-    // FormatVersion is bumped by TASK-062 (TASK-018 / TASK-026 / TASK-028 /
+    // FormatVersion is bumped by TASK-065 (TASK-018 / TASK-026 / TASK-028 /
     // TASK-032 / TASK-033 / TASK-034 / TASK-037 / TASK-044 / TASK-045 /
-    // TASK-047 / TASK-058 / TASK-062 -- TASK-049's MoveSpeed and TASK-058's
-    // Headquarters/Jammers and TASK-059's FormationOffset are all static,
-    // excluded, so none of them move this one; RadioDestroyed/
+    // TASK-047 / TASK-058 / TASK-062 / TASK-065 -- TASK-049's MoveSpeed and
+    // TASK-058's Headquarters/Jammers and TASK-059's FormationOffset are all
+    // static, excluded, so none of them move this one; RadioDestroyed/
     // PendingDelivery/MissionOutcome/CompletedObjectives/ObjectiveProgress/
-    // Extracted do), Replay.FormatVersion is 1. This test documents the
-    // intent, not an inequality.
+    // Extracted/StalledTicks do), Replay.FormatVersion is 1. This test
+    // documents the intent, not an inequality.
     Assert.Equal(7, ScenarioContent.Version)
-    Assert.Equal(13, Canonical.FormatVersion)
+    Assert.Equal(14, Canonical.FormatVersion)
     Assert.Equal(1, Replay.FormatVersion)
 
 // --- the happy path -------------------------------------------------
@@ -919,7 +919,7 @@ let private fixtureScenario () : Scenario =
 let ``the six-agent fixture as a Scenario reproduces the pinned initial hash`` () =
     match World.ofScenario (fixtureScenario ()) Fixture.Seed with
     | Error e -> Assert.Fail($"World.ofScenario failed: {e}")
-    | Ok world -> Assert.Equal(0xC0A53D46AE5D7C80UL, (Hashing.hash world).Value)
+    | Ok world -> Assert.Equal(0x672815D313E0AE51UL, (Hashing.hash world).Value)
 
 [<Fact>]
 let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the pinned final hash`` () =
@@ -942,4 +942,4 @@ let ``the fixture Scenario stepped 40 ticks with the fixture command reaches the
     // `MissionOutcome = Succeeded` the same tick -- see fixtureScenario's
     // own doc comment.
     Assert.Equal(Succeeded, state.MissionOutcome)
-    Assert.Equal(0xA2E8ACEB6116A803UL, (Hashing.hash state).Value)
+    Assert.Equal(0x5AF9A6631529BC6EUL, (Hashing.hash state).Value)

@@ -111,7 +111,7 @@ let ``the fixture frame hash equals Hashing.hash of the same state and its draw 
     let w = Fixture.initialState ()
     let f = Diagnostics.frame w
     Assert.Equal(Hashing.hash w, f.Hash)
-    Assert.Equal(0xC0A53D46AE5D7C80UL, f.Hash.Value)
+    Assert.Equal(0x672815D313E0AE51UL, f.Hash.Value)
     Assert.Equal(0UL, f.RandomDraws)
 
 // --- renderers: golden byte-equality ------------------------------------
@@ -423,6 +423,7 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | SightRay _
         | PlannedPath _
         | Obstructed _
+        | Abandoned _
         | UndeliveredOrder _
         | KnownContact _
         | OrderAppraisal _
@@ -478,6 +479,7 @@ let ``frameOf derives an AgentFormationSlot overlay per formationed agent for th
             | PlannedPath _
             | Reserved _
             | Obstructed _
+            | Abandoned _
             | UndeliveredOrder _
             | KnownContact _
             | OrderAppraisal _
@@ -553,6 +555,7 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | SightRay _
             | PlannedPath _
             | Reserved _
+            | Abandoned _
             | UndeliveredOrder _
             | KnownContact _
             | OrderAppraisal _
@@ -577,6 +580,60 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
 
     Assert.Equal(golden "swap-standoff-tick-001.ascii.txt", DiagnosticRender.Ascii tick1)
     Assert.Equal(golden "swap-standoff-tick-001.svg", DiagnosticRender.Svg tick1)
+
+// --- visible stall failure: the stalled-order-abandoned corpus entry (TASK-065, backlog B-065) --
+
+let private stalledOrderAbandonedFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "stalled-order-abandoned")
+
+    match Corpus.commandsOf corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives an Abandoned overlay for the stalled-order-abandoned entry's give-up tick (byte-equal to the goldens)`` () =
+    // Tick 41: agent 0 has been obstructed by agent 1 (parked permanently on
+    // its only route) for Simulation.StallAbandonTicks (40) consecutive
+    // ticks, so frameOf derives one Abandoned overlay instead of another
+    // Obstructed, and Destination clears for good.
+    let frames = stalledOrderAbandonedFrames ()
+    let tick41 = frames.[41]
+
+    match tick41.Overlays |> Array.tryPick (function
+        | Abandoned(agent, cell, target) -> Some(agent, cell, target)
+        | Cells _
+        | SightRay _
+        | PlannedPath _
+        | Reserved _
+        | Obstructed _
+        | UndeliveredOrder _
+        | KnownContact _
+        | OrderAppraisal _
+        | AgentCommitment _
+        | FireLine _
+        | AgentSuppression _
+        | AgentStress _
+        | HostileKnownContact _
+        | AgentOrderQueue _
+        | AgentVitals _
+        | SquadLeadership _
+        | AgentAmmo _
+        | Divergence _
+        | AgentRadioLost _
+        | AgentPendingDelivery _
+        | AgentFormationSlot _
+        | MissionStatus _ -> None) with
+    | Some(agent, cell, target) ->
+        Assert.Equal(AgentId.ofInt 0, agent)
+        Assert.Equal({ X = 1; Y = 0 }, cell)
+        Assert.Equal({ X = 4; Y = 0 }, target)
+    | None -> Assert.Fail($"expected one Abandoned overlay, got {tick41.Overlays}")
+
+    Assert.Contains(tick41.Events, fun (e: EventMarker) -> e.Kind = "movement-abandoned")
+    Assert.Equal(None, (tick41.Agents |> Array.find (fun a -> AgentId.value a.Id = 0)).Destination)
+
+    Assert.Equal(golden "stalled-order-abandoned-tick-041.ascii.txt", DiagnosticRender.Ascii tick41)
+    Assert.Equal(golden "stalled-order-abandoned-tick-041.svg", DiagnosticRender.Svg tick41)
 
 // --- perception: the perception-contact corpus entry (TASK-026) --------
 
@@ -607,6 +664,7 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | PlannedPath _
             | Reserved _
             | Obstructed _
+            | Abandoned _
             | UndeliveredOrder _
             | OrderAppraisal _
             | AgentCommitment _
@@ -697,6 +755,7 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | PlannedPath _
             | Reserved _
             | Obstructed _
+            | Abandoned _
             | KnownContact _
             | OrderAppraisal _
             | AgentCommitment _
@@ -1178,7 +1237,7 @@ let ``AppraisalDemo.dispositionText matches the committed golden vocabulary`` ()
 let ``AppraisalDemo.loadExposedApproachFrames reproduces the tick-1 hash and the divergent dispositions`` () =
     let frames = AppraisalDemo.loadExposedApproachFrames corpusDir
     Assert.Equal(13, frames.Length)
-    Assert.Equal(0xC382CACA830CCC35UL, frames.[1].Hash.Value)
+    Assert.Equal(0xF0169E93B40D5546UL, frames.[1].Hash.Value)
 
     let appraisals =
         frames.[1].Overlays
@@ -1246,8 +1305,8 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     let frames =
         DiagnosticRender.runFrames (Fixture.initialState ()) (Fixture.commandLog ()) Fixture.TickCount
 
-    Assert.Equal(0xC0A53D46AE5D7C80UL, frames.[0].Hash.Value)
-    Assert.Equal(0x447C32A5D599EAB3UL, frames.[40].Hash.Value)
+    Assert.Equal(0x672815D313E0AE51UL, frames.[0].Hash.Value)
+    Assert.Equal(0x27FC9F2AA2CA441EUL, frames.[40].Hash.Value)
     // TASK-030: 34 -> 36 (+1 CommitmentEstablished when agent 3's order is
     // accepted, +1 CommitmentCompleted when it arrives) — hashes unchanged,
     // since Commitment is derived, not canonical (Decision B).
@@ -1256,7 +1315,7 @@ let ``producing diagnostics for the shared fixture leaves its hashes and event c
     match Fixture.run () with
     | Error e -> Assert.Fail($"fixture replay failed: {e}")
     | Ok outcome ->
-        Assert.Equal(0x447C32A5D599EAB3UL, (Hashing.hash outcome.FinalState).Value)
+        Assert.Equal(0x27FC9F2AA2CA441EUL, (Hashing.hash outcome.FinalState).Value)
         Assert.Equal(36, outcome.Events.Length)
 
 // --- divergence rendering (TASK-057, backlog B-050) --------------------

@@ -216,6 +216,21 @@ and movement phase (12.7, `src/CommandoWar.Sim/Simulation.fs`) consumes
 - **No path:** `MovementBlocked (agent, at, target)` is emitted and the
   destination cleared when `Pathfinding` returns `NoPath`, `BudgetExhausted`,
   or `InvalidEndpoint`.
+- **Give up on a permanent freeze (TASK-065, backlog B-065):** since step 6's
+  replan is never forced by a same-tick reservation loss or a stationary
+  occupant (the note above), a `MovementYielded`/`MovementObstructed` freeze
+  against an occupant that itself never vacates would otherwise repeat every
+  tick forever — `docs/10_RISK_REGISTER.md` R-010 ("reservation deadlocks"),
+  materialising for real once Bridgehead's six-agent squad shared genuinely
+  narrow terrain (TASK-064). Rather than teach `Pathfinding` occupancy
+  awareness (a larger, contract-changing direction, deferred), a new
+  `AgentState.StalledTicks` counter tracks consecutive freezes against the
+  same route (reset to 0 by a fresh route computation or any real advance);
+  once it would reach `Simulation.StallAbandonTicks` (40), the phase abandons
+  the order outright — `Destination`/`Route` clear, the counter resets, and a
+  new `MovementAbandoned` event fires in place of that tick's usual
+  `MovementYielded`/`MovementObstructed` — turning a silent, permanent freeze
+  into a visible failure instead of resolving the contention itself.
 
 `AgentState.Route` (the followed path + cursor + cost) is a **non-canonical
 derived cache**: a pure deterministic function of `(Position, Destination,

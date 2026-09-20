@@ -93,7 +93,7 @@ let ``the followed-path cache is outside the canonical image and the format vers
 
     Assert.Equal<byte[]>(Canonical.encode stripped, Canonical.encode moved)
     Assert.Equal(Hashing.hash stripped, Hashing.hash moved)
-    Assert.Equal(13, Canonical.FormatVersion)
+    Assert.Equal(14, Canonical.FormatVersion)
 
 [<Fact>]
 let ``communication availability is static authored data outside the canonical image`` () =
@@ -109,7 +109,7 @@ let ``communication availability is static authored data outside the canonical i
 
     Assert.Equal<byte[]>(Canonical.encode w, Canonical.encode blackedOut)
     Assert.Equal(Hashing.hash w, Hashing.hash blackedOut)
-    Assert.Equal(13, Canonical.FormatVersion)
+    Assert.Equal(14, Canonical.FormatVersion)
 
     // But the order the blackout suppresses changes the hash within one tick,
     // via the recipient's Position: the delivered order moves agent 0, the

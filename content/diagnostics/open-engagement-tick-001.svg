@@ -123,7 +123,7 @@
   <text x="33" y="46" font-family="monospace" font-size="9" fill="#b7791f">H0</text>
   <circle cx="40" cy="44" r="3" fill="#e53e3e" fill-opacity="0.35"/>
   <circle cx="40" cy="40" r="8" fill="none" stroke="#d4af37" stroke-width="2"/>
-  <text x="4" y="176" font-family="monospace" font-size="11" fill="#111111">tick 1  hash 0x086AC62B49D205FD  draws 2</text>
+  <text x="4" y="176" font-family="monospace" font-size="11" fill="#111111">tick 1  hash 0x59A17612C14D85C8  draws 2</text>
   <text x="4" y="190" font-family="monospace" font-size="11" fill="#111111">agents 2  cover-edges 0  events 4</text>
   <text x="4" y="204" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

@@ -86,6 +86,22 @@ type EventBody =
     /// obstruction (a blocker that never moves) is a perception / appraisal
     /// concern (B-015 / B-017), not resolved here.
     | MovementObstructed of agent: AgentId * at: Cell * blocked: Cell * occupant: AgentId
+    /// `agent`, at `at`, gave up on its own order's destination `target`
+    /// after `Simulation.StallAbandonTicks` consecutive ticks of the
+    /// identical `MovementYielded`/`MovementObstructed` freeze against the
+    /// same route (TASK-065, backlog B-065; `docs/04` section 8 step 6,
+    /// "replan when the next path cell becomes invalid" — `docs/10_RISK_
+    /// REGISTER.md` R-010, "reservation deadlocks", finally materialising
+    /// on real content). The Navigation and movement phase clears
+    /// `Destination`/`Route` and resets `AgentState.StalledTicks` to `0`
+    /// here, exactly as it does for `MovementBlocked` (no traversable path
+    /// at all) — the difference is *why* the agent gives up: a path exists,
+    /// but the same next cell has been unavailable for too long, not that
+    /// none exists. Distinct from both `MovementYielded` (a same-tick rival
+    /// contest, resolves on its own once the winner clears the cell) and
+    /// `MovementObstructed` (any single tick's freeze against a stationary
+    /// occupant) so a reader can tell "still trying" apart from "gave up."
+    | MovementAbandoned of agent: AgentId * at: Cell * target: Cell
     /// `observer` newly sees `contact` (an opposing-side agent) at `at` this
     /// tick (TASK-026, `docs/04` section 14 "contact observed or reported").
     /// Emitted by the Perception phase on a *new* sighting only — the tick a

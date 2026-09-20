@@ -466,6 +466,31 @@ module Corpus =
           Formations = []
           Orders = [ order 1L 0 { X = 4; Y = 3 }; order 1L 1 { X = 3; Y = 3 } ] }
 
+    /// One friendly agent at (0,0) ordered east to (4,0); agent 1 sits idle,
+    /// permanently, on the only route at (2,0) (TASK-065, backlog B-065;
+    /// docs/10 R-010). Agent 0 advances one cell to (1,0), then freezes
+    /// (`MovementObstructed`) every tick against agent 1, which never
+    /// vacates -- exactly `swap-standoff`'s own shape, but with a genuinely
+    /// permanent single-sided block rather than a mutual one, run long
+    /// enough (`Simulation.StallAbandonTicks = 40`) to reach the give-up
+    /// transition: at tick 41 agent 0 abandons the order outright
+    /// (`MovementAbandoned`), `Destination`/`Route` clear, and it settles
+    /// one cell short of the blocker for good instead of retrying forever.
+    let private stalledOrderAbandonedSpec: ScenarioSpec =
+        { Id = "corpus-stalled-order-abandoned"
+          Width = 8
+          Height = 8
+          Friendly = [ agent 0 { X = 0; Y = 0 }; agent 1 { X = 2; Y = 0 } ]
+          Enemies = []
+          Terrain = []
+          Objective = { X = 7; Y = 7 }
+          Extraction = { X = 0; Y = 7 }
+          Resupply = None
+          Headquarters = None
+          Jammers = []
+          Formations = []
+          Orders = [ order 1L 0 { X = 4; Y = 0 } ] }
+
     /// One friendly agent at (1,5) ordered east to (9,5), and a stationary
     /// hostile agent 1 at (9,1) behind an opaque impassable wall at x = 6,
     /// rows 0..3. While the friendly is west of the wall its line of sight to
@@ -1040,7 +1065,20 @@ module Corpus =
              InitialStateNote = "Corpus demolition-success scenario (12 x 3, seed 20260904, 1 friendly)"
              InitialState = demolitionSuccessInitialState
              TickCount = 16L
-             Commands = Some demolitionSuccessCommands } |]
+             Commands = Some demolitionSuccessCommands }
+           { Name = "stalled-order-abandoned"
+             Description =
+               "One friendly agent at (0,0) ordered east to (4,0); a second friendly agent sits idle, "
+               + "permanently, on the only route at (2,0) (TASK-065, backlog B-065). Agent 0 advances to (1,0) "
+               + "on tick 1, then freezes every tick against the stationary occupant (MovementObstructed) -- "
+               + "swap-standoff's own single-sided case, but genuinely permanent. Run long enough to reach "
+               + "Simulation.StallAbandonTicks (40): at tick 41 the order is abandoned outright "
+               + "(MovementAbandoned), Destination/Route clear, and agent 0 settles one cell short of the "
+               + "blocker for good instead of retrying forever."
+             InitialStateNote = "Corpus stalled-order-abandoned scenario (8 x 8, seed 20260904, 2 friendlies)"
+             InitialState = fun () -> worldOfSpec stalledOrderAbandonedSpec
+             TickCount = 42L
+             Commands = Some(commandsOfSpec stalledOrderAbandonedSpec) } |]
 
     // --- entry paths and loading ----------------------------------------
 

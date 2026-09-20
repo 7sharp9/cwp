@@ -26,8 +26,8 @@ See `content/replays/CORPUS.md`.
 | Command file | `envelope-full.cwreplay` |
 | Initial state | Shared spike fixture (`Setup.sixAgentWorld`, 32 x 32, seed 20260902) |
 | Tick count | 24 |
-| Initial hash (tick 0) | `0xC0A53D46AE5D7C80` |
-| Final hash (tick 24) | `0xFD34E3D07EA044D3` |
+| Initial hash (tick 0) | `0x672815D313E0AE51` |
+| Final hash (tick 24) | `0xDF048B77995D0552` |
 | Domain events | 78 |
 
 _Re-pinned by TASK-028 (`Canonical.FormatVersion` 3 -> 4, `AgentState.Order` /
@@ -100,31 +100,38 @@ mission-outcome feature set stays inert for it (`MissionOutcome` stays
 `InProgress` the entire run): the byte-layout change is the only
 difference, the tick count (24) and domain event count (78) are unchanged._
 
+_Re-pinned by TASK-065 (backlog B-065; `Canonical.FormatVersion` 13 -> 14,
+`AgentState.StalledTicks` added). This entry's one command is an ordinary
+`MoveTo` with no rival agent and no occupied route cell anywhere near it,
+so the new counter stays 0 at every checkpoint: the byte-layout change is
+the only difference, the tick count (24) and domain event count (78) are
+unchanged._
+
 ## Per-tick authoritative state hash
 
 | tick | state hash          |
 |-----:|---------------------|
-|    1 | `0xE34B79C579AF9EDF` |
-|    2 | `0xD695167B21310963` |
-|    3 | `0xB2C1ECAA7FC23AD9` |
-|    4 | `0xBA06A174BD00D92B` |
-|    5 | `0x6373DE2FDB9E2CD5` |
-|    6 | `0x051034A258068E2B` |
-|    7 | `0x69C4AB157E011551` |
-|    8 | `0x21E6A353E0A81CD3` |
-|    9 | `0xD36D14C130D13AC5` |
-|   10 | `0x5AB189C5FAFE64B3` |
-|   11 | `0x7EE4222D71DF18F9` |
-|   12 | `0xF8E09A51F6966EDB` |
-|   13 | `0xF2C0D2747E0CD4F5` |
-|   14 | `0x52AACA04D2D6E9AB` |
-|   15 | `0xC0E86E00614C54E1` |
-|   16 | `0x523ABF4B2DFF2E73` |
-|   17 | `0x3A743EB78CB93545` |
-|   18 | `0xCEB8B119B20D0E43` |
-|   19 | `0xA428306654AD5A59` |
-|   20 | `0x2A988B7BDB1C82EB` |
-|   21 | `0x0833AE8D000587F5` |
-|   22 | `0x62654B482CA88F67` |
-|   23 | `0x68CC3E1EC9BE2665` |
-|   24 | `0xFD34E3D07EA044D3` |
+|    1 | `0xEDEEE60A8D387982` |
+|    2 | `0xB019F3CF1627688A` |
+|    3 | `0xE8A42FF36E1C083C` |
+|    4 | `0x2BC447A90AA5EDB2` |
+|    5 | `0xD4C4440F6F3645C0` |
+|    6 | `0xAC2928E7A02C513A` |
+|    7 | `0x6BAB4B2EA8E3AEBC` |
+|    8 | `0x272EF1D2801CEF62` |
+|    9 | `0x0A3ADDDCC8376CA8` |
+|   10 | `0x2A9CA370FBA72A4A` |
+|   11 | `0x3C24F692CA2C51DC` |
+|   12 | `0x61F93BE96B378EB2` |
+|   13 | `0x7B3FD1D4C86DB600` |
+|   14 | `0x2B5A6D8F57507F9A` |
+|   15 | `0x560C8396B2A0AD3C` |
+|   16 | `0x38CA548EAB702502` |
+|   17 | `0xFFB0F910D0FC3458` |
+|   18 | `0x38D738CF80A2BB4A` |
+|   19 | `0x7FDE64A19CB5407C` |
+|   20 | `0x380F778500FE44F2` |
+|   21 | `0x1D8147B54DEB7F40` |
+|   22 | `0x655817AF44F47D6E` |
+|   23 | `0xB1656C4DB2568AF8` |
+|   24 | `0xDF048B77995D0552` |

@@ -177,6 +177,20 @@ type Overlay =
     /// obstructed cell from this tick's `MovementObstructed` events;
     /// `Diagnostics.frame` never emits one.
     | Obstructed of cell: Cell * occupant: AgentId
+    /// A permanently stalled movement order abandoned this tick (TASK-065,
+    /// backlog B-065; docs/04 section 8 step 6, "replan when the next path
+    /// cell becomes invalid" — docs/10 R-010 "reservation deadlocks"):
+    /// `agent`, at `cell`, had been frozen against the identical route
+    /// (a `MovementYielded`/`MovementObstructed` retry) for
+    /// `Simulation.StallAbandonTicks` consecutive ticks with no forward
+    /// progress, so its order was abandoned outright instead of frozen
+    /// forever — `AgentState.Destination`/`.Route` cleared,
+    /// `.StalledTicks` reset to 0. `abandonedTarget` is the order's own
+    /// destination at the moment of abandonment, the `Reserved`/
+    /// `Obstructed` precedent of naming the mechanism, not just the agent.
+    /// `Diagnostics.frameOf` derives one per `MovementAbandoned` event this
+    /// tick; `Diagnostics.frame` never emits one.
+    | Abandoned of agent: AgentId * cell: Cell * abandonedTarget: Cell
     /// One contact in the friendly squad's shared tactical picture (TASK-026,
     /// `WorldState.TacticalKnowledge`, docs/04 section 12.4): `contact` was
     /// last seen at `cell` on tick `lastSeenTick` with `confidence` on the
@@ -456,6 +470,8 @@ module Diagnostics =
             { Kind = "movement-yielded"; Cells = [| at; contested |]; Agents = [| agent; winner |] }
         | MovementObstructed(agent, at, blocked, occupant) ->
             { Kind = "movement-obstructed"; Cells = [| at; blocked |]; Agents = [| agent; occupant |] }
+        | MovementAbandoned(agent, at, target) ->
+            { Kind = "movement-abandoned"; Cells = [| at; target |]; Agents = [| agent |] }
         | ContactObserved(observer, contact, at) ->
             { Kind = "contact-observed"; Cells = [| at |]; Agents = [| observer; contact |] }
         | ContactExpired(contact, lastKnownCell) ->
@@ -755,6 +771,7 @@ module Diagnostics =
             | MovementCompleted _
             | MovementBlocked _
             | MovementObstructed _
+            | MovementAbandoned _
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
@@ -796,6 +813,7 @@ module Diagnostics =
             | MovementCompleted _
             | MovementBlocked _
             | MovementYielded _
+            | MovementAbandoned _
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
@@ -812,6 +830,48 @@ module Diagnostics =
             | MissionFailed -> None)
         |> Array.distinctBy fst
         |> Array.map (fun (cell, occupant) -> Obstructed(cell, occupant))
+
+    /// An `Abandoned` overlay per agent whose permanently stalled order was
+    /// given up on this tick (TASK-065, backlog B-065), derived from this
+    /// tick's `MovementAbandoned` events — one entry per distinct agent, in
+    /// ascending agent id order (the standing movement-event order). The
+    /// `obstructionOverlays` precedent.
+    let private abandonedOverlays (result: StepResult) : Overlay[] =
+        result.Events
+        |> Array.choose (fun e ->
+            match e.Body with
+            | MovementAbandoned(agent, at, target) -> Some(agent, at, target)
+            | CommandAccepted _
+            | CommandRejected _
+            | OrderUndelivered _
+            | OrderDelivered _
+            | OrderQueued _
+            | OrderCancelled _
+            | OrderAppraised _
+            | CommitmentEstablished _
+            | CommitmentCompleted _
+            | ShotFired _
+            | MovementStepped _
+            | MovementCompleted _
+            | MovementBlocked _
+            | MovementYielded _
+            | MovementObstructed _
+            | ContactObserved _
+            | ContactExpired _
+            | AgentIncapacitated _
+            | AgentRadioDestroyed _
+            | AgentDied _
+            | LeadershipTransferred _
+            | SquadFailure
+            | ReloadStarted _
+            | ReloadCompleted _
+            | AgentResupplied _
+            | AgentExtracted _
+            | ObjectiveCompleted _
+            | MissionSucceeded
+            | MissionFailed -> None)
+        |> Array.distinctBy (fun (agent, _, _) -> agent)
+        |> Array.map (fun (agent, at, target) -> Abandoned(agent, at, target))
 
     /// An `UndeliveredOrder` overlay per recipient that could not be reached
     /// this tick (TASK-027), derived from this tick's `OrderUndelivered`
@@ -839,6 +899,7 @@ module Diagnostics =
             | MovementBlocked _
             | MovementYielded _
             | MovementObstructed _
+            | MovementAbandoned _
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
@@ -882,6 +943,7 @@ module Diagnostics =
             | MovementBlocked _
             | MovementYielded _
             | MovementObstructed _
+            | MovementAbandoned _
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
@@ -915,8 +977,10 @@ module Diagnostics =
     /// `AgentSuppression` overlay per agent with non-zero suppression
     /// (TASK-032), an `AgentStress` overlay per agent with non-zero stress
     /// (TASK-033), a `HostileKnownContact` overlay per Hostile-picture contact
-    /// (TASK-034), and the post-step canonical hash recorded on the
-    /// `StepResult`. Total, pure, deterministic.
+    /// (TASK-034), an `Abandoned` overlay per agent whose permanently
+    /// stalled order was given up on this tick (TASK-065), and the post-step
+    /// canonical hash recorded on the `StepResult`. Total, pure,
+    /// deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
         { frame result.State with
             Events = result.Events |> Array.map eventMarker
@@ -925,6 +989,7 @@ module Diagnostics =
                     [ routeOverlays result.State
                       reservationOverlays result
                       obstructionOverlays result
+                      abandonedOverlays result
                       undeliveredOrderOverlays result
                       knownContactOverlays result.State
                       orderAppraisalOverlays result.State

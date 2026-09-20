@@ -1,6 +1,6 @@
 version 1
 seed 20260904
 ticks 65
-canonical 13
+canonical 14
 build cwheadless
 scenario casualties-succession-and-squad-failure

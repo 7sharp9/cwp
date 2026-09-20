@@ -185,6 +185,16 @@ type CommandDemoScene() =
     let hitFlashHoldSeconds = 0.3
     let heldHitFlashes = ResizeArray<int * float>() // agent id, remaining
 
+    // Abandoned-order feedback (TASK-065, backlog B-065): a stalled order
+    // that gives up (`MovementAbandoned`) clears `Destination` exactly like
+    // a fulfilled one, so the plain order-status text alone would read as
+    // "arrived" -- the same ambiguity this task exists to remove. Held for
+    // longer than a fire effect (the player needs time to actually read the
+    // word "abandoned", not just notice a flash), the `heldHitFlashes`
+    // pattern applied to a per-agent text override instead of a colour.
+    let abandonedOrderHoldSeconds = 3.0
+    let heldAbandonedOrders = ResizeArray<int * float>() // agent id, remaining
+
     // Agent-facing bins (TASK-054, backlog B-052), one authoritative tick at
     // a time (the `heldFireLines`/`devFrame` precedent: computed once per
     // `stepOnce`, not per render frame).
@@ -466,6 +476,11 @@ type CommandDemoScene() =
                         let tip = (ax + 0.3f * (ccx - ax), ay + 0.3f * (ccy - ay))
                         heldAudioCues.Add(anchor, tip, audioCueHoldSeconds)
                     | None -> ()
+            | Abandoned(agent, _, _) ->
+                let agentId = AgentId.value agent
+                let idx = heldAbandonedOrders.FindIndex(fun (id, _) -> id = agentId)
+                if idx >= 0 then heldAbandonedOrders.[idx] <- (agentId, abandonedOrderHoldSeconds)
+                else heldAbandonedOrders.Add(agentId, abandonedOrderHoldSeconds)
             | _ -> ()
 
     let friendlyAt (cell: Cell) : AgentSnapshot option =
@@ -644,6 +659,12 @@ type CommandDemoScene() =
                 if remaining' <= 0.0 then heldHitFlashes.RemoveAt(i)
                 else heldHitFlashes.[i] <- (id, remaining')
 
+            for i in heldAbandonedOrders.Count - 1 .. -1 .. 0 do
+                let id, remaining = heldAbandonedOrders.[i]
+                let remaining' = remaining - deltaSeconds
+                if remaining' <= 0.0 then heldAbandonedOrders.RemoveAt(i)
+                else heldAbandonedOrders.[i] <- (id, remaining')
+
             // Audio-localised threat cues (TASK-054, backlog B-056) decay by
             // real wall-clock time the same way, independent of `paused`.
             for i in heldAudioCues.Count - 1 .. -1 .. 0 do
@@ -666,14 +687,27 @@ type CommandDemoScene() =
             // `Destination` whenever one is active tells the player exactly
             // where the soldier is actually headed, regardless of whether
             // that matches the clicked cell.
+            // TASK-065 (backlog B-065): an abandoned order clears
+            // `Destination` exactly like a fulfilled one (`AgentState.
+            // StalledTicks` and `.Route` are the only fields that
+            // distinguish the two sim-side, neither exposed to the client),
+            // so without this check "accepted" alone would read as "your
+            // soldier arrived" -- the very ambiguity this task exists to
+            // remove. `heldAbandonedOrders` (populated from the `Abandoned`
+            // overlay in `stepOnce`) names the recently-abandoned agents by
+            // id, checked ahead of the destination-suffix logic below.
             let liveOrderText =
                 selected
                 |> Option.bind (fun id -> currAgents |> Array.tryFind (fun a -> a.Id = id))
                 |> Option.map (fun a ->
                     let baseText = RenderShared.dispositionText a.Disposition
-                    match a.Disposition, a.Destination with
-                    | Some Accepted, Some dest -> sprintf "%s -> (%d,%d)" baseText dest.X dest.Y
-                    | _ -> baseText)
+
+                    if heldAbandonedOrders |> Seq.exists (fun (id, _) -> id = AgentId.value a.Id) then
+                        sprintf "%s -> abandoned (route blocked)" baseText
+                    else
+                        match a.Disposition, a.Destination with
+                        | Some Accepted, Some dest -> sprintf "%s -> (%d,%d)" baseText dest.X dest.Y
+                        | _ -> baseText)
                 |> Option.defaultValue ""
 
             if liveOrderText <> "" && liveOrderText <> "no order" then
@@ -1103,6 +1137,12 @@ type CommandDemoScene() =
                         |> Array.choose (function
                             | Reserved(cell, _, _) -> Some(RenderShared.cellMarker cell (0.2f, 0.9f, 0.9f) 0.45f 14.0f)
                             | Obstructed(cell, _) -> Some(RenderShared.cellMarker cell (1.0f, 0.2f, 0.2f) 0.45f 14.0f)
+                            // TASK-065 (backlog B-065): a distinct orange
+                            // marker for a permanently stalled order just
+                            // abandoned this tick, so a developer watching
+                            // `F1` can tell "gave up" apart from an ordinary
+                            // same-tick `Obstructed` freeze.
+                            | Abandoned(_, cell, _) -> Some(RenderShared.cellMarker cell (1.0f, 0.55f, 0.0f) 0.45f 14.0f)
                             | _ -> None)
 
                     // Known-versus-authoritative (docs/06 section 11): a

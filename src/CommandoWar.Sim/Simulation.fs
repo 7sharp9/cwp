@@ -1275,10 +1275,15 @@ module Simulation =
     //     resetting progress for the next edge and clearing the destination
     //     and the route on arrival;
     //   * a mover that would complete its edge but loses a contested cell to
-    //     another agent this tick stays put and emits `MovementYielded`; its
-    //     progress freezes (it does not advance, so it does not accumulate),
-    //     so it retries with the same progress next tick, once the winner has
-    //     vacated the cell;
+    //     another agent this tick (or is held out of it by a stationary
+    //     occupant, TASK-022) stays put and emits `MovementYielded` (or
+    //     `MovementObstructed`); its progress freezes (it does not advance,
+    //     so it does not accumulate), so it retries with the same progress
+    //     next tick, once the winner has vacated the cell — UNLESS this is
+    //     its `StallAbandonTicks`th consecutive freeze against the same
+    //     route (TASK-065, backlog B-065), in which case it gives up
+    //     outright instead: `Destination`/`Route` clear and it emits
+    //     `MovementAbandoned`;
     //   * a destination with no path emits `MovementBlocked`, clears the
     //     destination, and resets progress.
     //
@@ -1328,12 +1333,16 @@ module Simulation =
     // `yieldedTo` loser (`Progress = startProgress`, `Route = Some r` written
     // back, `Position` / `Destination` unchanged) and emits `MovementObstructed`.
     // Termination of the fixpoint is trivial (finite monotone). It does NOT
-    // guarantee an obstructed agent ever completes: an agent permanently
-    // blocked by one that never moves retries — and emits `MovementObstructed`
-    // — every tick, forever. Routing *around* a live agent is the cooperative
-    // pathfinder TASK-022 forbids; noticing a persistent stall and
-    // re-appraising the order is a perception / appraisal concern (B-015 /
-    // B-017), named here, not built here.
+    // guarantee an obstructed agent ever completes: an agent blocked by one
+    // that never moves retries every tick. Routing *around* a live agent is
+    // the cooperative pathfinder TASK-022 forbids; a genuinely permanent
+    // block does not retry forever, though — TASK-065 (backlog B-065) caps
+    // it at `StallAbandonTicks` consecutive freezes (against `yieldedTo` or
+    // `obstructedBy` alike), after which the order is abandoned outright
+    // (`MovementAbandoned`) rather than the agent freezing silently forever.
+    // Real occupancy-aware routing around a live agent remains out of scope
+    // (the larger, `Pathfinding`-contract-changing direction TASK-065 did
+    // not choose).
     //
     // Sub-cell movement progress (TASK-018, step 3 "reserve only the
     // immediate next destination", steps 4-5 "advance movement progress by an
@@ -1362,6 +1371,28 @@ module Simulation =
     // phase, above) -- Navigation itself is unchanged, still driven purely
     // by whatever `Destination` it is handed. `AgentState.Route` is still a
     // non-canonical derived cache (see `MovementPath`).
+    //
+    // Visible stall failure (TASK-065, backlog B-065; docs/04 section 8 step
+    // 6's own "replan when the next path cell becomes invalid" -- docs/10
+    // R-010 "reservation deadlocks" finally materialising on real content,
+    // Bridgehead's six-agent squad sharing genuinely narrow terrain).
+    // `Pathfinding` stays terrain-only -- this is deliberately NOT
+    // occupancy-aware routing (a larger, `Pathfinding`-contract-changing
+    // direction Dave did not choose): a `yieldedTo`/`obstructedBy` freeze
+    // below still retries the identical next cell every tick exactly as
+    // before this task, EXCEPT that each freeze against a still-cached
+    // route increments `AgentState.StalledTicks`; once that count would
+    // reach `StallAbandonTicks`, the phase gives up outright instead of
+    // freezing again -- clearing `Destination`/`Route`, resetting the
+    // counter to 0, and emitting `MovementAbandoned` in place of that
+    // tick's usual `MovementYielded`/`MovementObstructed`. A fresh route
+    // computed this tick (a new order, or a replan of an invalidated next
+    // cell) always restarts the count at 0 before counting this tick's own
+    // freeze, so a brand-new order is never abandoned on its very first
+    // unlucky tick, and a genuinely different destination never inherits a
+    // stale count from an unrelated prior stall.
+    [<Literal>]
+    let private StallAbandonTicks = 40
 
     /// One agent's movement outcome for this tick, computed in Pass 1 before
     /// same-tick contention resolution (Pass 2). Not persisted: recomputed
@@ -1381,8 +1412,18 @@ module Simulation =
         /// cross-multiplied by its own `AgentState.MoveSpeed` (TASK-049),
         /// reaches the next cell's threshold this tick is a claimant in Pass
         /// 2; one that does not simply accumulates progress in Pass 3 with
-        /// no contention possible.
-        | Advancing of route: MovementPath * next: Cell * destination: Cell * startProgress: int
+        /// no contention possible. `freshRoute` (TASK-065, backlog B-065) is
+        /// `true` exactly when this tick did NOT reuse a cached `Route` (a
+        /// new destination, or a replan of an invalidated next cell) — the
+        /// same condition `startProgress = 0` is derived from — used to
+        /// decide whether a freeze this tick continues a prior stall or
+        /// starts counting fresh (`AgentState.StalledTicks`).
+        | Advancing of
+            route: MovementPath *
+            next: Cell *
+            destination: Cell *
+            startProgress: int *
+            freshRoute: bool
 
     let private navigationAndMovement (s: StepState) =
         let terrain = s.Terrain
@@ -1443,7 +1484,7 @@ module Simulation =
                         | None -> Blocked(a.Position, dest)
                         | Some r ->
                             let startProgress = if cached.IsSome then a.Progress else 0
-                            Advancing(r, r.Cells.[r.Cursor + 1], dest, startProgress))
+                            Advancing(r, r.Cells.[r.Cursor + 1], dest, startProgress, cached.IsNone))
 
         // An `Advancing` agent whose progress reaches the next cell's
         // threshold this tick — the only agents that can contend for a cell,
@@ -1474,7 +1515,9 @@ module Simulation =
             |> Array.indexed
             |> Array.choose (fun (idx, intent) ->
                 match intent with
-                | Advancing(r, next, _, startProgress) when wouldComplete next startProgress agents.[idx].MoveSpeed ->
+                | Advancing(r, next, _, startProgress, _) when
+                    wouldComplete next startProgress agents.[idx].MoveSpeed
+                    ->
                     Some(idx, agents.[idx].Id, r, next)
                 | Advancing _
                 | Idle
@@ -1495,8 +1538,23 @@ module Simulation =
         // current occupant does. `obstructedBy` maps an agent array index to
         // the id of the stationary agent blocking it, consumed by a new Pass 3
         // arm. The fixpoint specification is in the phase comment above.
+        //
+        // A non-`Alive` agent is excluded (TASK-066, backlog B-066): a corpse
+        // never vacates on its own (it is always `Idle`, the intents
+        // computation's own `if not (Casualty.isAlive a.Vitals) then Idle`
+        // above), so before this task its cell blocked every other agent
+        // forever -- confirmed live on Bridgehead, most of a squad jamming
+        // permanently at the first casualty. A dead agent can never itself be
+        // a *mover* either (the same `Idle` branch), so this filter only ever
+        // changes what OTHER agents may enter, never what the corpse itself
+        // does. `Pathfinding.fs` has no occupancy concept at all and needs
+        // none for this: a live agent simply treats the corpse's cell as
+        // free, the same as any other passable cell.
         let occupantOf: Map<Cell, int> =
-            agents |> Array.mapi (fun i a -> a.Position, i) |> Map.ofArray
+            agents
+            |> Array.mapi (fun i a -> i, a)
+            |> Array.choose (fun (i, a) -> if Casualty.isAlive a.Vitals then Some(a.Position, i) else None)
+            |> Map.ofArray
 
         // Candidate movers: completing `Advancing` agents that did not lose a
         // rival contest (at most one per target cell), as `(idx, next cell)`.
@@ -1505,7 +1563,7 @@ module Simulation =
             |> Array.indexed
             |> Array.choose (fun (idx, intent) ->
                 match intent with
-                | Advancing(_, next, _, startProgress) when
+                | Advancing(_, next, _, startProgress, _) when
                     wouldComplete next startProgress agents.[idx].MoveSpeed
                     && not (Map.containsKey idx yieldedTo)
                     ->
@@ -1556,15 +1614,21 @@ module Simulation =
         for idx in 0 .. agents.Length - 1 do
             let a = agents.[idx]
 
+            // TASK-065 (backlog B-065): the stall count a freeze this tick
+            // would carry — 0 if this tick started a fresh edge (a new
+            // order, or a replan), otherwise the agent's own persisted
+            // count — plus this tick's own freeze.
+            let nextStalledTicks (freshRoute: bool) = (if freshRoute then 0 else a.StalledTicks) + 1
+
             match intents.[idx] with
             | Idle -> ()
             | Arrived at ->
-                agents.[idx] <- { a with Progress = 0; Destination = None; Route = None }
+                agents.[idx] <- { a with Progress = 0; Destination = None; Route = None; StalledTicks = 0 }
                 emit (MovementCompleted(a.Id, at)) s
             | Blocked(at, target) ->
-                agents.[idx] <- { a with Progress = 0; Destination = None; Route = None }
+                agents.[idx] <- { a with Progress = 0; Destination = None; Route = None; StalledTicks = 0 }
                 emit (MovementBlocked(a.Id, at, target)) s
-            | Advancing(r, next, _, startProgress) when not (wouldComplete next startProgress a.MoveSpeed) ->
+            | Advancing(r, next, _, startProgress, _) when not (wouldComplete next startProgress a.MoveSpeed) ->
                 // Still mid-edge: accumulate progress, no cell change, no
                 // event (a continuous fact fully recoverable from the
                 // resulting `AgentState.Progress`, like an idle agent's tick).
@@ -1573,32 +1637,81 @@ module Simulation =
                 // and `startProgress` resets to 0 every tick forever. The
                 // increment is always `Terrain.BaseMoveCost` (TASK-049): only
                 // `wouldComplete`'s threshold check scales with `MoveSpeed`.
-                agents.[idx] <- { a with Progress = startProgress + Terrain.BaseMoveCost; Route = Some r }
-            | Advancing(r, next, dest, startProgress) ->
+                // Genuine forward progress, not a freeze: `StalledTicks`
+                // resets to 0 (TASK-065).
+                agents.[idx] <-
+                    { a with
+                        Progress = startProgress + Terrain.BaseMoveCost
+                        Route = Some r
+                        StalledTicks = 0 }
+            | Advancing(r, next, dest, startProgress, freshRoute) ->
                 match yieldedTo.TryFind idx with
                 | Some winnerId ->
-                    // Frozen at `startProgress`, not incremented — the agent
-                    // did not advance this tick. `startProgress` (not
-                    // `a.Progress`) so a replan that starts a fresh edge and
-                    // is contested in the same tick still freezes at 0, not a
-                    // stale value from the edge it just left. `Route = Some r`
-                    // is written back for the same reason as the mid-edge
-                    // branch above: otherwise next tick recomputes from
-                    // scratch and `startProgress` wrongly resets to 0.
-                    agents.[idx] <- { a with Progress = startProgress; Route = Some r }
-                    emit (MovementYielded(a.Id, a.Position, next, winnerId)) s
+                    let stalledTicks = nextStalledTicks freshRoute
+
+                    if stalledTicks >= StallAbandonTicks then
+                        // TASK-065: this same-tick reservation loss would be
+                        // this agent's `StallAbandonTicks`th consecutive
+                        // freeze against this route — give up outright
+                        // instead of freezing again, the `Blocked` precedent
+                        // applied to "a path exists but has been
+                        // unavailable too long" rather than "no path exists
+                        // at all".
+                        agents.[idx] <-
+                            { a with
+                                Progress = 0
+                                Destination = None
+                                Route = None
+                                StalledTicks = 0 }
+
+                        emit (MovementAbandoned(a.Id, a.Position, dest)) s
+                    else
+                        // Frozen at `startProgress`, not incremented — the agent
+                        // did not advance this tick. `startProgress` (not
+                        // `a.Progress`) so a replan that starts a fresh edge and
+                        // is contested in the same tick still freezes at 0, not a
+                        // stale value from the edge it just left. `Route = Some r`
+                        // is written back for the same reason as the mid-edge
+                        // branch above: otherwise next tick recomputes from
+                        // scratch and `startProgress` wrongly resets to 0.
+                        agents.[idx] <-
+                            { a with
+                                Progress = startProgress
+                                Route = Some r
+                                StalledTicks = stalledTicks }
+
+                        emit (MovementYielded(a.Id, a.Position, next, winnerId)) s
                 | None ->
                     match Map.tryFind idx obstructedBy with
                     | Some occupantId ->
-                        // The next route cell is held by an agent that did not
-                        // vacate it this tick (stage 2b). Freeze exactly like a
-                        // rival-contest loser above — `Progress = startProgress`
-                        // (not incremented, not reset), `Route = Some r` written
-                        // back, `Position` / `Destination` untouched — and retry
-                        // the same next cell next tick. Persistent obstruction
-                        // is B-015 / B-017 scope, not resolved here.
-                        agents.[idx] <- { a with Progress = startProgress; Route = Some r }
-                        emit (MovementObstructed(a.Id, a.Position, next, occupantId)) s
+                        let stalledTicks = nextStalledTicks freshRoute
+
+                        if stalledTicks >= StallAbandonTicks then
+                            // TASK-065: the identical give-up transition as
+                            // the rival-contest-loser branch above, for a
+                            // stationary-occupant block instead.
+                            agents.[idx] <-
+                                { a with
+                                    Progress = 0
+                                    Destination = None
+                                    Route = None
+                                    StalledTicks = 0 }
+
+                            emit (MovementAbandoned(a.Id, a.Position, dest)) s
+                        else
+                            // The next route cell is held by an agent that did not
+                            // vacate it this tick (stage 2b). Freeze exactly like a
+                            // rival-contest loser above — `Progress = startProgress`
+                            // (not incremented, not reset), `Route = Some r` written
+                            // back, `Position` / `Destination` untouched — and retry
+                            // the same next cell next tick.
+                            agents.[idx] <-
+                                { a with
+                                    Progress = startProgress
+                                    Route = Some r
+                                    StalledTicks = stalledTicks }
+
+                            emit (MovementObstructed(a.Id, a.Position, next, occupantId)) s
                     | None ->
                         let arrived = next = dest
 
@@ -1606,6 +1719,7 @@ module Simulation =
                             { a with
                                 Position = next
                                 Progress = 0
+                                StalledTicks = 0
                                 Destination = (if arrived then None else Some dest)
                                 Route = (if arrived then None else Some { r with Cursor = r.Cursor + 1 }) }
 

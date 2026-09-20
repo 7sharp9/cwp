@@ -775,6 +775,142 @@ let ``two agents converging on a cell held by a stationary third never enter it 
     Assert.True(sawYield, "expected a MovementYielded from the rival contest")
     Assert.True(sawObstruct, "expected a MovementObstructed on the stationary occupant")
 
+// --- Visible stall failure (TASK-065, backlog B-065) --------------------
+
+[<Fact>]
+let ``a same-tick yield that clears within a few ticks never aborts the order`` () =
+    // The tied-contest setup from above: agent b yields to agent a for
+    // exactly one tick, then the cell is free and b proceeds normally --
+    // ordinary, brief multi-agent contention, nowhere near
+    // Simulation.StallAbandonTicks (40). No MovementAbandoned ever fires,
+    // and b's own order completes.
+    let a = agent 0
+    let b = agent 1
+    let w = twoAgentWorld { X = 2; Y = 3 } { X = 3; Y = 2 }
+    let r0 = stepWith [| cmd 1 a { X = 4; Y = 3 }; cmd 2 b { X = 3; Y = 4 } |] w
+
+    Assert.Contains(MovementYielded(b, { X = 3; Y = 2 }, { X = 3; Y = 3 }, a), bodies r0)
+
+    let mutable st = r0.State
+    let mutable sawAbandoned = false
+
+    for _ in 1..10 do
+        let r = stepIdle st
+        sawAbandoned <- sawAbandoned || (bodies r |> Array.exists (function MovementAbandoned _ -> true | _ -> false))
+        st <- r.State
+
+    Assert.False(sawAbandoned, "a brief, resolved yield must never abort the order")
+    Assert.Equal({ X = 3; Y = 4 }, (agentOf b st).Position)
+    Assert.Equal(None, (agentOf b st).Destination)
+
+[<Fact>]
+let ``an order permanently obstructed by a stationary agent is abandoned after StallAbandonTicks ticks`` () =
+    // The permanent-obstruction setup from above (a mover whose only route
+    // runs through a permanently idle agent): agent 0 at (0,0) -> (4,0),
+    // agent 1 idle on the route at (2,0). Left running past
+    // Simulation.StallAbandonTicks (40, not exposed -- asserted here by its
+    // observed effect, the `AGENTS.md` "reappraise only on material
+    // triggers" precedent of testing behaviour, not internals), the order
+    // is abandoned outright instead of freezing forever: Destination/Route
+    // clear, MovementAbandoned fires exactly once, and further idle ticks
+    // leave agent 0 genuinely at rest one cell short of the blocker.
+    let a = agent 0
+    let b = agent 1
+    let w = occWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 } ]
+    let r0 = stepWith [| cmd 1 a { X = 4; Y = 0 } |] w
+    let mutable st = r0.State
+    let mutable abandonedEvents: EventBody[] = [||]
+
+    for _ in 1..45 do
+        let r = stepIdle st
+        abandonedEvents <-
+            Array.append
+                abandonedEvents
+                (bodies r |> Array.filter (function MovementAbandoned _ -> true | _ -> false))
+        st <- r.State
+
+    Assert.Equal<EventBody[]>(
+        [| MovementAbandoned(a, { X = 1; Y = 0 }, { X = 4; Y = 0 }) |],
+        abandonedEvents
+    )
+    Assert.Equal({ X = 1; Y = 0 }, (agentOf a st).Position) // parked one cell short, permanently
+    Assert.Equal({ X = 2; Y = 0 }, (agentOf b st).Position) // b never moved
+    Assert.Equal(None, (agentOf a st).Destination)
+    Assert.Equal(0, (agentOf a st).StalledTicks)
+
+    // Genuinely at rest now, not silently retrying: one more idle tick
+    // produces neither a further freeze event nor any movement.
+    let r = stepIdle st
+
+    Assert.DoesNotContain(
+        bodies r,
+        (function
+        | MovementYielded _
+        | MovementObstructed _
+        | MovementAbandoned _
+        | MovementStepped _ -> true
+        | _ -> false)
+    )
+
+// --- Corpses vacate for movement (TASK-066, backlog B-066) --------------
+
+[<Fact>]
+let ``a live agent walks straight through a dead agent's cell instead of freezing`` () =
+    // Agent 0 at (0,0) -> (4,0); agent 1, DEAD, parked on the route at
+    // (2,0). Before TASK-066 this froze agent 0 forever (occupantOf held
+    // every agent regardless of Vitals); after it, agent 0 treats (2,0) as
+    // empty and reaches (4,0) on schedule, never obstructed even once.
+    let a = agent 0
+    let b = agent 1
+    let w = occWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 } ]
+
+    let w =
+        { w with
+            Agents = w.Agents |> Array.map (fun ag -> if ag.Id = b then { ag with Vitals = Dead } else ag) }
+
+    let r0 = stepWith [| cmd 1 a { X = 4; Y = 0 } |] w
+    let mutable st = r0.State
+    let mutable evs = bodies r0
+
+    for _ in 1..5 do
+        let r = stepIdle st
+        evs <- Array.append evs (bodies r)
+        st <- r.State
+
+    Assert.DoesNotContain(
+        evs,
+        (function
+        | MovementObstructed _
+        | MovementYielded _
+        | MovementAbandoned _ -> true
+        | _ -> false)
+    )
+    Assert.Equal({ X = 4; Y = 0 }, (agentOf a st).Position)
+    Assert.Equal(None, (agentOf a st).Destination)
+    Assert.Equal({ X = 2; Y = 0 }, (agentOf b st).Position) // the corpse itself never moves
+
+[<Fact>]
+let ``a live agent walks through an Incapacitated agent's cell the same as a Dead one`` () =
+    // The identical shape, `Incapacitated` instead of `Dead` -- both are
+    // non-`Alive`, and the fix (`Casualty.isAlive`) treats them the same
+    // way the intents computation's own `Idle`-for-non-Alive branch already
+    // does.
+    let a = agent 0
+    let b = agent 1
+    let w = occWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 } ]
+
+    let w =
+        { w with
+            Agents = w.Agents |> Array.map (fun ag -> if ag.Id = b then { ag with Vitals = Incapacitated 10 } else ag) }
+
+    let r0 = stepWith [| cmd 1 a { X = 4; Y = 0 } |] w
+    let mutable st = r0.State
+
+    for _ in 1..5 do
+        st <- (stepIdle st).State
+
+    Assert.Equal({ X = 4; Y = 0 }, (agentOf a st).Position)
+
 // --- Perception and shared squad tactical knowledge (TASK-026) ---------
 
 /// A world with the listed friendly and hostile agents (ids ascending from 0

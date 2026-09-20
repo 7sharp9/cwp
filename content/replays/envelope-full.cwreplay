@@ -9,44 +9,43 @@
 # Initial state: the shared spike fixture (Setup.sixAgentWorld, 32 x 32,
 # seed 20260902) — resolved by name from Corpus.all, not serialised.
 #
-# canonical 13 and every hash below were re-pinned by TASK-062 (backlog
-# B-032; Canonical.FormatVersion 12 -> 13, AgentState.Extracted and
-# WorldState.MissionOutcome/.CompletedObjectives/.ObjectiveProgress added).
-# This entry's initial state (Setup.sixAgentWorld) authors no Objectives, so
-# the whole demolition/extraction/mission-outcome feature set stays inert
-# for it: the byte-layout change is the only difference, the 24 ticks and
-# 78 domain events are unchanged. Prior re-pin: TASK-058 (Canonical.
-# FormatVersion 11 -> 12, AgentState.RadioDestroyed and PendingDelivery
-# added).
+# canonical 14 and every hash below were re-pinned by TASK-065 (backlog
+# B-065; Canonical.FormatVersion 13 -> 14, AgentState.StalledTicks added).
+# This entry's one command is an ordinary MoveTo with no rival agent and no
+# occupied route cell anywhere near it, so the new counter stays 0 at every
+# checkpoint: the byte-layout change is the only difference, the 24 ticks
+# and 78 domain events are unchanged. Prior re-pin: TASK-062 (Canonical.
+# FormatVersion 12 -> 13, AgentState.Extracted and WorldState.MissionOutcome/
+# .CompletedObjectives/.ObjectiveProgress added).
 version 1
 seed 20260902
 ticks 24
-canonical 13
+canonical 14
 build cwheadless
 scenario spike-fixture
-initial-hash 0xC0A53D46AE5D7C80
-checkpoint 1 0xE34B79C579AF9EDF
-checkpoint 2 0xD695167B21310963
-checkpoint 3 0xB2C1ECAA7FC23AD9
-checkpoint 4 0xBA06A174BD00D92B
-checkpoint 5 0x6373DE2FDB9E2CD5
-checkpoint 6 0x051034A258068E2B
-checkpoint 7 0x69C4AB157E011551
-checkpoint 8 0x21E6A353E0A81CD3
-checkpoint 9 0xD36D14C130D13AC5
-checkpoint 10 0x5AB189C5FAFE64B3
-checkpoint 11 0x7EE4222D71DF18F9
-checkpoint 12 0xF8E09A51F6966EDB
-checkpoint 13 0xF2C0D2747E0CD4F5
-checkpoint 14 0x52AACA04D2D6E9AB
-checkpoint 15 0xC0E86E00614C54E1
-checkpoint 16 0x523ABF4B2DFF2E73
-checkpoint 17 0x3A743EB78CB93545
-checkpoint 18 0xCEB8B119B20D0E43
-checkpoint 19 0xA428306654AD5A59
-checkpoint 20 0x2A988B7BDB1C82EB
-checkpoint 21 0x0833AE8D000587F5
-checkpoint 22 0x62654B482CA88F67
-checkpoint 23 0x68CC3E1EC9BE2665
-checkpoint 24 0xFD34E3D07EA044D3
+initial-hash 0x672815D313E0AE51
+checkpoint 1 0xEDEEE60A8D387982
+checkpoint 2 0xB019F3CF1627688A
+checkpoint 3 0xE8A42FF36E1C083C
+checkpoint 4 0x2BC447A90AA5EDB2
+checkpoint 5 0xD4C4440F6F3645C0
+checkpoint 6 0xAC2928E7A02C513A
+checkpoint 7 0x6BAB4B2EA8E3AEBC
+checkpoint 8 0x272EF1D2801CEF62
+checkpoint 9 0x0A3ADDDCC8376CA8
+checkpoint 10 0x2A9CA370FBA72A4A
+checkpoint 11 0x3C24F692CA2C51DC
+checkpoint 12 0x61F93BE96B378EB2
+checkpoint 13 0x7B3FD1D4C86DB600
+checkpoint 14 0x2B5A6D8F57507F9A
+checkpoint 15 0x560C8396B2A0AD3C
+checkpoint 16 0x38CA548EAB702502
+checkpoint 17 0xFFB0F910D0FC3458
+checkpoint 18 0x38D738CF80A2BB4A
+checkpoint 19 0x7FDE64A19CB5407C
+checkpoint 20 0x380F778500FE44F2
+checkpoint 21 0x1D8147B54DEB7F40
+checkpoint 22 0x655817AF44F47D6E
+checkpoint 23 0xB1656C4DB2568AF8
+checkpoint 24 0xDF048B77995D0552
 command 2 0 1 1 immediate aggressive fixture:spike 3,4,5 move 20 14

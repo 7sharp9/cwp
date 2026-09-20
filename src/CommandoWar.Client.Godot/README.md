@@ -691,6 +691,119 @@ after use), not a defect.
 reconfirmed `MATCH` unchanged. Screenshot recaptured:
 `docs/evidence/task-064-bridgehead-integration.png`.
 
+### Visible stall failure for a permanently blocked order (TASK-065, backlog B-065)
+
+Dave's own live playtest of Bridgehead (after TASK-064's acceptance) found a
+genuine sim-side bug, not a client one: "i expected the ai to be more
+autonomous, they all seem to just get stuck." A `dotnet fsi` probe against
+the real click path confirmed it -- an ordinary six-agent squad-movement
+order (not toward the bridge) left two agents permanently frozen from tick
+~30 through tick 500, with zero recovery or feedback, `docs/10_RISK_
+REGISTER.md` R-010 ("reservation deadlocks") finally materialising for
+real. The `CommandoWar.Sim` fix (a new `AgentState.StalledTicks` counter;
+`Simulation.navigationAndMovement` abandons a route frozen for
+`Simulation.StallAbandonTicks` = 40 consecutive ticks instead of retrying
+forever, clearing `Destination`/`Route` and emitting a new
+`MovementAbandoned` event) is documented in `docs/04_SIMULATION_SPEC.md`
+and `tasks/TASK-065-STALLED-ORDER-VISIBLE-FAILURE.md`; this section covers
+only the client's own minimal reaction to it.
+
+"Visible failure, not silent freeze" is the whole point -- an abandoned
+order clears `Destination` exactly like a fulfilled one, so the existing
+order-status text alone would read as "your soldier arrived", the same
+ambiguity this task removes. `CommandDemoScene.stepOnce` now watches
+`devFrame.Overlays` for the new `Abandoned` case (the `FireLine ->
+heldFireLines` precedent) and records the agent id in a new
+`heldAbandonedOrders` timer (`abandonedOrderHoldSeconds` = 3.0, held longer
+than a fire flash since the player needs time to read the word, not just
+notice a flash); `Update`'s order-status text checks it ahead of the
+existing accepted/destination-suffix logic and reads `"accepted -> abandoned
+(route blocked)"` instead of bare `"accepted"` for the held duration. The
+`F1` developer overlay also gets a distinct orange marker for the new
+`Abandoned` overlay (the `Reserved`/`Obstructed` cyan/red precedent), and a
+new `content/replays/stalled-order-abandoned` corpus entry (a permanent
+single-sided block, run past the 40-tick threshold) proves the whole chain
+end to end with a committed ASCII/SVG golden.
+
+No new client UI system: the same order-status text and the same developer
+overlay, one more case each. `Canonical.FormatVersion` 13 -> 14
+(`AgentState.StalledTicks` added) re-pins every corpus/fixture/diagnostics
+golden and all three Godot self-checks byte-layout only -- none of the
+existing scripted sequences (including this scene's own `--selfcheck`)
+sustains a freeze anywhere near 40 ticks, so none of them newly abandons an
+order.
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+dotnet build CommandoWar.Client.Godot.slnx -c Debug
+
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x047FF3080AD3EBCB (re-pinned: format 14)
+"$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x49E4CD73C85D1B47 (re-pinned: format 14)
+"$GODOT" --headless --path . scenes/AppraisalDemo.tscn -- --selfcheck  # MATCH 0xF0169E93B40D5546 (re-pinned: format 14)
+```
+
+`dotnet test` `412/412` (+4: two new `SimulationTests` facts, one `DiagnosticsTests` fact, and one `CorpusTests` theory row); `--
+corpus` `19/19` (+1: `stalled-order-abandoned`). Verified against the exact
+original repro (a temporary `dotnet fsi` probe against real
+`bridgehead.cwscenario` content, removed after use): the same six-agent
+squad-movement order now reaches `MovementAbandoned` for five of the six
+agents by tick 42, all settled with `Destination = None` and
+`StalledTicks = 0`, instead of freezing past tick 500. Not yet confirmed
+live in the running editor -- awaiting Dave's own playtest of the
+on-screen order-status text.
+
+### `--screenshot-squad`: watch a scripted playthrough (TASK-065/066)
+
+A general-purpose evaluation tool, not evidence for one specific task --
+Dave asked directly to be able to watch the real six-agent Bridgehead
+advance play out visually rather than only read a headless hash.
+`--screenshot-squad <frameCount> <path>` issues the identical
+`CommandDemoDrive.runScriptedSelfCheck` click sequence (all six agents
+advancing on the bridge) through the real `OnClick`/`OnHover` UI path
+instead of `StepTicksHeadless`, then stays unpaused (the
+`--screenshot-mission` precedent) so repeated invocations at different
+frame counts build a filmstrip:
+
+```
+GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+cd src/CommandoWar.Client.Godot
+
+for f in 30 90 200 400; do
+  "$GODOT" --path . scenes/CommandDemo.tscn -- --screenshot-squad $f "/tmp/squad_$f.png"
+done
+```
+
+Requires a real GPU-backed window (not `--headless`, the same constraint
+`--screenshot`/`--screenshot-mission` already have) -- `GetViewport()?.
+GetTexture()?.GetImage()` returns nothing without one. This tool found
+B-066: watching the filmstrip out to tick 400 showed most of the squad
+permanently jammed at the bridge chokepoint from roughly tick 42 onward,
+the corpse-blocking gap TASK-064 had already flagged.
+
+### A dead agent's corpse stops blocking movement (TASK-066, backlog B-066)
+
+Sim-side only, no Godot change beyond the tool above: `Simulation.
+navigationAndMovement`'s `occupantOf` map now excludes any non-`Alive`
+agent (`Casualty.isAlive`), so a corpse's cell reads as free and a live
+agent walks through/onto it instead of freezing forever. `Pathfinding.fs`
+has no occupancy concept at all and needed no change. Proven directly by
+two new `SimulationTests` facts; no existing corpus entry or Godot
+`--selfcheck` hash moves (confirmed clean, no re-pin needed -- none of the
+19 committed entries combines a death with a subsequent move through that
+exact cell).
+
+**Honestly flagged, not smoothed over:** re-running `--screenshot-squad`
+against the same real Bridgehead scenario is byte-identical to the pre-fix
+filmstrip, because the specific jam Dave watched never involves a death at
+all -- it's five of six agents blocking each other while still `Alive`,
+pure formation-offset contention at the chokepoint, a different mechanism
+this task does not touch. Dave's own further idea from the same
+conversation -- multi-select and joint squad orders, with formation
+applying to the group order instead of automatically redirecting every
+lone individual order -- is parked as backlog B-067, proposed only, not
+scoped here per his explicit instruction.
+
 ## Pinned versions
 
 | Component | Version |

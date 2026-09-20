@@ -253,6 +253,29 @@ type AgentState =
       /// Terrain)` by the Navigation and movement phase, and excluded from
       /// `Canonical.encode`. `None` when the agent has no destination.
       Route: MovementPath option
+      /// Consecutive ticks this agent's movement has been frozen by a
+      /// same-tick reservation loss (`MovementYielded`) or a stationary
+      /// occupant blocking its next route cell (`MovementObstructed`)
+      /// (TASK-065, backlog B-065; `docs/04` section 8 step 6, "replan when
+      /// the next path cell becomes invalid" -- R-010 "reservation
+      /// deadlocks"). Incremented by the Navigation and movement phase on
+      /// each such freeze against a route it is still following (a fresh
+      /// route computed this tick, from a new order or a replan, restarts
+      /// the count at 0 before counting this tick's own freeze); reset to 0
+      /// the instant the agent actually advances, arrives, or is blocked
+      /// outright (`MovementBlocked`, a different failure mode). Once it
+      /// would reach `Simulation.StallAbandonTicks`, the phase abandons the
+      /// order instead of freezing again: `Destination`/`Route` are cleared
+      /// and this counter resets to 0, emitting `MovementAbandoned` in place
+      /// of the usual `MovementYielded`/`MovementObstructed` for that tick --
+      /// turning a permanent, silent freeze into a visible failure.
+      ///
+      /// **Genuine canonical per-tick state** (the `Progress`/`Suppression`
+      /// precedent): it is real per-tick memory — how long the *current*
+      /// freeze has persisted — that cannot be recomputed from `Position`
+      /// alone. Defaults to `0`, no scenario-authored override (the
+      /// `Progress` precedent) — every agent always starts unstalled.
+      StalledTicks: int
       /// The opposing-side agents this agent can currently see, ascending by
       /// id (TASK-026, `docs/04` section 12.3 "current visible contacts").
       /// Rewritten from scratch every tick by the Perception phase.
@@ -875,6 +898,8 @@ module Agent =
     /// `World.ofScenario` overrides it too, default `None`. `Extracted`
     /// (TASK-062) follows the `RadioDestroyed`/`PendingDelivery` rule:
     /// every agent always starts `false`, no authored override.
+    /// `StalledTicks` (TASK-065) follows the `Progress` rule: every agent
+    /// always starts `0`, no authored override.
     let create (id: AgentId) (side: Side) (position: Cell) : AgentState =
         { Id = id
           Side = side
@@ -882,6 +907,7 @@ module Agent =
           Progress = 0
           Destination = None
           Route = None
+          StalledTicks = 0
           VisibleContacts = [||]
           Order = None
           OrderQueue = []

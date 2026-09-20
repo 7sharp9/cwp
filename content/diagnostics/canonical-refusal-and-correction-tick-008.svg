@@ -133,7 +133,7 @@
   <text x="164" y="30" font-family="monospace" font-size="8" fill="#718096">Z55</text>
   <text x="164" y="78" font-family="monospace" font-size="8" fill="#718096">Z56</text>
   <circle cx="104" cy="56" r="8" fill="none" stroke="#d4af37" stroke-width="2"/>
-  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 8  hash 0x5F64F2F8AF204427  draws 10</text>
+  <text x="4" y="144" font-family="monospace" font-size="11" fill="#111111">tick 8  hash 0xFD9AD69AFD47EDB6  draws 10</text>
   <text x="4" y="158" font-family="monospace" font-size="11" fill="#111111">agents 3  cover-edges 0  events 4</text>
   <text x="4" y="172" font-family="monospace" font-size="11" fill="#111111">hatch=impassable  dark border=opaque  darker fill=higher elevation  triangle=cover  circle=agent</text>
 </svg>

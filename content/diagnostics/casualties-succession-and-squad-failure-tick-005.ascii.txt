@@ -71,4 +71,4 @@ overlays:
 
 events: shot-fired-hit; agent-incapacitated@(0,3); shot-fired-hit; agent-incapacitated@(5,0); leadership-transferred; squad-failure; mission-failed
 
-tick 5 | hash 0x7D37DD758DF2B41B (format 13) | draws 17 | agents 4 | cover-edges 0 | events 7
+tick 5 | hash 0x7E534CA1931CE2EA (format 14) | draws 17 | agents 4 | cover-edges 0 | events 7

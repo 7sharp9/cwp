@@ -57,4 +57,4 @@ overlays:
 
 events: contact-expired@(0,3); contact-expired@(5,0)
 
-tick 65 | hash 0x3139C4A44AB28D65 (format 13) | draws 17 | agents 4 | cover-edges 0 | events 2
+tick 65 | hash 0x4723FEDCC6005C74 (format 14) | draws 17 | agents 4 | cover-edges 0 | events 2

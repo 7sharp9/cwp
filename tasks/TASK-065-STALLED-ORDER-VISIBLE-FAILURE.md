@@ -1,6 +1,8 @@
 # TASK-065: Turn a permanently stalled movement order into a visible failure
 
-Status: proposed
+Status: done (implemented and self-verified 2026-09-20; accepted by Dave
+2026-09-20 on the self-verification evidence alone, his explicit choice not
+to live-test the on-screen order-status text first)
 Owner: Dave
 Phase: P4
 Gate: G4 (vertical slice feature-complete); realises B-065
@@ -195,60 +197,125 @@ This is an outcome checklist, not permission to invent missing architecture.
 
 ## Acceptance criteria
 
-- [ ] A `SimulationTests` fact proves a same-tick yield that clears
+- [x] A `SimulationTests` fact proves a same-tick yield that clears
       within the threshold never aborts (no regression on ordinary,
-      brief multi-agent contention).
-- [ ] A `SimulationTests` fact proves a genuinely permanent block reaches
+      brief multi-agent contention). `` `an same-tick yield that clears
+      within a few ticks never aborts the order` ``.
+- [x] A `SimulationTests` fact proves a genuinely permanent block reaches
       the threshold and aborts: `Destination`/`Route` cleared, the new
-      event emitted, the counter reset.
-- [ ] The exact fsi-probe scenario that found this (six agents, ordinary
+      event emitted, the counter reset. `` `an order permanently
+      obstructed by a stationary agent is abandoned after
+      StallAbandonTicks ticks` ``.
+- [x] The exact fsi-probe scenario that found this (six agents, ordinary
       squad-movement orders) reaches a real abort within a bounded,
       short number of ticks when re-run, instead of freezing past tick
-      500.
-- [ ] A player sees *something* distinguishing "this order failed" from
+      500. Re-run against real `bridgehead.cwscenario` content (temporary
+      probe, removed after use): five of six agents reach
+      `MovementAbandoned` by tick 42, all settled (`Destination = None`,
+      `StalledTicks = 0`) at tick 600, none still frozen.
+- [x] A player sees *something* distinguishing "this order failed" from
       "this order is still in progress" or "this agent arrived" --
-      confirmed live or via a screenshot, not assumed from the event
-      existing alone.
-- [ ] No `Pathfinding.fs` change; no `Appraisal.fs` `OrderDisposition`/
-      `DecisionReason` change.
-- [ ] `dotnet test`/`corpus` pass with the full, expected re-pin from the
-      `Canonical.FormatVersion` bump (every existing entry byte-layout
-      only, unless one genuinely exercises a stall -- check, do not
-      assume).
-- [ ] Required documentation updated.
+      `CommandDemoScene`'s order-status text now reads `"accepted ->
+      abandoned (route blocked)"` for `abandonedOrderHoldSeconds` (3.0s)
+      after the event, ahead of the existing destination-suffix logic;
+      the `F1` developer overlay also gets a distinct orange marker.
+      Accepted by Dave (2026-09-20) on this self-verification evidence
+      without a live editor confirmation (his explicit choice); the
+      `docs/evidence/` screenshot precedent was not captured this round --
+      the diagnostics golden and the direct fsi-probe re-run above are the
+      accepted evidence in its place.
+- [x] No `Pathfinding.fs` change; no `Appraisal.fs` `OrderDisposition`/
+      `DecisionReason` change. Confirmed by inspection and by `git diff`
+      against the Allowed-scope file list.
+- [x] `dotnet test`/`corpus` pass with the full, expected re-pin from the
+      `Canonical.FormatVersion` bump (13 -> 14): every one of the 18
+      pre-existing corpus/fixture/diagnostics goldens re-pinned
+      byte-layout only (confirmed diff by diff -- only the embedded hash
+      token changed in each), plus one genuinely new corpus entry
+      (`stalled-order-abandoned`) exercising the new behaviour for real.
+      `dotnet test` `412/412` (+4); `-- corpus` `19/19` (+1).
+- [x] Required documentation updated (see Documentation updates below).
 
 ## Required verification
 
-Fill exact commands/results during implementation.
-
-- `dotnet build CommandoWar.slnx -c Release`:
-- `dotnet test`:
-- `dotnet run --project src/CommandoWar.Headless -- corpus [--regenerate]`:
+- `dotnet build CommandoWar.slnx -c Release`: `0` Warning(s), `0` Error(s).
+- `dotnet test CommandoWar.slnx -c Release`: `412/412` passed (+4: the two
+  new `SimulationTests` facts, one `DiagnosticsTests` fact, and one
+  `CorpusTests` theory row).
+- `dotnet run --project src/CommandoWar.Headless -c Release -- corpus`:
+  `19/19` entries match (`--regenerate` first re-pinned all 18 pre-existing
+  entries byte-layout only, plus wrote the one new `stalled-order-abandoned`
+  entry).
 - `dotnet build src/CommandoWar.Client.Godot/CommandoWar.Client.Godot.slnx -c Debug`:
-- `--selfcheck` for all three scene types through the real Godot 4.7.2 editor:
-- manual/scripted replay of the original stuck-agent repro:
+  `0` Warning(s), `0` Error(s).
+- `--selfcheck` through the real Godot 4.7.2 editor
+  (`Godot_v4.7.2-stable_mono_win64_console.exe --headless`): `CommandDemo.tscn`
+  `MATCH 0x047FF3080AD3EBCB` at tick 90 (re-pinned); `SnapshotDemo.tscn`
+  `MATCH 0x49E4CD73C85D1B47` at tick 20 (re-pinned); `AppraisalDemo.tscn`
+  `MATCH 0xF0169E93B40D5546` (re-pinned) -- all three format-14 byte-layout
+  re-pins, confirmed against the real editor, not assumed.
+- Manual/scripted replay of the original stuck-agent repro: a temporary
+  `dotnet fsi` probe (removed after use) against the real
+  `content/scenarios/bridgehead.cwscenario`, replicating the exact reported
+  order (all six friendly agents ordered to `(4,4)`, not toward the bridge),
+  run 600 ticks. Result: five of six agents (all but the fireteam leader,
+  which had no formation-offset contention) reach `MovementAbandoned`
+  between tick 41 and 42, every one settled with `Destination = None` and
+  `StalledTicks = 0` by tick 600 -- no agent still frozen, versus the
+  original report's freeze persisting past tick 500 with zero recovery.
+- `dotnet run --project src/CommandoWar.Headless -c Release -- replay-file content/replays/envelope-full.cwreplay`:
+  `checkpoints : OK (24 ticks match the file's committed hashes)` after
+  re-pinning (unaffected scenario, byte-layout-only re-pin).
+- `git status --porcelain`: matches this task's Allowed scope.
 
 ## Evidence to capture
 
-- command output or test summary;
-- the re-run stuck-agent repro's tick-by-tick outcome (abort tick, event);
-- screenshot or HUD-text evidence of the player-facing signal;
-- the tuned threshold value and why, flagged as first-cut/not
-  playtest-derived;
-- unresolved failures.
+- `dotnet build`/`test`/`corpus`/`replay-file` command output (above);
+- the re-run stuck-agent repro's tick-by-tick outcome (five agents abort at
+  tick 41-42; above);
+- `content/diagnostics/stalled-order-abandoned-tick-041.ascii.txt`/`.svg`
+  (committed golden), the HUD-text evidence in place of a screenshot this
+  round (see Acceptance criteria);
+- the tuned threshold value and why it is a first-cut, not
+  playtest-derived: `Simulation.StallAbandonTicks = 40` (2 real seconds at
+  the standard 20 ticks/second), chosen to comfortably exceed an ordinary
+  same-tick yield's 1-3-tick clearing time (confirmed by the "never aborts"
+  `SimulationTests` fact) while still resolving a genuine dead end within a
+  few real-time seconds rather than tens of seconds of silent standing --
+  not measured against any real playtest session, flagged for Dave to
+  retune if a live session feels off;
+- unresolved: the on-screen order-status text has not been confirmed live
+  in the running editor (self-verified only, see Acceptance criteria).
 
 ## Expected files
 
-- `src/CommandoWar.Sim/Domain.fs`, `Canonical.fs`, `Events.fs`,
-  `Simulation.fs`
-- `tests/CommandoWar.Sim.Tests/SimulationTests.fs` (and
-  `DeterminismPropertyTests.fs`/`CorpusTests.fs` if a new corpus entry is
-  added)
-- `content/replays/` (new entry, if added)
-- `src/CommandoWar.Client.Godot/Core/CommandDemoScene.fs`,
-  `src/FSharpSceneHost.cs`
+- `src/CommandoWar.Sim/Domain.fs` (`AgentState.StalledTicks`), `Canonical.fs`
+  (`FormatVersion` 13 -> 14, `writeAgent`), `Events.fs` (`MovementAbandoned`),
+  `Simulation.fs` (`StallAbandonTicks`, `navigationAndMovement`'s freeze
+  branches), `Diagnostics.fs` (new `Abandoned` overlay, `abandonedOverlays`,
+  `eventMarker`, the four exclusion-list updates).
+- `tests/CommandoWar.Sim.Tests/SimulationTests.fs` (two new facts),
+  `DiagnosticsTests.fs` (new fact + the five exclusion-list updates + every
+  re-pinned golden reference), `CanonicalHashTests.fs`, `ScenarioTests.fs`,
+  `TerrainTests.fs`, `PathfindingTests.fs`, `SightTests.fs`, `CorpusTests.fs`,
+  `FixtureTests.fs`, `ReplayTests.fs` (`FormatVersion` 13 -> 14 re-pins).
+- `src/CommandoWar.Headless/Corpus.fs` (new `stalled-order-abandoned` entry),
+  `DiagnosticRender.fs` (`Abandoned` ascii/svg render + two exclusion
+  lists), `AppraisalDemo.fs` (`unhandled` arm).
+- `content/replays/` (18 pre-existing entries re-pinned, one new entry:
+  `stalled-order-abandoned.cwreplay`/`.md`; `envelope-full.cwreplay`/`.md`
+  re-pinned by hand, not part of `Corpus.all`; `CORPUS.md` new entry row);
+  `content/fixtures/SPIKE-FIXTURE.md` re-pinned (found already silently
+  stale since format 4/TASK-028, corrected straight to format 14 rather
+  than left further behind -- flagged for Dave, not this task's own doing);
+  `content/diagnostics/` (every existing golden re-pinned byte-layout only,
+  two new goldens for `stalled-order-abandoned-tick-041`).
+- `src/CommandoWar.Client.Godot/Core/CommandDemoScene.fs` (`heldAbandonedOrders`,
+  the order-status text override, the `F1` overlay marker),
+  `src/FSharpSceneHost.cs`/`src/AppraisalDemoScene.cs` (three re-pinned
+  `--selfcheck` hashes), `README.md` (new section).
 - `docs/04_SIMULATION_SPEC.md`, `docs/11_BACKLOG.md`,
-  `docs/12_PROGRESS_LEDGER.md`, `PROJECT_STATE.yaml`
+  `docs/12_PROGRESS_LEDGER.md`, `PROJECT_STATE.yaml`.
 
 ## Documentation updates
 
@@ -256,7 +323,10 @@ Fill exact commands/results during implementation.
 - `docs/04_SIMULATION_SPEC.md` (step 6's realisation note);
 - `docs/11_BACKLOG.md` (B-065 row);
 - `docs/12_PROGRESS_LEDGER.md`: index row + `docs/ledger/` detail file;
-- `PROJECT_STATE.yaml`.
+- `PROJECT_STATE.yaml`;
+- `src/CommandoWar.Client.Godot/README.md` (new section, the TASK-040/048/
+  063 precedent);
+- `content/replays/CORPUS.md` (new entry row).
 
 ## Rollback or removal
 
@@ -266,6 +336,24 @@ is additive and revertible with `git revert` in one step, but the
 golden -- reverting after those are re-pinned means re-reverting every
 pinned hash back too, not just the code. Prefer fixing forward once this
 lands.
+
+## Review
+
+- Reviewer: Dave
+- Accepted: yes (2026-09-20), on the self-verification evidence alone --
+  confirmed via `AskUserQuestion` at the same time as TASK-066's
+  acceptance. Dave's explicit choice was to accept without first live-
+  testing the on-screen "accepted -> abandoned (route blocked)" text in
+  the running editor; that live confirmation remains outstanding as an
+  unexercised path, not a blocking gap.
+- Notes: full detail in `docs/ledger/2026-09-20-TASK-065-stalled-order-
+  visible-failure.md`. A pre-existing, unrelated staleness was found and
+  fixed while re-pinning: `content/fixtures/SPIKE-FIXTURE.md` had been
+  silently stuck at `Canonical.FormatVersion` 4 since TASK-028 (nine
+  intervening bumps never touched it), unlike `FixtureTests.fs`'s own
+  hashes, which stayed current -- corrected straight to format 14, flagged
+  for Dave rather than left further behind or silently backfilled through
+  every intervening version.
 
 ## Completion report
 
