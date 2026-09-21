@@ -148,6 +148,30 @@ public partial class FSharpSceneHost : Node2D
             OrderModeIconSize,
             OrderModeIconSize);
 
+    // Replay scrub bar (TASK-071, backlog B-064): fixed screen-space HUD
+    // chrome, the `OrderModeIconRect`/`DrawOrderModeBar` precedent -- owned
+    // entirely here, not a world-grid DrawItem. Positioned clear of the
+    // order-mode icon bar (12,720)-(272,768) so both could in principle
+    // render on the same frame without overlapping, though in practice
+    // `_scene.TickCount() > 0` (only true for CwClientCore.ReplayDemoScene)
+    // gates every draw/hit-test below, so a live-play scene never shows it.
+    private static readonly Vector2 ScrubBarOrigin = new(200f, 780f);
+    private const float ScrubBarWidth = 880f;
+    private const float ScrubBarHeight = 18f;
+    private static Rect2 ScrubBarRect => new(ScrubBarOrigin, new Vector2(ScrubBarWidth, ScrubBarHeight));
+
+    // A drag inside the scrub bar tracks continuously (unlike the
+    // rubber-band-select `_isDragging` below, which only resolves on
+    // release) -- every motion event while dragging immediately scrubs, so
+    // the rendered tick follows the mouse in real time.
+    private bool _isDraggingScrub;
+
+    private long ScrubTickAt(float screenX)
+    {
+        float t = Mathf.Clamp((screenX - ScrubBarOrigin.X) / ScrubBarWidth, 0f, 1f);
+        return (long)Mathf.Round(t * _scene.TickCount());
+    }
+
     private IClientScene _scene;
     private Label _hud;
 
@@ -219,6 +243,16 @@ public partial class FSharpSceneHost : Node2D
 
         string bridgeheadScenarioPath = ResolveContentPath(Path.Combine("scenarios", "bridgehead.cwscenario"));
 
+        // TASK-071, backlog B-064: `CwClientCore.ReplayDemoScene` reads a
+        // `.cwreplay` file through `Ready`'s own `scenarioContentPath`
+        // parameter, reusing it for a different content kind rather than
+        // widening `IClientScene.Ready`'s signature (documented in the task
+        // file's Inputs and assumptions). A fixed, committed fixture for
+        // now -- no in-scene file picker, the smallest thing that lets the
+        // scene load real content; a later task can widen this if a second
+        // replay ever needs viewing.
+        string replayFilePath = ResolveContentPath(Path.Combine("replays", "chokepoint-detour.cwreplay"));
+
         if (string.IsNullOrEmpty(SceneType))
         {
             GD.PrintErr("FSharpSceneHost: no SceneType set");
@@ -238,7 +272,17 @@ public partial class FSharpSceneHost : Node2D
         }
 
         _scene = (IClientScene)Activator.CreateInstance(sceneClrType);
-        _scene.Ready(bridgeheadScenarioPath);
+        _scene.Ready(SceneType == "CwClientCore.ReplayDemoScene" ? replayFilePath : bridgeheadScenarioPath);
+
+        // `--screenshot` evidence for ReplayDemoScene (TASK-071, backlog
+        // B-064): starts "playing" (`OnTogglePause`'s reused semantics for
+        // this scene) so the existing generic 45-frame capture window
+        // (below, ungated by SceneType) shows real scrub progress rather
+        // than the static tick-0 default.
+        if (_screenshotMode && SceneType == "CwClientCore.ReplayDemoScene")
+        {
+            _scene.OnTogglePause();
+        }
 
         // Screenshot evidence for CommandDemoScene needs a selection, a
         // route preview, and an issued order actually visible -- with no
@@ -400,6 +444,29 @@ public partial class FSharpSceneHost : Node2D
                 sequence = CommandDemoDrive.runScriptedSelfCheck(ResolveContentPath(Path.Combine("scenarios", "bridgehead.cwscenario")));
                 expected = 0x84A25E3559111E9BUL; // CommandDemoScene tick 90 (TASK-069 re-pin: content/scenarios/bridgehead.cwscenario's Trooper unit-type MoveSpeed 2 -> 1, halving movement speed per Dave's own live-playtest read that it ran "at least twice as fast as it should be" -- a genuine behaviour change, not byte-layout only: every agent now takes twice as many ticks to cross a cell. Confirmed via a temporary dotnet fsi probe (removed after use) with the dev overlay enabled (ground truth, ignoring fog of war) that the outcome is still reached within the same 90-tick budget: by tick 90 exactly one agent has died (the machine-gun team, cell (11,5)) and all six friendly agents remain Alive -- "no friendly casualties, machine gun neutralised" unchanged
                 break;
+            case "CwClientCore.ReplayDemoScene":
+                // TASK-071, backlog B-064: `_scene.Ready` already loaded and
+                // ran `content/replays/chokepoint-detour.cwreplay` above (a
+                // small, already-committed 10-tick corpus fixture, the
+                // TASK-070 precedent). This proves the scene's own real
+                // `SetTick`/`CurrentHash` path reproduces the exact same
+                // per-tick canonical hash chain `cwheadless replay-file`
+                // already prints for this fixture, tick by tick from 0
+                // (the initial state, not covered by `ReplayOutcome.
+                // TickStates`) through the final tick -- not just that
+                // `Replay.run` itself is correct (already proven
+                // elsewhere), but that this scene's own scrubbing plumbing
+                // is byte-identical to it.
+                label = "replay-demo-scene self-check (chokepoint-detour.cwreplay, scrubbed tick by tick through the real IClientScene.SetTick/CurrentHash path)";
+                var scrubbed = new List<TickHash>();
+                for (long t = 0; t <= _scene.TickCount(); t++)
+                {
+                    _scene.SetTick(t);
+                    scrubbed.Add(new TickHash { Tick = t, Hash = _scene.CurrentHash() });
+                }
+                sequence = scrubbed.ToArray();
+                expected = 0x5876C1280DDAE2CBUL; // chokepoint-detour.cwreplay tick 10 (`dotnet run --project src/CommandoWar.Headless -c Release -- replay-file content/replays/chokepoint-detour.cwreplay`, ground truth re-derived directly, not guessed)
+                break;
             default:
                 GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");
                 return 2;
@@ -488,7 +555,37 @@ public partial class FSharpSceneHost : Node2D
         if (_scene == null || _selfCheck || _screenshotMode || _screenshotMissionMode || _screenshotSquadMode || _screenshotMultiSelectMode)
             return;
 
-        if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mbIcon
+        // Replay scrub bar (TASK-071, backlog B-064): checked first, the
+        // `TryHitOrderModeIcon` precedent -- a miss falls through to every
+        // other handler unchanged. Only ever hittable when
+        // `_scene.TickCount() > 0` (only `CwClientCore.ReplayDemoScene`
+        // today), so this never intercepts input on a live-play scene.
+        if (_scene.TickCount() > 0
+            && @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mbScrub
+            && ScrubBarRect.HasPoint(mbScrub.Position))
+        {
+            _isDraggingScrub = true;
+            _scene.SetTick(ScrubTickAt(mbScrub.Position.X));
+        }
+        else if (_isDraggingScrub && @event is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left })
+        {
+            _isDraggingScrub = false;
+        }
+        else if (_isDraggingScrub && @event is InputEventMouseMotion mmScrub)
+        {
+            _scene.SetTick(ScrubTickAt(mmScrub.Position.X));
+        }
+        // Step one tick back/forward (TASK-071): only meaningful once
+        // something is loaded to step through.
+        else if (_scene.TickCount() > 0 && @event is InputEventKey { Pressed: true, Keycode: Key.Left })
+        {
+            _scene.SetTick(_scene.CurrentTick() - 1);
+        }
+        else if (_scene.TickCount() > 0 && @event is InputEventKey { Pressed: true, Keycode: Key.Right })
+        {
+            _scene.SetTick(_scene.CurrentTick() + 1);
+        }
+        else if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mbIcon
             && TryHitOrderModeIcon(mbIcon.Position, out int iconIndex))
         {
             _scene.OnOrderModeClick(iconIndex);
@@ -652,7 +749,31 @@ public partial class FSharpSceneHost : Node2D
 
         DrawDragMarquee();
         DrawOrderModeBar();
+        DrawScrubBar();
         DrawMissionSummaryPanel();
+    }
+
+    // Replay scrub bar (TASK-071, backlog B-064): a filled progress track
+    // plus a handle at the current tick, the `DrawOrderModeBar` fixed-rect
+    // chrome precedent. Gated on `_scene.TickCount() > 0` so it only ever
+    // appears on a scene that has something to scrub (today, only
+    // `CwClientCore.ReplayDemoScene`).
+    private void DrawScrubBar()
+    {
+        long total = _scene.TickCount();
+        if (total <= 0)
+            return;
+
+        DrawRect(ScrubBarRect, new Color(0f, 0f, 0f, 0.55f));
+        DrawRect(ScrubBarRect, new Color(1f, 1f, 1f, 0.35f), false, 1.5f);
+
+        float t = (float)_scene.CurrentTick() / total;
+        var filled = new Rect2(ScrubBarOrigin, new Vector2(ScrubBarWidth * t, ScrubBarHeight));
+        DrawRect(filled, new Color(0.35f, 0.75f, 1.0f, 0.65f));
+
+        float handleX = ScrubBarOrigin.X + ScrubBarWidth * t;
+        var handle = new Rect2(handleX - 3f, ScrubBarOrigin.Y - 4f, 6f, ScrubBarHeight + 8f);
+        DrawRect(handle, Colors.White);
     }
 
     // Rubber-band drag-select marquee (TASK-068, backlog B-067 second

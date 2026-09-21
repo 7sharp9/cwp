@@ -15,6 +15,7 @@
     <Compile Include="RenderShared.fs" />
     <Compile Include="DemoRenderScene.fs" />
     <Compile Include="CommandDemoScene.fs" />
+    <Compile Include="ReplayDemoScene.fs" />
   </ItemGroup>
 
   <ItemGroup>

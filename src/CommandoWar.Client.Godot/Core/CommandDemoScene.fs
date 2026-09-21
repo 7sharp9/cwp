@@ -1633,6 +1633,14 @@ type CommandDemoScene() =
         member _.OnOrderModeClick(index: int) = orderMode <- (if orderMode = index then 0 else index)
         member _.OrderMode() = orderMode
 
+        // TASK-071, backlog B-064: no replay/scrub concept here -- this
+        // scene steps the real simulation live, forward only, from
+        // whatever orders are issued through it.
+        member _.TickCount() = 0L
+        member _.CurrentTick() = 0L
+        member _.SetTick(_tick: int64) = ()
+        member _.CurrentHash() = 0UL
+
         // Mission summary panel (TASK-063, backlog B-033 narrowed): reads
         // the live `state` directly (`RenderShared.missionSummaryLines`
         // returns `[||]` while still `InProgress`), the same "read

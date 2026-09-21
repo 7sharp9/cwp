@@ -16,7 +16,64 @@ active_work:
   updated: 2026-09-21
   note: >-
     2026-09-21: TASK-071 (replay playback scrubber in the Godot client,
-    realises B-064) drafted and selected -- not yet implemented. Picked as
+    realises B-064) implemented and self-verified -- status `review`,
+    awaiting Dave's acceptance. `CwClientCore.ReplayDemoScene`/`scenes/
+    ReplayDemo.tscn` loads `content/replays/chokepoint-detour.cwreplay`
+    (the existing corpus fixture, no new one authored) through the exact
+    `cwheadless replay-file` pipeline (`ReplaySerialisation.parse` ->
+    resolve `Meta.Scenario` against `Corpus.all` -> `toReplayRecord` ->
+    `Replay.run`), holding the resulting `TickStates` in memory for the
+    scene's lifetime (central decision 3 from drafting -- no
+    checkpoint-cadence mechanism). `IClientScene` gained four new members
+    (`TickCount`/`CurrentTick`/`SetTick`/`CurrentHash`), mechanically
+    no-op'd in `CommandDemoScene`/`DemoRenderScene` (neither scene's
+    behaviour changed). `FSharpSceneHost.cs` gained a scrub bar (drag/
+    click to scrub, `Left`/`Right` to step, `Space` to play/pause via the
+    existing `OnTogglePause` wiring), gated on `_scene.TickCount() > 0` so
+    it never appears on a live-play scene.
+
+    Verified via a new `--selfcheck` case: scrubbing the scene's own real
+    `SetTick`/`CurrentHash` path from tick 0 through 10 reproduces the
+    exact hash chain `cwheadless replay-file` independently prints for
+    the same fixture (ground truth re-derived directly by running that
+    command, not guessed) -- `MATCH 0x5876C1280DDAE2CB` at tick 10.
+    `CommandDemoScene`/`DemoRenderScene`'s own `--selfcheck` hashes
+    reconfirmed `MATCH` unchanged through the real Godot 4.7.2 editor. No
+    `CommandoWar.Sim`/`CommandoWar.Headless` change; `dotnet test`
+    `422/422`, `-- corpus` `20/20`, both unaffected. A windowed
+    `--screenshot` capture confirmed real rendering: terrain, both
+    agents, the HUD line, and a correctly filled/positioned scrub bar
+    while auto-"playing" (`docs/evidence/task-071-replay-scrubber.png`).
+
+    **Wrong assumption found and corrected, not silently carried
+    through:** this task's own drafting assumed `AppraisalDemoScene` was
+    a third `IClientScene` implementer with its own `--selfcheck` hash --
+    inspection found it is a standalone pre-ADR-0004 script
+    (`AppraisalDemo.tscn` points directly at `AppraisalDemoScene.cs`, not
+    `FSharpSceneHost.cs`), never covered by that mechanism, so nothing
+    was missed by not reconfirming it.
+
+    **Honest caveat, the TASK-068 drag-gesture precedent:** the scrub
+    bar's raw mouse press/motion/release handling compiles clean and is
+    exercised structurally (the self-check drives the identical `SetTick`
+    call the drag handler itself makes; the screenshot confirms auto-play
+    advances the tick and redraws the bar correctly), but an actual mouse
+    press-drag-release across the bar in a live windowed session was not
+    independently exercised in this environment -- flagged for Dave's own
+    interactive pass.
+
+    `docs/07_VERTICAL_SLICE.md` deliberately **not** edited: this task's
+    own drafting assumed a per-bullet realised-by note, but the actual
+    precedent (TASK-063's neighbouring "mission completion" bullet) never
+    annotated section 6 inline either -- the realisation record lives in
+    `docs/11_BACKLOG.md`/`docs/12_PROGRESS_LEDGER.md` instead, matching
+    established convention over this task file's own assumption.
+
+    (tasks/TASK-071-REPLAY-PLAYBACK-SCRUBBER.md;
+    docs/11_BACKLOG.md B-064 row;
+    docs/ledger/2026-09-21-TASK-071-replay-playback-scrubber.md)
+
+    Prior: 2026-09-21: TASK-071 drafted and selected -- not yet implemented. Picked as
     the next task: with TASK-070/B-069 accepted, B-063 (scenario-authoring
     tooling) and B-064 were the only two `proposed` rows left at the
     current gate (G4), and B-063 is explicitly marked not blocking

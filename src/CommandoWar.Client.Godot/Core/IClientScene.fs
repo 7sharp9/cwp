@@ -132,6 +132,26 @@ type IClientScene =
     /// scene with no live input to overlay (like `DemoRenderScene`) may
     /// no-op -- the `OnTogglePause` precedent.
     abstract OnToggleDevOverlay: unit -> unit
+    /// The total number of recorded ticks this scene can scrub through
+    /// (TASK-071, backlog B-064). `0` for a scene with no replay/scrub
+    /// concept (the `OrderMode`/`MissionSummaryLines` "0/empty means
+    /// nothing here" precedent) -- the C# host uses this both to size and
+    /// to gate drawing/hit-testing the scrub bar, so it never appears on a
+    /// scene that has nothing to scrub.
+    abstract TickCount: unit -> int64
+    /// The tick currently displayed, `0 .. TickCount()`. Always `0` for a
+    /// scene with no replay/scrub concept.
+    abstract CurrentTick: unit -> int64
+    /// Scrubs to an absolute tick (the host's drag/click/step-key handling
+    /// all funnel through this one entry point, clamped to
+    /// `0 .. TickCount()` by the implementation). A scene with no replay/
+    /// scrub concept may no-op.
+    abstract SetTick: tick: int64 -> unit
+    /// The authoritative canonical-state hash at the tick `CurrentTick()`
+    /// currently displays (`0UL` for a scene with no replay/scrub concept)
+    /// -- read by the host's `--selfcheck` evidence path the same way
+    /// every other scene's own tick/hash sequence already is.
+    abstract CurrentHash: unit -> uint64
     /// The mission-summary panel's lines (TASK-063, backlog B-033 narrowed),
     /// read once per frame the same way `OrderMode` is (primitives only,
     /// the `OnOrderModeClick`/`OrderMode` boundary precedent). An empty

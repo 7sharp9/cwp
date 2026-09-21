@@ -1,6 +1,7 @@
 # TASK-071: Replay playback scrubber in the Godot client
 
-Status: proposed
+Status: review (implemented and self-verified 2026-09-21, awaiting Dave's
+acceptance)
 Owner: Dave
 Phase: P4
 Gate: G4 (vertical slice feature-complete); realises B-064
@@ -305,75 +306,162 @@ This is an outcome checklist, not permission to invent missing architecture.
 
 ## Acceptance criteria
 
-- [ ] A new Godot scene loads a committed `.cwreplay` file and renders its
+- [x] A new Godot scene (`CwClientCore.ReplayDemoScene`,
+      `scenes/ReplayDemo.tscn`) loads a committed `.cwreplay` file
+      (`content/replays/chokepoint-detour.cwreplay`, an existing corpus
+      fixture reused rather than authoring a new one) and renders its
       recorded world state at an arbitrary scrubbed tick, proven through a
-      deterministic self-check reaching a reproducible state through the
-      scene's own real input path (not just by inspection).
-- [ ] Scrubbing (drag), play/pause, and step affordances all work through
-      real input handling in `FSharpSceneHost.cs`, not only through a
-      test-only code path.
-- [ ] No order can be issued from this scene (confirmed by inspection: no
-      `Command.*` construction reachable from any input handler).
-- [ ] `CommandDemoScene`/`DemoRenderScene`/`AppraisalDemoScene`'s own
-      `--selfcheck` hashes are reconfirmed `MATCH`, byte-identical to
-      before this task, through the real Godot 4.7.2 editor.
-- [ ] No `CommandoWar.Sim` file changed (confirmed by `git diff` against
+      deterministic self-check: the scene's own real `IClientScene.
+      SetTick`/`CurrentHash` path, driven tick by tick from 0 through 10,
+      reproduces the exact per-tick canonical hash chain `cwheadless
+      replay-file` independently prints for the same fixture (ground
+      truth re-derived directly by running that command, not guessed or
+      recalled).
+- [x] Scrubbing (drag), play/pause, and step affordances all work through
+      real input handling in `FSharpSceneHost.cs` (`ScrubBarRect` hit-test
+      and continuous-drag tracking, `OnTogglePause`'s reused play/pause
+      semantics, `Left`/`Right` arrow-key stepping), not only through the
+      self-check's direct `SetTick` calls. **Partially verified only** --
+      see Evidence to capture below for the honest caveat on the raw drag
+      gesture specifically.
+- [x] No order can be issued from this scene (confirmed by inspection:
+      `OnClick`/`OnHover`/`OnDragSelect`/`OnOrderModeClick` are all literal
+      no-ops in `ReplayDemoScene.fs`, no `Command.*` construction anywhere
+      in the file).
+- [x] `CommandDemoScene`/`DemoRenderScene`'s own `--selfcheck` hashes are
+      reconfirmed `MATCH`, byte-identical to before this task, through the
+      real Godot 4.7.2 editor. (`AppraisalDemoScene` corrected out of this
+      criterion during implementation: it is a standalone `AppraisalDemoScene.
+      cs` script, not an `IClientScene` implementer at all -- it was never
+      covered by `RunSelfCheck`'s `SceneType` switch and has no hash to
+      reconfirm; this was a wrong assumption in this task's own drafting,
+      found and corrected, not silently carried through.)
+- [x] No `CommandoWar.Sim` file changed (confirmed by `git diff` against
       Allowed scope); `dotnet build`/`test`/`-- corpus`/`-- replay-file`
       on the main `.slnx` unaffected.
-- [ ] `AGENTS.md`'s diagnostics mandate confirmed not applicable (no new
-      authoritative state), documented rather than silently skipped.
-- [ ] Required documentation updated (see Documentation updates below).
+- [x] `AGENTS.md`'s diagnostics mandate confirmed not applicable (no new
+      authoritative state -- a pure read-only viewer over already-existing
+      recorded state), documented rather than silently skipped.
+- [x] Required documentation updated (see Documentation updates below).
 
 ## Required verification
 
-Fill exact commands during implementation, after inspecting the current
-build/test entry points; expected at minimum:
-
-- unit or property tests: `dotnet test CommandoWar.slnx -c Release`
-  (expected unaffected, no `CommandoWar.Sim`/`CommandoWar.Headless.Tests`
-  change).
+- unit or property tests: `dotnet test CommandoWar.slnx -c Release` ->
+  `422/422` passed, unaffected (no `CommandoWar.Sim` change).
 - scenario or replay tests: `dotnet run --project src/CommandoWar.Headless
-  -c Release -- corpus`; `-- replay-file <fixture>.cwreplay` (expected
-  unaffected).
-- build: `dotnet build CommandoWar.slnx -c Release`; `dotnet build
-  src/CommandoWar.Client.Godot/CommandoWar.Client.Godot.slnx -c Debug`.
-- manual smoke test: the real Godot 4.7.2 editor, all four scenes
-  (`ReplayDemo.tscn` new; the other three reconfirmed unchanged), plus an
-  actual interactive scrub/play/pause pass, not only `--selfcheck`.
-- dependency boundary check: `git diff --stat` against this task's
-  Allowed scope; confirm no `CommandoWar.Sim`/`CommandoWar.Headless`
-  entry.
+  -c Release -- corpus` -> `OK - all 20 entries match their committed
+  tables`, unaffected; `dotnet run --project src/CommandoWar.Headless -c
+  Release -- replay-file content/replays/chokepoint-detour.cwreplay` ->
+  the ground-truth run this task's self-check pins against (final hash
+  `0x5876C1280DDAE2CB` at tick 10).
+- build: `dotnet build CommandoWar.slnx -c Release` -> `0 Warning(s)`,
+  `0 Error(s)`. `dotnet build
+  src/CommandoWar.Client.Godot/CommandoWar.Client.Godot.slnx -c Debug` ->
+  `0 Warning(s)`, `0 Error(s)`.
+- manual smoke test: the real Godot 4.7.2 editor
+  (`Godot_v4.7.2-stable_mono_win64_console.exe`, sibling directory, not on
+  `PATH`) --
+  `--headless ... scenes/ReplayDemo.tscn -- --selfcheck` ->
+  `MATCH expected final hash 0x5876C1280DDAE2CB at tick 10`;
+  `--headless ... scenes/CommandDemo.tscn -- --selfcheck` -> `MATCH
+  0x84A25E3559111E9B` at tick 90, unchanged; `--headless ...
+  scenes/SnapshotDemo.tscn -- --selfcheck` -> `MATCH 0x6213D672BC36FDB8`
+  at tick 20, unchanged; a windowed (non-`--headless`) `--screenshot`
+  capture of `ReplayDemo.tscn` confirmed the scene renders terrain, both
+  agents, the HUD line, and a correctly-filled/positioned scrub bar/handle
+  while auto-"playing" (`docs/evidence/task-071-replay-scrubber.png`, tick
+  3/10, HUD hash matching the ground-truth table exactly).
+- dependency boundary check: `git status --short`/`git diff --stat`
+  against this task's Allowed scope -- confirmed no
+  `CommandoWar.Sim`/`CommandoWar.Headless` entry; one unrelated
+  editor-triggered reformat of `tools/ExportTerrainScript.cs` (the
+  recurring, already-documented wart from several prior tasks) was caught
+  and reverted, not committed.
 
 ## Evidence to capture
 
-- Command output/test summary for every item above.
-- The new scene's `--selfcheck`-equivalent hash/result.
-- All three pre-existing scenes' `--selfcheck` hashes, confirmed
-  unchanged.
-- A screenshot of the scrubber in use (the existing `docs/evidence/`
-  precedent).
-- Any deviation from this task's stated assumptions (the `IClientScene`
-  surface actually added, whether inter-tick interpolation during Play
-  was needed, how a load error is actually surfaced), honestly recorded
-  rather than smoothed over.
+- All command output above.
+- The new scene's self-check reproduces the ground-truth `cwheadless
+  replay-file` hash chain exactly, tick by tick (0 through 10):
+  `0x745B1AE1EC2F01C1` (tick 0, the initial state -- not covered by
+  `ReplayOutcome.TickStates`, sourced from `record.InitialState` directly)
+  through `0x5876C1280DDAE2CB` (tick 10, final) -- proving this scene's
+  own `SetTick`/`CurrentHash` plumbing is byte-identical to the existing,
+  independently-verified CLI tool, not a parallel reimplementation that
+  might silently diverge.
+- `CommandDemoScene`/`DemoRenderScene`'s `--selfcheck` hashes reconfirmed
+  unchanged -- the mechanical, no-op `IClientScene` interface additions
+  (`TickCount`/`CurrentTick`/`SetTick`/`CurrentHash`, all `0`/no-op for
+  both) altered no observable behaviour, exactly as expected.
+- **Wrong assumption found and corrected, not silently carried through:**
+  this task's own drafting (Required reading/Acceptance criteria) assumed
+  `AppraisalDemoScene` was a third `IClientScene`-implementing scene with
+  its own `--selfcheck` hash. Inspection during implementation found it is
+  a standalone `src/AppraisalDemoScene.cs` script predating
+  `FSharpSceneHost`/ADR-0004 entirely (`AppraisalDemo.tscn`'s own
+  `ext_resource` points at it directly, not at `FSharpSceneHost.cs`) --
+  never covered by `RunSelfCheck`'s `SceneType` switch, no hash to
+  reconfirm. Only two pre-existing scenes actually needed reconfirming
+  (`CommandDemoScene`, `DemoRenderScene`); both are unchanged.
+- **Honest caveat on the raw drag gesture, the TASK-068 precedent:** the
+  scrub bar's `_UnhandledInput` press/motion/release handling compiles
+  clean and is exercised structurally (the self-check drives `SetTick`
+  directly, which is exactly what the drag handler itself calls, and the
+  windowed screenshot confirms `OnTogglePause`-driven auto-play advances
+  `currentTick` and redraws the bar correctly), but an actual mouse
+  press-drag-release across the bar in a live windowed session was not
+  independently exercised in this environment -- flagged for Dave's own
+  interactive pass, the same gap TASK-068's own drag gesture was left
+  with.
+- No deviation from this task's other stated assumptions: `Ready`'s
+  `scenarioContentPath` parameter reused for a `.cwreplay` path as
+  planned; `Replay.run`'s existing full `TickStates` reused as-is, no
+  checkpoint cadence; no inter-tick interpolation added (each tick snaps
+  directly to its own authoritative `Position`/facing -- documented in
+  `ReplayDemoScene.fs` as a deliberate simplification, not a defect); a
+  load failure surfaces through `HudText()` (`"replay load FAILED:
+  <message>"`) rather than a silent blank scene or an exception, though
+  this specific path was verified by inspection/type-checking only (the
+  committed fixture always loads successfully, so no failing `.cwreplay`
+  was exercised live).
 
 ## Expected files
 
-- `src/CommandoWar.Client.Godot/Core/` (new scene file; `IClientScene.fs`
-  only if new members are genuinely needed; `RenderShared.fs` only if a
-  shared helper is extracted).
-- `src/CommandoWar.Client.Godot/src/FSharpSceneHost.cs`.
+- `src/CommandoWar.Client.Godot/Core/ReplayDemoScene.fs` (new).
+- `src/CommandoWar.Client.Godot/Core/IClientScene.fs` (four new members:
+  `TickCount`/`CurrentTick`/`SetTick`/`CurrentHash`).
+- `src/CommandoWar.Client.Godot/Core/CommandDemoScene.fs`,
+  `DemoRenderScene.fs` (mechanical no-op implementations of the four new
+  members only -- no other line changed, confirmed by `git diff`).
+- `src/CommandoWar.Client.Godot/Core/RenderShared.fs` (new `deadCross`
+  helper, extracted for `ReplayDemoScene`'s use rather than shared with
+  `CommandDemoScene`'s own inline copy, which is out of this task's
+  allowed scope).
+- `src/CommandoWar.Client.Godot/Core/CommandoWar.Client.Godot.Core.fsproj`
+  (new `<Compile>` entry).
+- `src/CommandoWar.Client.Godot/src/FSharpSceneHost.cs` (scrub-bar
+  chrome/hit-test/drag handling, step-key handling, the new self-check
+  case, the `Ready`-path and `--screenshot`-priming conditionals).
 - `src/CommandoWar.Client.Godot/scenes/ReplayDemo.tscn` (new).
-- `content/replays/` (a new fixture only if no existing entry suffices).
-- `docs/07_VERTICAL_SLICE.md`, `docs/11_BACKLOG.md`,
-  `docs/12_PROGRESS_LEDGER.md`, `PROJECT_STATE.yaml`.
+- `docs/11_BACKLOG.md`, `docs/12_PROGRESS_LEDGER.md`,
+  `PROJECT_STATE.yaml`. `docs/07_VERTICAL_SLICE.md` deliberately **not**
+  edited -- see Documentation updates below. No `content/replays/` change
+  (the existing `chokepoint-detour.cwreplay` corpus fixture was reused
+  as-is).
 
 ## Documentation updates
 
 - this task file's status and evidence;
-- `docs/07_VERTICAL_SLICE.md` section 6 (the "replay playback" bullet
-  gains a realised-by note);
-- `docs/11_BACKLOG.md` (B-064 row: `proposed -> review`/`done` with full
+- `docs/07_VERTICAL_SLICE.md`: **not edited**. This task's own drafting
+  assumed a per-bullet "realised by TASK-NNN" note (the `docs/11_
+  BACKLOG.md`/section-6 precedent it named), but checking the actual
+  precedent during implementation found TASK-063 (mission summary,
+  section 6's neighbouring "mission completion and failure summary"
+  bullet) did not annotate section 6 inline either -- the realisation
+  record lives in `docs/11_BACKLOG.md`/`docs/12_PROGRESS_LEDGER.md`
+  instead, matching that actual, established convention rather than the
+  one this task file assumed at drafting time;
+- `docs/11_BACKLOG.md` (B-064 row: `proposed -> review` with full
   self-verification evidence, the recent-task precedent);
 - `docs/12_PROGRESS_LEDGER.md`: index row + `docs/ledger/` detail file;
 - `PROJECT_STATE.yaml`.

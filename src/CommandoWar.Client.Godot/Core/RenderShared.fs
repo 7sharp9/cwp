@@ -247,6 +247,32 @@ module RenderShared =
     /// run cycle never animates while the sim itself is frozen). Pure.
     let runFrameIndex (runClock: float) : int = int (runClock / RunFrameSeconds) % 10
 
+    /// A small black `Kind = 2` cross at a cell centre -- a dead agent's
+    /// marker (the `DiagnosticRender.Svg` dead-cross vocabulary,
+    /// `CommandDemoScene.renderVitals`'s `Dead` case). No figure at all: a
+    /// corpse is not a coloured variant of a living agent. Extracted here
+    /// for `ReplayDemoScene` (TASK-071, backlog B-064) rather than shared
+    /// with `CommandDemoScene`'s own inline copy, since that scene is out
+    /// of this task's allowed scope.
+    let deadCross (cell: Cell) : DrawItem[] =
+        let cx, cy = float32 cell.X, float32 cell.Y
+        let d = 0.28f
+        let arm (x1, y1) (x2, y2) =
+            { Kind = 2
+              TextureId = 0
+              Cx = x1
+              Cy = y1
+              Cx2 = x2
+              Cy2 = y2
+              Text = ""
+              R = 0.05f
+              G = 0.05f
+              B = 0.05f
+              A = 0.9f
+              Radius = 2.5f }
+
+        [| arm (cx - d, cy - d) (cx + d, cy + d); arm (cx - d, cy + d) (cx + d, cy - d) |]
+
     let agentColor (side: Side) : float32 * float32 * float32 =
         match side with
         | Friendly -> 0.35f, 0.75f, 1.0f

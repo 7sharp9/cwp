@@ -247,6 +247,12 @@ type DemoRenderScene() =
         member _.OnToggleDevOverlay() = ()
         member _.OnOrderModeClick(_index: int) = ()
         member _.OrderMode() = 0
+        // TASK-071, backlog B-064: no replay/scrub concept here (this scene
+        // steps `DemoScenario` live, unattended, from tick 0).
+        member _.TickCount() = 0L
+        member _.CurrentTick() = 0L
+        member _.SetTick(_tick: int64) = ()
+        member _.CurrentHash() = 0UL
         member _.MissionSummaryLines() = [||]
 
         member _.Dispose() = ()
