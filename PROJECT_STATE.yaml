@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; review trigger 1 measured and closed 2026-09-19, decision reaffirmed -- see ADR-0001's 2026-09-19 note)
-  updated: 2026-09-20 (TASK-067 accepted by Dave on the self-verification evidence, realising the sim-side half of B-067 -- ReceivedOrder.AsGroup (Canonical.FormatVersion 14 -> 15) keys formation redirect off the originating command's own recipient count instead of the agent's static FormationOffset alone, so a solo click always goes exactly where clicked; two genuine, non-byte-layout behaviour changes found and fixed, not smoothed over -- the formation-slots corpus entry re-authored to a real Command.moveToMany, and CommandDemo.tscn's scripted self-check re-aimed at its own pre-fix resolved cells after the old target cells produced a real friendly casualty; the multi-select UI half of B-067 remains unscoped; prior: TASK-065 and TASK-066 both accepted by Dave on the self-verification evidence alone, confirmed via AskUserQuestion in one round: commit the combined working tree now, accept both tasks without a live playtest first, and hold B-067 as a proposed, unscoped backlog row rather than start design work on it; prior: TASK-066 implemented and self-verified, realising B-066 -- occupantOf now excludes non-Alive agents, so a corpse no longer blocks movement forever, found via a new --screenshot-squad capture tool Dave asked for to watch a scripted playthrough visually; correct and proven at the SimulationTests level, but does NOT fix the specific squad-jam Dave watched (that is live-agent formation contention at the chokepoint, none of the six ever dying in that repro) -- parked separately as B-067 (multi-select + joint squad orders), not scoped or touched; prior: TASK-065 implemented and self-verified, realising B-065 -- a new AgentState.StalledTicks counter turns a permanently frozen movement order into a visible MovementAbandoned failure after Simulation.StallAbandonTicks (40) consecutive freezes, instead of retrying forever; Canonical.FormatVersion 13 -> 14; re-run against the exact original six-agent Bridgehead repro now reaches a real abort by tick 42 instead of freezing past tick 500; prior: TASK-064 accepted by Dave, realising B-035 -- round 2's live-testing legibility fixes confirmed by his own further playtest, which separately found this movement deadlock (R-010 materialising for real); the pre-existing criterion-3/7 finding accepted as a known, tracked gap (no map rebalance, no corpse-occupancy fix), B-022 kept descoped as-is; prior: TASK-063 accepted by Dave, realising narrowed B-033; prior: TASK-062 accepted by Dave, realising B-032; prior: TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
+  updated: 2026-09-21 (TASK-068 and TASK-069 both accepted by Dave on the self-verification evidence ("commit and lets move on") -- B-067 (both halves, multi-select and joint order dispatch) and B-068 (Bridgehead trooper move speed) now done; prior: TASK-069 implemented and self-verified, realising new B-068 -- Bridgehead trooper movement was twice as fast as intended. Raised live by Dave immediately after TASK-068: "probably at least twice as fast as it should be... fast and choppy like it running fast forward." A temporary diagnostic (removed after use) confirmed the simulation genuinely runs at exactly 20 ticks/second with a stable 60fps render loop -- not a frame-pacing bug. Root cause: Terrain.BaseMoveCost = 1 with Trooper's authored MoveSpeed = 2 means a Trooper crosses a whole open-terrain cell in exactly one 20Hz tick (50ms), true since before unit types existed (TASK-049), not a regression -- this also starves the render-interpolation of any real window to smooth over, explaining "choppy" too. Fixed content-only per AskUserQuestion: content/scenarios/bridgehead.cwscenario's unit-type trooper 2 -> 1, no CommandoWar.Sim change, simHz stays at its documented 20Hz target. CommandDemo.tscn --selfcheck re-pinned; a temporary dev-overlay probe confirmed the demonstrated outcome ("no friendly casualties, machine gun neutralised") is unchanged at half speed. Status `review`, awaiting Dave's acceptance; prior: TASK-068 implemented and self-verified, realising the client-side half of B-067 -- selected: AgentId option becomes a Set, drag rubber-band-select and shift-click join the existing plain click, a MoveTo order to more than one selected agent dispatches a real Command.moveToMany (ReceivedOrder.AsGroup true for a client-issued order for the first time), Hold/Assault/Withdraw/Suppress dispatch as N existing single-recipient commands; no CommandoWar.Sim change at all, since the sim-side mechanism already existed and was already accepted (TASK-020/067) -- dotnet build/test/corpus/replay-checkpoints all unaffected and CommandDemo.tscn --selfcheck reconfirmed MATCH 0x2629A1FE165F94BB unchanged (at the time, before TASK-069's own re-pin), proving the default single-agent click path dispatches byte-identically to before this task. A real, pre-existing bug found and fixed while generalising dispatch: the pending-order dedup keyed on PlayerCommand.Agent (the head of Recipients) alone, letting a stale pending order for a non-head recipient of a new multi-recipient command survive into the same tick's batch -- fixed to match on Recipients membership. Verified with a temporary dotnet fsi probe: two selected agents with distinct authored FormationOffsets, ordered jointly to a shared cell, resolve to two distinct cells matching an independently-computed Appraisal.resolveFormationTarget prediction exactly. Honestly flagged, not smoothed over: stepping that order to settlement shows the two agents end one cell apart, not each at its own full resolved slot -- the trailing agent's order stalls against the leading agent and is abandoned (Simulation.StallAbandonTicks, TASK-065's own mechanism) one cell short, the same live-agent chokepoint contention TASK-066/067 already found and left as B-067's own accepted, unresolved gap, now reproduced for the first time through a real client-issued group order. Status `review`, awaiting Dave's acceptance and, separately, his own live editor pass over the raw mouse drag gesture (not independently verifiable from this environment); prior: TASK-067 accepted by Dave on the self-verification evidence, realising the sim-side half of B-067 -- ReceivedOrder.AsGroup (Canonical.FormatVersion 14 -> 15) keys formation redirect off the originating command's own recipient count instead of the agent's static FormationOffset alone, so a solo click always goes exactly where clicked; two genuine, non-byte-layout behaviour changes found and fixed, not smoothed over -- the formation-slots corpus entry re-authored to a real Command.moveToMany, and CommandDemo.tscn's scripted self-check re-aimed at its own pre-fix resolved cells after the old target cells produced a real friendly casualty; prior: TASK-065 and TASK-066 both accepted by Dave on the self-verification evidence alone, confirmed via AskUserQuestion in one round: commit the combined working tree now, accept both tasks without a live playtest first, and hold B-067 as a proposed, unscoped backlog row rather than start design work on it; prior: TASK-066 implemented and self-verified, realising B-066 -- occupantOf now excludes non-Alive agents, so a corpse no longer blocks movement forever, found via a new --screenshot-squad capture tool Dave asked for to watch a scripted playthrough visually; correct and proven at the SimulationTests level, but does NOT fix the specific squad-jam Dave watched (that is live-agent formation contention at the chokepoint, none of the six ever dying in that repro) -- parked separately as B-067 (multi-select + joint squad orders), not scoped or touched; prior: TASK-065 implemented and self-verified, realising B-065 -- a new AgentState.StalledTicks counter turns a permanently frozen movement order into a visible MovementAbandoned failure after Simulation.StallAbandonTicks (40) consecutive freezes, instead of retrying forever; Canonical.FormatVersion 13 -> 14; re-run against the exact original six-agent Bridgehead repro now reaches a real abort by tick 42 instead of freezing past tick 500; prior: TASK-064 accepted by Dave, realising B-035 -- round 2's live-testing legibility fixes confirmed by his own further playtest, which separately found this movement deadlock (R-010 materialising for real); the pre-existing criterion-3/7 finding accepted as a known, tracked gap (no map rebalance, no corpse-occupancy fix), B-022 kept descoped as-is; prior: TASK-063 accepted by Dave, realising narrowed B-033; prior: TASK-062 accepted by Dave, realising B-032; prior: TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
 
 active_work:
   selected_task: none
@@ -13,9 +13,123 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-20
+  updated: 2026-09-21
   note: >-
-    2026-09-20: TASK-067 accepted by Dave on the self-verification
+    2026-09-21: TASK-068 and TASK-069 both accepted by Dave on the
+    self-verification evidence ("commit and lets move on"). No live editor
+    test of TASK-068's drag/shift-click gesture. For TASK-069, Dave's own
+    further live playtest reported no perceptible speed change ("seems
+    just as fast, no matter") -- accepted anyway, not pursued further; the
+    mechanism itself (ticks-per-cell doubled) is independently verified
+    correct, honestly recorded as not resolving the felt complaint, not
+    smoothed over. B-067 (both halves) and B-068 now `done`.
+    `active_work.selected_task -> none`; next task not yet chosen.
+    (tasks/TASK-068-MULTI-SELECT-AND-JOINT-ORDER-DISPATCH.md;
+    tasks/TASK-069-BRIDGEHEAD-TROOPER-MOVE-SPEED.md;
+    docs/ledger/2026-09-21-TASK-068-multi-select-and-joint-order-dispatch.md;
+    docs/ledger/2026-09-21-TASK-069-bridgehead-trooper-move-speed.md)
+
+    Prior: 2026-09-21: TASK-069 (Bridgehead trooper movement was twice as fast as
+    intended, realises new B-068) implemented and self-verified -- status
+    `review`, awaiting Dave's acceptance. Raised live immediately after
+    TASK-068: "the game does run really quickly though, its probably at
+    least twice as fast as it should be... currently its fast and choppy
+    like it running fast forward." A temporary diagnostic (removed after
+    use) confirmed the simulation genuinely runs at exactly 20 ticks/second
+    with a stable 60fps render loop -- not a frame-pacing or engine bug.
+    Root cause: Terrain.BaseMoveCost = 1 combined with Trooper's authored
+    MoveSpeed = 2 (Agent.MoveSpeedDefault, confirmed to reproduce the sim's
+    pre-unit-type pace exactly, TASK-049) means a Trooper crosses a whole
+    open-terrain cell in exactly one 20Hz tick (50ms) -- true since before
+    unit types existed, not a regression from TASK-068 or anything recent;
+    this also starves the render-interpolation of any real window to smooth
+    over, explaining "choppy" too. Confirmed via AskUserQuestion: fixed
+    content-only (content/scenarios/bridgehead.cwscenario's `unit-type
+    trooper 2 -> 1`, no CommandoWar.Sim change), not by scaling simHz (which
+    stays at its documented 20Hz target). CommandDemo.tscn --selfcheck
+    re-pinned (0x2629A1FE165F94BB -> 0x84A25E3559111E9B at tick 90);
+    confirmed via a temporary dev-overlay probe that the demonstrated
+    outcome ("no friendly casualties, machine gun neutralised") is
+    unchanged at half speed. dotnet test/corpus/replay-checkpoints all
+    unaffected (no other content loads Bridgehead).
+    (tasks/TASK-069-BRIDGEHEAD-TROOPER-MOVE-SPEED.md;
+    docs/11_BACKLOG.md new B-068 row;
+    docs/ledger/2026-09-21-TASK-069-bridgehead-trooper-move-speed.md)
+
+    Prior: 2026-09-21: TASK-068 (multi-select UI and joint order dispatch, realises
+    the client-side half of B-067) implemented and self-verified -- status
+    `review`, awaiting Dave's acceptance. Drafted and selected via two
+    parallel research passes (one tracing every `CommandDemoScene.fs` site
+    touching `selected: AgentId option`; one tracing `FSharpSceneHost.cs`'s
+    mouse-input pipeline, which had no button-up/`Pressed: false` handling
+    at all) plus one `AskUserQuestion` round resolving four product-facing
+    forks: right-click clears the entire selection regardless of size; the
+    hover/route preview shows every selected agent's own route,
+    formation-aware once more than one is selected and `MoveTo` is armed;
+    the HUD selection line shows a count above one agent, not a list; a
+    Dead/Incapacitated/already-on-target selected agent is silently dropped
+    from a dispatched order, the rest of the (eligible) selection still
+    receives it. `selected` becomes `Set<AgentId>`; drag rubber-band-select
+    and shift-click (both already confirmed in the TASK-067 session) join
+    the existing plain click, unchanged when no modifier is held. A `MoveTo`
+    order to more than one selected agent dispatches one real
+    `Command.moveToMany` -- `ReceivedOrder.AsGroup` is `true` for a
+    client-issued order for the first time; `Hold`/`Assault`/`Withdraw`/
+    `Suppress` (no `*Many` builder, none reads formation) dispatch as N
+    existing single-recipient commands instead.
+
+    No `CommandoWar.Sim`/`CommandoWar.Headless` change at all -- the
+    sim-side mechanism already existed, tested, and accepted since
+    TASK-020/067. `dotnet build`/`test`/`-- corpus`/replay-checkpoints all
+    unaffected; `CommandDemo.tscn --selfcheck` reconfirmed
+    `MATCH 0x2629A1FE165F94BB` unchanged, proving the default (no modifier,
+    single-agent) click path dispatches byte-identically to before this
+    task; `SnapshotDemo.tscn`/`AppraisalDemo.tscn` also unaffected.
+
+    A real, pre-existing bug was found and fixed while generalising order
+    dispatch, not introduced by it: `OnClick`'s pending-order dedup keyed on
+    `PlayerCommand.Agent` (`List.head Recipients`) alone, so a stale pending
+    order for any non-head recipient of a new multi-recipient command would
+    survive the check and land in the same tick's batch alongside it --
+    fixed to match on `Recipients` membership against every agent about to
+    be addressed.
+
+    Verified with a temporary `dotnet fsi` probe (removed after use) driving
+    the real `IClientScene` methods directly against `bridgehead.cwscenario`:
+    drag-select/shift-click toggling confirmed via `HudText()`'s selection
+    count and `DrawList()`'s halo-item count; a plain click on a third,
+    unselected agent collapses an existing multi-selection to size 1; and,
+    the central proof, two selected agents with distinct authored
+    `FormationOffset`s (`(0,0)`/`(1,0)`) ordered jointly to one shared
+    literal cell resolve to two distinct cells matching an
+    independently-computed `Appraisal.resolveFormationTarget` prediction
+    against the same scenario/seed exactly. **Honestly flagged, not
+    smoothed over:** stepping that order to settlement (180 ticks) shows
+    the two agents end one cell apart, not each at its own full resolved
+    slot -- their overlapping routes contend for the same cells, and the
+    trailing agent's order stalls against the leading, still-`Alive` agent
+    and is abandoned (`Simulation.StallAbandonTicks`, TASK-065's own
+    mechanism, working as designed) one cell short, permanently. This is
+    the same live-agent chokepoint contention TASK-066/067 already found and
+    left as B-067's own accepted, unresolved gap -- reproduced here for the
+    first time through a real client-issued group order rather than six
+    independent solo ones, not a new defect and not this task's scope to
+    fix. Screenshot evidence: `docs/evidence/task-068-multiselect.png`.
+
+    **Not independently verified, flagged for Dave:** the raw mouse
+    press/motion/release sequence, `ShiftPressed`, and `Rect2` marquee
+    geometry added to `FSharpSceneHost.cs` compile clean against the real
+    `GodotSharp` 4.7.2 assembly but were only exercised through the F#
+    `IClientScene` surface directly (the probe), not an actual click-and-drag
+    in a live windowed session -- needs Dave's own interactive pass, the
+    TASK-060/061/064 precedent.
+
+    `active_work.selected_task -> TASK-068`, status `review`.
+    (tasks/TASK-068-MULTI-SELECT-AND-JOINT-ORDER-DISPATCH.md;
+    docs/11_BACKLOG.md B-067 row;
+    docs/ledger/2026-09-21-TASK-068-multi-select-and-joint-order-dispatch.md)
+
+    Prior: 2026-09-20: TASK-067 accepted by Dave on the self-verification
     evidence ("if it looks good then accept"). No further changes
     requested. B-067's sim-side half is now `done`; the multi-select UI
     half remains unscoped, proposed only. `active_work.selected_task ->

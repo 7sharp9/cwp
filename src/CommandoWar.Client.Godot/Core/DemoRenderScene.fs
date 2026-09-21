@@ -240,8 +240,9 @@ type DemoRenderScene() =
 
         // No input this scene (TASK-039's task file forbids it -- unattended
         // once launched). Real handling is CommandDemoScene's job (TASK-040).
-        member _.OnClick(_isLeftButton: bool, _cellX: int, _cellY: int) = ()
+        member _.OnClick(_isLeftButton: bool, _cellX: int, _cellY: int, _shiftHeld: bool) = ()
         member _.OnHover(_cellX: int, _cellY: int) = ()
+        member _.OnDragSelect(_cellXs: int[], _cellYs: int[], _shiftHeld: bool) = ()
         member _.OnTogglePause() = ()
         member _.OnToggleDevOverlay() = ()
         member _.OnOrderModeClick(_index: int) = ()

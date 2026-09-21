@@ -12,6 +12,7 @@
 // deviation, the latter the disposable TASK-004 spike).
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CwClientCore;
@@ -180,6 +181,29 @@ public partial class FSharpSceneHost : Node2D
     private bool _screenshotSquadMode;
     private int _screenshotSquadFrameCount = 400;
 
+    // `--screenshot-multiselect` (TASK-068, backlog B-067 second half): the
+    // `_screenshotMode`/`_screenshotSquadMode` precedent -- a scripted,
+    // fixed-argument priming of a real multi-agent selection and joint
+    // order for evidence, paused immediately (see `_Ready`) so the
+    // captured frame holds the pending state rather than racing it to
+    // completion.
+    private bool _screenshotMultiSelectMode;
+
+    // Drag rubber-band-select (TASK-068): raw mouse state `_UnhandledInput`
+    // tracks between a left-button press and its matching release -- no
+    // button-up/`Pressed: false` handling existed anywhere in this file
+    // before this task, so a genuine press/motion/release sequence is new,
+    // not a tweak to the old single-event click handling.
+    private bool _isDragging;
+    private Vector2 _dragStartScreen;
+    private Vector2 _dragCurrentScreen;
+
+    // Below this on-screen drag distance, a press-then-release resolves as
+    // an ordinary click instead of a (degenerate, zero-agent) drag-select --
+    // guards against a few pixels of hand tremor on an intended single click
+    // silently selecting nothing.
+    private const float DragThresholdPixels = 6f;
+
     // TASK-064 (backlog B-035): resolves `content/<relativePath>` the same
     // way `AppraisalDemoScene.cs` already does for `content/replays` -- the
     // Godot project root sits two levels under the repo root
@@ -235,11 +259,11 @@ public partial class FSharpSceneHost : Node2D
             // `bridgehead.cwscenario` layout -- agent 0 (leader) starts at
             // (3,5), agent 1 at (2,5); (5,5) is open west-bank ground well
             // short of the bridge, safe for a still evidence capture.
-            _scene.OnClick(true, 3, 5);
+            _scene.OnClick(true, 3, 5, false);
             _scene.OnTogglePause();
             _scene.OnHover(5, 5);
-            _scene.OnClick(true, 5, 5);
-            _scene.OnClick(true, 2, 5);
+            _scene.OnClick(true, 5, 5, false);
+            _scene.OnClick(true, 2, 5, false);
             _scene.OnOrderModeClick(1);
             _scene.OnHover(2, 4);
         }
@@ -259,9 +283,9 @@ public partial class FSharpSceneHost : Node2D
         // png`) is unaffected, captured against that earlier content.
         if (_screenshotMissionMode && SceneType == "CwClientCore.CommandDemoScene")
         {
-            _scene.OnClick(true, 3, 5);
+            _scene.OnClick(true, 3, 5, false);
             _scene.OnHover(4, 4);
-            _scene.OnClick(true, 4, 4);
+            _scene.OnClick(true, 4, 4, false);
         }
 
         // `--screenshot-squad` (TASK-065): the real all-six-agents-advance
@@ -271,9 +295,9 @@ public partial class FSharpSceneHost : Node2D
         {
             void Order(int selectX, int selectY, int targetX, int targetY)
             {
-                _scene.OnClick(true, selectX, selectY);
+                _scene.OnClick(true, selectX, selectY, false);
                 _scene.OnHover(targetX, targetY);
-                _scene.OnClick(true, targetX, targetY);
+                _scene.OnClick(true, targetX, targetY, false);
             }
 
             Order(3, 5, 8, 5); // agent 0 (fireteam-alpha, slot 0)
@@ -282,6 +306,28 @@ public partial class FSharpSceneHost : Node2D
             Order(3, 7, 9, 6); // agent 3 (fireteam-bravo, slot 0)
             Order(4, 7, 9, 6); // agent 4 (fireteam-bravo, slot 1)
             Order(4, 8, 8, 6); // agent 5 (fireteam-bravo, slot 2)
+        }
+
+        // TASK-068 (backlog B-067 second half): `--screenshot-multiselect`,
+        // the `--screenshot-squad` precedent -- primes a real two-agent
+        // multi-select and a joint order through the actual `OnDragSelect`/
+        // `OnHover`/`OnClick` methods (not raw mouse input, the existing
+        // screenshot-priming precedent throughout this file), so the
+        // captured frame shows two selection halos and two diverging,
+        // formation-resolved route previews for the same clicked cell --
+        // the visible proof that a real client-issued group order now
+        // exercises `ReceivedOrder.AsGroup`/formation redirect. Agents 0 and
+        // 1 (fireteam-alpha, slots 0/1, distinct authored
+        // `FormationOffset`s) at their own starting cells (3,5)/(2,5);
+        // (6,5) is open west-bank ground well short of the bridge, safe for
+        // a still evidence capture, matching `_screenshotMode`'s own choice
+        // of target area.
+        if (_screenshotMultiSelectMode && SceneType == "CwClientCore.CommandDemoScene")
+        {
+            _scene.OnDragSelect([3, 2], [5, 5], false);
+            _scene.OnHover(6, 5);
+            _scene.OnClick(true, 6, 5, false);
+            _scene.OnTogglePause();
         }
 
         // `--dev-overlay` (TASK-043, backlog B-029): a separate opt-in flag,
@@ -320,6 +366,12 @@ public partial class FSharpSceneHost : Node2D
             CaptureScreenshot();
         else if (_screenshotSquadMode && ++_screenshotFrameCount >= _screenshotSquadFrameCount)
             CaptureScreenshot();
+        // TASK-068: the scene is paused immediately after priming (see
+        // `_Ready`), so a short, fixed frame count is enough -- the
+        // `_screenshotMode` precedent, not `_screenshotSquadMode`'s longer
+        // unpaused run.
+        else if (_screenshotMultiSelectMode && ++_screenshotFrameCount >= 45)
+            CaptureScreenshot();
     }
 
     public override void _ExitTree() => _scene?.Dispose();
@@ -346,7 +398,7 @@ public partial class FSharpSceneHost : Node2D
             case "CwClientCore.CommandDemoScene":
                 label = "command-demo-scene self-check (real bridgehead.cwscenario content: all six friendly agents ordered toward the bridge, neutralising the machine-gun team through real automatic engagement with no friendly casualties)";
                 sequence = CommandDemoDrive.runScriptedSelfCheck(ResolveContentPath(Path.Combine("scenarios", "bridgehead.cwscenario")));
-                expected = 0x2629A1FE165F94BBUL; // CommandDemoScene tick 90 (TASK-067 re-pin: Canonical.FormatVersion 14 -> 15, ReceivedOrder.AsGroup added -- a genuine behaviour change, not byte-layout only: every order this scene issues is single-recipient, so formation redirect no longer applies to any of them, and the script's six target cells were updated to the pre-TASK-067 *resolved* cells directly (a temporary probe confirmed this reproduces the identical final state, "no friendly casualties, machine gun neutralised", byte-for-byte -- see CommandDemoScene.fs's runScriptedSelfCheck comment)
+                expected = 0x84A25E3559111E9BUL; // CommandDemoScene tick 90 (TASK-069 re-pin: content/scenarios/bridgehead.cwscenario's Trooper unit-type MoveSpeed 2 -> 1, halving movement speed per Dave's own live-playtest read that it ran "at least twice as fast as it should be" -- a genuine behaviour change, not byte-layout only: every agent now takes twice as many ticks to cross a cell. Confirmed via a temporary dotnet fsi probe (removed after use) with the dev overlay enabled (ground truth, ignoring fog of war) that the outcome is still reached within the same 90-tick budget: by tick 90 exactly one agent has died (the machine-gun team, cell (11,5)) and all six friendly agents remain Alive -- "no friendly casualties, machine gun neutralised" unchanged
                 break;
             default:
                 GD.PrintErr($"FSharpSceneHost: --selfcheck has no evidence path for '{SceneType}'");
@@ -433,7 +485,7 @@ public partial class FSharpSceneHost : Node2D
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (_scene == null || _selfCheck || _screenshotMode || _screenshotMissionMode || _screenshotSquadMode)
+        if (_scene == null || _selfCheck || _screenshotMode || _screenshotMissionMode || _screenshotSquadMode || _screenshotMultiSelectMode)
             return;
 
         if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mbIcon
@@ -441,14 +493,70 @@ public partial class FSharpSceneHost : Node2D
         {
             _scene.OnOrderModeClick(iconIndex);
         }
-        else if (@event is InputEventMouseButton { Pressed: true } mb
-            && (mb.ButtonIndex == MouseButton.Left || mb.ButtonIndex == MouseButton.Right))
+        // TASK-068 (backlog B-067 second half): a left-button press starts
+        // tracking a potential drag rather than resolving immediately --
+        // no button-up handling existed anywhere in this file before this
+        // task, so click-vs-drag disambiguation happens entirely on
+        // release, below.
+        else if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mbDown)
         {
-            Vector2I cell = TryHitAgentCircle(mb.Position, out Vector2I hit) ? hit : ScreenToCell(mb.Position);
-            _scene.OnClick(mb.ButtonIndex == MouseButton.Left, cell.X, cell.Y);
+            _isDragging = true;
+            _dragStartScreen = mbDown.Position;
+            _dragCurrentScreen = mbDown.Position;
+        }
+        else if (@event is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left } mbUp)
+        {
+            // A stray release with no matching tracked press -- the press
+            // itself was consumed by the order-mode-icon branch above.
+            if (!_isDragging)
+                return;
+
+            _isDragging = false;
+            bool shiftHeld = mbUp.ShiftPressed;
+
+            if (_dragStartScreen.DistanceTo(mbUp.Position) < DragThresholdPixels)
+            {
+                Vector2I cell = TryHitAgentCircle(mbUp.Position, out Vector2I hit) ? hit : ScreenToCell(mbUp.Position);
+                _scene.OnClick(true, cell.X, cell.Y, shiftHeld);
+            }
+            else
+            {
+                Rect2 rect = new Rect2(_dragStartScreen, mbUp.Position - _dragStartScreen).Abs();
+                var xs = new List<int>();
+                var ys = new List<int>();
+
+                // The `TryHitAgentCircle` per-agent screen-position
+                // derivation and full-opacity-real-agent filter, reused
+                // with a rectangle-contains-centre test in place of its
+                // point-vs-circle distance test -- any side, `friendlyAt`
+                // on the F# side does the side filtering, the same
+                // boundary division `OnClick` already uses.
+                foreach (DrawItem item in _scene.DrawList())
+                {
+                    if (item.Kind != 1 || item.A < 0.99f)
+                        continue;
+
+                    Vector2 center = CellToScreen(item.Cx, item.Cy) - new Vector2(0, TileH * 0.5f);
+                    if (rect.HasPoint(center))
+                    {
+                        xs.Add(Mathf.RoundToInt(item.Cx));
+                        ys.Add(Mathf.RoundToInt(item.Cy));
+                    }
+                }
+
+                _scene.OnDragSelect(xs.ToArray(), ys.ToArray(), shiftHeld);
+            }
+        }
+        else if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right } mbRight)
+        {
+            Vector2I cell = TryHitAgentCircle(mbRight.Position, out Vector2I hit) ? hit : ScreenToCell(mbRight.Position);
+            _scene.OnClick(false, cell.X, cell.Y, false);
         }
         else if (@event is InputEventMouseMotion mm)
         {
+            if (_isDragging)
+                _dragCurrentScreen = mm.Position;
+
             // TASK-052, backlog B-053: the same `TryHitAgentCircle`-first
             // fallback the click handler above already uses (`OnClick`),
             // so hovering directly over a rendered agent circle resolves to
@@ -542,8 +650,25 @@ public partial class FSharpSceneHost : Node2D
             }
         }
 
+        DrawDragMarquee();
         DrawOrderModeBar();
         DrawMissionSummaryPanel();
+    }
+
+    // Rubber-band drag-select marquee (TASK-068, backlog B-067 second
+    // half): screen-space chrome, the `DrawMissionSummaryPanel`/
+    // `DrawOrderModeBar` translucent-fill-plus-border precedent. Only drawn
+    // once the drag has moved past the same threshold that distinguishes a
+    // drag from a plain click (`_UnhandledInput`'s own `DragThresholdPixels`
+    // check) -- a drag that resolves as a click never flashes a marquee.
+    private void DrawDragMarquee()
+    {
+        if (!_isDragging || _dragStartScreen.DistanceTo(_dragCurrentScreen) < DragThresholdPixels)
+            return;
+
+        Rect2 rect = new Rect2(_dragStartScreen, _dragCurrentScreen - _dragStartScreen).Abs();
+        DrawRect(rect, new Color(0.3f, 0.9f, 0.4f, 0.15f));
+        DrawRect(rect, new Color(0.3f, 0.9f, 0.4f, 0.85f), false, 1.5f);
     }
 
     // Mission summary panel (TASK-063, backlog B-033 narrowed): fixed
@@ -747,6 +872,11 @@ public partial class FSharpSceneHost : Node2D
                         _screenshotSquadFrameCount = frames;
                         i++;
                     }
+                    if (i + 1 < args.Length)
+                        _screenshotPath = args[++i];
+                    break;
+                case "--screenshot-multiselect":
+                    _screenshotMultiSelectMode = true;
                     if (i + 1 < args.Length)
                         _screenshotPath = args[++i];
                     break;

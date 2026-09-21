@@ -837,9 +837,109 @@ already found and parked as B-067's still-unscoped second half.
 GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
 cd src/CommandoWar.Client.Godot
 "$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x6213D672BC36FDB8
-"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x2629A1FE165F94BB
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x84A25E3559111E9B
 "$GODOT" --headless --path . scenes/AppraisalDemo.tscn -- --selfcheck  # MATCH 0xA1354EB998FC1B95
 ```
+
+### Multi-select and joint order dispatch (TASK-068, backlog B-067 second half)
+
+B-067's client-side half: `selected` (`CommandDemoScene.fs`) is now a set,
+not one `AgentId option`. **Drag rubber-band-select** (click-drag over empty
+ground selects every friendly agent whose figure centre falls inside the
+drawn rectangle) and **shift-click** (toggles one agent into/out of the
+current selection) join the existing plain left-click (which still replaces
+the whole selection with just that one agent, unchanged). A `MoveTo` order
+issued to more than one selected agent now dispatches a real
+`Command.moveToMany`, so `ReceivedOrder.AsGroup` (TASK-067) is `true` for a
+client-issued order for the first time -- formation redirect
+(`Appraisal.resolveFormationTarget`) applies to a real group order, not just
+a unit test. `Hold`/`Assault`/`Withdraw`/`Suppress` have no `*Many` builder
+and need none (only `MoveTo` reads formation): a group order for any of
+these four is N existing single-recipient commands, one per eligible
+selected agent, added to `pending` in one click.
+
+A selected agent that is Dead/Incapacitated, or already standing on the
+clicked cell, is silently dropped from the dispatched order; the rest of the
+(eligible) selection still receives it. Right-click always clears the entire
+selection. The hover/route preview shows every selected agent's own route;
+with more than one agent selected and `MoveTo` armed, each preview is
+resolved through `Appraisal.resolveFormationTarget` first (the same inputs
+`Simulation.fs`'s own appraisal phase uses), reviving per-agent the
+redirect-preview logic TASK-064 added and TASK-067's own comment retired
+once every order this scene issued was single-recipient -- no longer true.
+The HUD selection line shows a count above one agent ("N agents"); per-agent
+detail (order status, the `F1` dev-overlay agent line/LOS ray/exposed-route
+markers) needs exactly one selected agent, the same simplification.
+
+A real, pre-existing bug was found and fixed while generalising the order
+dispatch, not introduced by it: `OnClick`'s pending-order dedup used to key
+on `PlayerCommand.Agent` (`List.head Recipients`), so a stale pending
+single-recipient order for any *non-head* recipient of a new multi-recipient
+command would survive the check and land in the same tick's batch alongside
+it -- fixed to match on `Recipients` membership against every agent about to
+be addressed.
+
+`FSharpSceneHost.cs`'s `_UnhandledInput` had no button-up (`Pressed: false`)
+handling at all before this task -- every click was a complete single event.
+A real press/motion/release sequence was added (right-click and the
+HUD-icon click stay single-press): a left-button press starts tracking a
+drag; on release, a drag shorter than `DragThresholdPixels` (6px) resolves
+as an ordinary click, otherwise the dragged rectangle is tested against
+every real, full-opacity agent's on-screen centre (`TryHitAgentCircle`'s own
+per-agent derivation, `Rect2.HasPoint` in place of its point-vs-circle
+distance test) and the hit cells are handed to the new
+`IClientScene.OnDragSelect`. A translucent marquee (`DrawRect`, the
+`DrawMissionSummaryPanel` precedent) renders while dragging past the
+threshold.
+
+Verified with a temporary `dotnet fsi` probe (removed after use) driving the
+real `IClientScene` methods directly against `bridgehead.cwscenario`:
+drag-select and shift-click toggling both confirmed via `HudText()`'s
+selection count and the halo-item count in `DrawList()`; a plain click on an
+unselected agent collapses an existing multi-selection to size 1; two
+selected agents (fireteam-alpha slots 0/1, authored `FormationOffset`
+`(0,0)`/`(1,0)`) ordered jointly to one shared literal cell resolve to two
+distinct predicted cells (`Appraisal.resolveFormationTarget`, computed
+independently in the probe against the same scenario/seed, matches the
+scene's own preview-dot route endpoints exactly). **Honestly flagged, not
+smoothed over:** stepping the resulting order to settlement shows the two
+agents end up one cell apart, not each at its own full resolved slot -- their
+routes overlap for several cells, and the trailing agent's order stalls
+against the leading agent (still `Alive`, occupying the cell it needs) and
+is abandoned after `Simulation.StallAbandonTicks` (TASK-065's own mechanism,
+working as designed), parking one cell short. This is the same live-agent
+chokepoint contention TASK-066/067 already found and left as B-067's
+own accepted, unresolved second-order gap -- now reproduced for the first
+time through a real client-issued group order rather than six independent
+solo ones, not a new defect this task introduces or is scoped to fix.
+
+`dotnet build`/`test`/`corpus`/replay-checkpoints unaffected (no
+`CommandoWar.Sim`/`CommandoWar.Headless` file changed); all three scenes'
+`--selfcheck` hashes reconfirmed `MATCH` unchanged through the real Godot
+4.7.2 editor -- `CommandDemo.tscn`'s scripted sequence is entirely
+single-agent, no-shift clicks, so it dispatches byte-identically to before
+this task. Screenshot evidence:
+`docs/evidence/task-068-multiselect.png` (`--screenshot-multiselect`,
+the `--screenshot-squad` precedent -- primes a real two-agent drag-select
+and joint order through `OnDragSelect`/`OnHover`/`OnClick` directly, paused
+immediately so the captured frame holds the pending state).
+
+### Bridgehead trooper movement speed halved (TASK-069, backlog B-068)
+
+Raised live right after TASK-068: Dave's own read was that movement "run[s]
+really quickly... probably at least twice as fast as it should be... fast
+and choppy like it running fast forward." A temporary diagnostic (removed
+after use) confirmed the simulation genuinely runs at exactly 20 ticks/
+second with a stable 60fps render loop — not a frame-pacing bug.
+`Terrain.BaseMoveCost = 1` combined with Trooper's authored `MoveSpeed = 2`
+(`Domain.fs`'s `Agent.MoveSpeedDefault`) means a Trooper crosses a whole
+open-terrain cell in exactly one 20Hz tick, 50ms — true since before unit
+types existed (TASK-049), not a regression. Fixed content-only, confirmed
+via `AskUserQuestion`: `content/scenarios/bridgehead.cwscenario`'s
+`unit-type trooper 2` -> `1`, doubling ticks-per-cell to 2 (100ms), no
+`CommandoWar.Sim` change. `CommandDemo.tscn --selfcheck` re-pinned; a
+temporary dev-overlay probe confirmed the demonstrated outcome ("no
+friendly casualties, machine gun neutralised") is unchanged at half speed.
 
 ## Pinned versions
 
@@ -874,7 +974,8 @@ src/FSharpSceneHost.cs      TASK-039/040: the generic ADR-0004 C# host over Core
 Core/                       TASK-039/040: the ADR-0004 F# client-core library (CwClientCore.*)
 Core/RenderShared.fs        TASK-040: terrain-item + depth-sort helpers shared by every render scene
 Core/CommandDemoScene.fs    TASK-040: live selection, input-mapped MoveTo, route preview, pause;
-                            TASK-043: F1 developer overlay over live Diagnostics.DiagnosticFrame
+                            TASK-043: F1 developer overlay over live Diagnostics.DiagnosticFrame;
+                            TASK-068: multi-select (drag/shift-click), joint order dispatch
 art/                        TASK-041: Kenney CC0 placeholder terrain/agent textures + licence file
 ```
 

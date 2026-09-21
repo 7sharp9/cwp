@@ -86,11 +86,29 @@ type IClientScene =
     /// A mouse-button press, already projected from screen space to a grid
     /// cell by the C# host (TASK-040, ADR-0004's screen<->cell projection
     /// rule: the host resolves the cell, F# only ever sees cell
-    /// coordinates). `isLeftButton = false` is a right-click.
-    abstract OnClick: isLeftButton: bool * cellX: int * cellY: int -> unit
+    /// coordinates). `isLeftButton = false` is a right-click. `shiftHeld`
+    /// (TASK-068, backlog B-067 second half) is the modifier-key state at
+    /// the moment of the click, read by the C# host
+    /// (`InputEventMouseButton.ShiftPressed`) the same "raw input capture |
+    /// C#" way the button/position already are -- a shift-held left-click on
+    /// a friendly agent toggles it into/out of the current selection instead
+    /// of replacing the whole selection with just that one agent.
+    abstract OnClick: isLeftButton: bool * cellX: int * cellY: int * shiftHeld: bool -> unit
     /// The mouse has moved over the given cell (already projected). Used to
     /// drive a hover-dependent command preview.
     abstract OnHover: cellX: int * cellY: int -> unit
+    /// A completed rubber-band drag-select (TASK-068, backlog B-067 second
+    /// half), resolved entirely in the C# host: for every real, full-opacity
+    /// agent item in the current `DrawList()` (any side -- the `OnClick`/
+    /// `friendlyAt` precedent of letting F# do side filtering) whose
+    /// on-screen figure centre falls inside the dragged rectangle
+    /// (`TryHitAgentCircle`'s own screen-position derivation, a
+    /// `Rect2.HasPoint` test in place of its point-vs-circle distance test),
+    /// its cell is included -- parallel primitive arrays, never a rectangle,
+    /// an agent id, or an F# collection crossing the boundary (ADR-0004).
+    /// `shiftHeld` adds every hit agent to the existing selection instead of
+    /// replacing it, the same modifier `OnClick` reads.
+    abstract OnDragSelect: cellXs: int[] * cellYs: int[] * shiftHeld: bool -> unit
     /// The tactical-pause key was pressed. A scene that has nothing to pause
     /// (like `DemoRenderScene`) may no-op.
     abstract OnTogglePause: unit -> unit

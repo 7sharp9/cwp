@@ -115,8 +115,16 @@ type CommandDemoScene() =
     let mutable alpha = 0.0
     let mutable hash = 0UL
     let mutable paused = false
-    let mutable selected: AgentId option = None
-    let mutable previewPath: Cell[] option = None
+    // TASK-068 (backlog B-067 second half): a set, not `AgentId option` --
+    // drag rubber-band-select and shift-click can now address several
+    // agents with one selection. Every prior single-agent consumer below is
+    // updated to fold/filter over the set rather than pattern-match
+    // `Some`/`None`; see each site's own comment for the (mostly mechanical,
+    // a few genuinely new) decision this required.
+    let mutable selected: Set<AgentId> = Set.empty
+    // One route per currently-selected, currently-`Alive` agent (TASK-068;
+    // was `Cell[] option`, one route) -- see `OnHover`.
+    let mutable previewPath: Cell[][] = [||]
     let mutable hoveredCell: Cell option = None
 
     // XCOM-style HUD order-mode icons (TASK-048, backlog B-059; `4 =
@@ -542,10 +550,15 @@ type CommandDemoScene() =
     /// that is actually enforced. Called after every tick (vitals only ever
     /// change from `stepOnce`) and after a selection change (selecting an
     /// already-non-`Alive` friendly directly must disarm just as promptly).
+    // TASK-068: disarms once zero `Alive` candidates remain anywhere in the
+    // selection, not the instant any one selected agent stops being `Alive`
+    // -- consistent with `OnClick`'s own "silently drop the ineligible
+    // agent, order the rest" rule (confirmed via `AskUserQuestion`): the
+    // armed mode should stay usable as long as at least one selected agent
+    // could still receive it.
     let syncOrderModeToSelection () =
-        match selected with
-        | Some id when orderMode <> 0 && not (Casualty.isAlive (vitalsOf id)) -> orderMode <- 0
-        | _ -> ()
+        if orderMode <> 0 && not (Set.isEmpty selected) && not (selected |> Set.exists (fun id -> Casualty.isAlive (vitalsOf id))) then
+            orderMode <- 0
 
     /// A route's cells excluding the traveller's own starting cell, drawn as
     /// small `Kind = 1` dots in the given colour/alpha/radius -- the shared
@@ -699,19 +712,32 @@ type CommandDemoScene() =
             // remove. `heldAbandonedOrders` (populated from the `Abandoned`
             // overlay in `stepOnce`) names the recently-abandoned agents by
             // id, checked ahead of the destination-suffix logic below.
+            // TASK-068: this per-agent disposition/destination line is
+            // inherently single-agent-shaped (one `Disposition`, one
+            // `Destination`) -- shown only when exactly one agent is
+            // selected (confirmed via `AskUserQuestion`: the HUD selection
+            // line itself shows just a count for several, and this suffix
+            // follows the identical "count only" simplification rather than
+            // inventing an aggregate reading across several agents'
+            // dispositions).
             let liveOrderText =
-                selected
-                |> Option.bind (fun id -> currAgents |> Array.tryFind (fun a -> a.Id = id))
-                |> Option.map (fun a ->
-                    let baseText = RenderShared.dispositionText a.Disposition
+                match Set.count selected with
+                | 1 ->
+                    let id = Set.minElement selected
 
-                    if heldAbandonedOrders |> Seq.exists (fun (id, _) -> id = AgentId.value a.Id) then
-                        sprintf "%s -> abandoned (route blocked)" baseText
-                    else
-                        match a.Disposition, a.Destination with
-                        | Some Accepted, Some dest -> sprintf "%s -> (%d,%d)" baseText dest.X dest.Y
-                        | _ -> baseText)
-                |> Option.defaultValue ""
+                    currAgents
+                    |> Array.tryFind (fun a -> a.Id = id)
+                    |> Option.map (fun a ->
+                        let baseText = RenderShared.dispositionText a.Disposition
+
+                        if heldAbandonedOrders |> Seq.exists (fun (id, _) -> id = AgentId.value a.Id) then
+                            sprintf "%s -> abandoned (route blocked)" baseText
+                        else
+                            match a.Disposition, a.Destination with
+                            | Some Accepted, Some dest -> sprintf "%s -> (%d,%d)" baseText dest.X dest.Y
+                            | _ -> baseText)
+                    |> Option.defaultValue ""
+                | _ -> ""
 
             if liveOrderText <> "" && liveOrderText <> "no order" then
                 heldOrderText <- liveOrderText
@@ -941,27 +967,32 @@ type CommandDemoScene() =
             // `renderVitals`'s own frozen (never-lerped) figure for those
             // states, or the halo would visibly drift off a figure that
             // itself never moves.
+            // TASK-068: one halo per currently-selected agent -- each
+            // independently anchored (`renderPos` for `Alive`, raw
+            // `Position` otherwise, unchanged per-agent logic), so no
+            // shared-state conflict between several agents' halos.
             let haloItems =
-                match selected |> Option.bind (fun id -> currAgents |> Array.tryFind (fun a -> a.Id = id)) with
-                | Some a ->
+                selected
+                |> Set.toArray
+                |> Array.choose (fun id -> currAgents |> Array.tryFind (fun a -> a.Id = id))
+                |> Array.map (fun a ->
                     let cx, cy =
                         match vitalsOf a.Id with
                         | Alive _ -> renderPos a
                         | _ -> float32 a.Position.X, float32 a.Position.Y
 
-                    [| { Kind = 1
-                         TextureId = 0
-                         Cx = cx
-                         Cy = cy
-                         Cx2 = 0.0f
-                         Cy2 = 0.0f
-                         Text = ""
-                         R = 1.0f
-                         G = 0.95f
-                         B = 0.30f
-                         A = 0.35f
-                         Radius = haloRadius } |]
-                | None -> [||]
+                    { Kind = 1
+                      TextureId = 0
+                      Cx = cx
+                      Cy = cy
+                      Cx2 = 0.0f
+                      Cy2 = 0.0f
+                      Text = ""
+                      R = 1.0f
+                      G = 0.95f
+                      B = 0.30f
+                      A = 0.35f
+                      Radius = haloRadius })
 
             // Hover highlight for a selectable agent (TASK-052, backlog
             // B-053): a thin ring around a friendly agent's own figure when
@@ -1036,10 +1067,10 @@ type CommandDemoScene() =
             // one):
             //   - hover preview (yellow, dim): what a click right now would
             //     target, live under the mouse, not yet committed to anything.
+            // TASK-068: one route per currently-previewed (selected, Alive)
+            // agent, not just one -- see `OnHover`.
             let previewItems =
-                previewPath
-                |> Option.map (fun cells -> routeDots cells (1.0f, 0.9f, 0.3f) 0.35f 5.0f)
-                |> Option.defaultValue [||]
+                previewPath |> Array.collect (fun cells -> routeDots cells (1.0f, 0.9f, 0.3f) 0.35f 5.0f)
 
             //   - pending / queued (orange): a `RecordedCommand` already
             //     issued but not yet delivered to command intake -- normally
@@ -1098,8 +1129,8 @@ type CommandDemoScene() =
             // sort alongside `devItems`/`fireEffects` below, not folded into
             // `sorted`.
             let holdOutlineItems =
-                match orderMode, selected, hoveredCell with
-                | 1, Some _, Some c ->
+                match orderMode, not (Set.isEmpty selected), hoveredCell with
+                | 1, true, Some c ->
                     let r = AppraisalConfig.HoldCoverSearchRadius
                     let nw = { X = c.X - r; Y = c.Y - r }
                     let ne = { X = c.X + r; Y = c.Y - r }
@@ -1168,13 +1199,16 @@ type CommandDemoScene() =
 
                     // Last appraisal factors (docs/06 section 11): the
                     // selected agent's current exposed-route cells.
+                    // TASK-068: unioned over every selected agent -- may
+                    // overlap/clutter with several selected, a dev-only
+                    // overlay so lower stakes than a player-facing choice.
                     let exposedCells =
-                        match selected with
-                        | None -> [||]
-                        | Some id ->
+                        if Set.isEmpty selected then
+                            [||]
+                        else
                             devFrame.Overlays
                             |> Array.choose (function
-                                | OrderAppraisal(a, _, _, exposed) when a = id -> Some exposed
+                                | OrderAppraisal(a, _, _, exposed) when Set.contains a selected -> Some exposed
                                 | _ -> None)
                             |> Array.concat
                             |> Array.map (fun cell -> RenderShared.cellMarker cell (1.0f, 0.55f, 0.0f) 0.4f 9.0f)
@@ -1282,10 +1316,14 @@ type CommandDemoScene() =
             Array.concat [ sorted; fireEffects; audioCueItems; holdOutlineItems; devItems ]
 
         member _.HudText() =
+            // TASK-068: a count for several agents, not a list (confirmed
+            // via `AskUserQuestion`) -- exactly one selected keeps today's
+            // exact text unchanged.
             let selText =
-                match selected with
-                | Some id -> sprintf "agent %d" (AgentId.value id)
-                | None -> "none"
+                match Set.count selected with
+                | 0 -> "none"
+                | 1 -> sprintf "agent %d" (AgentId.value (Set.minElement selected))
+                | n -> sprintf "%d agents" n
 
             // Order acknowledgement/disposition + a concise refusal reason
             // for the selected agent (TASK-042, backlog B-028; docs/06
@@ -1321,15 +1359,27 @@ type CommandDemoScene() =
             // (TASK-043, backlog B-029, docs/06 section 11), gated behind the
             // `F1` overlay toggle and shown only for the selected agent (the
             // TASK-042 single-selection precedent).
-            match devOverlay, selected with
-            | true, Some id ->
-                sprintf "%s\n[dev] %s\n%s" line1 (RenderShared.devAgentText devFrame.Overlays id) RenderShared.devLegendText
-            | true, None -> sprintf "%s\n[dev] no agent selected\n%s" line1 RenderShared.devLegendText
+            // TASK-068: per-agent dev detail needs a single selection --
+            // several agents show a count instead (dev-only, lowest stakes,
+            // decided directly rather than asked).
+            match devOverlay, Set.count selected with
+            | true, 1 ->
+                sprintf
+                    "%s\n[dev] %s\n%s"
+                    line1
+                    (RenderShared.devAgentText devFrame.Overlays (Set.minElement selected))
+                    RenderShared.devLegendText
+            | true, 0 -> sprintf "%s\n[dev] no agent selected\n%s" line1 RenderShared.devLegendText
+            | true, n -> sprintf "%s\n[dev] %d agents selected (per-agent detail needs a single selection)\n%s" line1 n RenderShared.devLegendText
             | false, _ -> line1
 
-        member _.OnClick(isLeftButton: bool, cellX: int, cellY: int) =
+        member _.OnClick(isLeftButton: bool, cellX: int, cellY: int, shiftHeld: bool) =
             if not isLeftButton then
-                selected <- None
+                // TASK-068: right-click always clears the *entire*
+                // selection, regardless of size (confirmed via
+                // `AskUserQuestion`) -- no "remove just the one under the
+                // cursor" mode.
+                selected <- Set.empty
                 heldOrderText <- ""
                 orderTextHoldRemaining <- 0.0
                 losRay <- None
@@ -1338,7 +1388,17 @@ type CommandDemoScene() =
 
                 match friendlyAt cell with
                 | Some a ->
-                    selected <- Some a.Id
+                    // TASK-068: a plain click always replaces the whole
+                    // selection with just this agent (unchanged from before
+                    // this task when nothing else is already selected); a
+                    // shift-held click toggles this one agent into/out of
+                    // whatever is already selected, leaving every other
+                    // member alone.
+                    selected <-
+                        if shiftHeld then
+                            if Set.contains a.Id selected then Set.remove a.Id selected else Set.add a.Id selected
+                        else
+                            Set.singleton a.Id
                     // A different agent's held message must not leak onto
                     // the newly selected one (or the same one re-clicked) --
                     // start from its own live state, not a stale hold.
@@ -1350,106 +1410,178 @@ type CommandDemoScene() =
                     losRay <- None
                     // Selecting a Dead/Incapacitated friendly directly is
                     // allowed (status-view mode, TASK-053/B-061), but an
-                    // armed order-mode icon carried over from a previous,
-                    // still-`Alive` selection must not survive onto it.
+                    // armed order-mode icon must not survive once the
+                    // selection has no `Alive` candidate left for it.
                     syncOrderModeToSelection ()
                 | None ->
-                    match selected with
-                    | Some agentId when
+                    if
                         GridBounds.contains cell state.Bounds
-                        && agentPosition agentId <> Some cell
-                        && Casualty.isAlive (vitalsOf agentId)
                         && state.MissionOutcome = InProgress
-                        ->
+                        && not (Set.isEmpty selected)
+                    then
+                        // TASK-068: a selected agent that is Dead/
+                        // Incapacitated or already standing on the clicked
+                        // cell is silently dropped from the order; the rest
+                        // of the (eligible) selection still receives it
+                        // (confirmed via `AskUserQuestion`) -- if none
+                        // remain eligible, nothing is dispatched, the same
+                        // "click does nothing" outcome a single ineligible
+                        // selection already produced before this task.
+                        let addressed =
+                            selected
+                            |> Set.filter (fun id -> Casualty.isAlive (vitalsOf id) && agentPosition id <> Some cell)
+
                         // Dispatch on the armed HUD order mode (TASK-048,
                         // backlog B-059; index 4 added by TASK-064, backlog
                         // B-035) -- `0 = MoveTo` is both the default unarmed
-                        // state and an explicit icon, so a plain click with
-                        // nothing armed keeps issuing `MoveTo` exactly as
-                        // before this task. `4 = Suppress` targets whichever
-                        // agent occupies the clicked cell instead of the
-                        // bare cell itself -- `None` (no agent there) leaves
-                        // Suppress armed rather than issuing a meaningless
-                        // command, the "need a valid target" idiom.
-                        let cmd =
+                        // state and an explicit icon. Only `MoveTo` reads
+                        // `AsGroup`/formation (`Appraisal.appraise`'s own
+                        // intent match), so a group `MoveTo` is one real
+                        // `Command.moveToMany` naming every eligible agent;
+                        // every other mode has no multi-recipient builder
+                        // and needs none (none of them reads formation) --
+                        // N existing single-recipient commands reproduce
+                        // today's per-agent semantics exactly. A
+                        // one-element `moveToMany` list is byte-identical in
+                        // every field to `Command.moveTo`'s own output, so a
+                        // plain single-agent click still dispatches exactly
+                        // what it did before this task. `4 = Suppress`
+                        // targets whichever agent occupies the clicked cell
+                        // instead of the bare cell itself -- `None` (no
+                        // agent there) leaves Suppress armed and issues
+                        // nothing, the pre-existing "need a valid target"
+                        // idiom.
+                        let cmds: PlayerCommand list =
+                            let addressedList = addressed |> Set.toList
+
                             match orderMode with
-                            | 1 -> Some(Command.hold (CommandId.ofInt nextCommandId) state.Tick agentId cell)
-                            | 2 -> Some(Command.assault (CommandId.ofInt nextCommandId) state.Tick agentId cell)
-                            | 3 -> Some(Command.withdraw (CommandId.ofInt nextCommandId) state.Tick agentId cell)
+                            | 1 ->
+                                addressedList
+                                |> List.mapi (fun i agentId ->
+                                    Command.hold (CommandId.ofInt (nextCommandId + i)) state.Tick agentId cell)
+                            | 2 ->
+                                addressedList
+                                |> List.mapi (fun i agentId ->
+                                    Command.assault (CommandId.ofInt (nextCommandId + i)) state.Tick agentId cell)
+                            | 3 ->
+                                addressedList
+                                |> List.mapi (fun i agentId ->
+                                    Command.withdraw (CommandId.ofInt (nextCommandId + i)) state.Tick agentId cell)
                             | 4 ->
-                                enemyAt cell
-                                |> Option.map (fun target ->
-                                    Command.suppress (CommandId.ofInt nextCommandId) state.Tick agentId target.Id)
-                            | _ -> Some(Command.moveTo (CommandId.ofInt nextCommandId) state.Tick agentId cell)
+                                match enemyAt cell with
+                                | Some target ->
+                                    addressedList
+                                    |> List.mapi (fun i agentId ->
+                                        Command.suppress (CommandId.ofInt (nextCommandId + i)) state.Tick agentId target.Id)
+                                | None -> []
+                            | _ ->
+                                if addressedList.IsEmpty then
+                                    []
+                                else
+                                    [ Command.moveToMany (CommandId.ofInt nextCommandId) state.Tick addressedList cell Routine Standard ]
 
-                        match cmd with
-                        | Some cmd ->
-                            nextCommandId <- nextCommandId + 1
-
+                        match cmds with
+                        | [] -> ()
+                        | _ ->
                             // Replace, not stack: an agent has at most one
                             // undelivered order at a time today (no waypoint
-                            // queue yet -- see the TASK-040 review follow-up).
-                            // Without this, two clicks before the next
-                            // delivery tick (easy while paused) would hand
-                            // Simulation.step two different commands both
-                            // addressing the same agent in one tick's batch,
-                            // an untested combination.
-                            pending.RemoveAll(fun c -> c.Command.Agent = agentId) |> ignore
+                            // queue yet -- see the TASK-040 review
+                            // follow-up). TASK-068: matched against every
+                            // recipient of every command about to be added,
+                            // not `PlayerCommand.Agent` (the head of
+                            // `Recipients`) alone -- a stale pending order
+                            // for any non-head recipient of a new
+                            // multi-recipient command would otherwise
+                            // survive this check and land in the same
+                            // tick's batch alongside it, an untested
+                            // double-command combination.
+                            let addressedIds = cmds |> List.collect (fun c -> c.Recipients) |> Set.ofList
 
-                            pending.Add
-                                { Tick = state.Tick + 1L
-                                  Sequence = pending.Count
-                                  Command = cmd
-                                  Issuer = "player" }
+                            pending.RemoveAll(fun c -> c.Command.Recipients |> List.exists (fun r -> Set.contains r addressedIds))
+                            |> ignore
+
+                            for cmd in cmds do
+                                pending.Add
+                                    { Tick = state.Tick + 1L
+                                      Sequence = pending.Count
+                                      Command = cmd
+                                      Issuer = "player" }
+
+                            nextCommandId <- nextCommandId + cmds.Length
 
                             // An armed non-default mode is consumed by
-                            // issuing one order (see the field comment on
-                            // `orderMode`).
+                            // issuing at least one order (see the field
+                            // comment on `orderMode`).
                             orderMode <- 0
-                        | None -> ()
-                    | _ -> ()
 
         member _.OnHover(cellX: int, cellY: int) =
             let cell = { X = cellX; Y = cellY }
             hoveredCell <- if GridBounds.contains cell state.Bounds then Some cell else None
 
-            // Suppressed while the selected agent is not `Alive` (TASK-053,
-            // backlog B-061): previewing a route implies a click there
-            // would move it, which is no longer true once it is
+            // Suppressed for any selected agent that is not `Alive`
+            // (TASK-053, backlog B-061): previewing a route implies a click
+            // there would move it, which is no longer true once it is
             // Dead/Incapacitated -- see `OnClick`'s matching order-issue
             // guard.
             //
-            // TASK-064 review (backlog B-035) found a `MoveTo` order for a
-            // formationed agent could silently redirect short of the
-            // clicked cell (`Appraisal.resolveFormationTarget`'s own
-            // bounded-radius fallback, TASK-059), with no client-side
-            // indication -- fixed at the time by previewing that same
-            // resolution here. TASK-067 (backlog B-067) removed the root
-            // cause instead of just previewing around it: formation
-            // redirect now only applies to a genuine multi-recipient
-            // (`ReceivedOrder.AsGroup`) order, and this scene's `OnClick`
-            // only ever issues a single-recipient `Command.moveTo`/`.hold`/
-            // `.assault`/`.withdraw`/`.suppress` (no multi-select UI exists
-            // yet, backlog B-067's own deferred second half) -- so every
-            // order this client can issue today resolves to the literal
-            // clicked cell regardless of `FormationOffset`, and the preview
-            // now shows exactly that, with no redirect computation needed.
+            // TASK-068 (backlog B-067 second half): with more than one
+            // agent selected, a `MoveTo` order dispatches through
+            // `Command.moveToMany`, which sets `ReceivedOrder.AsGroup =
+            // true` -- formation redirect (TASK-059/067) applies again,
+            // exactly the case TASK-064 review round 1 originally patched a
+            // preview for and TASK-067's own (now-stale) comment here
+            // retired once every order this scene issued was
+            // single-recipient. That is no longer true once multi-select
+            // exists: each currently-selected, currently-`Alive` agent gets
+            // its own preview, resolved through the identical `Appraisal.
+            // resolveFormationTarget` call and inputs (`occupied` built the
+            // same way `Simulation.fs`'s own appraisal phase builds it --
+            // every OTHER agent's current `Position`, regardless of vitals)
+            // the sim itself will use for real, so the preview never shows
+            // a route the order will not actually take. A single selected
+            // agent, or any order mode other than `MoveTo`, keeps the
+            // literal-cell preview unchanged (a solo order never sets
+            // `AsGroup`, and no other intent reads formation at all).
             previewPath <-
-                match selected with
-                | Some id when Casualty.isAlive (vitalsOf id) ->
-                    agentPosition id
-                    |> Option.bind (fun pos ->
-                        match Pathfinding.find state.Terrain pos cell with
-                        | Found(cells, _) -> Some cells
-                        | NoPath
-                        | BudgetExhausted _
-                        | InvalidEndpoint _ -> None)
-                | _ -> None
+                if not (GridBounds.contains cell state.Bounds) then
+                    [||]
+                else
+                    let formationAware = orderMode = 0 && Set.count selected > 1
 
-            // Developer-overlay line of sight and occluders (TASK-043):
-            // traced from the selected agent to the hovered cell regardless
-            // of whether the overlay is currently shown -- cheap, and keeps
-            // `losRay` correct the instant `F1` is pressed rather than one
+                    selected
+                    |> Set.toArray
+                    |> Array.filter (fun id -> Casualty.isAlive (vitalsOf id))
+                    |> Array.choose (fun id ->
+                        agentPosition id
+                        |> Option.bind (fun pos ->
+                            let resolvedTarget =
+                                if formationAware then
+                                    let offset =
+                                        state.Agents
+                                        |> Array.tryFind (fun a -> a.Id = id)
+                                        |> Option.bind (fun a -> a.FormationOffset)
+
+                                    let occupied =
+                                        currAgents
+                                        |> Array.choose (fun x -> if x.Id = id then None else Some x.Position)
+
+                                    Appraisal.resolveFormationTarget state.Terrain occupied offset cell
+                                else
+                                    cell
+
+                            match Pathfinding.find state.Terrain pos resolvedTarget with
+                            | Found(cells, _) -> Some cells
+                            | NoPath
+                            | BudgetExhausted _
+                            | InvalidEndpoint _ -> None))
+
+            // Developer-overlay line of sight and occluders (TASK-043),
+            // meaningful only for a single selected agent (TASK-068: no
+            // defined "whose LOS" answer for several selected, dev-only and
+            // lowest stakes, decided directly rather than asked): traced
+            // from that one agent to the hovered cell regardless of whether
+            // the overlay is currently shown -- cheap, and keeps `losRay`
+            // correct the instant `F1` is pressed rather than one
             // hover-move stale. A blocked trace ends at its own `Blocker`
             // cell, not the hovered cell, so the ray visibly stops at the
             // occluder rather than passing through it in red. Gated on
@@ -1459,15 +1591,37 @@ type CommandDemoScene() =
             // mouse arbitrarily far off the map the moment the cursor left
             // the grid (Dave's review feedback).
             losRay <-
-                if not (GridBounds.contains cell state.Bounds) then
+                if not (GridBounds.contains cell state.Bounds) || Set.count selected <> 1 then
                     None
                 else
-                    selected
-                    |> Option.bind agentPosition
+                    agentPosition (Set.minElement selected)
                     |> Option.map (fun pos ->
                         let los = Sight.trace state.Terrain pos cell
                         let endCell = if los.Visible then cell else los.Blocker |> Option.defaultValue cell
                         pos, endCell, los.Visible)
+
+        // TASK-068 (backlog B-067 second half): a completed rubber-band
+        // drag-select, `cellXs`/`cellYs` already resolved to every agent
+        // (any side -- `friendlyAt` below does the filtering, the `OnClick`
+        // precedent) whose on-screen figure fell inside the dragged
+        // rectangle (`IClientScene.OnDragSelect`'s own doc comment; the
+        // rectangle-vs-agent-screen-position test itself lives in the C#
+        // host, ADR-0004's screen-space projection allowance). `shiftHeld`
+        // adds the hit agents to the existing selection instead of
+        // replacing it -- a plain drag over empty ground (nothing hit, no
+        // shift) clears the selection, the `OnClick` right-click precedent
+        // extended to "an empty selection gesture" generally.
+        member _.OnDragSelect(cellXs: int[], cellYs: int[], shiftHeld: bool) =
+            let hit =
+                Array.zip cellXs cellYs
+                |> Array.choose (fun (x, y) -> friendlyAt { X = x; Y = y } |> Option.map (fun a -> a.Id))
+                |> Set.ofArray
+
+            selected <- if shiftHeld then Set.union selected hit else hit
+            heldOrderText <- ""
+            orderTextHoldRemaining <- 0.0
+            losRay <- None
+            syncOrderModeToSelection ()
 
         member _.OnTogglePause() = paused <- not paused
         member _.OnToggleDevOverlay() = devOverlay <- not devOverlay
@@ -1556,9 +1710,9 @@ module CommandDemoDrive =
         // -- the "no friendly casualties, machine gun neutralised" outcome
         // is unchanged, confirmed by re-running the sequence.
         let order (selectCell: Cell) (targetCell: Cell) =
-            asScene.OnClick(true, selectCell.X, selectCell.Y)
+            asScene.OnClick(true, selectCell.X, selectCell.Y, false)
             asScene.OnHover(targetCell.X, targetCell.Y)
-            asScene.OnClick(true, targetCell.X, targetCell.Y)
+            asScene.OnClick(true, targetCell.X, targetCell.Y, false)
 
         order { X = 3; Y = 5 } { X = 8; Y = 5 } // agent 0 (fireteam-alpha, slot 0)
         order { X = 2; Y = 5 } { X = 8; Y = 5 } // agent 1 (fireteam-alpha, slot 1)
