@@ -1,7 +1,7 @@
 # TASK-070: Route around a permanently parked agent instead of stalling and abandoning
 
-Status: review (implemented and self-verified 2026-09-21, awaiting Dave's
-acceptance)
+Status: done (accepted by Dave 2026-09-21 on the self-verification evidence,
+"commit and lets move on")
 Owner: Dave
 Phase: P4
 Gate: G4 (vertical slice feature-complete); realises B-069

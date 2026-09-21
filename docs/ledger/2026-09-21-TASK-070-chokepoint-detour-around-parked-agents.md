@@ -264,4 +264,7 @@ and no field was added to `AgentState`/`WorldState`.
 ### Review
 
 - Reviewer: Dave
-- Accepted: not yet.
+- Accepted: yes, 2026-09-21 ("accept TASK-070, commit and lets move on"), on
+  the self-verification evidence alone -- no separate live editor pass. R-010
+  stays `open`: the swap-standoff limitation above is accepted as a real,
+  live residual gap, not pursued further in this task.
