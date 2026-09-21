@@ -165,6 +165,7 @@ module DiagnosticRender =
                 | Reserved _
                 | Obstructed _
                 | Abandoned _
+                | Rerouted _
                 | KnownContact _
                 | UndeliveredOrder _
                 | OrderAppraisal _
@@ -206,6 +207,7 @@ module DiagnosticRender =
                 | Reserved _
                 | Obstructed _
                 | Abandoned _
+                | Rerouted _
                 | KnownContact _
                 | UndeliveredOrder _
                 | OrderAppraisal _
@@ -408,6 +410,15 @@ module DiagnosticRender =
                             (cellText cell)
                             (AgentId.value agent)
                             (cellText target)
+                    )
+                | Rerouted(agent, cell, newNext, avoided) ->
+                    line (
+                        sprintf
+                            "  rerouted %s: agent %d -> %s (avoided agent %d)"
+                            (cellText cell)
+                            (AgentId.value agent)
+                            (cellText newNext)
+                            (AgentId.value avoided)
                     )
                 | KnownContact(cell, contact, confidence, lastSeenTick) ->
                     line (
@@ -862,6 +873,31 @@ module DiagnosticRender =
                 line (
                     sprintf
                         "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"9\" fill=\"#9c4221\">A%d</text>"
+                        (cell.X * s + 1)
+                        (cell.Y * s + s - 2)
+                        (AgentId.value agent)
+                )
+            | Rerouted(agent, cell, newNext, _) ->
+                // A detour found and adopted around a parked agent
+                // (TASK-070, backlog B-069): a green dashed box on the cell
+                // the reroute was discovered at, an arrow to the new next
+                // cell, deliberately distinct from `Obstructed`'s red
+                // (still stuck) and `Abandoned`'s brown (gave up).
+                line (
+                    sprintf
+                        "  <rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" stroke=\"#2f855a\" stroke-width=\"2\" stroke-dasharray=\"2,1\"/>"
+                        (cell.X * s) (cell.Y * s) s s
+                )
+
+                line (
+                    sprintf
+                        "  <line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"#2f855a\" stroke-width=\"2\"/>"
+                        (cell.X * s + mid) (cell.Y * s + mid) (newNext.X * s + mid) (newNext.Y * s + mid)
+                )
+
+                line (
+                    sprintf
+                        "  <text x=\"%d\" y=\"%d\" font-family=\"monospace\" font-size=\"9\" fill=\"#2f855a\">D%d</text>"
                         (cell.X * s + 1)
                         (cell.Y * s + s - 2)
                         (AgentId.value agent)

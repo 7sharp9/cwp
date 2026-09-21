@@ -211,3 +211,26 @@ module Terrain =
             t.Cover.[indexOf t c * 4 + Direction.index d]
         else
             0
+
+    /// A copy of `t` with every cell in `cells` forced `Impassable`,
+    /// leaving `Elevation`/`MoveCost`/`Opaque`/`Cover` untouched (TASK-070,
+    /// backlog B-069). An out-of-bounds cell in `cells` is ignored, the
+    /// `passable`/`moveCost` "out of bounds behaves like blocked" idiom
+    /// applied here as "already blocked, nothing to change".
+    ///
+    /// This exists so `Simulation.navigationAndMovement` can ask
+    /// `Pathfinding.findWithin` a "what if these currently-occupied cells
+    /// were walls" question for one throwaway query, without
+    /// `Pathfinding.fs` itself gaining any concept of agent occupancy: the
+    /// occupancy signal is expressed entirely as an ordinary `Terrain`
+    /// value, the same input `Pathfinding` already accepts. The result is
+    /// a new value; `t` itself is never mutated (`Movement` is copied, not
+    /// written in place).
+    let withImpassable (cells: Cell seq) (t: Terrain) : Terrain =
+        let movement = Array.copy t.Movement
+
+        for c in cells do
+            if GridBounds.contains c t.Bounds then
+                movement.[indexOf t c] <- Impassable
+
+        { t with Movement = movement }

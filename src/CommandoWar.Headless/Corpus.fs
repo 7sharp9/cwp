@@ -497,16 +497,46 @@ module Corpus =
 
     /// One friendly agent at (0,0) ordered east to (4,0); agent 1 sits idle,
     /// permanently, on the only route at (2,0) (TASK-065, backlog B-065;
-    /// docs/10 R-010). Agent 0 advances one cell to (1,0), then freezes
-    /// (`MovementObstructed`) every tick against agent 1, which never
-    /// vacates -- exactly `swap-standoff`'s own shape, but with a genuinely
-    /// permanent single-sided block rather than a mutual one, run long
-    /// enough (`Simulation.StallAbandonTicks = 40`) to reach the give-up
+    /// docs/10 R-010). Row `y = 1` is walled off the full width of the map
+    /// (TASK-070, backlog B-069): on open terrain agent 0 would now detour
+    /// around agent 1 and reach (4,0) for real (proved by the new
+    /// `chokepoint-detour` entry below), so this entry -- whose whole
+    /// purpose is to demonstrate the genuine give-up path -- needs the wall
+    /// to keep that route truly the *only* one. Agent 0 advances one cell
+    /// to (1,0), then freezes (`MovementObstructed`) every tick against
+    /// agent 1, which never vacates and has no detour to try -- exactly
+    /// `swap-standoff`'s own shape, but with a genuinely permanent
+    /// single-sided block rather than a mutual one, run long enough
+    /// (`Simulation.StallAbandonTicks = 40`) to reach the give-up
     /// transition: at tick 41 agent 0 abandons the order outright
     /// (`MovementAbandoned`), `Destination`/`Route` clear, and it settles
     /// one cell short of the blocker for good instead of retrying forever.
     let private stalledOrderAbandonedSpec: ScenarioSpec =
         { Id = "corpus-stalled-order-abandoned"
+          Width = 8
+          Height = 8
+          Friendly = [ agent 0 { X = 0; Y = 0 }; agent 1 { X = 2; Y = 0 } ]
+          Enemies = []
+          Terrain = [ for x in 0..7 -> wall x 1 ]
+          Objective = { X = 7; Y = 7 }
+          Extraction = { X = 0; Y = 7 }
+          Resupply = None
+          Headquarters = None
+          Jammers = []
+          Formations = []
+          Orders = [ order 1L 0 { X = 4; Y = 0 } ] }
+
+    /// One friendly agent at (0,0) ordered east to (4,0); agent 1 sits idle,
+    /// permanently, on the only *direct* route at (2,0), on genuinely open
+    /// terrain (TASK-070, backlog B-069; docs/10 R-010 "reservation
+    /// deadlocks", the live-agent chokepoint jam TASK-066/067/068 each
+    /// independently found and left open). Unlike `stalled-order-abandoned`
+    /// (walled into a true corridor so it can still prove the give-up
+    /// path), a real alternate route exists here, so agent 0 detours around
+    /// agent 1 (`MovementRerouted`) instead of stalling toward abandonment,
+    /// and reaches (4,0) for real.
+    let private chokepointDetourSpec: ScenarioSpec =
+        { Id = "corpus-chokepoint-detour"
           Width = 8
           Height = 8
           Friendly = [ agent 0 { X = 0; Y = 0 }; agent 1 { X = 2; Y = 0 } ]
@@ -1098,16 +1128,30 @@ module Corpus =
            { Name = "stalled-order-abandoned"
              Description =
                "One friendly agent at (0,0) ordered east to (4,0); a second friendly agent sits idle, "
-               + "permanently, on the only route at (2,0) (TASK-065, backlog B-065). Agent 0 advances to (1,0) "
-               + "on tick 1, then freezes every tick against the stationary occupant (MovementObstructed) -- "
-               + "swap-standoff's own single-sided case, but genuinely permanent. Run long enough to reach "
-               + "Simulation.StallAbandonTicks (40): at tick 41 the order is abandoned outright "
-               + "(MovementAbandoned), Destination/Route clear, and agent 0 settles one cell short of the "
-               + "blocker for good instead of retrying forever."
-             InitialStateNote = "Corpus stalled-order-abandoned scenario (8 x 8, seed 20260904, 2 friendlies)"
+               + "permanently, on the only route at (2,0), row y=1 walled off the full map width so no "
+               + "detour exists (TASK-065, backlog B-065; walled TASK-070, backlog B-069, so it keeps "
+               + "demonstrating genuine abandonment once open terrain would otherwise let agent 0 detour -- "
+               + "see chokepoint-detour below). Agent 0 advances to (1,0) on tick 1, then freezes every tick "
+               + "against the stationary occupant (MovementObstructed) -- swap-standoff's own single-sided "
+               + "case, but genuinely permanent. Run long enough to reach Simulation.StallAbandonTicks (40): "
+               + "at tick 41 the order is abandoned outright (MovementAbandoned), Destination/Route clear, "
+               + "and agent 0 settles one cell short of the blocker for good instead of retrying forever."
+             InitialStateNote = "Corpus stalled-order-abandoned scenario (8 x 8, seed 20260904, 2 friendlies, walled corridor)"
              InitialState = fun () -> worldOfSpec stalledOrderAbandonedSpec
              TickCount = 42L
-             Commands = Some(commandsOfSpec stalledOrderAbandonedSpec) } |]
+             Commands = Some(commandsOfSpec stalledOrderAbandonedSpec) }
+           { Name = "chokepoint-detour"
+             Description =
+               "The identical setup to stalled-order-abandoned, but on open terrain (no wall) -- one "
+               + "friendly agent at (0,0) ordered east to (4,0), a second idle, permanently, at (2,0) "
+               + "(TASK-070, backlog B-069; docs/10 R-010, the live-agent chokepoint jam TASK-066/067/068 "
+               + "each independently found and left open). A genuine alternate route exists, so agent 0 "
+               + "detours around agent 1 (MovementRerouted) instead of stalling toward eventual abandonment, "
+               + "and reaches (4,0) for real by tick 7."
+             InitialStateNote = "Corpus chokepoint-detour scenario (8 x 8, seed 20260904, 2 friendlies, open terrain)"
+             InitialState = fun () -> worldOfSpec chokepointDetourSpec
+             TickCount = 10L
+             Commands = Some(commandsOfSpec chokepointDetourSpec) } |]
 
     // --- entry paths and loading ----------------------------------------
 

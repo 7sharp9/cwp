@@ -616,6 +616,27 @@ let private occWorld (cells: Cell list) : WorldState =
     | Ok w -> w
     | Error e -> failwith $"unexpected {e}"
 
+/// The `occWorld` shape, walled into a genuine one-row-wide corridor along
+/// `y = 0` (row `y = 1` forced `Impassable` the full width of `bounds`, so
+/// there is no route around anything placed on row 0 at all -- TASK-070,
+/// backlog B-069). `occWorld`'s own 8x8-open terrain lets an obstructed
+/// agent always route around a single parked blocker (open terrain almost
+/// never has no detour); this fixture is for the facts that specifically
+/// need "no possible detour exists" to hold.
+let private corridorWorld (cells: Cell list) : WorldState =
+    let wall =
+        Terrain.build
+            bounds
+            [| for x in 0 .. bounds.Width - 1 ->
+                   { Cell = { X = x; Y = 1 }
+                     Movement = Impassable
+                     Elevation = 0
+                     MoveCost = 0
+                     Opaque = false } |]
+            [||]
+
+    { occWorld cells with Terrain = wall }
+
 /// Every live agent holds a distinct cell.
 let private distinctCells (s: WorldState) =
     let ps = s.Agents |> Array.map (fun a -> a.Position)
@@ -629,10 +650,16 @@ let private obstructedBodies (r: StepResult) =
 
 [<Fact>]
 let ``a mover whose only route runs through a permanently idle agent never enters that cell and emits MovementObstructed`` () =
-    // Agent 0 at (0,0) -> (4,0); agent 1 idle on the route at (2,0).
+    // Agent 0 at (0,0) -> (4,0); agent 1 idle on the route at (2,0), in the
+    // one-row corridor (TASK-070, backlog B-069): on `occWorld`'s own open
+    // 8x8 terrain a detour around one parked blocker always exists, so
+    // this fact -- which specifically needs "no possible detour" to prove
+    // the freeze-forever fallback still works -- must wall off row `y = 1`
+    // to remove that detour. The open-terrain case (a detour genuinely
+    // exists and is taken) is proved separately below.
     let a = agent 0
     let b = agent 1
-    let w = occWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 } ]
+    let w = corridorWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 } ]
     let r0 = stepWith [| cmd 1 a { X = 4; Y = 0 } |] w
     let mutable st = r0.State
     let mutable sawObstructed = obstructedBodies r0 |> Array.isEmpty |> not
@@ -756,11 +783,26 @@ let ``two agents converging on a cell held by a stationary third never enter it 
     // Agent 2 idle at (3,3). Agent 0 at (1,3) -> (5,3) and agent 1 at (3,1) ->
     // (3,5) both route through (3,3): stage 2a picks one candidate (rival),
     // stage 2b obstructs it on the stationary occupant. Neither enters (3,3).
+    //
+    // TASK-070 (backlog B-069), found and honestly recorded, not smoothed
+    // over: on this open 8x8 terrain, each obstructed agent successfully
+    // reroutes around agent 2 in turn (`MovementRerouted`, asserted below)
+    // -- but their independently-computed detours are not coordinated with
+    // each other, and both happen to prefer the same alternate cell,
+    // producing a *new*, genuine mutual obstruction between agent 0 and
+    // agent 1 themselves (the `swap-standoff` shape) once they reroute.
+    // Neither agent's blocker is itself parked at that point (both hold
+    // active orders), so this task's detour deliberately does not fire
+    // again for it -- the original assertions (neither ever enters (3,3);
+    // a rival yield and an eventual stationary-occupant obstruction both
+    // occur somewhere in the run) still hold, just via one extra step, so
+    // this fact is strengthened rather than replaced.
     let w = occWorld [ { X = 1; Y = 3 }; { X = 3; Y = 1 }; { X = 3; Y = 3 } ]
     let r0 = stepWith [| cmd 1 (agent 0) { X = 5; Y = 3 }; cmd 2 (agent 1) { X = 3; Y = 5 } |] w
     let mutable st = r0.State
     let mutable sawYield = false
     let mutable sawObstruct = false
+    let mutable sawRerouted = false
 
     for _ in 0..9 do
         distinctCells st
@@ -770,10 +812,12 @@ let ``two agents converging on a cell held by a stationary third never enter it 
         let r = stepIdle st
         sawYield <- sawYield || (bodies r |> Array.exists (function MovementYielded _ -> true | _ -> false))
         sawObstruct <- sawObstruct || (bodies r |> Array.exists (function MovementObstructed _ -> true | _ -> false))
+        sawRerouted <- sawRerouted || (bodies r |> Array.exists (function MovementRerouted _ -> true | _ -> false))
         st <- r.State
 
     Assert.True(sawYield, "expected a MovementYielded from the rival contest")
-    Assert.True(sawObstruct, "expected a MovementObstructed on the stationary occupant")
+    Assert.True(sawRerouted, "expected both agents to detour around agent 2 in turn")
+    Assert.True(sawObstruct, "expected a MovementObstructed once the two rerouted agents block each other")
 
 // --- Visible stall failure (TASK-065, backlog B-065) --------------------
 
@@ -806,8 +850,11 @@ let ``a same-tick yield that clears within a few ticks never aborts the order`` 
 [<Fact>]
 let ``an order permanently obstructed by a stationary agent is abandoned after StallAbandonTicks ticks`` () =
     // The permanent-obstruction setup from above (a mover whose only route
-    // runs through a permanently idle agent): agent 0 at (0,0) -> (4,0),
-    // agent 1 idle on the route at (2,0). Left running past
+    // runs through a permanently idle agent), in the same one-row corridor
+    // (TASK-070, backlog B-069): agent 0 at (0,0) -> (4,0), agent 1 idle on
+    // the route at (2,0), with row `y = 1` walled off so no detour is
+    // possible (open terrain would let agent 0 route around agent 1
+    // instead -- proved separately below). Left running past
     // Simulation.StallAbandonTicks (40, not exposed -- asserted here by its
     // observed effect, the `AGENTS.md` "reappraise only on material
     // triggers" precedent of testing behaviour, not internals), the order
@@ -816,7 +863,7 @@ let ``an order permanently obstructed by a stationary agent is abandoned after S
     // leave agent 0 genuinely at rest one cell short of the blocker.
     let a = agent 0
     let b = agent 1
-    let w = occWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 } ]
+    let w = corridorWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 } ]
     let r0 = stepWith [| cmd 1 a { X = 4; Y = 0 } |] w
     let mutable st = r0.State
     let mutable abandonedEvents: EventBody[] = [||]
@@ -851,6 +898,84 @@ let ``an order permanently obstructed by a stationary agent is abandoned after S
         | MovementStepped _ -> true
         | _ -> false)
     )
+
+// --- Detour around a parked agent (TASK-070, backlog B-069) -------------
+
+[<Fact>]
+let ``an agent obstructed by a parked agent with a real detour available reroutes instead of stalling`` () =
+    // The identical setup the two facts above use, but on `occWorld`'s own
+    // open 8x8 terrain (no corridor wall): agent 0 at (0,0) -> (4,0), agent
+    // 1 idle (parked, no active order) on the route at (2,0). A genuine
+    // alternate route around (2,0) exists here, so this task's fix finds
+    // it and adopts it instead of freezing toward eventual abandonment --
+    // MovementRerouted fires, naming agent 1 as the avoided blocker, and
+    // agent 0 goes on to reach its original (4,0) destination for real.
+    let a = agent 0
+    let b = agent 1
+    let w = occWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 } ]
+    let r0 = stepWith [| cmd 1 a { X = 4; Y = 0 } |] w
+    let mutable st = r0.State
+    let mutable reroutedEvents: EventBody[] = [||]
+    let mutable sawAbandoned = false
+
+    for _ in 1..20 do
+        let r = stepIdle st
+        reroutedEvents <-
+            Array.append reroutedEvents (bodies r |> Array.filter (function MovementRerouted _ -> true | _ -> false))
+        sawAbandoned <- sawAbandoned || (bodies r |> Array.exists (function MovementAbandoned _ -> true | _ -> false))
+        st <- r.State
+
+    Assert.False(sawAbandoned, "a detour was available, so the order must never be abandoned")
+    Assert.Contains(reroutedEvents, (function MovementRerouted(agentId, _, _, avoided) -> agentId = a && avoided = b | _ -> false))
+    Assert.Equal({ X = 4; Y = 0 }, (agentOf a st).Position)
+    Assert.Equal(None, (agentOf a st).Destination)
+    Assert.Equal({ X = 2; Y = 0 }, (agentOf b st).Position) // b, parked, never moved
+
+[<Fact>]
+let ``two jointly-ordered formationed agents through a shared chokepoint both reach their own resolved slots`` () =
+    // The TASK-068 repro shape: two agents start adjacent, are jointly
+    // ordered (one Command.moveToMany, ReceivedOrder.AsGroup true) to a
+    // shared cell, and their formation-resolved destinations sit one cell
+    // apart along the same line of travel -- so the leading agent's own
+    // permanent, settled destination sits directly on the trailing agent's
+    // route to its own destination. Before TASK-070 the trailing agent
+    // stalled against the leading one and was abandoned one cell short
+    // (TASK-068's own recorded finding); after it, the trailing agent
+    // reroutes around the leading agent's settled cell and reaches its own
+    // full resolved slot instead.
+    let a = agent 0
+    let b = agent 1
+
+    let agents =
+        [ { Agent.create a Friendly { X = 0; Y = 4 } with FormationOffset = Some { X = -1; Y = 0 } }
+          { Agent.create b Friendly { X = 0; Y = 5 } with FormationOffset = Some { X = 1; Y = 0 } } ]
+
+    let w =
+        match World.create bounds 1UL agents with
+        | Ok w -> w
+        | Error e -> failwith $"unexpected {e}"
+
+    let order = Command.moveToMany (CommandId.ofInt 1) 0L [ a; b ] { X = 6; Y = 4 } Routine Standard
+    let r0 = stepWith [| order |] w
+    // Formation resolution (Appraisal.resolveFormationTarget) gives each
+    // agent its own distinct destination along the offset axis, not the
+    // literal shared (6,4) click.
+    Assert.Equal(Some { X = 5; Y = 4 }, (agentOf a r0.State).Destination)
+    Assert.Equal(Some { X = 7; Y = 4 }, (agentOf b r0.State).Destination)
+
+    let mutable st = r0.State
+    let mutable sawAbandoned = false
+
+    for _ in 1..150 do
+        let r = stepIdle st
+        sawAbandoned <- sawAbandoned || (bodies r |> Array.exists (function MovementAbandoned _ -> true | _ -> false))
+        st <- r.State
+
+    Assert.False(sawAbandoned, "both agents' own resolved slots must be reachable via a detour")
+    Assert.Equal({ X = 5; Y = 4 }, (agentOf a st).Position)
+    Assert.Equal({ X = 7; Y = 4 }, (agentOf b st).Position)
+    Assert.Equal(None, (agentOf a st).Destination)
+    Assert.Equal(None, (agentOf b st).Destination)
 
 // --- Corpses vacate for movement (TASK-066, backlog B-066) --------------
 

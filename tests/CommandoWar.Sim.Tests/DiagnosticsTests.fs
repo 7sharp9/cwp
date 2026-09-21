@@ -424,6 +424,7 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | PlannedPath _
         | Obstructed _
         | Abandoned _
+        | Rerouted _
         | UndeliveredOrder _
         | KnownContact _
         | OrderAppraisal _
@@ -480,6 +481,7 @@ let ``frameOf derives an AgentFormationSlot overlay per formationed agent for th
             | Reserved _
             | Obstructed _
             | Abandoned _
+            | Rerouted _
             | UndeliveredOrder _
             | KnownContact _
             | OrderAppraisal _
@@ -556,6 +558,7 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | PlannedPath _
             | Reserved _
             | Abandoned _
+            | Rerouted _
             | UndeliveredOrder _
             | KnownContact _
             | OrderAppraisal _
@@ -606,6 +609,7 @@ let ``frameOf derives an Abandoned overlay for the stalled-order-abandoned entry
         | PlannedPath _
         | Reserved _
         | Obstructed _
+        | Rerouted _
         | UndeliveredOrder _
         | KnownContact _
         | OrderAppraisal _
@@ -634,6 +638,71 @@ let ``frameOf derives an Abandoned overlay for the stalled-order-abandoned entry
 
     Assert.Equal(golden "stalled-order-abandoned-tick-041.ascii.txt", DiagnosticRender.Ascii tick41)
     Assert.Equal(golden "stalled-order-abandoned-tick-041.svg", DiagnosticRender.Svg tick41)
+
+// --- chokepoint detour: the chokepoint-detour corpus entry (TASK-070, backlog B-069) --
+
+let private chokepointDetourFrames () =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = "chokepoint-detour")
+
+    match Corpus.commandsOf corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+[<Fact>]
+let ``frameOf derives a Rerouted overlay for the chokepoint-detour entry's detour tick (byte-equal to the goldens)`` () =
+    // Tick 1: agent 0 steps to (1,0), its route's next cell now (2,0),
+    // agent 1's parked cell. Tick 2: agent 0's cached route is obstructed
+    // by agent 1 -- but unlike stalled-order-abandoned, this entry's
+    // terrain is open, so a genuine detour exists and frameOf derives one
+    // Rerouted overlay instead of an Obstructed.
+    let frames = chokepointDetourFrames ()
+    let tick2 = frames.[2]
+
+    match tick2.Overlays |> Array.tryPick (function
+        | Rerouted(agent, cell, newNext, avoided) -> Some(agent, cell, newNext, avoided)
+        | Cells _
+        | SightRay _
+        | PlannedPath _
+        | Reserved _
+        | Obstructed _
+        | Abandoned _
+        | UndeliveredOrder _
+        | KnownContact _
+        | OrderAppraisal _
+        | AgentCommitment _
+        | FireLine _
+        | AgentSuppression _
+        | AgentStress _
+        | HostileKnownContact _
+        | AgentOrderQueue _
+        | AgentVitals _
+        | SquadLeadership _
+        | AgentAmmo _
+        | Divergence _
+        | AgentRadioLost _
+        | AgentPendingDelivery _
+        | AgentFormationSlot _
+        | MissionStatus _ -> None) with
+    | Some(agent, cell, newNext, avoided) ->
+        Assert.Equal(AgentId.ofInt 0, agent)
+        Assert.Equal({ X = 1; Y = 0 }, cell)
+        Assert.Equal({ X = 1; Y = 1 }, newNext)
+        Assert.Equal(AgentId.ofInt 1, avoided)
+    | None -> Assert.Fail($"expected one Rerouted overlay, got {tick2.Overlays}")
+
+    Assert.Contains(tick2.Events, fun (e: EventMarker) -> e.Kind = "movement-rerouted")
+
+    // By the final tick agent 0 has genuinely arrived, not merely
+    // abandoned one cell short -- the whole point of the detour.
+    let final = frames.[frames.Length - 1]
+    Assert.Equal({ X = 4; Y = 0 }, (final.Agents |> Array.find (fun a -> AgentId.value a.Id = 0)).Cell)
+    Assert.DoesNotContain(
+        frames |> Array.collect (fun f -> f.Events),
+        (fun (e: EventMarker) -> e.Kind = "movement-abandoned")
+    )
+
+    Assert.Equal(golden "chokepoint-detour-tick-002.ascii.txt", DiagnosticRender.Ascii tick2)
+    Assert.Equal(golden "chokepoint-detour-tick-002.svg", DiagnosticRender.Svg tick2)
 
 // --- perception: the perception-contact corpus entry (TASK-026) --------
 
@@ -665,6 +734,7 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | Reserved _
             | Obstructed _
             | Abandoned _
+            | Rerouted _
             | UndeliveredOrder _
             | OrderAppraisal _
             | AgentCommitment _
@@ -756,6 +826,7 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | Reserved _
             | Obstructed _
             | Abandoned _
+            | Rerouted _
             | KnownContact _
             | OrderAppraisal _
             | AgentCommitment _

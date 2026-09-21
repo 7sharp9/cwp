@@ -1,6 +1,6 @@
 # Replay corpus entry: stalled-order-abandoned
 
-One friendly agent at (0,0) ordered east to (4,0); a second friendly agent sits idle, permanently, on the only route at (2,0) (TASK-065, backlog B-065). Agent 0 advances to (1,0) on tick 1, then freezes every tick against the stationary occupant (MovementObstructed) -- swap-standoff's own single-sided case, but genuinely permanent. Run long enough to reach Simulation.StallAbandonTicks (40): at tick 41 the order is abandoned outright (MovementAbandoned), Destination/Route clear, and agent 0 settles one cell short of the blocker for good instead of retrying forever.
+One friendly agent at (0,0) ordered east to (4,0); a second friendly agent sits idle, permanently, on the only route at (2,0), row y=1 walled off the full map width so no detour exists (TASK-065, backlog B-065; walled TASK-070, backlog B-069, so it keeps demonstrating genuine abandonment once open terrain would otherwise let agent 0 detour -- see chokepoint-detour below). Agent 0 advances to (1,0) on tick 1, then freezes every tick against the stationary occupant (MovementObstructed) -- swap-standoff's own single-sided case, but genuinely permanent. Run long enough to reach Simulation.StallAbandonTicks (40): at tick 41 the order is abandoned outright (MovementAbandoned), Destination/Route clear, and agent 0 settles one cell short of the blocker for good instead of retrying forever.
 
 Regenerate every corpus hash table from the repository root:
 
@@ -14,7 +14,7 @@ See `content/replays/CORPUS.md`.
 | Parameter | Value |
 |---|---|
 | Command log | `stalled-order-abandoned.cwreplay` |
-| Initial state | Corpus stalled-order-abandoned scenario (8 x 8, seed 20260904, 2 friendlies) |
+| Initial state | Corpus stalled-order-abandoned scenario (8 x 8, seed 20260904, 2 friendlies, walled corridor) |
 | Tick count | 42 |
 | Initial hash (tick 0) | `0x745B1AE1EC2F01C1` |
 | Final hash (tick 42) | `0xD584A5D6F6CCC8BF` |

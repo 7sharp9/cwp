@@ -191,6 +191,18 @@ type Overlay =
     /// `Diagnostics.frameOf` derives one per `MovementAbandoned` event this
     /// tick; `Diagnostics.frame` never emits one.
     | Abandoned of agent: AgentId * cell: Cell * abandonedTarget: Cell
+    /// A movement order rerouted around a permanently parked agent this
+    /// tick (TASK-070, backlog B-069; docs/10 R-010 "reservation
+    /// deadlocks"): `agent`, at `cell`, had its cached route obstructed by
+    /// `avoided` — an agent with no active order, never going to vacate —
+    /// and a genuine alternate route to the unchanged destination was
+    /// found and adopted instead of freezing toward eventual `Abandoned`.
+    /// `newNext` is the first cell of the new route. Distinct from
+    /// `Obstructed` (no reroute was found or attempted for that tick) and
+    /// `Abandoned` (no route was ever found, so the order was given up
+    /// instead). `Diagnostics.frameOf` derives one per `MovementRerouted`
+    /// event this tick; `Diagnostics.frame` never emits one.
+    | Rerouted of agent: AgentId * cell: Cell * newNext: Cell * avoided: AgentId
     /// One contact in the friendly squad's shared tactical picture (TASK-026,
     /// `WorldState.TacticalKnowledge`, docs/04 section 12.4): `contact` was
     /// last seen at `cell` on tick `lastSeenTick` with `confidence` on the
@@ -472,6 +484,8 @@ module Diagnostics =
             { Kind = "movement-obstructed"; Cells = [| at; blocked |]; Agents = [| agent; occupant |] }
         | MovementAbandoned(agent, at, target) ->
             { Kind = "movement-abandoned"; Cells = [| at; target |]; Agents = [| agent |] }
+        | MovementRerouted(agent, at, newNext, avoided) ->
+            { Kind = "movement-rerouted"; Cells = [| at; newNext |]; Agents = [| agent; avoided |] }
         | ContactObserved(observer, contact, at) ->
             { Kind = "contact-observed"; Cells = [| at |]; Agents = [| observer; contact |] }
         | ContactExpired(contact, lastKnownCell) ->
@@ -775,6 +789,7 @@ module Diagnostics =
             | MovementBlocked _
             | MovementObstructed _
             | MovementAbandoned _
+            | MovementRerouted _
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
@@ -817,6 +832,7 @@ module Diagnostics =
             | MovementBlocked _
             | MovementYielded _
             | MovementAbandoned _
+            | MovementRerouted _
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
@@ -859,6 +875,7 @@ module Diagnostics =
             | MovementBlocked _
             | MovementYielded _
             | MovementObstructed _
+            | MovementRerouted _
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
@@ -875,6 +892,49 @@ module Diagnostics =
             | MissionFailed -> None)
         |> Array.distinctBy (fun (agent, _, _) -> agent)
         |> Array.map (fun (agent, at, target) -> Abandoned(agent, at, target))
+
+    /// A `Rerouted` overlay per agent whose obstructed order was routed
+    /// around a permanently parked agent this tick (TASK-070, backlog
+    /// B-069), derived from this tick's `MovementRerouted` events — one
+    /// entry per distinct agent, in ascending agent id order (the standing
+    /// movement-event order). The `abandonedOverlays` precedent.
+    let private reroutedOverlays (result: StepResult) : Overlay[] =
+        result.Events
+        |> Array.choose (fun e ->
+            match e.Body with
+            | MovementRerouted(agent, at, newNext, avoided) -> Some(agent, at, newNext, avoided)
+            | CommandAccepted _
+            | CommandRejected _
+            | OrderUndelivered _
+            | OrderDelivered _
+            | OrderQueued _
+            | OrderCancelled _
+            | OrderAppraised _
+            | CommitmentEstablished _
+            | CommitmentCompleted _
+            | ShotFired _
+            | MovementStepped _
+            | MovementCompleted _
+            | MovementBlocked _
+            | MovementYielded _
+            | MovementObstructed _
+            | MovementAbandoned _
+            | ContactObserved _
+            | ContactExpired _
+            | AgentIncapacitated _
+            | AgentRadioDestroyed _
+            | AgentDied _
+            | LeadershipTransferred _
+            | SquadFailure
+            | ReloadStarted _
+            | ReloadCompleted _
+            | AgentResupplied _
+            | AgentExtracted _
+            | ObjectiveCompleted _
+            | MissionSucceeded
+            | MissionFailed -> None)
+        |> Array.distinctBy (fun (agent, _, _, _) -> agent)
+        |> Array.map (fun (agent, at, newNext, avoided) -> Rerouted(agent, at, newNext, avoided))
 
     /// An `UndeliveredOrder` overlay per recipient that could not be reached
     /// this tick (TASK-027), derived from this tick's `OrderUndelivered`
@@ -903,6 +963,7 @@ module Diagnostics =
             | MovementYielded _
             | MovementObstructed _
             | MovementAbandoned _
+            | MovementRerouted _
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
@@ -947,6 +1008,7 @@ module Diagnostics =
             | MovementYielded _
             | MovementObstructed _
             | MovementAbandoned _
+            | MovementRerouted _
             | ContactObserved _
             | ContactExpired _
             | AgentIncapacitated _
@@ -981,7 +1043,9 @@ module Diagnostics =
     /// (TASK-032), an `AgentStress` overlay per agent with non-zero stress
     /// (TASK-033), a `HostileKnownContact` overlay per Hostile-picture contact
     /// (TASK-034), an `Abandoned` overlay per agent whose permanently
-    /// stalled order was given up on this tick (TASK-065), and the post-step
+    /// stalled order was given up on this tick (TASK-065), a `Rerouted`
+    /// overlay per agent whose obstructed order was routed around a
+    /// permanently parked agent this tick (TASK-070), and the post-step
     /// canonical hash recorded on the `StepResult`. Total, pure,
     /// deterministic.
     let frameOf (result: StepResult) : DiagnosticFrame =
@@ -993,6 +1057,7 @@ module Diagnostics =
                       reservationOverlays result
                       obstructionOverlays result
                       abandonedOverlays result
+                      reroutedOverlays result
                       undeliveredOrderOverlays result
                       knownContactOverlays result.State
                       orderAppraisalOverlays result.State

@@ -231,6 +231,32 @@ and movement phase (12.7, `src/CommandoWar.Sim/Simulation.fs`) consumes
   new `MovementAbandoned` event fires in place of that tick's usual
   `MovementYielded`/`MovementObstructed` — turning a silent, permanent freeze
   into a visible failure instead of resolving the contention itself.
+- **Detour around a parked blocker (TASK-070, backlog B-069):** TASK-065's
+  give-up above converts a permanent stall into a visible failure but does
+  not resolve it — three independent tasks (TASK-066, TASK-067, TASK-068)
+  went on to find and reproduce the same live-agent chokepoint jam this
+  materialises. Before freezing against a stationary occupant that itself
+  holds no active order (`Destination = None`, so it will never vacate on
+  its own — an actively-ordered blocker that simply did not vacate this
+  exact tick is left to the freeze/give-up path above unchanged), the phase
+  now tries one detour: `Pathfinding.findWithin` — its own public contract
+  untouched, still a pure function of `Terrain` and two `Cell`s — is called
+  against a locally patched, throwaway `Terrain` value
+  (`Terrain.withImpassable`) that marks every currently-parked agent's cell
+  impassable. If a genuine alternate route is found, it is adopted
+  (`MovementRerouted`, `AgentState.StalledTicks` reset to 0, no movement
+  that same tick); if not, the existing freeze-then-abandon path applies
+  exactly as before. `Pathfinding.fs` itself gains no occupancy parameter
+  and no space-time search — the occupancy signal lives entirely in this
+  phase, the same "(a) over (b)" choice TASK-065 made, now doing more work
+  within it. **Known limitation, found and recorded, not smoothed over:**
+  each obstructed agent's detour is computed independently, with no
+  coordination between agents planning at the same time — two agents
+  rerouting around the same single parked blocker can independently choose
+  the same alternate cell and obstruct *each other* instead (the
+  `swap-standoff` shape), which this task does not resolve further (neither
+  blocker is itself parked, so no further detour is attempted; the existing
+  give-up path still bounds it).
 
 `AgentState.Route` (the followed path + cursor + cost) is a **non-canonical
 derived cache**: a pure deterministic function of `(Position, Destination,

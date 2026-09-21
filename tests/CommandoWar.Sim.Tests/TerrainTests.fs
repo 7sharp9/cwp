@@ -95,6 +95,43 @@ let ``cover is directional: level 2 from the north only, 0 elsewhere, 0 out of b
     Assert.Equal(0, Terrain.cover t { X = 4; Y = 4 } North)
     Assert.Equal(0, Terrain.cover t { X = 99; Y = 0 } North)
 
+// --- withImpassable (TASK-070, backlog B-069) -----------------------
+
+[<Fact>]
+let ``withImpassable forces the given cells Impassable and leaves every other field untouched`` () =
+    let t = handBuilt ()
+    let patched = Terrain.withImpassable [ { X = 5; Y = 5 }; { X = 1; Y = 1 } ] t
+
+    Assert.False(Terrain.passable patched { X = 5; Y = 5 })
+    Assert.False(Terrain.passable patched { X = 1; Y = 1 })
+    // Every other query is unaffected: the pre-existing impassable cell,
+    // elevation, opacity, and cover data all survive the patch verbatim.
+    Assert.False(Terrain.passable patched { X = 2; Y = 2 })
+    Assert.Equal(4, Terrain.elevation patched { X = 3; Y = 3 })
+    Assert.True(Terrain.opaque patched { X = 3; Y = 3 })
+    Assert.Equal(2, Terrain.cover patched { X = 5; Y = 5 } North)
+    // The source value is not mutated in place.
+    Assert.True(Terrain.passable t { X = 5; Y = 5 })
+
+[<Fact>]
+let ``withImpassable ignores an out-of-bounds cell rather than throwing`` () =
+    let t = Terrain.empty bounds
+    let patched = Terrain.withImpassable [ { X = -1; Y = 0 }; { X = 99; Y = 99 } ] t
+
+    Assert.False(Terrain.passable patched { X = -1; Y = 0 }) // out of bounds either way
+    Assert.True(Terrain.passable patched { X = 0; Y = 0 }) // untouched elsewhere
+
+[<Fact>]
+let ``withImpassable with an empty cell set returns terrain behaviourally identical to the input`` () =
+    let t = handBuilt ()
+    let patched = Terrain.withImpassable [] t
+
+    for y in 0 .. bounds.Height - 1 do
+        for x in 0 .. bounds.Width - 1 do
+            let c = { X = x; Y = y }
+            Assert.Equal(Terrain.passable t c, Terrain.passable patched c)
+            Assert.Equal(Terrain.moveCost t c, Terrain.moveCost patched c)
+
 // --- terrain is excluded from the canonical image ------------------
 
 [<Fact>]

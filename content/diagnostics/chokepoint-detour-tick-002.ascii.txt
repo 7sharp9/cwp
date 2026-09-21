@@ -1,10 +1,10 @@
 # CommandoWar diagnostic frame
-tick 41
+tick 2
 
             
     01234567
-  0 .@@.....
-  1 ########
+  0 .@@+G...
+  1 .+++....
   2 ........
   3 ........
   4 ........
@@ -30,18 +30,19 @@ legend:
 movement-cost: uniform
 
 agents:
-  agent 0  friendly  (1,0)  at rest
+  agent 0  friendly  (1,0)  -> (4,0)
   agent 1  friendly  (2,0)  at rest
 
 overlays:
-  abandoned (1,0): agent 0 gave up on (4,0)
+  path (1,0) -> (4,0): reached, cost 5
+  rerouted (1,0): agent 0 -> (1,1) (avoided agent 1)
   order appraisal (1,0): agent 0  accepted
-  commitment (1,0): agent 0  holding
+  commitment (1,0): agent 0  moving to (4,0)
   commitment (2,0): agent 1  holding
   vitals (1,0): agent 0  alive 1000/1000
   vitals (2,0): agent 1  alive 1000/1000
   squad leader: agent 0
 
-events: movement-abandoned@(1,0),(4,0)
+events: movement-rerouted@(1,0),(1,1)
 
-tick 41 | hash 0xA35517BD105CB608 (format 15) | draws 0 | agents 2 | cover-edges 0 | events 1
+tick 2 | hash 0xF79B1CF77362D804 (format 15) | draws 0 | agents 2 | cover-edges 0 | events 1

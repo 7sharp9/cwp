@@ -1577,6 +1577,20 @@ module Simulation =
             |> Array.choose (fun (i, a) -> if Casualty.isAlive a.Vitals then Some(a.Position, i) else None)
             |> Map.ofArray
 
+        // Every currently `Alive` agent's cell that holds no active order at
+        // all (`Destination = None`) — TASK-070, backlog B-069. Such an
+        // agent will never vacate its cell on its own, unlike a merely-
+        // not-vacating-*this-tick* mover with an active order (which may
+        // still move next tick or the tick after, left to the existing
+        // freeze below unchanged). Read from `s.Agents`, the pre-tick
+        // array, not the local `agents` copy Pass 3 mutates in place below
+        // — at this point in the function they are still identical, but
+        // this makes the intent (pre-tick truth, regardless of Pass 3
+        // iteration order) explicit rather than incidental.
+        let parkedCells: Cell[] =
+            s.Agents
+            |> Array.choose (fun a -> if Casualty.isAlive a.Vitals && a.Destination.IsNone then Some a.Position else None)
+
         // Candidate movers: completing `Advancing` agents that did not lose a
         // rival contest (at most one per target cell), as `(idx, next cell)`.
         let candidateMovers: (int * Cell)[] =
@@ -1705,34 +1719,89 @@ module Simulation =
                 | None ->
                     match Map.tryFind idx obstructedBy with
                     | Some occupantId ->
-                        let stalledTicks = nextStalledTicks freshRoute
+                        // TASK-070 (backlog B-069): before freezing, try one
+                        // detour around every currently-parked agent's cell
+                        // when the specific blocker is itself parked (no
+                        // active order, so it will never vacate `next` on
+                        // its own — an actively-ordered blocker that simply
+                        // didn't vacate this exact tick is left to the
+                        // freeze below unchanged, since it may still move
+                        // next tick or the tick after). `Pathfinding.
+                        // findWithin` itself is unmodified and gains no
+                        // occupancy parameter: the occupancy signal is
+                        // expressed entirely as `Terrain.withImpassable`'s
+                        // locally patched, throwaway `Terrain` value for
+                        // this one query — `s.Terrain` is never written to,
+                        // and every other call site still sees the real,
+                        // unpatched terrain.
+                        let blockerParked =
+                            match Map.tryFind next occupantOf with
+                            | Some occ -> s.Agents.[occ].Destination.IsNone
+                            | None -> false
 
-                        if stalledTicks >= StallAbandonTicks then
-                            // TASK-065: the identical give-up transition as
-                            // the rival-contest-loser branch above, for a
-                            // stationary-occupant block instead.
+                        let reroute =
+                            if not blockerParked then
+                                None
+                            else
+                                match
+                                    Pathfinding.findWithin (Terrain.withImpassable parkedCells terrain) a.Position dest budget
+                                with
+                                | Found(cells, cost) when cells.Length >= 2 ->
+                                    Some { Cells = cells; Cursor = 0; Cost = cost }
+                                | Found _
+                                | NoPath
+                                | BudgetExhausted _
+                                | InvalidEndpoint _ -> None
+
+                        match reroute with
+                        | Some newRoute ->
+                            // A genuine alternate route was found and adopted:
+                            // it necessarily avoids `next` (the patched
+                            // terrain marked it impassable), so this can never
+                            // repeat the identical blocked step next tick. No
+                            // movement this tick — the reroute itself
+                            // consumes the tick, the same "freeze, don't
+                            // teleport" discipline the obstructed/yielded
+                            // branches already follow, applied to a
+                            // successful outcome instead of a frozen one.
                             agents.[idx] <-
                                 { a with
                                     Progress = 0
-                                    Destination = None
-                                    Route = None
+                                    Route = Some newRoute
                                     StalledTicks = 0 }
 
-                            emit (MovementAbandoned(a.Id, a.Position, dest)) s
-                        else
-                            // The next route cell is held by an agent that did not
-                            // vacate it this tick (stage 2b). Freeze exactly like a
-                            // rival-contest loser above — `Progress = startProgress`
-                            // (not incremented, not reset), `Route = Some r` written
-                            // back, `Position` / `Destination` untouched — and retry
-                            // the same next cell next tick.
-                            agents.[idx] <-
-                                { a with
-                                    Progress = startProgress
-                                    Route = Some r
-                                    StalledTicks = stalledTicks }
+                            emit (MovementRerouted(a.Id, a.Position, newRoute.Cells.[1], occupantId)) s
+                        | None ->
+                            let stalledTicks = nextStalledTicks freshRoute
 
-                            emit (MovementObstructed(a.Id, a.Position, next, occupantId)) s
+                            if stalledTicks >= StallAbandonTicks then
+                                // TASK-065: the identical give-up transition as
+                                // the rival-contest-loser branch above, for a
+                                // stationary-occupant block instead.
+                                agents.[idx] <-
+                                    { a with
+                                        Progress = 0
+                                        Destination = None
+                                        Route = None
+                                        StalledTicks = 0 }
+
+                                emit (MovementAbandoned(a.Id, a.Position, dest)) s
+                            else
+                                // The next route cell is held by an agent that did not
+                                // vacate it this tick (stage 2b), and no detour is
+                                // possible (the blocker is not parked, or a patched
+                                // search found none). Freeze exactly like a
+                                // rival-contest loser above — `Progress = startProgress`
+                                // (not incremented, not reset), `Route = Some r` written
+                                // back, `Position` / `Destination` untouched — and retry
+                                // the same next cell next tick.
+                                agents.[idx] <-
+                                    { a with
+                                        Progress = startProgress
+                                        Route = Some r
+                                        StalledTicks = stalledTicks }
+
+                                emit (MovementObstructed(a.Id, a.Position, next, occupantId)) s
                     | None ->
                         let arrived = next = dest
 

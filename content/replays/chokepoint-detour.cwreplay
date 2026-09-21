@@ -1,0 +1,7 @@
+version 1
+seed 20260904
+ticks 10
+canonical 15
+build cwheadless
+scenario chokepoint-detour
+command 1 0 1 1 routine standard corpus 0 move 4 0

@@ -231,6 +231,20 @@ module AppraisalDemo =
                 unhandled.Add(
                     sprintf "abandoned agent %d (%d,%d) -> (%d,%d)" (AgentId.value agent) cell.X cell.Y target.X target.Y
                 )
+            | Rerouted(agent, cell, newNext, avoided) ->
+                // TASK-070: not yet surfaced in this disposable P3 demo (it
+                // predates the phase, and this demo's own scripted content
+                // never sustains an obstruction against a parked agent).
+                unhandled.Add(
+                    sprintf
+                        "rerouted agent %d (%d,%d) -> (%d,%d) avoided agent %d"
+                        (AgentId.value agent)
+                        cell.X
+                        cell.Y
+                        newNext.X
+                        newNext.Y
+                        (AgentId.value avoided)
+                )
             | UndeliveredOrder(recipient, at, _) ->
                 unhandled.Add(sprintf "undelivered order agent %d (%d,%d)" (AgentId.value recipient) at.X at.Y)
             | AgentCommitment(agent, at, _) ->

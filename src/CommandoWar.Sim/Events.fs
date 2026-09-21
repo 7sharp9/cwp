@@ -83,9 +83,33 @@ type EventBody =
     /// rival contest for the cell to another *mover*). The vacation-chain
     /// resolution (TASK-022) is a same-tick pure function of pre-tick positions
     /// and this tick's intents; nothing is booked across ticks. Persistent
-    /// obstruction (a blocker that never moves) is a perception / appraisal
-    /// concern (B-015 / B-017), not resolved here.
+    /// obstruction against a *parked* agent (`Destination = None`, never
+    /// going to vacate on its own) is partly resolved in this same phase
+    /// now, not left entirely to a future perception/appraisal concern
+    /// (TASK-070, backlog B-069) — when a genuine alternate route exists,
+    /// the obstructed agent reroutes instead (`MovementRerouted`); this
+    /// event still fires for the tick that discovers the obstruction and
+    /// for every case a reroute is not possible.
     | MovementObstructed of agent: AgentId * at: Cell * blocked: Cell * occupant: AgentId
+    /// `agent`, at `at`, was obstructed by `avoided` — a *parked* agent
+    /// (`Destination = None`) permanently holding `blocked`, the agent's
+    /// next route cell — and found a genuinely different route to its own
+    /// unchanged destination that avoids every currently-parked agent's
+    /// cell (TASK-070, backlog B-069; `docs/10_RISK_REGISTER.md` R-010).
+    /// `newNext` is the first cell of the new route. The agent does not
+    /// move this tick (the reroute itself consumes the tick, the same
+    /// "freeze, don't teleport" discipline `MovementYielded`/
+    /// `MovementObstructed` already follow); it advances along the new
+    /// route on a later tick exactly like any other route. Distinct from
+    /// `MovementObstructed` (no alternate route was found or attempted,
+    /// the agent freezes and retries the identical next cell) and from
+    /// `MovementAbandoned` (no route exists at all, or none was found
+    /// within `Simulation.StallAbandonTicks`, so the order is given up).
+    /// `Pathfinding.fs` itself is not consulted about occupancy — the
+    /// route is found by querying it, unmodified, against a locally
+    /// patched `Terrain` (`Terrain.withImpassable`), so this event, not a
+    /// new `Pathfinding` capability, is what makes the reroute visible.
+    | MovementRerouted of agent: AgentId * at: Cell * newNext: Cell * avoided: AgentId
     /// `agent`, at `at`, gave up on its own order's destination `target`
     /// after `Simulation.StallAbandonTicks` consecutive ticks of the
     /// identical `MovementYielded`/`MovementObstructed` freeze against the
