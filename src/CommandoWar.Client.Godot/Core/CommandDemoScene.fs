@@ -398,6 +398,28 @@ type CommandDemoScene() =
         if state.MissionOutcome <> InProgress then
             paused <- true
 
+        // Refusal salience (TASK-072, backlog B-072): the instant any
+        // agent's order is newly appraised `Refused`/`Unable` this tick,
+        // auto-pause the same way -- same field, sits beside the
+        // `MissionOutcome` branch above rather than replacing or gating
+        // it. `r.Events` is this tick's real, non-lossy `DomainEvent[]`
+        // (unlike `devFrame.Overlays`, whose every overlay builder
+        // explicitly discards `OrderAppraised _ -> None`,
+        // `Diagnostics.fs`), so it is read directly here rather than
+        // through the dev-overlay frame. Genuinely edge-triggered:
+        // `OrderAppraised` is "never emitted on a tick where the order is
+        // unchanged and already appraised" (`Events.fs`'s own doc comment
+        // on the case), so this cannot re-fire from a disposition that
+        // merely stays `Refused`/`Unable` across several ticks while the
+        // player already has the game paused reading it.
+        if
+            r.Events
+            |> Array.exists (function
+                | { Body = OrderAppraised(_, _, (Refused _ | Unable _)) } -> true
+                | _ -> false)
+        then
+            paused <- true
+
         // The immediate next path cell (not the far-off final `Destination`)
         // for every currently-moving agent -- see the field comment on
         // `nextStepCell` above. `Array.skip 1` on the returned route would
@@ -1062,6 +1084,50 @@ type CommandDemoScene() =
                          Radius = 8.0f } |])
                 |> Option.defaultValue [||]
 
+            // Refusal salience (TASK-072, backlog B-072): a per-agent
+            // floating label naming the disposition and reason, ungated
+            // from selection -- unlike `liveOrderText` (`Update`, above),
+            // which only renders at all when exactly one agent is
+            // selected (`Set.count selected = 1`, TASK-068's own "count
+            // only for several" simplification), leaving zero or several
+            // agents selected -- the normal state during a squad-wide
+            // push -- with no disposition text for anyone. Deliberately
+            // reads `currAgents`' live `Disposition` directly each frame
+            // rather than a decaying timer, unlike
+            // `heldFireLines`/`heldAudioCues`/`heldAbandonedOrders`
+            // above: the `stepOnce` auto-pause exists specifically to
+            // give the player unhurried time to read this, so the label
+            // must persist for as long as the disposition itself still
+            // reads `Refused`/`Unable`, not fade out from under a paused
+            // game -- it clears itself the instant reappraisal produces
+            // `Accepted` or the order is superseded/fulfilled
+            // (`Disposition` becomes `None`), with no bookkeeping of our
+            // own needed, since `currAgents` already carries that
+            // transition. Drawn at the agent's raw `Position`, not
+            // `renderPos`: `Events.fs`'s own `OrderAppraised` doc comment
+            // says a `Refused`/`Unable` appraisal writes no `Destination`,
+            // so an agent showing this label is never mid-edge. Styled
+            // distinctly from `LEADER` (green) and the audio-cue `"!"`
+            // (orange) -- a warning red -- though the text itself, reused
+            // verbatim from `RenderShared.dispositionText`, already
+            // carries the meaning (docs/06 "status indicators that do not
+            // rely on colour alone"): this is mostly about placement and
+            // legibility, not a new colour code.
+            let refusalLabelItems : DrawItem[] =
+                currAgents
+                |> Array.choose (fun a ->
+                    match a.Disposition with
+                    | Some(Refused _ | Unable _) ->
+                        Some(
+                            RenderShared.cellLabel
+                                a.Position
+                                (RenderShared.dispositionText a.Disposition)
+                                (1.0f, 0.25f, 0.2f)
+                                0.95f
+                                9.0f
+                        )
+                    | _ -> None)
+
             // Three distinct route states, each its own colour (Dave's review
             // feedback: a hover is not a queued order is not a confirmed
             // one):
@@ -1310,7 +1376,8 @@ type CommandDemoScene() =
             let sorted =
                 Array.concat
                     [ terrainItems; coverIndicatorItems; objectiveMarkerItems; haloItems; agentItems
-                      leaderMarkerItems; hoverHighlightItems; previewItems; pendingItems; committedItems ]
+                      leaderMarkerItems; refusalLabelItems; hoverHighlightItems; previewItems; pendingItems
+                      committedItems ]
                 |> Array.sortBy RenderShared.depthKey
 
             Array.concat [ sorted; fireEffects; audioCueItems; holdOutlineItems; devItems ]

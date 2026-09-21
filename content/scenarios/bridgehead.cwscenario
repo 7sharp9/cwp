@@ -8,11 +8,36 @@
 # opaque true), crate (passable, moveCost 3, opaque true).
 #
 # Layout: an impassable river runs north-south at x=8..9 for the whole map
-# height, crossed by one compact two-cell-wide rail bridge deck at y=5..6
-# (elevation 1) -- the single exposed approach. Friendly forces stage on
-# the west bank (x<8); the depot (two building clusters plus scattered
-# crate cover) occupies the east bank (x>=14), with an open lane in
-# between that the machine-gun position overwatches.
+# height, crossed by two compact two-cell-wide crossings: the original rail
+# bridge deck at y=5..6 (elevation 1) and a second, non-elevated ford at
+# y=9..10 (TASK-073, backlog B-073). Friendly forces stage on the west bank
+# (x<8); the depot (two building clusters plus scattered crate cover)
+# occupies the east bank (x>=14), with an open lane in between that the
+# machine-gun position overwatches.
+#
+# The bridge deck sits at elevation 1 against elevation-0 banks on both
+# sides, so it acts as a berm (`Sight.fs`'s elevation-blocking rule): every
+# west-bank cell approaching it has zero line of sight to any east-bank
+# threat until standing on the deck itself, at which point any visible
+# threat is already within `CombatConfig.WeaponRange` (7) -- a `MoveTo`
+# order via the bridge alone is either wholly unappraised or already in
+# contact, never a genuine stand-off. The ford is deliberately elevation 0
+# (not 1) to avoid reproducing that berm: a friendly agent approaching along
+# row y=9 gains clear line of sight to depot rifleman 102 at Chebyshev
+# distance exactly 8 (`AppraisalConfig.ThreatEngagementRange`) once at
+# x=5, still outside `WeaponRange` (7) -- confirmed with a temporary
+# `Sight.trace` probe against the built `CommandoWar.Sim.dll` (TASK-073) --
+# giving the Appraisal phase's route-exposure stage a real stand-off state
+# to appraise and refuse against before contact, for the first time on this
+# map's own content. The same probe found no unintended new sightline to
+# rifleman 101 or the machine gun opened along the ford approach.
+#
+# A second `extraction-area` (`extraction-south`, at (4,9), TASK-073)
+# resolves the single sticky `(1,9)` extraction cell forcing one-at-a-time
+# shepherding of survivors (backlog B-071's finding) -- `Simulation.fs`'s
+# extraction check accepts any declared `ExtractionAreas` cell, not one
+# picked by the `extract` objective's own (unread) `AreaId` field, so a
+# second declared area is a pure content addition.
 #
 # Friendly: agent 0 is the leader, agents 1-5 are five more soldiers --
 # fireteam-alpha is agents 0/1/2, fireteam-bravo is agents 3/4/5 (TASK-059
@@ -64,10 +89,10 @@ terrain-cell 8 7 impassable 0 0 true
 terrain-cell 9 7 impassable 0 0 true
 terrain-cell 8 8 impassable 0 0 true
 terrain-cell 9 8 impassable 0 0 true
-terrain-cell 8 9 impassable 0 0 true
-terrain-cell 9 9 impassable 0 0 true
-terrain-cell 8 10 impassable 0 0 true
-terrain-cell 9 10 impassable 0 0 true
+terrain-cell 8 9 passable 0 1 false
+terrain-cell 9 9 passable 0 1 false
+terrain-cell 8 10 passable 0 1 false
+terrain-cell 9 10 passable 0 1 false
 terrain-cell 8 11 impassable 0 0 true
 terrain-cell 9 11 impassable 0 0 true
 terrain-cell 14 2 impassable 0 0 true
@@ -112,6 +137,7 @@ enemy 103 17 3 true 4 trooper - 0
 enemy 104 17 8 true 4 trooper - 0
 objective-area observation 4 4
 extraction-area extraction 1 9
+extraction-area extraction-south 4 9
 target bridge-charge 9 5
 target mg-position 11 5
 objective 1 reach observation - 0 true -

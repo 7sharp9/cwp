@@ -6,10 +6,32 @@ This file records the external material used to evaluate the framework options. 
 
 ## Historical concept
 
-- Games That Weren't, “Commando War”  
+Research snapshot: 2026-09-21.
+
+- Games That Weren't, "Commando War"
   https://www.gamesthatwerent.com/2020/07/commando-war/
+- Amiga Magazine Rack, "Commando War" preview from *Zero* issue 9 (July 1990, David Wilson)
+  https://amr.abime.net/review_39855
+- *Generation 4* magazine (April 1990) preview, cited by Games That Weren't (no stable direct URL; scan not independently re-verified beyond the secondary citation)
 
 The project must not depend on the historical name, artwork, maps, text, or any assumed ownership status.
+
+### Relevant findings
+
+`Commando War` was an unreleased 1990 Titus Software title for Amiga, Atari ST, and PC, announced and previewed in the French and UK press (*Génération 4*, *Zero*) but never shipped on any platform — it was delayed into 1991 and then disappeared with no further coverage. Everything known about it comes from period magazine previews of pre-release material, not a played, reviewable, or shipped game. There is no surviving build, and no source describes final, tested behaviour.
+
+What the previews actually describe:
+
+- A squad-command game for up to 10 commandos (or 5-a-side head-to-head), presented in a flip-screen (not scrolling) overhead view across a series of mission maps.
+- Click-to-direct control: the player points at the map and the soldiers "intelligently react with the environment around them" — the closest documented precedent is Cannon Fodder's point-and-move pathing (itself released later, 1993), not a negotiated or refusable order model.
+- Planned vehicle entry/riding.
+- Marketed as a hybrid of *Populous* (god-game framing) and *Cannon Fodder* (arcade squad action), promoted around Titus's "Action Concept" — a reusable engine meant to support cheap themed expansion disks (Vietnam, Roman, Viking settings) sold as add-ons once the base game was owned.
+
+What no source describes, in any preview: order refusal, negotiated compliance, appraisal of an order against battlefield conditions, suppression/stress/discipline mechanics, or any legible command-and-response loop. The "intelligently react with the environment" language is the entire extent of the AI claim, and period previews read it as pathing/obstacle-awareness, not as agency over whether an order is obeyed.
+
+### Cross-reference against `docs/00_PROJECT_CHARTER.md`
+
+The charter (section 8) already states the correct legal/IP posture: the historical concept "may inform high-level mechanics that are independently implemented," and the public game must not use the `Commando War` name without verified rights. That framing holds up against what the sources actually show, for a reason the charter does not currently spell out: there is nothing in the historical record to independently implement. The one attested AI trait ("intelligently react with the environment," never released, never played, sourced only from pre-release marketing previews) is not evidence for the charter's central premise in section 1 — bounded autonomy, legible refusal, and a player-diagnosable command loop. That premise is this project's own invention, not a revival of a documented mechanic. Calling the project a "spiritual successor" is accurate only at the level of setting/squad-command framing (a small commando squad, mission maps, click-to-order control); it is not a successor to any command-refusal design, because the original never had or demonstrated one. This is worth stating explicitly wherever the project's positioning is described externally, so "spiritual successor" is not read as implying the refusal/appraisal loop has a historical precedent it does not have.
 
 ## Godot
 

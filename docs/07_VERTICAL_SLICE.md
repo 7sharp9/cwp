@@ -144,6 +144,20 @@ appraisal and major state transition" (functional acceptance criterion 11) for
 the systems that currently exist. The Godot overlay (B-029) renders the same
 frame.
 
+### Realised by TASK-072 (backlog B-072): "tactical pause ... while issuing orders"
+
+This bullet's pause requirement was unbuilt as of the 2026-09-21
+charter-alignment review (only a manual `Space`-toggle and an automatic pause
+on `MissionOutcome` leaving `InProgress` existed). TASK-072 ties tactical
+pause to the moment it is actually needed for the charter's own "diagnose
+resistance" step (section 2): `CommandDemoScene`'s `stepOnce` auto-pauses the
+instant any agent's order is newly appraised `Refused`/`Unable`, alongside a
+floating per-agent label (`RenderShared.dispositionText`) at that agent's own
+cell, ungated from selection -- previously the order-status text rendered
+only for a single selected agent and nothing called attention to it at all.
+Implemented and self-verified 2026-09-21; status `review`, awaiting Dave's
+acceptance (`tasks/TASK-072-*.md`, `docs/11_BACKLOG.md` B-072 row).
+
 ## 7. Deliberate exclusions
 
 The slice must not include:
@@ -285,6 +299,111 @@ target-cell threat). **Accepted by Dave (2026-09-20, via `AskUserQuestion`)
 as a known, tracked gap** rather than pursued further -- no Bridgehead map
 rebalance and no corpse-occupancy fix were made; TASK-064 was accepted with
 this gap on record.
+
+### Criterion 7 (`Succeeded` direction): met, with caveat -- update 2026-09-21
+
+Continuing the investigation rather than leaving it as an accepted gap:
+TASK-064's "apparent additional threat covering the `bridge-charge` target
+cell" is now identified. Tracing `Sight.fs`'s exact integer supercover walk
+by hand, then confirming with a temporary `dotnet fsi` probe against the
+built `CommandoWar.Sim.dll` (removed after use, not committed), found that
+depot rifleman `AgentId 102` at `(13,9)` has a fully clear, unobstructed
+diagonal line of sight to `(9,5)` -- Chebyshev distance 4, well inside
+`CombatConfig.WeaponRange` (7). Rifleman `101` is blocked by the crate at
+`(10,4)`; riflemen `103`/`104` are out of weapon range at distance 8. This
+is legitimate defense-in-depth (confirmed with Dave via `AskUserQuestion`),
+not a bug -- the machine gun alone was never the whole threat picture at
+that cell.
+
+A companion LOS-matrix probe found `(10,5)`/`(10,6)`/`(11,6)` also have
+mutual line of sight and range with rifleman `102` (and `(10,5)` with
+rifleman `101` too), while `(9,6)`/`(8,5)`/`(8,6)` do not -- a real approach
+exists that engages both riflemen from cells other than the exposed
+objective cell itself. Proved end to end by driving the real
+`ScenarioFile.parse -> Scenario.validate -> World.ofScenario ->
+Simulation.step` pipeline directly (`CommandDemoScene`'s own pipeline, not
+the Godot client): TASK-064's known-good casualty-free machine-gun-team
+neutralisation, then a push to `(10,5)`/`(10,6)`/`(11,6)` to fight
+riflemen `101`/`102` there (both end `Dead`, at the cost of two friendly
+deaths -- agents 2 and 3, **not** casualty-free), then planting on the
+now-genuinely-uncontested `(9,5)` for the 10-tick demolition window
+(`ObjectiveId 2` completes clean, zero further fire), then extraction.
+`WorldState.MissionOutcome` reached `Succeeded` for the first time ever
+demonstrated on real Bridgehead.
+
+Extraction itself surfaced a second, previously-undiscovered gap, not
+predicted going in: sending every survivor to the single authored
+extraction cell `(1,9)` at once jams exactly like the corpse/parked-agent
+family (B-065/B-066/B-069) -- the first arrival (sticky extraction,
+TASK-062) never vacates the cell, and TASK-070's chokepoint detour cannot
+help here, since it reroutes *around* a parked blocker's cell, not *onto*
+it when the blocker's cell IS the mover's own destination; every later
+agent stalls and hits `MovementAbandoned`. Worked around in the probe by
+shepherding survivors through the cell one at a time, moving each off
+again immediately after -- this reached `Succeeded` for real, but nothing
+in the client UI explains why a second agent sent to extraction silently
+stops short. Filed as new backlog row B-071, folded into B-070's
+usability-review scope rather than fixed unilaterally here.
+
+**Criterion 7 is therefore marked met, with caveat, for the `Succeeded`
+direction**: the mission can succeed on Bridgehead without developer
+intervention, but only via a specific tactical approach (engage both
+riflemen from cells off the objective, not just the machine gun) and a
+non-obvious extraction choreography (one survivor through the cell at a
+time) that the game does not currently teach or explain -- consistent with
+B-070's own "no refined user experience" framing. The `Failed` direction
+was not re-attempted this round and remains as TASK-064 left it (capped
+short of all six friendly agents by the bridge's own two-lane chokepoint,
+not re-verified against TASK-066/070's fixes). Criterion 3 (canonical
+refusal) remains genuinely unclosed: the entire ~610-tick `Succeeded` run
+above produced zero `OrderAppraised(Refused | Unable)` events, confirming
+TASK-064's original finding still holds -- every threat on this map is
+only ever in contact once an agent is already inside its own engagement
+range, so no ordinary `MoveTo` order is ever appraised as a refusal here.
+
+See `docs/11_BACKLOG.md` rows B-070 (usability/gameplay-design review) and
+B-071 (this investigation's full record) for detail.
+
+### Criterion 3 (canonical refusal): closed on Bridgehead -- update 2026-09-21
+
+A same-day charter-alignment review (not this investigation) found this
+row's own "no ordinary `MoveTo` order is ever appraised as a refusal here"
+claim too strong: a direct probe driving `Simulation.step` against real
+Bridgehead under a broader, non-curated push (not the specific `Succeeded`
+sequence above) triggered a real `Refused(RouteTooExposed(Some AgentId
+102))`. The underlying reason both readings are true at once: contact and
+engagement range coincided everywhere on the map as authored, so refusal was
+*reachable* but not *reliable or player-predictable* -- a soldier could be
+refused and shot at almost the same moment, with no cell offering a genuine
+stand-off between "threat known" and "threat in range."
+
+A tactical-game-design-expert review traced the exact mechanism: `Sight.fs`
+blocks line of sight through any intermediate cell whose elevation exceeds
+both endpoints', and the original bridge deck (elevation 1 against
+elevation-0 banks) acts as a berm -- every west-bank cell had zero LOS to any
+east-bank threat until standing on the deck itself, at which point any
+visible threat was already inside `CombatConfig.WeaponRange` (7). A full map
+scan found exactly two genuine stand-off cells anywhere, both unreachable
+dead ends. TASK-073 (backlog B-073) fixed this at the content level, not the
+mechanism level (which TASK-038's separate synthetic fixture already proved
+correct): a second, non-elevated ford south of the existing deck gives a
+friendly agent approaching along it clear LOS to rifleman 102 at Chebyshev
+distance exactly 8 (`AppraisalConfig.ThreatEngagementRange`), outside weapon
+range, before it is possible to close to contact. Implemented and
+self-verified 2026-09-21, independently re-verified by the orchestrating
+session against the real `Simulation.step` pipeline: an agent halted at the
+ford establishes contact, and a follow-up order pushing deeper is refused
+(`RouteTooExposed`) before a single shot is fired -- the canonical-refusal
+shape (section 8, steps 1-4) demonstrated on Bridgehead's own real content
+for the first time, not only on TASK-038's separate fixture.
+
+**Criterion 3 is therefore marked met on Bridgehead**, via a two-step order
+(halt at the stand-off cell to establish contact, then push closer) rather
+than a single direct order -- a genuine tactical choice the redesigned
+geometry now supports, not previously possible at all. Status `review`,
+awaiting Dave's acceptance (`tasks/TASK-073-*.md`, `docs/11_BACKLOG.md`
+B-073 row). The same task also added a second `extraction-area` cell,
+resolving B-071's extraction-jam finding at its source (see that row).
 
 ## 10. Performance budgets
 
