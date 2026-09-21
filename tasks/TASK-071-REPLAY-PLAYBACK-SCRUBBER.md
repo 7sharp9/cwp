@@ -1,7 +1,7 @@
 # TASK-071: Replay playback scrubber in the Godot client
 
-Status: review (implemented and self-verified 2026-09-21, awaiting Dave's
-acceptance)
+Status: done (accepted by Dave 2026-09-21 on the self-verification
+evidence)
 Owner: Dave
 Phase: P4
 Gate: G4 (vertical slice feature-complete); realises B-064
@@ -479,7 +479,10 @@ Confirm this expectation holds before relying on it.
 ## Review
 
 - Reviewer: Dave
-- Accepted: not yet.
+- Accepted: yes, 2026-09-21, on the self-verification evidence alone. The
+  scrub bar's raw mouse drag gesture (flagged as not independently
+  exercised live in this environment) was not separately re-tested before
+  acceptance.
 
 ## Completion report
 

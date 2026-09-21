@@ -175,4 +175,7 @@ fresh from that tick's own `Position`/`Destination` alone.
 ### Review
 
 - Reviewer: Dave
-- Accepted: not yet.
+- Accepted: yes, 2026-09-21, on the self-verification evidence alone. The
+  scrub bar's raw mouse drag gesture (flagged above as not independently
+  exercised live in this environment) was not separately re-tested before
+  acceptance.
