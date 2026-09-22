@@ -779,30 +779,45 @@ let ``a three-agent follow chain into a free cell advances the whole chain on th
     Assert.Equal({ X = 6; Y = 1 }, (agentOf (agent 2) st).Position)
 
 [<Fact>]
-let ``two agents converging on a cell held by a stationary third never enter it and never collide`` () =
+let ``two agents converging on a cell held by a stationary third both detour to distinct cells and reach their own destinations`` () =
     // Agent 2 idle at (3,3). Agent 0 at (1,3) -> (5,3) and agent 1 at (3,1) ->
     // (3,5) both route through (3,3): stage 2a picks one candidate (rival),
     // stage 2b obstructs it on the stationary occupant. Neither enters (3,3).
     //
-    // TASK-070 (backlog B-069), found and honestly recorded, not smoothed
-    // over: on this open 8x8 terrain, each obstructed agent successfully
+    // TASK-070 (backlog B-069) found and honestly recorded, not smoothed
+    // over, that on this open 8x8 terrain each obstructed agent successfully
     // reroutes around agent 2 in turn (`MovementRerouted`, asserted below)
-    // -- but their independently-computed detours are not coordinated with
-    // each other, and both happen to prefer the same alternate cell,
-    // producing a *new*, genuine mutual obstruction between agent 0 and
-    // agent 1 themselves (the `swap-standoff` shape) once they reroute.
-    // Neither agent's blocker is itself parked at that point (both hold
-    // active orders), so this task's detour deliberately does not fire
-    // again for it -- the original assertions (neither ever enters (3,3);
-    // a rival yield and an eventual stationary-occupant obstruction both
-    // occur somewhere in the run) still hold, just via one extra step, so
-    // this fact is strengthened rather than replaced.
+    // -- but their independently-computed detours were not coordinated with
+    // each other, and both happened to prefer the same alternate cell
+    // (2,2), producing a *new*, genuine mutual obstruction between agent 0
+    // and agent 1 themselves (the `swap-standoff` shape) once they
+    // rerouted -- left deliberately open as `docs/10_RISK_REGISTER.md`
+    // R-010's residual gap.
+    //
+    // TASK-076 (backlog B-076) closes that gap. Traced directly (a
+    // temporary `dotnet fsi` probe, removed after use): agent 0 reroutes at
+    // tick 2 (obstructed by agent 2, `MovementRerouted` naming agent 2);
+    // agent 1 reroutes one tick *later*, at tick 3 -- not the same tick as
+    // agent 0's own reroute, so the Central decision's own per-tick
+    // `claimedDetourCells` alone (reset every tick) does not by itself
+    // prevent agent 1 from also picking (2,2), since agent 0's claim from
+    // tick 2 is already gone by tick 3. What does prevent it is the second,
+    // necessary half of the fix: agent 0's already-committed route names
+    // (2,2) as its own Pass-1 `intents` "next cell" *for tick 3 too*
+    // (it is simply continuing the route it adopted at tick 2), and that
+    // static, already-known-before-Pass-3 fact is exactly what
+    // `advancingNextCells` (`Simulation.fs`) feeds into agent 1's own
+    // detour query -- so agent 1's tick-3 reroute avoids (2,2) and picks
+    // (4,2) instead. Both agents then proceed with no mutual obstruction at
+    // all: agent 0 reaches (5,3) (tick 7) and agent 1 reaches (3,5)
+    // (tick 8), neither ever `MovementAbandoned`.
     let w = occWorld [ { X = 1; Y = 3 }; { X = 3; Y = 1 }; { X = 3; Y = 3 } ]
     let r0 = stepWith [| cmd 1 (agent 0) { X = 5; Y = 3 }; cmd 2 (agent 1) { X = 3; Y = 5 } |] w
     let mutable st = r0.State
     let mutable sawYield = false
     let mutable sawObstruct = false
-    let mutable sawRerouted = false
+    let mutable sawAbandoned = false
+    let mutable reroutedCount = 0
 
     for _ in 0..9 do
         distinctCells st
@@ -812,12 +827,16 @@ let ``two agents converging on a cell held by a stationary third never enter it 
         let r = stepIdle st
         sawYield <- sawYield || (bodies r |> Array.exists (function MovementYielded _ -> true | _ -> false))
         sawObstruct <- sawObstruct || (bodies r |> Array.exists (function MovementObstructed _ -> true | _ -> false))
-        sawRerouted <- sawRerouted || (bodies r |> Array.exists (function MovementRerouted _ -> true | _ -> false))
+        sawAbandoned <- sawAbandoned || (bodies r |> Array.exists (function MovementAbandoned _ -> true | _ -> false))
+        reroutedCount <- reroutedCount + (bodies r |> Array.filter (function MovementRerouted _ -> true | _ -> false) |> Array.length)
         st <- r.State
 
     Assert.True(sawYield, "expected a MovementYielded from the rival contest")
-    Assert.True(sawRerouted, "expected both agents to detour around agent 2 in turn")
-    Assert.True(sawObstruct, "expected a MovementObstructed once the two rerouted agents block each other")
+    Assert.Equal(2, reroutedCount) // both agents detour around agent 2, in turn, to distinct cells
+    Assert.False(sawObstruct, "the two agents' detours must no longer collide with each other")
+    Assert.False(sawAbandoned, "both orders must complete, not stall out")
+    Assert.Equal({ X = 5; Y = 3 }, (agentOf (agent 0) st).Position)
+    Assert.Equal({ X = 3; Y = 5 }, (agentOf (agent 1) st).Position)
 
 // --- Visible stall failure (TASK-065, backlog B-065) --------------------
 

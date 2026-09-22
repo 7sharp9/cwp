@@ -405,6 +405,72 @@ awaiting Dave's acceptance (`tasks/TASK-073-*.md`, `docs/11_BACKLOG.md`
 B-073 row). The same task also added a second `extraction-area` cell,
 resolving B-071's extraction-jam finding at its source (see that row).
 
+### Criterion 7 (`Failed` direction): met -- update 2026-09-22
+
+TASK-075 re-verified the `Failed` direction the "Criterion 7 (`Succeeded`
+direction)" update above left open ("not re-attempted this round"), against
+TASK-066 (corpse no longer blocks movement), TASK-070 (chokepoint detour),
+and TASK-073's (second ford/extraction cell) combined fixes. `Simulation.fs`
+line 2273-2274 (`mission`) confirms the exact trigger from the code directly:
+`friendlyForceEliminated = s.Rules.FailOnFriendlyForceEliminated && not
+(agents |> Array.exists (fun a -> a.Side = Friendly && Casualty.isAlive
+a.Vitals))` -- `MissionOutcome <- Failed` fires the tick every Friendly
+agent's `Vitals` leaves `Alive` (an `Incapacitated` bleed-out counts as
+eliminated for this purpose, `Casualty.isAlive` returning `false` for it,
+not only literal `Dead`), independent of objective or extraction state, as
+the task file's own "Inputs and assumptions" expected.
+
+A temporary `dotnet fsi` probe (several iterations, removed after use, this
+session's own precedent) drove the real `ScenarioFile.parse ->
+Scenario.validate -> World.ofScenario -> Simulation.step` pipeline directly
+against unmodified `bridgehead.cwscenario` (seed `20260920UL`, the
+`CommandDemoScene` precedent): a single simultaneous six-agent `MoveTo` push
+(Standard/Routine, no cover or suppression tactics) toward the machine gun
+and riflemen 101/102's approach lanes killed the machine gun (tick 71) and
+rifleman 102 (tick 78) at the cost of four of six friendlies (agents 0, 3,
+4, 5 -- dead by tick 183), leaving agents 1 and 2 alive and, like TASK-064's
+original finding, safely outside riflemen 103 (`(17,3)`)/104 (`(17,8)`)'s
+combined engagement zone. A second, ordinary `MoveTo` order (still
+Standard/Routine -- no envelope tuning needed) sending each survivor
+directly onto the two remaining riflemen's own cells reached
+`MissionOutcome = Failed` at **tick 416**
+(`content/diagnostics`-style `DiagnosticRender.Svg` evidence:
+`docs/evidence/task-075-bridgehead-failed-direction.png`, state hash
+`0xE76F42B2E1AE4237`). This **is** a genuine `RouteTooExposed` refusal
+cycle, not a bypass of it: contact with 103/104 is established mid-route at
+tick 413, and the very next reappraisal (tick 414) does emit
+`Refused(RouteTooExposed(Some AgentId 103|104))` for both agents -- but by
+then `Pathfinding`'s threat-blind shortest route has already put them
+within weapon range the same tick contact fires, so `Combat`'s own
+independent within-range check lands the fatal hit before the refusal can
+turn them back. This is the identical one-tick contact/reappraisal lag
+TASK-073 already found and documented for a single un-staged `MoveTo` order
+into the depot ("Pathfinding is deliberately threat-blind... a one-tick lag
+between a new contact being observed and the Appraisal phase's reappraisal
+reacting to it... Combat's own independent within-range check already fires
+that same tick"), now confirmed to apply symmetrically in the `Failed`
+direction as well as the `Succeeded` one. A parallel branch re-run with the
+identical order upgraded to `RiskTolerance.Aggressive`/`Urgency.Immediate`
+(both ordinary command-envelope options, not a mechanism change) reaches the
+exact same tick-416 outcome with the order staying `Accepted` throughout --
+confirming the escalation is not actually load-bearing here, only the
+staged sequencing (broad push first, then a direct second order once the
+two remaining threats' defenses are thinned) is.
+
+**Criterion 7 is therefore marked met for the `Failed` direction as well**:
+`MissionOutcome` can reach `Failed` on Bridgehead's real content without
+developer intervention, through entirely ordinary, legitimate `MoveTo`
+orders in a deliberate two-stage sequence -- no map or content edit was
+needed (Central decision's precondition for one was never met: no genuinely
+unreachable safe pocket exists, since a route into 103/104's engagement zone
+is always reachable, just briefly defended by a one-tick-late refusal). Both
+`Succeeded` and `Failed` are now demonstrated end to end on real Bridgehead
+content, closing docs/07 section 9's last open half of criterion 7. No
+`content/scenarios/bridgehead.cwscenario` change was made or needed; the
+file is byte-identical to the TASK-073 state. See
+`docs/ledger/2026-09-22-TASK-075-bridgehead-failed-direction-verification.md`
+for the full tick-by-tick record and the probe transcripts' findings.
+
 ## 10. Performance budgets
 
 These are initial budgets and may be revised only with measured evidence.

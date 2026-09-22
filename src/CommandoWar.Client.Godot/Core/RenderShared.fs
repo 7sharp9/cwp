@@ -97,6 +97,43 @@ module RenderShared =
           A = a
           Radius = width }
 
+    /// The four `Kind = 2` line segments outlining the true Chebyshev-range
+    /// square of radius `radius` around `centre` (TASK-074, backlog B-074:
+    /// weapon/engagement-range display) -- the corners `(cx-R,cy-R)`,
+    /// `(cx+R,cy-R)`, `(cx+R,cy+R)`, `(cx-R,cy+R)` joined edge to edge, since
+    /// that is the exact cell set within Chebyshev distance `radius` of
+    /// `centre` (`Perception.chebyshev`, the distance both
+    /// `CombatConfig.WeaponRange` and `AppraisalConfig.ThreatEngagementRange`
+    /// use). Deliberately **not** the smaller diamond joining only the four
+    /// edge-midpoints `(cx±R,cy)`/`(cx,cy±R)`: because `CellToScreen` is an
+    /// affine but anisotropic (2:1 isometric) projection, that inscribed
+    /// diamond understates the true envelope by roughly half in every
+    /// direction, not merely "a bit short on the diagonals" -- verified by
+    /// hand against the real `TileW`/`TileH` constants (`FSharpSceneHost.cs`)
+    /// before implementing: for `radius = CombatConfig.WeaponRange` (7) the
+    /// true corners project 616px/308px (horizontal/vertical) from centre,
+    /// the edge-midpoint diamond only 308px/154px. Reuses `lineMarker`
+    /// (the fire-line/LOS-ray precedent) rather than a new `DrawItem.Kind`;
+    /// a pure distance envelope, not LOS-aware (Sight.fs's elevation rule is
+    /// not consulted), a known, deliberate simplification -- see this
+    /// task's own doc comment at each call site and its ledger entry.
+    let rangeSquare
+        (centre: Cell)
+        (radius: int)
+        (r: float32, g: float32, b: float32)
+        (a: float32)
+        (width: float32)
+        : DrawItem[] =
+        let corner (dx: int) (dy: int) : Cell = { X = centre.X + dx; Y = centre.Y + dy }
+
+        let corners =
+            [| corner (-radius) (-radius)
+               corner radius (-radius)
+               corner radius radius
+               corner (-radius) radius |]
+
+        [| for i in 0 .. 3 -> lineMarker corners.[i] corners.[(i + 1) % 4] (r, g, b) a width |]
+
     /// A `Kind = 4` one-shot effect sprite centred at a cell (TASK-046,
     /// backlog B-057: a muzzle flash or bullet-impact effect), keyed by
     /// `textureId` -- the `buildTerrainItems`/`DrawItem.TextureId` precedent.

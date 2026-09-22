@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; review trigger 1 measured and closed 2026-09-19, decision reaffirmed -- see ADR-0001's 2026-09-19 note)
-  updated: 2026-09-21 (TASK-072 and TASK-073 accepted by Dave together, "accept both, commit" -- TASK-072 (backlog B-072) makes a fresh order refusal a real-time event: CommandDemoScene.fs's stepOnce auto-pauses and draws a floating per-agent label the instant any agent's disposition is newly appraised Refused/Unable, ungated from selection, closing docs/07 section 6's own unbuilt "tactical pause while issuing orders" requirement at the same time; TASK-073 (backlog B-073) redesigns Bridgehead's terrain -- a second, elevation-0 ford south of the existing berm-like bridge deck gives a friendly agent a genuine stand-off sightline to a depot rifleman at Chebyshev distance 8 (outside WeaponRange 7) for the first time, closing docs/07 section 9 criterion 3 (canonical refusal) on Bridgehead itself, plus a second extraction cell resolving B-071's extraction-jam finding at its source. Both scoped from a same-day charter-alignment review (does the build hold to docs/00_PROJECT_CHARTER.md's own product hypothesis, design principles, and stop conditions, not just docs/07's functional checklist -- answered by actually driving Bridgehead rather than re-reading docs) plus two independent expert-persona reviews (game UX, tactical game design) Dave asked for to feed into the sequencing decision. Both tasks then implemented by two agents dispatched in parallel, one each, each in an isolated git worktree to avoid collision on shared files -- an explicit, Dave-directed deviation from the project's own "only one task active" rule, reconciled centrally rather than by either agent. Both self-reports were independently re-verified by the orchestrating session before being trusted (rebuild, dotnet test 422/422, -- corpus 20/20, all three Godot --selfcheck hashes unchanged, combined in one tree), not merely relayed; a Godot NullReferenceException hit during that re-verification turned out to be a fresh worktree's missing one-time texture-import cache, not a regression. No CommandoWar.Sim file touched by either task. Status `done`, accepted 2026-09-21; prior: TASK-070 implemented and self-verified, realising new B-069 -- route around a permanently parked agent instead of stalling and abandoning, the live-agent chokepoint jam TASK-066/067/068 each independently found and left open. Scoped via two parallel research agents plus AskUserQuestion: Simulation.navigationAndMovement now attempts one Pathfinding.findWithin query (its own public contract unchanged) against a locally patched Terrain (new Terrain.withImpassable helper, currently-parked agents' cells marked Impassable) when an agent is obstructed by a parked formation-mate; a genuine detour is adopted (new MovementRerouted event/Rerouted overlay) or the existing TASK-065 freeze-then-abandon path applies unchanged. Verified directly against the TASK-068 repro shape: two formationed agents jointly ordered through a shared chokepoint now both reach their own full resolved slots, zero MovementAbandoned. No Pathfinding.fs/Appraisal.fs change, no Canonical.FormatVersion bump. Known limitation found and honestly recorded, not resolved further: two agents independently detouring around the same parked blocker can obstruct each other instead (swap-standoff shape) -- R-010 left open. dotnet test 422/422 (+7); -- corpus 20/20 (+1); all three Godot --selfcheck hashes unchanged (CommandDemo.tscn's scripted sequence is single-agent, never exercises this contention). Status `review`, awaiting Dave's acceptance; prior: TASK-068 and TASK-069 both accepted by Dave on the self-verification evidence ("commit and lets move on") -- B-067 (both halves, multi-select and joint order dispatch) and B-068 (Bridgehead trooper move speed) now done; prior: TASK-069 implemented and self-verified, realising new B-068 -- Bridgehead trooper movement was twice as fast as intended. Raised live by Dave immediately after TASK-068: "probably at least twice as fast as it should be... fast and choppy like it running fast forward." A temporary diagnostic (removed after use) confirmed the simulation genuinely runs at exactly 20 ticks/second with a stable 60fps render loop -- not a frame-pacing bug. Root cause: Terrain.BaseMoveCost = 1 with Trooper's authored MoveSpeed = 2 means a Trooper crosses a whole open-terrain cell in exactly one 20Hz tick (50ms), true since before unit types existed (TASK-049), not a regression -- this also starves the render-interpolation of any real window to smooth over, explaining "choppy" too. Fixed content-only per AskUserQuestion: content/scenarios/bridgehead.cwscenario's unit-type trooper 2 -> 1, no CommandoWar.Sim change, simHz stays at its documented 20Hz target. CommandDemo.tscn --selfcheck re-pinned; a temporary dev-overlay probe confirmed the demonstrated outcome ("no friendly casualties, machine gun neutralised") is unchanged at half speed. Status `review`, awaiting Dave's acceptance; prior: TASK-068 implemented and self-verified, realising the client-side half of B-067 -- selected: AgentId option becomes a Set, drag rubber-band-select and shift-click join the existing plain click, a MoveTo order to more than one selected agent dispatches a real Command.moveToMany (ReceivedOrder.AsGroup true for a client-issued order for the first time), Hold/Assault/Withdraw/Suppress dispatch as N existing single-recipient commands; no CommandoWar.Sim change at all, since the sim-side mechanism already existed and was already accepted (TASK-020/067) -- dotnet build/test/corpus/replay-checkpoints all unaffected and CommandDemo.tscn --selfcheck reconfirmed MATCH 0x2629A1FE165F94BB unchanged (at the time, before TASK-069's own re-pin), proving the default single-agent click path dispatches byte-identically to before this task. A real, pre-existing bug found and fixed while generalising dispatch: the pending-order dedup keyed on PlayerCommand.Agent (the head of Recipients) alone, letting a stale pending order for a non-head recipient of a new multi-recipient command survive into the same tick's batch -- fixed to match on Recipients membership. Verified with a temporary dotnet fsi probe: two selected agents with distinct authored FormationOffsets, ordered jointly to a shared cell, resolve to two distinct cells matching an independently-computed Appraisal.resolveFormationTarget prediction exactly. Honestly flagged, not smoothed over: stepping that order to settlement shows the two agents end one cell apart, not each at its own full resolved slot -- the trailing agent's order stalls against the leading agent and is abandoned (Simulation.StallAbandonTicks, TASK-065's own mechanism) one cell short, the same live-agent chokepoint contention TASK-066/067 already found and left as B-067's own accepted, unresolved gap, now reproduced for the first time through a real client-issued group order. Status `review`, awaiting Dave's acceptance and, separately, his own live editor pass over the raw mouse drag gesture (not independently verifiable from this environment); prior: TASK-067 accepted by Dave on the self-verification evidence, realising the sim-side half of B-067 -- ReceivedOrder.AsGroup (Canonical.FormatVersion 14 -> 15) keys formation redirect off the originating command's own recipient count instead of the agent's static FormationOffset alone, so a solo click always goes exactly where clicked; two genuine, non-byte-layout behaviour changes found and fixed, not smoothed over -- the formation-slots corpus entry re-authored to a real Command.moveToMany, and CommandDemo.tscn's scripted self-check re-aimed at its own pre-fix resolved cells after the old target cells produced a real friendly casualty; prior: TASK-065 and TASK-066 both accepted by Dave on the self-verification evidence alone, confirmed via AskUserQuestion in one round: commit the combined working tree now, accept both tasks without a live playtest first, and hold B-067 as a proposed, unscoped backlog row rather than start design work on it; prior: TASK-066 implemented and self-verified, realising B-066 -- occupantOf now excludes non-Alive agents, so a corpse no longer blocks movement forever, found via a new --screenshot-squad capture tool Dave asked for to watch a scripted playthrough visually; correct and proven at the SimulationTests level, but does NOT fix the specific squad-jam Dave watched (that is live-agent formation contention at the chokepoint, none of the six ever dying in that repro) -- parked separately as B-067 (multi-select + joint squad orders), not scoped or touched; prior: TASK-065 implemented and self-verified, realising B-065 -- a new AgentState.StalledTicks counter turns a permanently frozen movement order into a visible MovementAbandoned failure after Simulation.StallAbandonTicks (40) consecutive freezes, instead of retrying forever; Canonical.FormatVersion 13 -> 14; re-run against the exact original six-agent Bridgehead repro now reaches a real abort by tick 42 instead of freezing past tick 500; prior: TASK-064 accepted by Dave, realising B-035 -- round 2's live-testing legibility fixes confirmed by his own further playtest, which separately found this movement deadlock (R-010 materialising for real); the pre-existing criterion-3/7 finding accepted as a known, tracked gap (no map rebalance, no corpse-occupancy fix), B-022 kept descoped as-is; prior: TASK-063 accepted by Dave, realising narrowed B-033; prior: TASK-062 accepted by Dave, realising B-032; prior: TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
+  updated: 2026-09-22 (TASK-074, TASK-075, and TASK-076 accepted by Dave together, "accept all three, commit" -- TASK-074 (backlog B-074) renders a true Chebyshev-range-square weapon/engagement envelope (RenderShared.rangeSquare, four line segments at the real corners, not the smaller edge-midpoint diamond an initiating scoping pass first proposed and this session corrected) around a single selected friendly and every known hostile contact, closing B-070's original "show firearm ranges on the map" request, render-only, no CommandoWar.Sim change; TASK-075 (backlog B-075) settled docs/07 section 9 criterion 7's last open half by demonstrating a genuine MissionOutcome = Failed on unmodified Bridgehead content at tick 416 via a staged two-order push, no content edit needed, confirming the old TASK-064 "geometrically capped" finding is dead post TASK-066/070/073; TASK-076 (backlog B-076) closes docs/10_RISK_REGISTER.md R-010's swap-standoff residual gap -- two agents independently detouring around the same parked blocker no longer collide with each other, via a second detour-claim mechanism (advancingNextCells) the implementing agent found necessary beyond this session's own original scoped fix, honestly recorded as a deviation rather than silently forced to fit; R-010 moved open -> watch, a judgement call reviewed and accepted as-is. All three scoped from four parallel research/scoping agents (a live-play UX review using a newly-confirmed real windowed Godot session in this environment, a technical range-display scoping pass, a Bridgehead Failed-direction investigation, and an R-010 scoping pass), with a fifth candidate (enemy doctrine, B-022) explicitly recommended against for this session on corpus-regeneration-risk grounds and deferred. Dispatched as three parallel implementation agents, each in an isolated git worktree with fully disjoint file footprints (client render files / Bridgehead content+docs / sim movement code) -- the TASK-072/073 two-at-once deviation from the project's own "only one task active" rule, extended to three, reconciled centrally. All three self-reports were independently re-verified by the orchestrating session before being trusted (rebuild, dotnet test 422/422, -- corpus 20/20, all three Godot --selfcheck hashes unchanged, combined in one tree, plus direct review of each diff and evidence screenshot), not merely relayed. Status `done`, accepted 2026-09-22; prior: TASK-072 and TASK-073 accepted by Dave together, "accept both, commit" -- TASK-072 (backlog B-072) makes a fresh order refusal a real-time event: CommandDemoScene.fs's stepOnce auto-pauses and draws a floating per-agent label the instant any agent's disposition is newly appraised Refused/Unable, ungated from selection, closing docs/07 section 6's own unbuilt "tactical pause while issuing orders" requirement at the same time; TASK-073 (backlog B-073) redesigns Bridgehead's terrain -- a second, elevation-0 ford south of the existing berm-like bridge deck gives a friendly agent a genuine stand-off sightline to a depot rifleman at Chebyshev distance 8 (outside WeaponRange 7) for the first time, closing docs/07 section 9 criterion 3 (canonical refusal) on Bridgehead itself, plus a second extraction cell resolving B-071's extraction-jam finding at its source. Both scoped from a same-day charter-alignment review (does the build hold to docs/00_PROJECT_CHARTER.md's own product hypothesis, design principles, and stop conditions, not just docs/07's functional checklist -- answered by actually driving Bridgehead rather than re-reading docs) plus two independent expert-persona reviews (game UX, tactical game design) Dave asked for to feed into the sequencing decision. Both tasks then implemented by two agents dispatched in parallel, one each, each in an isolated git worktree to avoid collision on shared files -- an explicit, Dave-directed deviation from the project's own "only one task active" rule, reconciled centrally rather than by either agent. Both self-reports were independently re-verified by the orchestrating session before being trusted (rebuild, dotnet test 422/422, -- corpus 20/20, all three Godot --selfcheck hashes unchanged, combined in one tree), not merely relayed; a Godot NullReferenceException hit during that re-verification turned out to be a fresh worktree's missing one-time texture-import cache, not a regression. No CommandoWar.Sim file touched by either task. Status `done`, accepted 2026-09-21; prior: TASK-070 implemented and self-verified, realising new B-069 -- route around a permanently parked agent instead of stalling and abandoning, the live-agent chokepoint jam TASK-066/067/068 each independently found and left open. Scoped via two parallel research agents plus AskUserQuestion: Simulation.navigationAndMovement now attempts one Pathfinding.findWithin query (its own public contract unchanged) against a locally patched Terrain (new Terrain.withImpassable helper, currently-parked agents' cells marked Impassable) when an agent is obstructed by a parked formation-mate; a genuine detour is adopted (new MovementRerouted event/Rerouted overlay) or the existing TASK-065 freeze-then-abandon path applies unchanged. Verified directly against the TASK-068 repro shape: two formationed agents jointly ordered through a shared chokepoint now both reach their own full resolved slots, zero MovementAbandoned. No Pathfinding.fs/Appraisal.fs change, no Canonical.FormatVersion bump. Known limitation found and honestly recorded, not resolved further: two agents independently detouring around the same parked blocker can obstruct each other instead (swap-standoff shape) -- R-010 left open. dotnet test 422/422 (+7); -- corpus 20/20 (+1); all three Godot --selfcheck hashes unchanged (CommandDemo.tscn's scripted sequence is single-agent, never exercises this contention). Status `review`, awaiting Dave's acceptance; prior: TASK-068 and TASK-069 both accepted by Dave on the self-verification evidence ("commit and lets move on") -- B-067 (both halves, multi-select and joint order dispatch) and B-068 (Bridgehead trooper move speed) now done; prior: TASK-069 implemented and self-verified, realising new B-068 -- Bridgehead trooper movement was twice as fast as intended. Raised live by Dave immediately after TASK-068: "probably at least twice as fast as it should be... fast and choppy like it running fast forward." A temporary diagnostic (removed after use) confirmed the simulation genuinely runs at exactly 20 ticks/second with a stable 60fps render loop -- not a frame-pacing bug. Root cause: Terrain.BaseMoveCost = 1 with Trooper's authored MoveSpeed = 2 means a Trooper crosses a whole open-terrain cell in exactly one 20Hz tick (50ms), true since before unit types existed (TASK-049), not a regression -- this also starves the render-interpolation of any real window to smooth over, explaining "choppy" too. Fixed content-only per AskUserQuestion: content/scenarios/bridgehead.cwscenario's unit-type trooper 2 -> 1, no CommandoWar.Sim change, simHz stays at its documented 20Hz target. CommandDemo.tscn --selfcheck re-pinned; a temporary dev-overlay probe confirmed the demonstrated outcome ("no friendly casualties, machine gun neutralised") is unchanged at half speed. Status `review`, awaiting Dave's acceptance; prior: TASK-068 implemented and self-verified, realising the client-side half of B-067 -- selected: AgentId option becomes a Set, drag rubber-band-select and shift-click join the existing plain click, a MoveTo order to more than one selected agent dispatches a real Command.moveToMany (ReceivedOrder.AsGroup true for a client-issued order for the first time), Hold/Assault/Withdraw/Suppress dispatch as N existing single-recipient commands; no CommandoWar.Sim change at all, since the sim-side mechanism already existed and was already accepted (TASK-020/067) -- dotnet build/test/corpus/replay-checkpoints all unaffected and CommandDemo.tscn --selfcheck reconfirmed MATCH 0x2629A1FE165F94BB unchanged (at the time, before TASK-069's own re-pin), proving the default single-agent click path dispatches byte-identically to before this task. A real, pre-existing bug found and fixed while generalising dispatch: the pending-order dedup keyed on PlayerCommand.Agent (the head of Recipients) alone, letting a stale pending order for a non-head recipient of a new multi-recipient command survive into the same tick's batch -- fixed to match on Recipients membership. Verified with a temporary dotnet fsi probe: two selected agents with distinct authored FormationOffsets, ordered jointly to a shared cell, resolve to two distinct cells matching an independently-computed Appraisal.resolveFormationTarget prediction exactly. Honestly flagged, not smoothed over: stepping that order to settlement shows the two agents end one cell apart, not each at its own full resolved slot -- the trailing agent's order stalls against the leading agent and is abandoned (Simulation.StallAbandonTicks, TASK-065's own mechanism) one cell short, the same live-agent chokepoint contention TASK-066/067 already found and left as B-067's own accepted, unresolved gap, now reproduced for the first time through a real client-issued group order. Status `review`, awaiting Dave's acceptance and, separately, his own live editor pass over the raw mouse drag gesture (not independently verifiable from this environment); prior: TASK-067 accepted by Dave on the self-verification evidence, realising the sim-side half of B-067 -- ReceivedOrder.AsGroup (Canonical.FormatVersion 14 -> 15) keys formation redirect off the originating command's own recipient count instead of the agent's static FormationOffset alone, so a solo click always goes exactly where clicked; two genuine, non-byte-layout behaviour changes found and fixed, not smoothed over -- the formation-slots corpus entry re-authored to a real Command.moveToMany, and CommandDemo.tscn's scripted self-check re-aimed at its own pre-fix resolved cells after the old target cells produced a real friendly casualty; prior: TASK-065 and TASK-066 both accepted by Dave on the self-verification evidence alone, confirmed via AskUserQuestion in one round: commit the combined working tree now, accept both tasks without a live playtest first, and hold B-067 as a proposed, unscoped backlog row rather than start design work on it; prior: TASK-066 implemented and self-verified, realising B-066 -- occupantOf now excludes non-Alive agents, so a corpse no longer blocks movement forever, found via a new --screenshot-squad capture tool Dave asked for to watch a scripted playthrough visually; correct and proven at the SimulationTests level, but does NOT fix the specific squad-jam Dave watched (that is live-agent formation contention at the chokepoint, none of the six ever dying in that repro) -- parked separately as B-067 (multi-select + joint squad orders), not scoped or touched; prior: TASK-065 implemented and self-verified, realising B-065 -- a new AgentState.StalledTicks counter turns a permanently frozen movement order into a visible MovementAbandoned failure after Simulation.StallAbandonTicks (40) consecutive freezes, instead of retrying forever; Canonical.FormatVersion 13 -> 14; re-run against the exact original six-agent Bridgehead repro now reaches a real abort by tick 42 instead of freezing past tick 500; prior: TASK-064 accepted by Dave, realising B-035 -- round 2's live-testing legibility fixes confirmed by his own further playtest, which separately found this movement deadlock (R-010 materialising for real); the pre-existing criterion-3/7 finding accepted as a known, tracked gap (no map rebalance, no corpse-occupancy fix), B-022 kept descoped as-is; prior: TASK-063 accepted by Dave, realising narrowed B-033; prior: TASK-062 accepted by Dave, realising B-032; prior: TASK-061 accepted by Dave, realising B-025; prior: TASK-060 accepted by Dave, realising B-024; B-043 resolved -- ADR-0001 review trigger 1 measured live, Godot decision reaffirmed, no new ADR; prior: TASK-059 accepted by Dave, realising B-011d)
 
 active_work:
   selected_task: none
@@ -13,9 +13,148 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-09-21
+  updated: 2026-09-22
   note: >-
-    2026-09-21: Dave accepted both TASK-072 and TASK-073 together ("accept
+    2026-09-22: Dave accepted all three tasks together ("accept all three,
+    commit") on the implementation-plus-independent-re-verification evidence
+    recorded below. All three task files' `Status` -> `done`; `docs/11_
+    BACKLOG.md` B-074/B-075/B-076 rows -> `done`; all three `docs/ledger/
+    2026-09-22-TASK-07{4,5,6}-*.md` Review sections closed; `docs/12_
+    PROGRESS_LEDGER.md` gained three "accepted" index rows (the TASK-072/073
+    two-row precedent, extended to three). The combined working tree (all
+    three tasks' changes, already reconciled together before this
+    acceptance) was committed to `main` per Dave's explicit instruction --
+    one unrelated pre-existing uncommitted change (`src/CommandoWar.Client.
+    Godot/tools/ExportTerrainScript.cs`, a whitespace-only tabs-vs-spaces
+    diff predating this session, flagged to Dave but not addressed by him)
+    was deliberately excluded from this commit rather than bundled in
+    silently. `active_work.selected_task` stays `none`; next task not yet
+    chosen.
+
+    Prior: 2026-09-22: Three parallel tasks (TASK-074, TASK-075, TASK-076) implemented
+    and independently re-verified by the orchestrating session -- all three
+    `Status: review`, none yet accepted by Dave. Session opened per Dave's
+    own standing instruction (this session's own prompt) to make substantial
+    playability/UI progress using multiple parallel agents, extending the
+    TASK-072/073 two-at-once precedent to three. Oriented first (AGENTS.md,
+    this file's top entries, docs/11_BACKLOG.md), confirmed a clean baseline
+    (dotnet build 0/0, dotnet test 422/422, -- corpus 20/20, matching the
+    prior session's own recorded numbers exactly), then found a genuinely
+    new capability this environment offers that the prior B-072/B-073
+    session's agents did not have: a real GPU-backed windowed Godot 4.7.2
+    session works here (confirmed directly -- a real `--screenshot`
+    capture succeeded), unlike every prior task's own recorded "no live
+    windowed Godot session is possible in this environment" finding.
+
+    Four parallel research/scoping agents (background, read-only) found and
+    sized four candidates from the session prompt's own open list: (1) a
+    game-UX-expert-persona review of the *current* build (post B-072/B-073),
+    using the newly-confirmed live session to screenshot real play rather
+    than read code alone -- confirmed both shipped tasks hold up live, and
+    independently converged on weapon/engagement-range display (B-070's
+    still-unbuilt original ask) as the top remaining gap, plus reconfirmed
+    the HUD marker-cluster "busy, similarly-shaped rings" complaint is still
+    unresolved; (2) a dedicated technical scoping pass on the same
+    range-display candidate, confirming it render-only (no CommandoWar.Sim/
+    Diagnostics.fs/Canonical.FormatVersion change) and correcting a real
+    geometry error in its own first proposal (an edge-midpoint diamond that
+    understates true Chebyshev range by roughly half) before any task file
+    was drafted; (3) an investigation into the Bridgehead `Failed` direction
+    (docs/07 section 9 criterion 7's last open half, never re-verified
+    against TASK-066/070/073's fixes) -- found the old TASK-064 "geometrically
+    capped" finding is now false (5 of 6 friendlies reachable dead in one
+    probe run) but left the full 6-of-6 case inconclusive; (4) a scoping
+    pass on `docs/10_RISK_REGISTER.md` R-010's swap-standoff residual gap
+    (TASK-070's own left-open finding) -- recommended no-go for a fifth
+    candidate, enemy doctrine (B-022, a separate research agent's own
+    finding): mechanically small but would force manual eyeball-review of
+    regenerated corpus goldens across most hostile-bearing fixtures, the
+    exact scope-creep pattern this project's own history names as a
+    cautionary case -- deferred to its own future task, not built this
+    session.
+
+    Findings reported to Dave; `AskUserQuestion` confirmed the grouping
+    before dispatch, the same as the B-072/B-073 precedent. Dave chose the
+    two ready UI/content candidates (range display + marker legibility,
+    Bridgehead Failed-direction verification) plus a third: scope and fix
+    R-010's swap-standoff gap too (not yet researched at ask-time) --
+    scoped with one more dedicated research pass before drafting its task
+    file. Three task files drafted directly by the orchestrating session
+    (not delegated, the TASK-072/073 precedent): `tasks/TASK-074-WEAPON-
+    RANGE-DISPLAY-AND-MARKER-LEGIBILITY.md`, `tasks/TASK-075-BRIDGEHEAD-
+    FAILED-DIRECTION-VERIFICATION.md`, `tasks/TASK-076-SWAP-STANDOFF-DETOUR-
+    COORDINATION.md`; `docs/11_BACKLOG.md` gained new B-074/B-075/B-076 rows
+    (`ready`) before dispatch.
+
+    Dispatched as three parallel `Agent` calls, each `isolation: worktree`,
+    with fully disjoint file footprints by design (TASK-074: client render
+    files only; TASK-075: Bridgehead content/docs only; TASK-076: sim
+    movement code only) -- a stronger version of the TASK-072/073 two-at-once
+    deviation from `docs/11_BACKLOG.md`'s own "only one task active" rule,
+    reconciled centrally here rather than by any agent editing shared docs.
+
+    **TASK-074** implemented exactly as scoped: `RenderShared.rangeSquare`
+    (the true Chebyshev-range-square outline, four `Kind = 2` line segments
+    at the real corners, not the flawed edge-midpoint diamond) wired into
+    `CommandDemoScene.DrawList` for a single selected friendly and every
+    known hostile contact. Render-only, confirmed by the diff. Honestly
+    reported: at `WeaponRange = 7` the square's real screen extent exceeds
+    this game's fixed-camera viewport in one axis, a fixed-camera
+    limitation (no zoom/pan exists), not a geometry defect.
+
+    **TASK-075** settled the open question: no content edit was needed. A
+    staged two-order probe sequence (broad push, then an ordinary follow-up
+    onto the two remaining riflemen) reached `MissionOutcome = Failed` at
+    tick 416 on unmodified `bridgehead.cwscenario` -- a genuine refusal
+    cycle, not a bypass (the identical one-tick contact/reappraisal lag
+    TASK-073 already documented for `Succeeded`, now confirmed symmetric
+    for `Failed`). `docs/07_VERTICAL_SLICE.md` section 9 criterion 7 now
+    reads "met" for both directions.
+
+    **TASK-076** found and fixed a real gap in its own scoped Central
+    decision, not merely implemented it as specified: the literal
+    `claimedDetourCells` (same-tick-only) mechanism does not close the named
+    repro, since the two agents' reroutes were traced to happen on
+    *different* ticks. A second, necessary mechanism (`advancingNextCells`,
+    from Pass 1's already-fixed `intents`) was added to catch a continuing
+    agent's already-claimed cell across ticks. The pre-existing
+    `SimulationTests` fact was rewritten, not merely re-numbered, to assert
+    the fixed behaviour. `docs/10_RISK_REGISTER.md` R-010 moved `open ->
+    watch` (the implementing agent's own judgement call, flagged for Dave
+    to confirm or override -- the named collision shape is resolved, but
+    R-010's wording covers a broader ongoing risk category).
+
+    **All three self-reports were independently re-verified by this session
+    before being trusted, not taken at face value**: each worktree's diff
+    was read directly (not just its own summary), all three worktrees'
+    changed/new files were copied into the main checkout (confirmed
+    non-overlapping), then rebuilt (`dotnet build` both `.slnx`), re-ran
+    `dotnet test` (`422/422`, unchanged net count -- TASK-076 rewrote one
+    fact in place), `-- corpus` (`20/20`, unchanged), `-- import` on
+    `bridgehead.cwscenario` (confirmed byte-identical to the TASK-073
+    state), and all three Godot `--selfcheck` cases through the real 4.7.2
+    editor with all three changes combined in one tree (`MATCH` unchanged
+    on `CommandDemo.tscn` `0x84A25E3559111E9B`/`SnapshotDemo.tscn`
+    `0x6213D672BC36FDB8`/`AppraisalDemo.tscn` `0xA1354EB998FC1B95`) --
+    confirming the three parallel changes do not interact badly. Both
+    evidence screenshots (`docs/evidence/task-074-...png`,
+    `docs/evidence/task-075-...png`) were viewed directly and confirmed
+    genuine, consistent with each task's own report.
+
+    `docs/11_BACKLOG.md` B-074/B-075/B-076 rows updated `ready -> review`
+    with the verified evidence; `docs/12_PROGRESS_LEDGER.md` gained three
+    new index rows (the TASK-072/073 two-row precedent, extended to three)
+    plus a Pinned-facts addendum recording TASK-076's net-zero test-count
+    change. Each task's own file reads `Status: review`, self-verified --
+    **none of the three has been accepted by Dave**; this note and the docs
+    above record implementation and independent verification only, not
+    acceptance. `active_work.selected_task` stays `none` (three parallel
+    `review` tasks, the same explicit-deviation shape as TASK-072/073, not
+    a schema violation to silently paper over). Nothing has been committed
+    -- awaiting Dave's review and explicit accept/commit instruction, the
+    standing `AGENTS.md` rule this session was told to keep following.
+
+    Prior: 2026-09-21: Dave accepted both TASK-072 and TASK-073 together ("accept
     both, commit and update any docs so we know where progress is it") on
     the implementation-plus-independent-re-verification evidence recorded
     below -- no separate live editor pass by Dave himself. Both task files'

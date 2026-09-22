@@ -1591,6 +1591,31 @@ module Simulation =
             s.Agents
             |> Array.choose (fun a -> if Casualty.isAlive a.Vitals && a.Destination.IsNone then Some a.Position else None)
 
+        // TASK-076 (backlog B-076): every `Advancing` agent's own already-
+        // computed next cell (Pass 1's `intents`, fixed before Pass 3 runs,
+        // regardless of iteration order). A same-tick detour query must
+        // avoid this too, not just `parkedCells` — found necessary by
+        // tracing the pre-existing `swap-standoff` `SimulationTests` fact
+        // (line ~782) directly: there, the second agent's detour is
+        // computed one tick *after* the first agent's, so the first
+        // agent's alternate cell is no longer "freshly claimed this tick"
+        // by the time the second agent reroutes (`claimedDetourCells`
+        // below, being per-tick, has already reset) — but the first
+        // agent's committed route already names that same cell as `next`
+        // in its own `intents` entry for this very tick, exactly like a
+        // parked agent's cell, just for one tick at a time instead of
+        // permanently. Including it here lets the second agent's detour
+        // see it and route elsewhere, closing the cross-tick case the
+        // Central decision's own `claimedDetourCells` (same-tick-only)
+        // does not reach on its own.
+        let advancingNextCells: Cell[] =
+            intents
+            |> Array.choose (function
+                | Advancing(_, next, _, _, _) -> Some next
+                | Idle
+                | Arrived _
+                | Blocked _ -> None)
+
         // Candidate movers: completing `Advancing` agents that did not lose a
         // rival contest (at most one per target cell), as `(idx, next cell)`.
         let candidateMovers: (int * Cell)[] =
@@ -1643,6 +1668,18 @@ module Simulation =
                     // seeded `idx` in round 0).
                     Map.tryFind next occupantOf |> Option.map (fun occ -> idx, agents.[occ].Id))
             |> Map.ofArray
+
+        // TASK-076 (backlog B-076): the alternate cell each successful
+        // TASK-070 detour below claims for itself this tick, so a later
+        // agent's own detour query in the same Pass 3 pass (ascending id
+        // order, immediately below) treats it as taken too, instead of
+        // independently landing on the same cell and trading the original
+        // parked-blocker obstruction for a new mutual one between the two
+        // rerouting agents (the `swap-standoff` shape, R-010's residual
+        // gap from TASK-070). Local to this one Pass 3 pass, reset every
+        // tick — not persisted `AgentState`/`WorldState`, matching
+        // `parkedCells`'s own precedent above.
+        let mutable claimedDetourCells: Cell list = []
 
         // Pass 3: apply, in ascending agent id order — the standing
         // movement-event ordering guarantee (Events.fs).
@@ -1743,8 +1780,12 @@ module Simulation =
                             if not blockerParked then
                                 None
                             else
+                                let impassableThisQuery =
+                                    Seq.append parkedCells advancingNextCells
+                                    |> Seq.append claimedDetourCells
+
                                 match
-                                    Pathfinding.findWithin (Terrain.withImpassable parkedCells terrain) a.Position dest budget
+                                    Pathfinding.findWithin (Terrain.withImpassable impassableThisQuery terrain) a.Position dest budget
                                 with
                                 | Found(cells, cost) when cells.Length >= 2 ->
                                     Some { Cells = cells; Cursor = 0; Cost = cost }
@@ -1769,6 +1810,15 @@ module Simulation =
                                     Progress = 0
                                     Route = Some newRoute
                                     StalledTicks = 0 }
+
+                            // TASK-076: claim the adopted alternate cell so a
+                            // later agent's own detour query this same tick
+                            // avoids it too. Only the immediate next cell —
+                            // movement advances one cell per tick, and any
+                            // later cell in a multi-cell detour route is
+                            // already handled correctly by the existing
+                            // rival-contest logic on a following tick.
+                            claimedDetourCells <- newRoute.Cells.[1] :: claimedDetourCells
 
                             emit (MovementRerouted(a.Id, a.Position, newRoute.Cells.[1], occupantId)) s
                         | None ->

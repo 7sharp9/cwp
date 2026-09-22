@@ -1210,6 +1210,77 @@ type CommandDemoScene() =
                        RenderShared.lineMarker sw nw color 0.7f 1.5f |]
                 | _ -> [||]
 
+            // Weapon/engagement-range envelope (TASK-074, backlog B-074:
+            // Dave's own "having firearms ranges shown on the map" request,
+            // B-070's original ask). A player-facing, always-on-when-
+            // triggered indicator (no `F1` gate, no toggle key -- Central
+            // decision 2), reusing `RenderShared.rangeSquare` (the true
+            // Chebyshev-range square outline, not an inscribed diamond or a
+            // circle -- see that helper's own doc comment for the
+            // screen-space reasoning). A pure distance envelope: it does
+            // NOT account for LOS blocking (`Sight.fs`'s elevation rule, the
+            // mechanism behind Bridgehead's berm cover) -- a known,
+            // deliberate simplification, not a silently-shipped
+            // LOS-accurate claim (docs/06's "status indicators" bullet asks
+            // for the range to be shown, not for the indicator to resolve
+            // visibility itself, which would need a per-cell `Sight.trace`
+            // call every frame against live terrain -- out of scope here).
+            //
+            // Colour: a desaturated amber/orange distinct from every
+            // existing marker hue on this screen -- violet (objective),
+            // cyan (extraction), each side's own agent colour (fog-of-war
+            // ring), near-white (hover), green (leader), gold (selection
+            // halo), the brighter golds already used for `holdOutlineItems`
+            // (1.0,0.85,0.2) and the pending-order route preview
+            // (1.0,0.65,0.15) above -- deliberately darker/more desaturated
+            // than both of those. At `CombatConfig.WeaponRange` (7) this
+            // outline's real screen extent is large (roughly 1230x620px at
+            // this map's own `TileW`/`TileH`, hand-verified against
+            // `CellToScreen` before implementing -- see `rangeSquare`'s own
+            // doc comment), so its corners routinely fall outside the
+            // viewport; `0.3`/`1.5px` (this task's first-pass choice) read
+            // as background at that scale but proved too faint to read in
+            // an un-enhanced live screenshot against Bridgehead's busy
+            // terrain -- bumped to `0.45`/`2.0px` after a real screenshot
+            // check (not by reasoning alone), still visibly thinner and
+            // dimmer than every solid ring/halo above.
+            let rangeColor = (0.75f, 0.45f, 0.15f)
+            let rangeAlpha = 0.45f
+            let rangeWidth = 2.0f
+
+            // Friendly side: exactly one selected agent only (Central
+            // decision 2 / Inputs and assumptions -- mirrors the existing
+            // single-selection dev-detail precedent, `HudText`'s `Set.count
+            // selected = 1` gate below). Drawn at the agent's raw
+            // `Position`, the `lastKnownCell`/objective-marker precedent for
+            // a grid-cell-anchored indicator, not the smoothed `renderPos`
+            // used for the figure/halo -- `rangeSquare` itself is built from
+            // integer `Cell` corner arithmetic, so it has no meaningful
+            // sub-cell position to interpolate toward.
+            let friendlyRangeItems =
+                if Set.count selected = 1 then
+                    currAgents
+                    |> Array.tryFind (fun a -> a.Id = Set.minElement selected)
+                    |> Option.map (fun a -> RenderShared.rangeSquare a.Position CombatConfig.WeaponRange rangeColor rangeAlpha rangeWidth)
+                    |> Option.defaultValue [||]
+                else
+                    [||]
+
+            // Hostile side: every currently known contact (both a
+            // currently-visible one and a stale last-known one), read from
+            // the same `hostileKnownContacts` fog-of-war map already gating
+            // the last-known-position ring above -- an un-contacted hostile
+            // is absent from that map entirely, so it never gets a range
+            // indicator (no new intel leak, consistent with existing
+            // fog-of-war behaviour).
+            let hostileRangeItems =
+                hostileKnownContacts
+                |> Map.toArray
+                |> Array.collect (fun (_, (cell, _, _)) ->
+                    RenderShared.rangeSquare cell CombatConfig.WeaponRange rangeColor rangeAlpha rangeWidth)
+
+            let rangeItems = Array.append friendlyRangeItems hostileRangeItems
+
             // Developer overlay (TASK-043, backlog B-029 proper): renders
             // `devFrame.Overlays` -- the identical `Diagnostics` data every
             // other developer renderer consumes -- plus a coordinate grid and
@@ -1380,7 +1451,7 @@ type CommandDemoScene() =
                       committedItems ]
                 |> Array.sortBy RenderShared.depthKey
 
-            Array.concat [ sorted; fireEffects; audioCueItems; holdOutlineItems; devItems ]
+            Array.concat [ sorted; fireEffects; audioCueItems; holdOutlineItems; rangeItems; devItems ]
 
         member _.HudText() =
             // TASK-068: a count for several agents, not a list (confirmed
