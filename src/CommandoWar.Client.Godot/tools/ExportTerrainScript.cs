@@ -30,10 +30,10 @@ namespace CommandoWar.Client.Godot.Tools;
 [Tool]
 public partial class ExportTerrainScript : EditorScript
 {
-    private const string TerrainLayerPath = "TileMapLayer";
-    private const string OutputName = "bridgehead-test";
+	private const string TerrainLayerPath = "TileMapLayer";
+	private const string OutputName = "bridgehead-test";
 
-    /// The exported map is this many times the painted footprint's own
+	/// The exported map is this many times the painted footprint's own
     /// width/height, centred around it.
     private const int SizeMultiplier = 2;
 
@@ -50,15 +50,15 @@ public partial class ExportTerrainScript : EditorScript
         if (layerNode is null)
         {
             GD.PrintErr(
-                $"ExportTerrainScript: no TileMapLayer at '{TerrainLayerPath}' under the edited "
-                + $"scene's root ('{sceneRoot.Name}'). Update TerrainLayerPath and re-run.");
+				$"ExportTerrainScript: no TileMapLayer at '{TerrainLayerPath}' under the edited "
+				+ $"scene's root ('{sceneRoot.Name}'). Update TerrainLayerPath and re-run.");
             return;
         }
 
         var usedCells = layerNode.GetUsedCells();
         if (usedCells.Count == 0)
         {
-            GD.PrintErr("ExportTerrainScript: nothing is painted on this TileMapLayer yet.");
+			GD.PrintErr("ExportTerrainScript: nothing is painted on this TileMapLayer yet.");
             return;
         }
 
@@ -92,10 +92,10 @@ public partial class ExportTerrainScript : EditorScript
             var data = layerNode.GetCellTileData(coords);
             xs.Add(coords.X + offsetX);
             ys.Add(coords.Y + offsetY);
-            classes.Add((string)data.GetCustomData("Class"));
-            elevations.Add((int)data.GetCustomData("Elevation"));
-            moveCosts.Add((int)data.GetCustomData("MoveCost"));
-            opaques.Add((bool)data.GetCustomData("Opaque"));
+			classes.Add((string)data.GetCustomData("Class"));
+			elevations.Add((int)data.GetCustomData("Elevation"));
+			moveCosts.Add((int)data.GetCustomData("MoveCost"));
+			opaques.Add((bool)data.GetCustomData("Opaque"));
         }
 
         // The four map corners: always outside the centred, margined
@@ -105,10 +105,10 @@ public partial class ExportTerrainScript : EditorScript
         var objectiveArea = new Vector2I(width - 1, 0);
         var exfil = new Vector2I(0, height - 1);
 
-        var projectRoot = ProjectSettings.GlobalizePath("res://");
+		var projectRoot = ProjectSettings.GlobalizePath("res://");
 
         var outPath = System.IO.Path.GetFullPath(
-            System.IO.Path.Combine(projectRoot, "..", "..", "content", "scenarios", $"{OutputName}.cwscenario"));
+			System.IO.Path.Combine(projectRoot, "..", "..", "content", "scenarios", $"{OutputName}.cwscenario"));
 
         CwClientCore.TerrainAuthoring.exportScenario(
             width,
@@ -126,7 +126,7 @@ public partial class ExportTerrainScript : EditorScript
             outPath);
 
         GD.Print(
-            $"ExportTerrainScript: wrote {outPath} ({xs.Count} painted cell(s), "
-            + $"footprint {footprintW}x{footprintH}, map {width}x{height}).");
+			$"ExportTerrainScript: wrote {outPath} ({xs.Count} painted cell(s), "
+			+ $"footprint {footprintW}x{footprintH}, map {width}x{height}).");
     }
 }
