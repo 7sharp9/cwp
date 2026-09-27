@@ -105,8 +105,11 @@ for that bullet as well.
       are byte-identical after `--regenerate`.
 - [x] Golden frames for the refusal, `Succeeded`, and `Failed` ticks exist and
       match fresh renderer output.
-- [ ] `dotnet test CommandoWar.slnx -c Release` passes (not runnable in this
-      environment; see Evidence, delegated to CI on push).
+- [x] `dotnet test CommandoWar.slnx -c Release` passes: not runnable in this
+      environment (NuGet blocked), run by CI on push instead -- windows-latest,
+      SDK 10.0.303, run `36339461637` on `4aabb0b`: `Passed: 427, Failed: 0`
+      (422 + 2 `CorpusTests` theory rows + 3 `DiagnosticsTests` facts),
+      `corpus` 22/22, build 0 warnings / 0 errors.
 - [x] No forbidden dependency or scope entered the change.
 - [x] Required documentation updated.
 
@@ -181,6 +184,12 @@ were not recorded).
    an extraction that never happened. Proposed severity: low.
 
 Both are pinned as current behaviour in the new entries; a fix re-pins them.
+
+3. Pre-existing, cosmetic: `Corpus.fs`'s `chokepoint-detour` description says
+   "reaches (4,0) for real by tick 7" while the committed
+   `content/replays/chokepoint-detour.md` says "by tick 6", so
+   `corpus --regenerate` rewrites that file's prose. Hashes are unaffected;
+   left alone per Forbidden scope.
 
 ## Documentation updates
 

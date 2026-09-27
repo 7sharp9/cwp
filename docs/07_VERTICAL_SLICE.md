@@ -471,6 +471,32 @@ file is byte-identical to the TASK-073 state. See
 `docs/ledger/2026-09-22-TASK-075-bridgehead-failed-direction-verification.md`
 for the full tick-by-tick record and the probe transcripts' findings.
 
+### Committed replay evidence for criteria 3, 4, and 7 -- update 2026-09-27
+
+Every Bridgehead demonstration above was a temporary `dotnet fsi` probe,
+removed after use, so nothing in the build would have noticed a later change
+that made the mission unwinnable or unlosable. TASK-077 (backlog B-077) pins
+both directions as replay-corpus entries built from the real
+`content/scenarios/bridgehead.cwscenario` (embedded into `cwheadless`, seed
+20260920, the `CommandDemoScene` seed), each driven by `MoveTo` orders only
+and re-verified by `cwheadless corpus` and `CorpusTests` on every build:
+
+- `bridgehead-succeeded` reaches `Succeeded` at tick 215 and contains
+  criterion 3's shape (agent 5 refused at the ford stand-off cell at tick 6,
+  zero shots fired) and criterion 4's (the same standing order reappraised
+  `Accepted` at tick 83, once rifleman 102 is down).
+- `bridgehead-failed` reaches `Failed` at tick 84 from one six-agent frontal
+  charge.
+
+Diagnostic goldens (`content/diagnostics/bridgehead-*`) pin the refusal frame
+and both outcome frames. The schedules differ from the earlier probes' (the
+`Succeeded` run now uses both extraction cells and ends at tick 215 rather
+than ~610; the `Failed` run is a single wave rather than TASK-075's two), but
+the outcomes and the criteria they evidence are the same. Two defects found
+while building them (a non-alive agent still perceives; the extraction
+objective completes vacuously when the whole squad is down) are recorded in
+`tasks/TASK-077-*.md` for G4 triage and left unfixed.
+
 ## 10. Performance budgets
 
 These are initial budgets and may be revised only with measured evidence.
