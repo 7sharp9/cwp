@@ -1,0 +1,23 @@
+version 1
+seed 20260920
+ticks 217
+canonical 15
+build cwheadless
+scenario bridgehead-succeeded
+command 1 0 1 1 routine standard corpus 0 move 8 5
+command 1 1 2 1 routine standard corpus 1 move 8 5
+command 1 2 3 1 routine standard corpus 2 move 8 6
+command 1 3 4 1 routine standard corpus 3 move 9 6
+command 1 4 5 1 routine standard corpus 4 move 8 6
+command 1 5 6 1 routine standard corpus 5 move 5 9
+command 6 0 7 6 routine standard corpus 5 move 12 9
+command 75 0 8 75 routine standard corpus 0 move 10 5
+command 75 1 9 75 routine standard corpus 4 move 10 6
+command 75 2 10 75 routine standard corpus 2 move 11 6
+command 150 0 11 150 routine standard corpus 1 move 9 5
+command 165 0 12 165 routine standard corpus 1 move 4 9
+command 165 1 13 165 routine standard corpus 3 move 1 9
+command 195 0 14 195 routine standard corpus 1 move 5 8
+command 195 1 15 195 routine standard corpus 3 move 2 8
+command 196 0 16 196 routine standard corpus 2 move 4 9
+command 196 1 17 196 routine standard corpus 5 move 1 9

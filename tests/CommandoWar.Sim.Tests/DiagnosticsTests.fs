@@ -1561,3 +1561,72 @@ let ``frameOf derives a Succeeded MissionStatus overlay once the demolition-succ
 
     Assert.Equal(golden "demolition-success-tick-014.ascii.txt", DiagnosticRender.Ascii tick14)
     Assert.Equal(golden "demolition-success-tick-014.svg", DiagnosticRender.Svg tick14)
+
+// --- Bridgehead full mission: the bridgehead-* corpus entries (TASK-077, backlog B-077) ---
+
+let private bridgeheadFrames (name: string) =
+    let entry = Corpus.all |> Array.find (fun e -> e.Name = name)
+
+    match Corpus.commandsOf corpusDir entry with
+    | Error m -> failwith m
+    | Ok cmds -> DiagnosticRender.runFrames (entry.InitialState ()) cmds entry.TickCount
+
+let private assertMissionStatus (expectedOutcome: MissionOutcome) (expectedCompleted: ObjectiveId[]) (frame: DiagnosticFrame) =
+    match
+        frame.Overlays
+        |> Array.tryPick (function
+            | MissionStatus(outcome, completed, _) -> Some(outcome, completed)
+            | _ -> None)
+    with
+    | Some(outcome, completed) ->
+        Assert.Equal(expectedOutcome, outcome)
+        Assert.Equal<ObjectiveId[]>(expectedCompleted, completed)
+    | None -> Assert.Fail($"expected one MissionStatus overlay, got {frame.Overlays}")
+
+[<Fact>]
+let ``bridgehead-succeeded refuses agent 5 at the ford before contact, then accepts once rifleman 102 is down (byte-equal to the goldens)`` () =
+    let frames = bridgeheadFrames "bridgehead-succeeded"
+    let tick6 = frames.[6]
+
+    // Refused against rifleman 102 from the stand-off cell, before any shot.
+    Assert.Contains(tick6.Overlays, (function
+        | OrderAppraisal(a, at, Refused(RouteTooExposed(Some t), _), _) ->
+            AgentId.value a = 5 && at = { X = 5; Y = 9 } && AgentId.value t = 102
+        | _ -> false))
+
+    for tick in 1..6 do
+        Assert.DoesNotContain(frames.[tick].Events, (fun (e: EventMarker) -> e.Kind.StartsWith("shot-fired", StringComparison.Ordinal)))
+
+    // docs/07 criterion 4: removing the threat changes the appraisal.
+    Assert.Contains(frames.[83].Overlays, (function
+        | OrderAppraisal(a, _, Accepted, _) -> AgentId.value a = 5
+        | _ -> false))
+
+    Assert.Equal(golden "bridgehead-succeeded-tick-006.ascii.txt", DiagnosticRender.Ascii tick6)
+    Assert.Equal(golden "bridgehead-succeeded-tick-006.svg", DiagnosticRender.Svg tick6)
+
+[<Fact>]
+let ``bridgehead-succeeded reaches MissionOutcome Succeeded at tick 215 (byte-equal to the goldens)`` () =
+    let frames = bridgeheadFrames "bridgehead-succeeded"
+    let tick215 = frames.[215]
+
+    assertMissionStatus InProgress [| ObjectiveId.ofInt 2 |] frames.[214]
+    assertMissionStatus Succeeded [| ObjectiveId.ofInt 2; ObjectiveId.ofInt 3 |] tick215
+    Assert.Contains(tick215.Events, fun (e: EventMarker) -> e.Kind = "mission-succeeded")
+
+    Assert.Equal(golden "bridgehead-succeeded-tick-215.ascii.txt", DiagnosticRender.Ascii tick215)
+    Assert.Equal(golden "bridgehead-succeeded-tick-215.svg", DiagnosticRender.Svg tick215)
+
+[<Fact>]
+let ``bridgehead-failed reaches MissionOutcome Failed at tick 84 (byte-equal to the goldens)`` () =
+    let frames = bridgeheadFrames "bridgehead-failed"
+    let tick84 = frames.[84]
+
+    assertMissionStatus InProgress [| ObjectiveId.ofInt 1 |] frames.[83]
+    // Objective 3 (extract) reports complete vacuously once no friendly is
+    // alive -- current behaviour, recorded as a defect in TASK-077.
+    assertMissionStatus Failed [| ObjectiveId.ofInt 1; ObjectiveId.ofInt 3 |] tick84
+    Assert.Contains(tick84.Events, fun (e: EventMarker) -> e.Kind = "mission-failed")
+
+    Assert.Equal(golden "bridgehead-failed-tick-084.ascii.txt", DiagnosticRender.Ascii tick84)
+    Assert.Equal(golden "bridgehead-failed-tick-084.svg", DiagnosticRender.Svg tick84)

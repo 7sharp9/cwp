@@ -879,6 +879,91 @@ module Corpus =
              Command = Command.moveTo (CommandId.ofInt 2) 8L (AgentId.ofInt 0) { X = 10; Y = 0 }
              Issuer = "corpus" } |]
 
+    // --- Bridgehead full mission (TASK-077, backlog B-077) -----------------
+    // The first entries built from real authored content rather than a
+    // focused `RawScenario`: `content/scenarios/bridgehead.cwscenario`,
+    // embedded into this assembly at build time (see the project file) so
+    // the same bytes reach `cwheadless`, the test assembly, and the Godot
+    // replay scene without a working-directory assumption. A Bridgehead
+    // content edit therefore re-runs these entries and must regenerate them.
+
+    /// `CommandDemoScene.bridgeheadSeed`: the corpus world is byte-identical
+    /// to the one the play scene builds.
+    [<Literal>]
+    let private BridgeheadSeed = 20260920UL
+
+    let private bridgeheadInitialState () : WorldState =
+        let text =
+            use stream = typeof<Entry>.Assembly.GetManifestResourceStream "bridgehead.cwscenario"
+
+            if isNull stream then
+                failwith "corpus: embedded resource 'bridgehead.cwscenario' is missing from the Headless assembly"
+
+            use reader = new StreamReader(stream)
+            reader.ReadToEnd()
+
+        match ScenarioFile.parse text with
+        | Error e -> failwith $"corpus scenario 'bridgehead' failed to parse: {ScenarioFile.describeError e}"
+        | Ok raw ->
+            match Scenario.validate raw with
+            | Error es -> failwith $"corpus scenario 'bridgehead' is invalid: {es}"
+            | Ok scenario ->
+                match World.ofScenario scenario BridgeheadSeed with
+                | Ok w -> w
+                | Error e -> failwith $"corpus world 'bridgehead' build failed: {e}"
+
+    /// Plain `MoveTo` commands, `(tick, agent, x, y)` in tick order, with
+    /// command ids numbered 1.. overall and `Sequence` numbered 0.. within
+    /// each tick (the log must be strictly ascending by `(Tick, Sequence)`).
+    let private bridgeheadMoves (moves: (int64 * int * int * int) list) : RecordedCommand[] =
+        moves
+        |> List.mapi (fun i (tick, agent, x, y) ->
+            let sequence =
+                moves |> List.take i |> List.filter (fun (t, _, _, _) -> t = tick) |> List.length
+
+            { Tick = tick
+              Sequence = sequence
+              Command = Command.moveTo (CommandId.ofInt (i + 1)) tick (AgentId.ofInt agent) { X = x; Y = y }
+              Issuer = "corpus" })
+        |> List.toArray
+
+    /// Found by a temporary `dotnet fsi` probe (removed after use); see
+    /// TASK-077 for the tick-by-tick account.
+    let private bridgeheadSucceededCommands: RecordedCommand[] =
+        bridgeheadMoves
+            [ // Bridge push (TASK-064's scripted self-check targets) plus agent 5 to the ford stand-off cell.
+              1L, 0, 8, 5
+              1L, 1, 8, 5
+              1L, 2, 8, 6
+              1L, 3, 9, 6
+              1L, 4, 8, 6
+              1L, 5, 5, 9
+              // Refused before contact (RouteTooExposed, rifleman 102).
+              6L, 5, 12, 9
+              // Engage riflemen 101/102 from off the objective cell (B-071's cells).
+              75L, 0, 10, 5
+              75L, 4, 10, 6
+              75L, 2, 11, 6
+              // Plant the charge.
+              150L, 1, 9, 5
+              // Extract through both cells, stepping off before the next pair arrives.
+              165L, 1, 4, 9
+              165L, 3, 1, 9
+              195L, 1, 5, 8
+              195L, 3, 2, 8
+              196L, 2, 4, 9
+              196L, 5, 1, 9 ]
+
+    /// One reckless six-agent frontal charge (TASK-075's target set).
+    let private bridgeheadFailedCommands: RecordedCommand[] =
+        bridgeheadMoves
+            [ 1L, 0, 16, 4
+              1L, 1, 10, 6
+              1L, 2, 11, 6
+              1L, 3, 16, 7
+              1L, 4, 13, 2
+              1L, 5, 10, 5 ]
+
     /// Every corpus entry, in a fixed order.
     let all: Entry[] =
         [| { Name = "spike-fixture"
@@ -1151,7 +1236,35 @@ module Corpus =
              InitialStateNote = "Corpus chokepoint-detour scenario (8 x 8, seed 20260904, 2 friendlies, open terrain)"
              InitialState = fun () -> worldOfSpec chokepointDetourSpec
              TickCount = 10L
-             Commands = Some(commandsOfSpec chokepointDetourSpec) } |]
+             Commands = Some(commandsOfSpec chokepointDetourSpec) }
+           { Name = "bridgehead-succeeded"
+             Description =
+               "The real Bridgehead mission (content/scenarios/bridgehead.cwscenario, seed 20260920) played to "
+               + "MissionOutcome = Succeeded with ordinary MoveTo orders only (TASK-077, backlog B-077). Tick 1: "
+               + "five agents push onto the bridge deck and agent 5 halts at the ford stand-off cell (5,9); the "
+               + "machine gun is down by tick 12. Tick 6: agent 5 is ordered on to (12,9) and Refused "
+               + "(RouteTooExposed, rifleman 102) before any shot is fired. Tick 75: three agents engage riflemen "
+               + "101/102 from (10,5)/(10,6)/(11,6); both go down (agents 0 and 4 are lost), and at tick 83 agent "
+               + "5's standing order is reappraised Accepted. Tick 150: agent 1 plants on the bridge charge "
+               + "(complete tick 160). Ticks 165-196: the four survivors extract through both extraction cells; "
+               + "MissionSucceeded at tick 215."
+             InitialStateNote = "content/scenarios/bridgehead.cwscenario (18 x 12, seed 20260920, 6 friendlies + 5 hostiles)"
+             InitialState = bridgeheadInitialState
+             TickCount = 217L
+             Commands = Some bridgeheadSucceededCommands }
+           { Name = "bridgehead-failed"
+             Description =
+               "The real Bridgehead mission (content/scenarios/bridgehead.cwscenario, seed 20260920) played to "
+               + "MissionOutcome = Failed with ordinary MoveTo orders only (TASK-077, backlog B-077): one reckless "
+               + "six-agent frontal charge at tick 1 toward (16,4)/(10,6)/(11,6)/(16,7)/(13,2)/(10,5). Several "
+               + "orders are Refused (RouteTooExposed) once threats become known, but those agents are already "
+               + "inside weapon range; every friendly is down by tick 84 and MissionFailed fires. The extraction "
+               + "objective (id 3) also reports complete that tick, vacuously, since no friendly is alive to "
+               + "extract -- current behaviour, recorded as a defect in TASK-077."
+             InitialStateNote = "content/scenarios/bridgehead.cwscenario (18 x 12, seed 20260920, 6 friendlies + 5 hostiles)"
+             InitialState = bridgeheadInitialState
+             TickCount = 86L
+             Commands = Some bridgeheadFailedCommands } |]
 
     // --- entry paths and loading ----------------------------------------
 
@@ -1417,7 +1530,11 @@ module Corpus =
     /// second source of the same truth.
     let private replayFileOf (e: Entry) (cmds: RecordedCommand[]) : ReplaySerialisation.ReplayCommandFile =
         { Version = ReplaySerialisation.FormatVersion
-          Seed = Seed
+          // The entry's own seed, not the shared `Seed` literal: the bridgehead-*
+          // entries use `BridgeheadSeed` (TASK-077). A freshly created SplitMix64
+          // stream's word is its seed, which is exactly what `Replay.validate`
+          // checks the header against.
+          Seed = (e.InitialState ()).Random.Word
           TickCount = e.TickCount
           CanonicalFormat = Canonical.FormatVersion
           Meta = { Build = "cwheadless"; Scenario = e.Name }
