@@ -19,7 +19,14 @@ active_work:
     B-077 `done`, ledger Review closed, acceptance index row added. On the
     same instruction he selected TASK-077's finding 1 next ("fix the
     perception defect next"): TASK-078 (new backlog B-078), a non-`Alive`
-    observer perceives nothing. Status `ready`.
+    observer perceives nothing. Implemented and self-verified the same day;
+    status `review`, not yet accepted. `Casualty.isAlive observer.Vitals`
+    gate in `Perception.visibleContactsFor`; seven corpus tables, four
+    goldens, and the CommandDemoScene self-check re-pin with every outcome,
+    death, and refusal unchanged (old-versus-new event diff). CI on the
+    pinned SDK (run 36340712686): build 0/0, `dotnet test` 428/428, corpus
+    22/22. Remaining G4 input unchanged: triage of TASK-077's other finding
+    (vacuous extraction completion, proposed low) and the gate call itself.
 
     Prior:     2026-09-27: TASK-077 (new backlog B-077) selected, implemented, and
     self-verified; status `review`, not yet accepted. Chosen as the next

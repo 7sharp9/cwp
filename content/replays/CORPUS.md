@@ -112,6 +112,23 @@ instead of a separate hand-typed `.cwlog`; every `<name>.md` is byte-identical
 except the "Command log" row, which now correctly names the generated
 `<name>.cwreplay` in place of the deleted `<name>.cwlog`.
 
+**Re-pinned by TASK-078** (a non-`Alive` observer perceives nothing, backlog
+B-078): the seven entries where a downed agent still had an enemy in view --
+`perception-contact` (from tick 9), `exposed-approach` (6),
+`suppress-relieves-exposure` (5), `canonical-refusal-and-correction` (5),
+`casualties-succession-and-squad-failure` (4), `bridgehead-succeeded` (13),
+`bridgehead-failed` (15). In each, the first re-pinned tick is exactly the
+first tick a downed agent would have perceived under the old rule. What moves
+is the downed agent's own `Stress` (it no longer rises) and its side's shared
+picture (no longer refreshed by it). **Mission outcomes, deaths, refusals, and
+tick counts are unchanged everywhere.** Five entries' event streams are
+byte-identical; `bridgehead-succeeded` loses 9 corpse `ContactObserved` events
+(482 -> 470 events, including the spurious reappraisals those sightings
+triggered through the appraisal phase's global `knowledgeChanged` check) and
+`bridgehead-failed` loses 2 (364 -> 362). `Canonical.FormatVersion` does not
+move. The other 15 entries have no downed observer with anything in view and
+are byte-identical.
+
 ## Production replay-command format (TASK-025, backlog B-045)
 
 `envelope-full.cwreplay` is the first committed replay in the **production
