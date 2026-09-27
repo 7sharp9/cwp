@@ -1,7 +1,7 @@
 # TASK-077: Bridgehead full-mission replay corpus entries (`Succeeded` and `Failed`)
 
-Status: review
-Owner: coding agent (Dave to accept)
+Status: done (accepted by Dave 2026-09-27)
+Owner: coding agent
 Phase: P4
 Gate: G4 (vertical slice feature-complete); realises B-077
 Size: M

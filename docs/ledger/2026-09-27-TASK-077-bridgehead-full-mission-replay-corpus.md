@@ -143,4 +143,6 @@ re-pin them.
 ### Review
 
 - Reviewer: Dave
-- Accepted: not yet (status `review`)
+- Accepted: yes (2026-09-27, "accept it"), on the self-verification plus
+  CI evidence above. Dave's next instruction was to fix finding 1 (the
+  perception defect), realised as TASK-078.
