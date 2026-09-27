@@ -80,12 +80,8 @@ overlays:
   fire (13,2) -> (9,6): agent 101 -> agent 3  hit
   suppression (9,6): agent 3  950/1000
   suppression (9,5): agent 4  800/1000
-  stress (7,9): agent 1  880/1000
-  stress (10,6): agent 2  880/1000
   stress (9,6): agent 3  250/1000
   stress (9,5): agent 4  60/1000
-  stress (8,9): agent 5  880/1000
-  stress (11,5): agent 100  970/1000
   stress (13,2): agent 101  250/1000
   stress (13,9): agent 102  60/1000
   hostile known contact (7,9): agent 1  confidence 750  seen tick 41
@@ -117,4 +113,4 @@ overlays:
 
 events: shot-fired-miss; shot-fired-hit; agent-incapacitated@(9,6); leadership-transferred; squad-failure; objective-completed:3; mission-failed
 
-tick 84 | hash 0x1EFC5642D6532E76 (format 15) | draws 60 | agents 11 | cover-edges 7 | events 7
+tick 84 | hash 0x98477BBD703DD37E (format 15) | draws 60 | agents 11 | cover-edges 7 | events 7

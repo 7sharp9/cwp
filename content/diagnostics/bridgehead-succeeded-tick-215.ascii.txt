@@ -65,12 +65,6 @@ overlays:
   commitment (13,9): agent 102  holding
   commitment (17,3): agent 103  holding
   commitment (17,8): agent 104  holding
-  stress (11,5): agent 100  610/1000
-  stress (13,9): agent 102  970/1000
-  hostile known contact (4,9): agent 1  confidence 1000  seen tick 196
-  hostile known contact (8,6): agent 2  confidence 1000  seen tick 203
-  hostile known contact (8,6): agent 3  confidence 750  seen tick 168
-  hostile known contact (3,9): agent 5  confidence 1000  seen tick 215
   vitals (10,5): agent 0  dead
   vitals (5,8): agent 1  alive 1000/1000
   vitals (4,9): agent 2  alive 650/1000
@@ -94,4 +88,4 @@ overlays:
 
 events: movement-stepped@(4,8),(4,9); movement-completed@(4,9); movement-stepped@(3,9),(2,9); agent-extracted; objective-completed:3; mission-succeeded
 
-tick 215 | hash 0x62AF99729ED8A568 (format 15) | draws 31 | agents 11 | cover-edges 7 | events 6
+tick 215 | hash 0x8B22C2D9B44AD744 (format 15) | draws 31 | agents 11 | cover-edges 7 | events 6

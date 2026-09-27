@@ -17,7 +17,7 @@ See `content/replays/CORPUS.md`.
 | Initial state | Corpus suppress-relieves-exposure scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile) |
 | Tick count | 10 |
 | Initial hash (tick 0) | `0xF55656DDA9247A8F` |
-| Final hash (tick 10) | `0x8F563C4EF5AB73EB` |
+| Final hash (tick 10) | `0x17260DFE422F9018` |
 | Domain events | 37 |
 
 ## Per-tick authoritative state hash
@@ -28,9 +28,9 @@ See `content/replays/CORPUS.md`.
 |    2 | `0x552E34EF678BE1A4` |
 |    3 | `0x8577C832FE4DDE73` |
 |    4 | `0x2509839936BC996B` |
-|    5 | `0xC8481A6487039335` |
-|    6 | `0x2F35D5581D77E41A` |
-|    7 | `0x428C605C3C4E17BF` |
-|    8 | `0xEAEDB32EB9FFB7C4` |
-|    9 | `0x293BB99058C1ECCF` |
-|   10 | `0x8F563C4EF5AB73EB` |
+|    5 | `0xDD584F2546A34E65` |
+|    6 | `0xB5E9427C20274385` |
+|    7 | `0xD6FD8469EFCEEA36` |
+|    8 | `0x9E7D920D2B2790E7` |
+|    9 | `0xB8CB73F38334F9BE` |
+|   10 | `0x17260DFE422F9018` |
