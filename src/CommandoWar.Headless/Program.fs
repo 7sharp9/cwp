@@ -201,10 +201,36 @@ let private cmdReplay (args: string list) : int =
 /// `WorldState`. The initial state is not serialised (TASK-025 Central
 /// decision 2): it is a named builder reference, resolved here against the
 /// same `Corpus.all` registry the `.cwlog` corpus uses.
+///
+/// `bridgehead` is the label the Godot client writes into a playtest session
+/// file (TASK-080): the real `bridgehead.cwscenario` at the client's own seed,
+/// which is exactly the initial state the two `bridgehead-*` corpus entries
+/// build, so it resolves to the same builder.
 let private resolveScenario (name: string) : (unit -> WorldState) option =
+    let corpusName = if name = "bridgehead" then "bridgehead-succeeded" else name
+
     Corpus.all
-    |> Array.tryFind (fun e -> e.Name = name)
+    |> Array.tryFind (fun e -> e.Name = corpusName)
     |> Option.map (fun e -> e.InitialState)
+
+/// The order-appraisal trace of a replayed run (TASK-080): every
+/// `OrderAppraised` event with its disposition and, for a refusal, its typed
+/// reasons, then the mission outcome. This is how a recorded playtest session
+/// answers "why did that agent resist?" without the Godot client. The
+/// disposition is printed with `%A` collapsed to one line, so its wording is
+/// the type's own, not a second description that could drift from it.
+let private printAppraisals (outcome: ReplayOutcome) =
+    printfn ""
+    printfn "order appraisals:"
+
+    for e in outcome.Events do
+        match e.Body with
+        | OrderAppraised(agent, command, disposition) ->
+            let text = System.Text.RegularExpressions.Regex.Replace(sprintf "%A" disposition, @"\s+", " ")
+            printfn "    tick %d  agent %d  command %d  %s" e.Tick (AgentId.value agent) (CommandId.value command) text
+        | _ -> ()
+
+    printfn "mission outcome : %A" outcome.FinalState.MissionOutcome
 
 /// Runs and inspects a replay file in the production replay-command format
 /// (`ReplaySerialisation`). Parses it, resolves the named scenario to an
@@ -290,6 +316,7 @@ let private cmdReplayFile (args: string list) : int =
 
                             printfn ""
                             printOutcomeTail outcome
+                            printAppraisals outcome
 
                             // Checkpoint divergence check (exit 3).
                             if file.Checkpoints.Length = 0 then

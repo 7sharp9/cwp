@@ -286,7 +286,12 @@ before delivery — an envelope the legacy `.cwlog` cannot express), replayed an
 cross-checked against its own `checkpoint` lines, the committed
 `envelope-full.md` per-tick table, and a fresh `Replay.run`. `cwheadless
 replay-file <path>` is the CLI form (exit 2 on parse/validate failure, 3 on
-checkpoint divergence). The divergence report fields above are unchanged: this
+checkpoint divergence; TASK-080 appended an `order appraisals` section, one line
+per `OrderAppraised` event with its disposition and typed refusal reasons, plus
+the mission outcome, so a recorded playtest session can answer why an agent
+resisted; the `bridgehead` scenario label the Godot client writes into a
+session file resolves to the same initial state as the `bridgehead-*` corpus
+entries). The divergence report fields above are unchanged: this
 task only changes how the command log reaches `Replay.run` from disk.
 
 Do not promise replay compatibility across arbitrary future versions. Version the format and fail explicitly when migration is unavailable.

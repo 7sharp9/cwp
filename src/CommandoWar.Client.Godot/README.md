@@ -1030,3 +1030,20 @@ The Godot editor also builds it on open / on run. Output lands in
 executable needs the Godot **export templates** for `4.7.2.stable.mono`, which
 are not installed (`%APPDATA%\Godot\export_templates\4.7.2.stable.mono\` is
 empty). See the TASK-004 ledger entry for the exact error and the unblock path.
+
+## Playtest session recording and shipped content (TASK-080, backlog B-036)
+
+`CommandDemoScene` (the main scene) now records the commands it actually
+delivers to `Simulation.step` into one `session-<UTC time>.cwreplay` file per
+launch under `<ApplicationData>/CommandoWar/playtest/`, rewritten on delivery,
+every 20 ticks, and on every pause and mission end. A failed write shows
+`SESSION RECORDING FAILED: ...` on the HUD status line instead of stopping the
+run. The scripted self-check constructs the scene with no session directory
+and writes nothing, so the pinned self-check hashes are unchanged.
+`cwheadless replay-file <session>` reads a session back. The full playtest
+procedure, script, and forms are `docs/14_PLAYTEST_KIT.md`.
+
+`FSharpSceneHost.ResolveContentPath` now looks for `content/<path>` beside the
+executable first (an exported build), then falls back to the repository's
+`content/` (editor and `dotnet` runs). The exported build ships
+`content/scenarios/bridgehead.cwscenario` beside the executable.
