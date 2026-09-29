@@ -60,6 +60,12 @@ to `eol=lf` so the byte comparison holds on Windows too.
 | `demolition-success-tick-003.svg` | SVG of the same frame: the footer's extra `mission: ...` line (the `Divergence`-footer precedent — no single cell to anchor a mission-wide summary on). |
 | `demolition-success-tick-014.ascii.txt` | The same corpus entry at tick 14: agent 0 has reached the `exit` extraction area, completing `ExtractAgents` on top of the already-completed `DestroyTarget` — `WorldState.MissionOutcome` reaches `Succeeded` this tick. The overlays section carries `mission: succeeded  completed 1,2` and the events line carries `agent-extracted`, `objective-completed:2`, and `mission-succeeded`. |
 | `demolition-success-tick-014.svg` | SVG of the same frame: the footer's `mission: succeeded ...` line. |
+| `bridgehead-succeeded-tick-006.ascii.txt` | The `content/replays/bridgehead-succeeded` corpus entry (TASK-077, backlog B-077) at tick 6, the real Bridgehead content: agent 5 at the ford stand-off cell `(5,9)` is ordered on to `(12,9)` and refused before contact. The overlays section carries `order appraisal (5,9): agent 5  refused route-too-exposed threat-agent-102  exposed (5,9) ... (12,9)` and `known contact (13,9): agent 102`; the footer reads `draws 0` (no shot has been fired). |
+| `bridgehead-succeeded-tick-006.svg` | SVG of the same frame: the exposed ford row as translucent red squares, the red `R` glyph at agent 5, the `?102` known-contact ring, and the five-agent bridge push's route polylines. |
+| `bridgehead-succeeded-tick-215.ascii.txt` | The same entry at tick 215: the last survivor reaches an extraction cell and the overlays section carries `mission: succeeded  completed 2,3` (the optional observation objective 1 was never taken). |
+| `bridgehead-succeeded-tick-215.svg` | SVG of the same frame: casualty crosses on the bridge exit and depot, survivors around the two extraction cells, and the footer's `mission: succeeded ...` line. |
+| `bridgehead-failed-tick-084.ascii.txt` | The `content/replays/bridgehead-failed` corpus entry (TASK-077) at tick 84: the last friendly goes down and the overlays section carries `mission: failed  completed 1,3` -- objective 3 (extract) is listed because `Simulation.mission` treats a non-alive agent as satisfying `ExtractAgents`, a defect recorded in TASK-077, not intended behaviour. |
+| `bridgehead-failed-tick-084.svg` | SVG of the same frame: every friendly dead or bleeding out on the bridge and ford, and the footer's `mission: failed ...` line. |
 
 ## Regeneration
 

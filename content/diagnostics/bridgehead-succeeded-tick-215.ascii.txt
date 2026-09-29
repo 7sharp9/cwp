@@ -1,0 +1,91 @@
+# CommandoWar diagnostic frame
+tick 215
+
+              11111111
+    012345678901234567
+  0 ........##........
+  1 ........##........
+  2 ........##...X###.
+  3 ........##....###X
+  4 ........##o.o.....
+  5 ........11@X..o..o
+  6 ........11@.o.o...
+  7 ........##o.......
+  8 ..@..@..##....###X
+  9 .G@+@+++++++SX###.
+ 10 ..................
+ 11 ........##........
+
+cover edges (N/E/S/W per cell, * for more than one):
+    012345678901234567
+  0 ..................
+  1 ..................
+  2 .............W....
+  3 .................S
+  4 ..................
+  5 ......E....E......
+  6 ......E...........
+  7 ..................
+  8 .................N
+  9 .............W....
+ 10 ..................
+ 11 ..................
+
+legend:
+  @ friendly agent   X hostile agent
+  # impassable        o opaque (passable)
+  1-9 elevation       . open flat ground
+movement-cost > base at: (10,4)=3 (12,4)=3 (14,5)=3 (17,5)=3 (12,6)=3 (14,6)=3 (10,7)=3
+
+agents:
+  agent 0  friendly  (10,5)  at rest
+  agent 1  friendly  (5,8)  at rest
+  agent 2  friendly  (4,9)  at rest
+  agent 3  friendly  (2,8)  at rest
+  agent 4  friendly  (10,6)  at rest
+  agent 5  friendly  (2,9)  -> (1,9)
+  agent 100  hostile   (11,5)  at rest
+  agent 101  hostile   (13,2)  at rest
+  agent 102  hostile   (13,9)  at rest
+  agent 103  hostile   (17,3)  at rest
+  agent 104  hostile   (17,8)  at rest
+
+overlays:
+  path (12,9) -> (1,9): reached, cost 11
+  order appraisal (4,9): agent 2  accepted
+  order appraisal (2,9): agent 5  accepted
+  commitment (10,5): agent 0  holding
+  commitment (5,8): agent 1  holding
+  commitment (4,9): agent 2  holding
+  commitment (2,8): agent 3  holding
+  commitment (10,6): agent 4  holding
+  commitment (2,9): agent 5  moving to (1,9)
+  commitment (11,5): agent 100  holding
+  commitment (13,2): agent 101  holding
+  commitment (13,9): agent 102  holding
+  commitment (17,3): agent 103  holding
+  commitment (17,8): agent 104  holding
+  vitals (10,5): agent 0  dead
+  vitals (5,8): agent 1  alive 1000/1000
+  vitals (4,9): agent 2  alive 650/1000
+  vitals (2,8): agent 3  alive 1000/1000
+  vitals (10,6): agent 4  dead
+  vitals (2,9): agent 5  alive 1000/1000
+  vitals (11,5): agent 100  dead
+  vitals (13,2): agent 101  dead
+  vitals (13,9): agent 102  dead
+  vitals (17,3): agent 103  alive 1000/1000
+  vitals (17,8): agent 104  alive 1000/1000
+  squad leader: agent 1
+  ammo (10,5): agent 0  ammo 25/reserve 90
+  ammo (4,9): agent 2  ammo 26/reserve 90
+  ammo (2,8): agent 3  ammo 29/reserve 90
+  ammo (10,6): agent 4  ammo 23/reserve 90
+  ammo (11,5): agent 100  ammo 28/reserve 90
+  ammo (13,2): agent 101  ammo 24/reserve 90
+  ammo (13,9): agent 102  ammo 24/reserve 90
+  mission: succeeded  completed 2,3
+
+events: movement-stepped@(4,8),(4,9); movement-completed@(4,9); movement-stepped@(3,9),(2,9); agent-extracted; objective-completed:3; mission-succeeded
+
+tick 215 | hash 0x8B22C2D9B44AD744 (format 15) | draws 31 | agents 11 | cover-edges 7 | events 6

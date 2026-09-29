@@ -1973,7 +1973,12 @@ let ``an agent with a visible contact gains net Stress this tick; one with none 
 [<Fact>]
 let ``Stress accumulates over continuous contact and decays once contact is lost`` () =
     let b: GridBounds = { Width = 10; Height = 10 }
-    let mutable st = perceptionWorld b [ 0, { X = 0; Y = 0 } ] [ 1, { X = 3; Y = 0 } ] (Terrain.empty b)
+    // Chebyshev 9: inside PerceptionConfig.SightRange (10), outside
+    // CombatConfig.WeaponRange (7), so the contact is continuous and nobody is
+    // shot. At distance 3 (before TASK-078) the pair exchanged fire, agent 0
+    // was Incapacitated at tick 3, and the test only reached its expected
+    // value because a downed agent kept "seeing" and gaining stress.
+    let mutable st = perceptionWorld b [ 0, { X = 0; Y = 0 } ] [ 1, { X = 9; Y = 0 } ] (Terrain.empty b)
 
     for _ in 1..5 do
         st <- (stepIdle st).State
@@ -2401,6 +2406,39 @@ let ``an Incapacitated or Dead hostile is no longer freshly observed, even still
         // The existing Contact is retained (aging normally, not refreshed):
         // LastSeenTick stays pinned at the last tick it was actually
         // Alive-and-seen, one tick behind the current tick.
+        Assert.Equal(1L, (contactOf (agent 1) r.State).Value.LastSeenTick)
+        Assert.Equal(2L, r.State.Tick)
+
+// --- Perception requires a live observer (TASK-078, backlog B-078) --------
+
+[<Fact>]
+let ``an Incapacitated or Dead observer perceives nothing and stops refreshing the squad picture`` () =
+    // TASK-055 stopped a downed agent being *seen*; this is the observer side
+    // it left out of scope. Before this fix a corpse kept "seeing": it emitted
+    // ContactObserved and refreshed its side's shared tactical picture at full
+    // Confidence for as long as the enemy stayed in its line of sight.
+    for downVitals in [ Incapacitated 10; Dead ] do
+        let b: GridBounds = { Width = 16; Height = 8 }
+        let w = perceptionWorld b [ 0, { X = 1; Y = 1 } ] [ 1, { X = 6; Y = 1 } ] (Terrain.empty b)
+
+        let down (id: AgentId) (st: WorldState) =
+            { st with
+                Agents = st.Agents |> Array.map (fun a -> if a.Id = id then { a with Vitals = downVitals } else a) }
+
+        // Down from the start: an Alive hostile in range and line of sight is
+        // never observed, so nothing enters the squad picture.
+        let never = stepIdle (down (agent 0) w)
+        Assert.Empty((agentOf (agent 0) never.State).VisibleContacts)
+        Assert.DoesNotContain(ContactObserved(agent 0, agent 1, { X = 6; Y = 1 }), bodies never)
+        Assert.True((contactOf (agent 1) never.State).IsNone)
+
+        // Seen while alive, then downed: the contact is kept but no longer
+        // refreshed, so it ages out through the ordinary StaleAfter/ExpireAfter
+        // bands (the TASK-055 path) instead of staying at full Confidence.
+        let baseline = stepIdle w
+        Assert.Equal<AgentId[]>([| agent 1 |], (agentOf (agent 0) baseline.State).VisibleContacts)
+        let r = stepIdle (down (agent 0) baseline.State)
+        Assert.Empty((agentOf (agent 0) r.State).VisibleContacts)
         Assert.Equal(1L, (contactOf (agent 1) r.State).Value.LastSeenTick)
         Assert.Equal(2L, r.State.Tick)
 
@@ -3109,6 +3147,28 @@ let ``ExtractAgents excludes a non-Alive agent from its requirement`` () =
     Assert.Equal<ObjectiveId[]>([| ObjectiveId.ofInt 1 |], r.State.CompletedObjectives)
     Assert.True((agentOf (agent 0) r.State).Extracted)
     Assert.False((agentOf (agent 1) r.State).Extracted)
+
+[<Fact>]
+let ``ExtractAgents does not complete when every required agent is non-Alive and none was extracted`` () =
+    let area: Area = { Id = AreaId.ofString "exfil"; Cell = { X = 0; Y = 0 } }
+    let objective = ExtractAgents(ObjectiveId.ofInt 1, AllFriendlyAgents, area.Id)
+    let a = { Agent.create (agent 0) Friendly { X = 3; Y = 3 } with Vitals = Dead }
+    let b = { Agent.create (agent 1) Friendly { X = 4; Y = 4 } with Vitals = Incapacitated 100 }
+    let selected = ExtractAgents(ObjectiveId.ofInt 2, SpecificAgents [| agent 0; agent 1 |], area.Id)
+
+    // With the fail rule off the mission has no other verdict: nobody was
+    // extracted, so neither objective completes and the mission stays open.
+    let unfailing = missionWorld [| objective; selected |] [||] [| area |] [||] noFailRules [ a; b ]
+    let r = stepIdle unfailing
+    Assert.Equal<ObjectiveId[]>([||], r.State.CompletedObjectives)
+    Assert.Equal(InProgress, r.State.MissionOutcome)
+    Assert.DoesNotContain(bodies r, fun e -> e = ObjectiveCompleted(ObjectiveId.ofInt 1))
+
+    // With the fail rule on, the mission fails and lists no extraction.
+    let failing = missionWorld [| objective |] [||] [| area |] [||] { FailOnFriendlyForceEliminated = true } [ a; b ]
+    let r2 = stepIdle failing
+    Assert.Equal(Failed, r2.State.MissionOutcome)
+    Assert.Equal<ObjectiveId[]>([||], r2.State.CompletedObjectives)
 
 [<Fact>]
 let ``ExtractAgents stays satisfied once a required agent has visited the extraction cell (sticky)`` () =

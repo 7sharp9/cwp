@@ -26,6 +26,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The real Bridgehead mission content, read by the bridgehead-* corpus
+         entries (TASK-077). Embedded rather than read from disk so cwheadless,
+         the test assembly, and the Godot replay scene all see the same bytes
+         regardless of working directory. -->
+    <EmbeddedResource Include="..\..\content\scenarios\bridgehead.cwscenario" LogicalName="bridgehead.cwscenario" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CommandoWar.Sim\CommandoWar.Sim.fsproj" />
   </ItemGroup>
 

@@ -837,7 +837,7 @@ already found and parked as B-067's still-unscoped second half.
 GODOT="C:/Users/Dave/Documents/GitHub/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
 cd src/CommandoWar.Client.Godot
 "$GODOT" --headless --path . scenes/SnapshotDemo.tscn -- --selfcheck   # MATCH 0x6213D672BC36FDB8
-"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x84A25E3559111E9B
+"$GODOT" --headless --path . scenes/CommandDemo.tscn -- --selfcheck    # MATCH 0x300BB18492CEB355 (TASK-078 re-pin)
 "$GODOT" --headless --path . scenes/AppraisalDemo.tscn -- --selfcheck  # MATCH 0xA1354EB998FC1B95
 ```
 

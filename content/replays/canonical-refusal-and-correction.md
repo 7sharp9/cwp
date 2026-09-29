@@ -17,7 +17,7 @@ See `content/replays/CORPUS.md`.
 | Initial state | Corpus canonical-refusal-and-correction scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile) |
 | Tick count | 14 |
 | Initial hash (tick 0) | `0xF55656DDA9247A8F` |
-| Final hash (tick 14) | `0x38D46EC375685B5F` |
+| Final hash (tick 14) | `0xFC03C6DC0AFD699F` |
 | Domain events | 45 |
 
 ## Per-tick authoritative state hash
@@ -28,13 +28,13 @@ See `content/replays/CORPUS.md`.
 |    2 | `0x552E34EF678BE1A4` |
 |    3 | `0x8577C832FE4DDE73` |
 |    4 | `0x2509839936BC996B` |
-|    5 | `0xC8481A6487039335` |
-|    6 | `0x2F35D5581D77E41A` |
-|    7 | `0x428C605C3C4E17BF` |
-|    8 | `0x9E49F378044ACF03` |
-|    9 | `0x796EBF8471CB768C` |
-|   10 | `0xFF7A4B836BD44634` |
-|   11 | `0x5DABC1379313DF63` |
-|   12 | `0x6BFCC18EDDC286FB` |
-|   13 | `0xFFF579C9A4592BAD` |
-|   14 | `0x38D46EC375685B5F` |
+|    5 | `0xDD584F2546A34E65` |
+|    6 | `0xB5E9427C20274385` |
+|    7 | `0xD6FD8469EFCEEA36` |
+|    8 | `0x1960EEE94E38280C` |
+|    9 | `0xB59869B20A7D21D5` |
+|   10 | `0xB4D2C10BC7DEE8FB` |
+|   11 | `0xC2C0C4D1A5447AEB` |
+|   12 | `0xEBB4DC0343234E6F` |
+|   13 | `0x65F7F0215125F7CD` |
+|   14 | `0xFC03C6DC0AFD699F` |

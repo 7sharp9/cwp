@@ -46,9 +46,9 @@ overlays:
   suppression (10,1): agent 1  750/1000
   suppression (10,4): agent 2  800/1000
   stress (6,3): agent 0  160/1000
-  stress (10,1): agent 1  160/1000
-  stress (10,4): agent 2  400/1000
-  hostile known contact (5,3): agent 0  confidence 1000  seen tick 8
+  stress (10,1): agent 1  80/1000
+  stress (10,4): agent 2  160/1000
+  hostile known contact (2,3): agent 0  confidence 1000  seen tick 5
   hostile known contact (10,1): agent 1  confidence 1000  seen tick 4
   vitals (6,3): agent 0  alive 650/1000
   vitals (10,1): agent 1  incapacitated (bleeding out, 55 tick(s))
@@ -60,4 +60,4 @@ overlays:
 
 events: command-accepted@(11,3); order-appraised; commitment-established@(11,3); movement-stepped@(5,3),(6,3)
 
-tick 8 | hash 0x9E49F378044ACF03 (format 15) | draws 10 | agents 3 | cover-edges 0 | events 4
+tick 8 | hash 0x1960EEE94E38280C (format 15) | draws 10 | agents 3 | cover-edges 0 | events 4

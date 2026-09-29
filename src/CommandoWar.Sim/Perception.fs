@@ -104,19 +104,26 @@ module Perception =
     /// through the ordinary `PerceptionConfig.StaleAfter`/`ExpireAfter`
     /// bands instead (`Perception.mergeKnowledge`), the same path a threat
     /// that simply moved out of sight already takes.
+    ///
+    /// A non-`Alive` `observer` sees nothing (TASK-078, backlog B-078):
+    /// otherwise a corpse kept refreshing its side's shared picture at full
+    /// `Confidence` for as long as an enemy stayed in its line of sight.
     let visibleContactsFor (terrain: Terrain) (observer: AgentState) (agents: AgentState[]) : AgentId[] =
-        agents
-        |> Array.choose (fun other ->
-            if
-                other.Side <> observer.Side
-                && Casualty.isAlive other.Vitals
-                && chebyshev observer.Position other.Position <= PerceptionConfig.SightRange
-                && Sight.visible terrain observer.Position other.Position
-            then
-                Some other.Id
-            else
-                None)
-        |> Array.sort
+        if not (Casualty.isAlive observer.Vitals) then
+            [||]
+        else
+            agents
+            |> Array.choose (fun other ->
+                if
+                    other.Side <> observer.Side
+                    && Casualty.isAlive other.Vitals
+                    && chebyshev observer.Position other.Position <= PerceptionConfig.SightRange
+                    && Sight.visible terrain observer.Position other.Position
+                then
+                    Some other.Id
+                else
+                    None)
+            |> Array.sort
 
     /// Every agent's current visible contacts, as an array parallel to
     /// `agents` (index `i` is `agents.[i]`'s contacts). Both sides are swept.

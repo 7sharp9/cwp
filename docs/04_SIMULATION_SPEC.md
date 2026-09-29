@@ -955,7 +955,10 @@ this tick's final `Agents`; a no-op once `WorldState.MissionOutcome` is not
   qualifying occupant) until it reaches the authored tick count;
   `ExtractAgents` completes once every required, still-Alive agent's own
   `Extracted` flag is `true` (a `Dead`/`Incapacitated` agent is excluded
-  from the requirement, not a blocker); `Optional` tracks/completes exactly
+  from the requirement, not a blocker) **and at least one required agent has
+  `Extracted` set** (TASK-079: with every required agent down the
+  requirement is empty, and an empty requirement never completes, the same
+  rule as an empty `Objectives` array); `Optional` tracks/completes exactly
   like its wrapped objective, using the same id, but never gates success;
 - **emit completion or failure once**: a newly-satisfied objective's id is
   added to `WorldState.CompletedObjectives` and `ObjectiveCompleted` is
