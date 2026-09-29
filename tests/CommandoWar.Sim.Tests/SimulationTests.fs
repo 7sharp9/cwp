@@ -3149,6 +3149,28 @@ let ``ExtractAgents excludes a non-Alive agent from its requirement`` () =
     Assert.False((agentOf (agent 1) r.State).Extracted)
 
 [<Fact>]
+let ``ExtractAgents does not complete when every required agent is non-Alive and none was extracted`` () =
+    let area: Area = { Id = AreaId.ofString "exfil"; Cell = { X = 0; Y = 0 } }
+    let objective = ExtractAgents(ObjectiveId.ofInt 1, AllFriendlyAgents, area.Id)
+    let a = { Agent.create (agent 0) Friendly { X = 3; Y = 3 } with Vitals = Dead }
+    let b = { Agent.create (agent 1) Friendly { X = 4; Y = 4 } with Vitals = Incapacitated 100 }
+    let selected = ExtractAgents(ObjectiveId.ofInt 2, SpecificAgents [| agent 0; agent 1 |], area.Id)
+
+    // With the fail rule off the mission has no other verdict: nobody was
+    // extracted, so neither objective completes and the mission stays open.
+    let unfailing = missionWorld [| objective; selected |] [||] [| area |] [||] noFailRules [ a; b ]
+    let r = stepIdle unfailing
+    Assert.Equal<ObjectiveId[]>([||], r.State.CompletedObjectives)
+    Assert.Equal(InProgress, r.State.MissionOutcome)
+    Assert.DoesNotContain(bodies r, fun e -> e = ObjectiveCompleted(ObjectiveId.ofInt 1))
+
+    // With the fail rule on, the mission fails and lists no extraction.
+    let failing = missionWorld [| objective |] [||] [| area |] [||] { FailOnFriendlyForceEliminated = true } [ a; b ]
+    let r2 = stepIdle failing
+    Assert.Equal(Failed, r2.State.MissionOutcome)
+    Assert.Equal<ObjectiveId[]>([||], r2.State.CompletedObjectives)
+
+[<Fact>]
 let ``ExtractAgents stays satisfied once a required agent has visited the extraction cell (sticky)`` () =
     let area: Area = { Id = AreaId.ofString "exfil"; Cell = { X = 0; Y = 0 } }
     let objective = ExtractAgents(ObjectiveId.ofInt 1, AllFriendlyAgents, area.Id)

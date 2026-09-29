@@ -495,9 +495,13 @@ than ~610; the `Failed` run is a single wave rather than TASK-075's two), but
 the outcomes and the criteria they evidence are the same. Two defects found
 while building them (a non-alive agent still perceives; the extraction
 objective completes vacuously when the whole squad is down) are recorded in
-`tasks/TASK-077-*.md` for G4 triage and left unfixed. The first is fixed by
-TASK-078 (a non-`Alive` observer perceives nothing); both Bridgehead entries
-re-pin under it with their outcomes, refusals, and deaths unchanged.
+`tasks/TASK-077-*.md` for G4 triage. The first is fixed by TASK-078 (a
+non-`Alive` observer perceives nothing); both Bridgehead entries re-pin under
+it with their outcomes, refusals, and deaths unchanged. The second is fixed by
+TASK-079 (an `ExtractAgents` objective needs at least one required agent
+actually extracted): only `bridgehead-failed` moves, from tick 84, and its
+`CompletedObjectives` at `Failed` is now `1` rather than `1,3`; the outcome
+and tick are unchanged.
 
 ## 10. Performance budgets
 

@@ -2282,7 +2282,18 @@ module Simulation =
                                 | Some a -> not (Casualty.isAlive a.Vitals) || a.Extracted
                                 | None -> true)
 
-                        if satisfied then
+                        // A non-`Alive` agent is excused, but the objective still
+                        // needs someone actually extracted: with every required
+                        // agent down the requirement is empty and must not
+                        // complete (the empty-`Objectives` precedent below).
+                        let anyExtracted =
+                            required
+                            |> Array.exists (fun rid ->
+                                match Map.tryFind rid agentsById with
+                                | Some a -> a.Extracted
+                                | None -> false)
+
+                        if satisfied && anyExtracted then
                             markCompleted id
                     | AllOf(_, parts) ->
                         for p in parts do

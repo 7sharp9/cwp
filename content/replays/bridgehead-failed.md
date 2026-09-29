@@ -17,8 +17,8 @@ See `content/replays/CORPUS.md`.
 | Initial state | content/scenarios/bridgehead.cwscenario (18 x 12, seed 20260920, 6 friendlies + 5 hostiles) |
 | Tick count | 86 |
 | Initial hash (tick 0) | `0x02EA1348C7764846` |
-| Final hash (tick 86) | `0xE2411D3A4F4EE4C4` |
-| Domain events | 362 |
+| Final hash (tick 86) | `0x298CDA351D4244C4` |
+| Domain events | 361 |
 
 ## Per-tick authoritative state hash
 
@@ -107,6 +107,6 @@ See `content/replays/CORPUS.md`.
 |   81 | `0x087FCAEA2F0F9937` |
 |   82 | `0x0D85FFDEEDA7E3A6` |
 |   83 | `0x976AB5DCD329028D` |
-|   84 | `0x98477BBD703DD37E` |
-|   85 | `0x9EEA2F0834F58B88` |
-|   86 | `0xE2411D3A4F4EE4C4` |
+|   84 | `0xC05F39B3078F5E5E` |
+|   85 | `0xD1431A5DA082F148` |
+|   86 | `0x298CDA351D4244C4` |

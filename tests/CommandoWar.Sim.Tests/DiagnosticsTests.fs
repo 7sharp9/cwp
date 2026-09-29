@@ -1623,9 +1623,9 @@ let ``bridgehead-failed reaches MissionOutcome Failed at tick 84 (byte-equal to 
     let tick84 = frames.[84]
 
     assertMissionStatus InProgress [| ObjectiveId.ofInt 1 |] frames.[83]
-    // Objective 3 (extract) reports complete vacuously once no friendly is
-    // alive -- current behaviour, recorded as a defect in TASK-077.
-    assertMissionStatus Failed [| ObjectiveId.ofInt 1; ObjectiveId.ofInt 3 |] tick84
+    // Objective 3 (extract) stays incomplete: nobody was extracted (TASK-079).
+    assertMissionStatus Failed [| ObjectiveId.ofInt 1 |] tick84
+    Assert.DoesNotContain(tick84.Events, fun (e: EventMarker) -> e.Kind = "objective-completed:3")
     Assert.Contains(tick84.Events, fun (e: EventMarker) -> e.Kind = "mission-failed")
 
     Assert.Equal(golden "bridgehead-failed-tick-084.ascii.txt", DiagnosticRender.Ascii tick84)

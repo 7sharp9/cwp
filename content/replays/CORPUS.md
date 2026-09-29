@@ -62,7 +62,7 @@ numbers).
 | `stalled-order-abandoned` | **The first entry exercising a visible stall failure** (TASK-065, backlog B-065; docs/10 R-010 "reservation deadlocks"). One friendly agent at (0,0) ordered east to (4,0); a second friendly sits idle, permanently, on the only route at (2,0), row `y = 1` walled off the full map width (TASK-070, backlog B-069) so no detour exists — `swap-standoff`'s single-sided case, but genuinely permanent rather than mutual, and genuinely undetourable. Agent 0 advances one cell then freezes (`MovementObstructed`) every tick against the stationary occupant; run 42 ticks, long enough to reach `Simulation.StallAbandonTicks` (40), so at tick 41 the order is abandoned outright (`MovementAbandoned`) instead of freezing forever — `Destination`/`Route` clear and `AgentState.StalledTicks` resets to 0. |
 | `chokepoint-detour` | **The first entry exercising a successful detour around a parked agent** (TASK-070, backlog B-069; docs/10 R-010, the live-agent chokepoint jam TASK-066/067/068 each independently found and left open). The identical setup to `stalled-order-abandoned`, but on open terrain (no wall): a genuine alternate route around the idle blocker at (2,0) exists, so `Simulation.navigationAndMovement` finds and adopts it (`MovementRerouted`, a locally patched `Terrain` passed into the unmodified `Pathfinding.findWithin` — `Pathfinding.fs`'s own contract never changes) instead of stalling toward eventual abandonment. Agent 0 reaches (4,0) for real within the 10-tick run. |
 | `bridgehead-succeeded` | **The first entry built from real mission content** (TASK-077, backlog B-077; G4 "replay of a completed mission reproduces its authoritative result"). `content/scenarios/bridgehead.cwscenario`, seed 20260920 (`CommandDemoScene`'s own seed), played to `MissionOutcome = Succeeded` at tick 215 with 17 `MoveTo` orders and nothing else. Tick 6: agent 5, halted at the ford stand-off cell `(5,9)`, is ordered on to `(12,9)` and `Refused(RouteTooExposed(Some 102))` before any shot (docs/07 criterion 3); at tick 83, once rifleman 102 is down, the same standing order is reappraised `Accepted` (criterion 4). The machine gun falls to the bridge push (incapacitated tick 12), riflemen 101/102 to a push onto `(10,5)`/`(10,6)`/`(11,6)` at the cost of agents 0 and 4, the charge is planted ticks 151-160, and the four survivors extract through both extraction cells. |
-| `bridgehead-failed` | The same content and seed played to `MissionOutcome = Failed` at tick 84 (TASK-077): one six-agent frontal charge at tick 1. Several orders are refused mid-route once threats become known, but those agents are already inside weapon range. Also pins current behaviour recorded as a defect in TASK-077: the extraction objective (id 3) reports complete the same tick, vacuously, because no friendly is alive to extract. |
+| `bridgehead-failed` | The same content and seed played to `MissionOutcome = Failed` at tick 84 (TASK-077): one six-agent frontal charge at tick 1. Several orders are refused mid-route once threats become known, but those agents are already inside weapon range. The extraction objective (id 3) stays incomplete at `Failed`: no friendly was extracted (TASK-079; before it, id 3 completed vacuously the same tick). |
 
 **Re-pinned by TASK-031** (Combat phase realised, backlog B-019): `perception-contact`
 and `exposed-approach` each legitimately bring an agent within
@@ -128,6 +128,16 @@ triggered through the appraisal phase's global `knowledgeChanged` check) and
 `bridgehead-failed` loses 2 (364 -> 362). `Canonical.FormatVersion` does not
 move. The other 15 entries have no downed observer with anything in view and
 are byte-identical.
+
+**Re-pinned by TASK-079** (`ExtractAgents` needs at least one required agent
+extracted, backlog B-079): `bridgehead-failed` only, from tick 84 (the tick
+of `MissionFailed`, where the extraction objective used to complete
+vacuously because no friendly was alive). It loses the one
+`ObjectiveCompleted 3` event (362 -> 361 events); `MissionOutcome`, final
+tick (86), deaths, and refusals are unchanged. The other 21 entries are
+byte-identical: `bridgehead-succeeded` really extracts its agents, and no
+other entry ends with an extraction objective and a fully downed squad.
+`Canonical.FormatVersion` does not move.
 
 ## Production replay-command format (TASK-025, backlog B-045)
 
