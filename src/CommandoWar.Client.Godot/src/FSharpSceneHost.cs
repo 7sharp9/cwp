@@ -233,9 +233,20 @@ public partial class FSharpSceneHost : Node2D
     // Godot project root sits two levels under the repo root
     // (`src/CommandoWar.Client.Godot/`), and `res://` paths do not reliably
     // support `..` traversal, so the absolute path is globalized first.
-    private static string ResolveContentPath(string relativePath) =>
-        Path.GetFullPath(Path.Combine(
-            ProjectSettings.GlobalizePath("res://"), "..", "..", "content", relativePath));
+    // TASK-080: an exported build ships `content/` beside the executable
+    // (docs/14_PLAYTEST_KIT.md); an editor or `dotnet` run has no such folder
+    // beside the Godot binary and falls back to the repository's `content/`
+    // (`res://` is `src/CommandoWar.Client.Godot/`).
+    private static string ResolveContentPath(string relativePath)
+    {
+        string shipped = Path.Combine(
+            Path.GetDirectoryName(OS.GetExecutablePath()) ?? "", "content", relativePath);
+
+        return File.Exists(shipped)
+            ? shipped
+            : Path.GetFullPath(Path.Combine(
+                ProjectSettings.GlobalizePath("res://"), "..", "..", "content", relativePath));
+    }
 
     public override void _Ready()
     {

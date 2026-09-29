@@ -10,7 +10,7 @@ open CommandoWar.Sim
 /// `Ready`'s `scenarioContentPath`, not the `DemoScenario` diagnostic
 /// fixture `DemoRenderScene` still uses. Reuses TASK-039's terrain-item/
 /// depth-sort helpers (`RenderShared`) rather than duplicating them.
-type CommandDemoScene() =
+type CommandDemoScene(sessionDirectory: string option) =
     let simHz = 20.0
     let maxCatchUpStepsPerFrame = 5
 
@@ -303,10 +303,84 @@ type CommandDemoScene() =
     let pending = ResizeArray<RecordedCommand>()
     let mutable nextCommandId = 0
 
+    // Every command actually delivered to `Simulation.step`, in delivery
+    // order (TASK-080): the accepted command stream a session replay file
+    // needs. Recorded at delivery, not at click time, so a pending order
+    // that a later click superseded (see `OnClick`'s stale-order removal)
+    // never appears -- the sim never saw it. `Sequence` is the index within
+    // the delivery tick, which `pending`'s own insertion-time `Sequence` is
+    // not guaranteed to keep unique once stale entries are removed.
+    let recorded = ResizeArray<RecordedCommand>()
+
     let commandsForTick (t: int64) : PlayerCommand[] =
-        let cmds = pending |> Seq.filter (fun c -> c.Tick = t) |> Seq.map (fun c -> c.Command) |> Array.ofSeq
+        let due = pending |> Seq.filter (fun c -> c.Tick = t) |> Array.ofSeq
         pending.RemoveAll(fun c -> c.Tick = t) |> ignore
-        cmds
+        due |> Array.iteri (fun i c -> recorded.Add { c with Sequence = i })
+        due |> Array.map (fun c -> c.Command)
+
+    // Session recording (TASK-080, backlog B-036): the whole accepted command
+    // stream is rewritten to one `.cwreplay` file per launch, after the step
+    // that delivered a command and again when the mission ends, so a session
+    // that is closed mid-mission still leaves everything up to its last
+    // delivered command. Non-authoritative: nothing here feeds the sim.
+    let mutable initialHash = 0UL
+    let mutable sessionPath: string option = None
+    let mutable sessionError: string option = None
+    let mutable writtenCommands = 0
+    let mutable writtenTick = 0L
+    let mutable outcomeWritten = false
+
+    /// Ticks between routine rewrites (one second at `simHz = 20`). A refusal
+    /// lands several ticks after the order that caused it, so the file's tick
+    /// count has to keep pace with the run, not only with new commands.
+    let sessionFlushTicks = 20L
+
+    let sessionText () : string =
+        let file: ReplaySerialisation.ReplayCommandFile =
+            { Version = ReplaySerialisation.FormatVersion
+              Seed = bridgeheadSeed
+              TickCount = state.Tick
+              CanonicalFormat = Canonical.FormatVersion
+              Meta =
+                { Build = sprintf "client %O" (typeof<WorldState>.Assembly.GetName().Version)
+                  Scenario = "bridgehead" }
+              InitialHash = Some initialHash
+              Checkpoints = [||]
+              Commands = recorded.ToArray() }
+
+        // `#` lines are ignored by `ReplaySerialisation.parse`; this one is
+        // for the human who opens the file.
+        sprintf "# playtest session: mission outcome %A at tick %d\n%s" state.MissionOutcome state.Tick (ReplaySerialisation.serialise file)
+
+    // A failed write is shown on the HUD rather than swallowed or fatal: only
+    // the two disk-access failures are caught, nothing broader.
+    let writeSession () =
+        match sessionPath with
+        | None -> ()
+        | Some path ->
+            try
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName path) |> ignore
+                System.IO.File.WriteAllText(path, sessionText ())
+                sessionError <- None
+            with
+            | :? System.IO.IOException as e -> sessionError <- Some e.Message
+            | :? System.UnauthorizedAccessException as e -> sessionError <- Some e.Message
+
+    let flushSession () =
+        writeSession ()
+        writtenCommands <- recorded.Count
+        writtenTick <- state.Tick
+        outcomeWritten <- outcomeWritten || state.MissionOutcome <> InProgress
+
+    let recordSessionIfChanged () =
+        let ended = state.MissionOutcome <> InProgress
+
+        if
+            recorded.Count <> writtenCommands
+            || (ended && not outcomeWritten)
+            || state.Tick - writtenTick >= sessionFlushTicks
+        then
+            flushSession ()
 
     /// An agent's current `VitalStatus`, read from `devFrame`'s always-on
     /// `AgentVitals` overlay (TASK-053, backlog B-061) -- `AgentSnapshot`
@@ -387,6 +461,7 @@ type CommandDemoScene() =
         currAgents <- r.Snapshot.Agents
         hash <- r.StateHash.Value
         devFrame <- Diagnostics.frameOf r
+        recordSessionIfChanged ()
 
         // Mission summary panel (TASK-063, backlog B-033 narrowed): the
         // instant `MissionOutcome` leaves `InProgress` (a one-way
@@ -419,6 +494,7 @@ type CommandDemoScene() =
                 | _ -> false)
         then
             paused <- true
+            flushSession ()
 
         // The immediate next path cell (not the far-off final `Destination`)
         // for every currently-moving agent -- see the field comment on
@@ -604,6 +680,21 @@ type CommandDemoScene() =
               A = a
               Radius = radius })
 
+    /// The host constructs the scene by name with no arguments
+    /// (`FSharpSceneHost`, `Activator.CreateInstance`): sessions are recorded
+    /// under the per-user application-data folder (TASK-080). The scripted
+    /// self-check passes `None` and never writes.
+    new() =
+        CommandDemoScene(
+            Some(
+                System.IO.Path.Combine(
+                    System.Environment.GetFolderPath System.Environment.SpecialFolder.ApplicationData,
+                    "CommandoWar",
+                    "playtest"
+                )
+            )
+        )
+
     interface IClientScene with
         // TASK-064 (backlog B-035): loads the real vertical-slice content
         // (`content/scenarios/bridgehead.cwscenario`) instead of
@@ -653,6 +744,19 @@ type CommandDemoScene() =
             // for a fresh `DemoScenario`) makes the very first comparison
             // exact instead of sentinel-driven.
             prevProgress <- currAgents |> Array.map (fun a -> AgentId.value a.Id, a.Progress) |> Map.ofArray
+
+            // Session recording (TASK-080): one file per launch, named by
+            // wall-clock UTC start time (client-side only, never read by the
+            // sim). Written once now so the file's existence shows recording
+            // is live before the first order.
+            initialHash <- (Hashing.hash state).Value
+
+            sessionPath <-
+                sessionDirectory
+                |> Option.map (fun dir ->
+                    System.IO.Path.Combine(dir, sprintf "session-%s.cwreplay" (System.DateTime.UtcNow.ToString "yyyyMMdd-HHmmss")))
+
+            writeSession ()
 
         member _.Update(deltaSeconds: float) =
             if not paused then
@@ -1481,9 +1585,16 @@ type CommandDemoScene() =
                 | 3 -> "   mode=withdraw"
                 | _ -> ""
 
+            // A failed session write (TASK-080) is loud, never silent: the
+            // facilitator must know the run is not being recorded.
+            let recordingSuffix =
+                match sessionError with
+                | Some e -> sprintf "   SESSION RECORDING FAILED: %s" e
+                | None -> ""
+
             let line1 =
                 sprintf
-                    "tick %d   hash 0x%016X   draws %d   agents %d   %s   selected=%s%s%s"
+                    "tick %d   hash 0x%016X   draws %d   agents %d   %s   selected=%s%s%s%s"
                     state.Tick
                     hash
                     state.Random.Draws
@@ -1492,6 +1603,7 @@ type CommandDemoScene() =
                     selText
                     orderSuffix
                     modeSuffix
+                    recordingSuffix
 
             // Developer-facing commitment/suppression/stress/reason line
             // (TASK-043, backlog B-029, docs/06 section 11), gated behind the
@@ -1761,7 +1873,11 @@ type CommandDemoScene() =
             losRay <- None
             syncOrderModeToSelection ()
 
-        member _.OnTogglePause() = paused <- not paused
+        member _.OnTogglePause() =
+            paused <- not paused
+            // Pausing is when a tester stops to read a refusal, or leaves:
+            // make the file current (TASK-080).
+            if paused then flushSession ()
         member _.OnToggleDevOverlay() = devOverlay <- not devOverlay
 
         // A HUD order-mode icon click (TASK-048, backlog B-059): clicking
@@ -1835,7 +1951,7 @@ module CommandDemoDrive =
     /// order) -- avoided here by never routing an agent's *final*
     /// destination onto (9,5)/(9,6) themselves, only adjacent to them.
     let runScriptedSelfCheck (scenarioContentPath: string) : TickHash[] =
-        let scene = CommandDemoScene()
+        let scene = CommandDemoScene(None)
         let asScene = scene :> IClientScene
         asScene.Ready(scenarioContentPath)
 

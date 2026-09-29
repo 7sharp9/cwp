@@ -1,7 +1,7 @@
 # TASK-079: `ExtractAgents` requires at least one extracted agent
 
-Status: review
-Owner: coding agent (Dave to accept)
+Status: done (accepted by Dave 2026-09-29)
+Owner: coding agent
 Phase: P4
 Gate: G4 (defect found by TASK-077, finding 2); realises B-079
 Size: S

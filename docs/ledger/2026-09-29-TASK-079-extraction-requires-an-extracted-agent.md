@@ -82,4 +82,6 @@ Local, from a copy of the tree without `global.json`, `-p:NuGetAudit=false`:
 ### Review
 
 - Reviewer: Dave
-- Accepted: not yet (status `review`)
+- Accepted: yes (2026-09-29, "accept it"), on the self-verification plus
+  CI evidence above (run 36576528593: build 0/0, `dotnet test` 429/429,
+  `corpus` 22/22).
