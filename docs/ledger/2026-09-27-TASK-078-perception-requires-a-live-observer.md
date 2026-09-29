@@ -89,4 +89,6 @@ Godot dependency) after confirming it reproduced the old pin; story unchanged
 ### Review
 
 - Reviewer: Dave
-- Accepted: not yet (status `review`)
+- Accepted: yes (2026-09-29, "accept it"), on the self-verification plus
+  CI evidence above (run 36340712686: build 0/0, `dotnet test` 428/428,
+  `corpus` 22/22).

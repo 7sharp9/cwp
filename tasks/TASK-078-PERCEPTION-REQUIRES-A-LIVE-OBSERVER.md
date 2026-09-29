@@ -1,7 +1,7 @@
 # TASK-078: Perception requires a live observer
 
-Status: review
-Owner: coding agent (Dave to accept)
+Status: done (accepted by Dave 2026-09-29)
+Owner: coding agent
 Phase: P4
 Gate: G4 (defect found by TASK-077); realises B-078
 Size: S
