@@ -22,7 +22,8 @@ active_work:
     vacuously when every friendly is down (TASK-077 finding 2). Only
     `bridgehead-failed` moves (from tick 84; `CompletedObjectives` `1,3` ->
     `1`; 362 -> 361 events); outcome, tick, deaths, refusals, both Godot
-    pins unchanged. Local: stand-in suite 374/374, corpus 22/22; CI pending.
+    pins unchanged. Local: stand-in suite 374/374, corpus 22/22; CI on the
+    pinned SDK (run 36576528593): build 0/0, `dotnet test` 429/429, corpus 22/22.
     Remaining G4 input, all Dave's: acceptance and the gate call itself.
 
     Prior:     2026-09-29: Dave accepted TASK-078 ("accept it"); task file `done`,

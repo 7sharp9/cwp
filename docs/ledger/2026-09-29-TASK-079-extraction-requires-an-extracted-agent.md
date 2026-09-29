@@ -2,7 +2,8 @@
 
 **Owner:** Dave with coding-agent assistance
 **Source revision:** `2e075fd` (TASK-078 accepted, no task selected); Dave then
-selected TASK-077's finding 2 ("Fix it")
+selected TASK-077's finding 2 ("Fix it"); implementation commit `136d4be` on
+branch `claude/cool-hypatia-j4rswr`
 **Environment:** Linux cloud container, .NET SDK `10.0.112` (Ubuntu archive;
 pinned `10.0.303` and NuGet blocked by the session's network policy); CI:
 windows-latest, .NET SDK `10.0.303`
@@ -55,7 +56,7 @@ Local, from a copy of the tree without `global.json`, `-p:NuGetAudit=false`:
   both equal the committed pins.
 - `git diff --stat src/CommandoWar.Sim`: `Simulation.fs` only. No package or
   reference added.
-- CI on the pinned SDK: pending.
+- CI on the pinned SDK (windows-latest, SDK 10.0.303, run `36576528593` on `136d4be`: build 0 warnings / 0 errors, `Passed: 429, Failed: 0` (428 + the new fact), `corpus` 22/22, working tree clean after the verbs).
 
 ### Findings (not fixed)
 

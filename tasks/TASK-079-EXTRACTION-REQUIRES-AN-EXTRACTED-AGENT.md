@@ -83,7 +83,8 @@ accepting TASK-078.
       holds (`ExtractAgents excludes a non-Alive agent from its requirement`).
 - [x] Every moved corpus table and golden is explained; the Godot self-check
       pins are unchanged.
-- [ ] `dotnet test` and `cwheadless corpus` pass on CI (pinned SDK).
+- [x] `dotnet test` and `cwheadless corpus` pass on CI (pinned SDK):
+      windows-latest, SDK 10.0.303, run `36576528593` on `136d4be`: build 0 warnings / 0 errors, `Passed: 429, Failed: 0` (428 + the new fact), `corpus` 22/22, working tree clean after the verbs.
 - [x] No forbidden scope entered the change.
 - [x] Documentation updated.
 
@@ -152,7 +153,7 @@ build): `DemoRenderScene` `0x6213D672BC36FDB8` and `CommandDemoScene`
   fact; the stand-in excludes the FsCheck/`BenchmarkTests` files, as in
   TASK-078).
 - `git diff --stat src/CommandoWar.Sim`: `Simulation.fs` only.
-- CI on the pinned SDK: pending (recorded in the ledger detail once run).
+- CI on the pinned SDK: windows-latest, SDK 10.0.303, run `36576528593` on `136d4be`: build 0 warnings / 0 errors, `Passed: 429, Failed: 0` (428 + the new fact), `corpus` 22/22, working tree clean after the verbs.
 
 ## Documentation updates
 
