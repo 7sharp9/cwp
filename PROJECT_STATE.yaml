@@ -26,7 +26,9 @@ active_work:
     was produced and the Godot-side changes were not run (no Godot or export
     templates here); the docs/14 section 2 checklist is the acceptance test.
     The G4 gate is still `pending` and is Dave's call; nothing here records it
-    as passed. TASK-079 file `done`, B-079 `done`, ledger Review closed.
+    as passed. TASK-079 file `done`, B-079 `done`, ledger Review closed. CI on
+    the pinned SDK (run 36580095236): build 0/0, `dotnet test` 429/429, corpus
+    22/22 (CI does not compile the Godot Core or C# host).
 
     Prior:     2026-09-29: TASK-079 (new backlog B-079) selected by Dave ("Fix it") after
     the TASK-078 acceptance below, implemented, and self-verified; status

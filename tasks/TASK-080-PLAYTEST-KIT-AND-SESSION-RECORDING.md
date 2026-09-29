@@ -112,8 +112,8 @@ not record G4 as passed.
       0x300BB18492CEB355`).
 - [x] Kit written: script, controls card, observation sheet, issue form, build
       procedure, G5 mapping, findings.
-- [ ] `dotnet test` and `cwheadless corpus` pass on CI (pinned SDK): see
-      Evidence (pending).
+- [x] `dotnet test` and `cwheadless corpus` pass on CI (pinned SDK):
+      windows-latest, SDK 10.0.303, run `36580095236` on `8e4f8c6`: build 0 warnings / 0 errors, `Passed: 429, Failed: 0` (unchanged: no test added), `corpus` 22/22, working tree clean after the verbs.
 - [ ] **Not verified here:** the Godot export builds, launches from a folder
       outside the repository, finds `content/` beside the executable, and
       writes a session file (checklist in `docs/14` section 2). Needs the
@@ -169,7 +169,7 @@ not record G4 as passed.
 - `cwheadless corpus`: 22/22. Stand-in suite: 374/374 (unchanged; no test
   added).
 - `git diff --stat src/CommandoWar.Sim`: empty.
-- CI on the pinned SDK: pending (recorded in the ledger detail once run). CI
+- CI on the pinned SDK: windows-latest, SDK 10.0.303, run `36580095236` on `8e4f8c6`: build 0 warnings / 0 errors, `Passed: 429, Failed: 0` (unchanged: no test added), `corpus` 22/22, working tree clean after the verbs. CI
   builds only Sim, Headless, Tests and Benchmarks: it does not compile the
   Godot Core or the C# host.
 

@@ -57,7 +57,7 @@ Local, from a copy of the tree without `global.json`, `-p:NuGetAudit=false`:
 - `cwheadless corpus`: `OK - all 22 entries match their committed tables`.
   Stand-in suite `TOTAL pass=374 fail=0` (unchanged; no test added).
 - `git diff --stat src/CommandoWar.Sim`: empty.
-- CI on the pinned SDK: pending.
+- CI on the pinned SDK (windows-latest, SDK 10.0.303, run `36580095236` on `8e4f8c6`: build 0 warnings / 0 errors, `Passed: 429, Failed: 0` (unchanged: no test added), `corpus` 22/22, working tree clean after the verbs).
 
 ### Findings (not fixed; also in `docs/14` section 8)
 
