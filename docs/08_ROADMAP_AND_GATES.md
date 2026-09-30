@@ -161,7 +161,7 @@ passed on the evidence bullets alone.
 - mission can be completed from a clean build without developer commands;
 - failure states and invalid content are explicit;
 - replay of a completed mission reproduces its authoritative result;
-- known defects are triaged by severity;
+- known defects are triaged by severity (`15_G4_DEFECT_TRIAGE.md`);
 - no prohibited pre-G5 scope has entered the build.
 
 ## 8. P5: external playtest
