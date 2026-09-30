@@ -1,7 +1,7 @@
 # TASK-080: Playtest kit and per-session recording
 
-Status: review
-Owner: coding agent (Dave to accept; export checklist to be run by Dave)
+Status: done (accepted by Dave 2026-09-30; the export checklist, `docs/14` section 2, is still Dave's to run and its acceptance criterion below stays unticked)
+Owner: coding agent (export checklist to be run by Dave)
 Phase: P5 (preparation)
 Gate: G5 (playtest prerequisites); realises B-036
 Size: M (B-036 was `S`; widened, see "Why this task exists")
