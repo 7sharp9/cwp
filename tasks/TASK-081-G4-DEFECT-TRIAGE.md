@@ -1,6 +1,6 @@
 # TASK-081: G4 known-defect triage
 
-Status: review (self-verified 2026-09-30; not yet accepted)
+Status: done (accepted by Dave 2026-10-03; self-verified 2026-09-30)
 Owner: coding agent
 Phase: P4
 Gate: G4 (evidence bullet "known defects are triaged by severity", `docs/08_ROADMAP_AND_GATES.md` section 7); realises B-080
@@ -140,4 +140,5 @@ Detail, commands and unresolved concerns: `docs/ledger/2026-09-30-TASK-081-g4-de
 The `dotnet build`, `dotnet test` and `-- corpus` checks were **not run** (pinned SDK
 absent, NuGet blocked); the diff has no `src/`, `tests/`, `content/` or `.github/` path.
 
-Accepted: not yet.
+Accepted: yes (2026-10-03, "accept"), on the self-verification evidence. The docs-only
+diff was not built or tested locally; acceptance does not call G4, which stays `pending`.

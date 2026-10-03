@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: "godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; reaffirmed 2026-09-19, see the ADR's note)"
-  updated: 2026-10-02
+  updated: 2026-10-03
 
 # Current state only. What was done, when, and with what evidence is recorded in
 # docs/12_PROGRESS_LEDGER.md (index) and docs/ledger/ (detail files); the work
@@ -16,10 +16,10 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-10-02
+  updated: 2026-10-03
   note: >-
-    TASK-081 (backlog B-080, G4 known-defect triage) is implemented and
-    self-verified; status `review`, awaiting Dave's acceptance. It adds
+    TASK-081 (backlog B-080, G4 known-defect triage) is implemented,
+    self-verified and accepted by Dave (2026-10-03); status `done`. It adds
     `docs/15_G4_DEFECT_TRIAGE.md`: 12 open defects (1 major, 11 minor), 6
     deliberate limitations and 6 items never verified in the build
     environment. No blocker is recorded, which is not proof that none exists,

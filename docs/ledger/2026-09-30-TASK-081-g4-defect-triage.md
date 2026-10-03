@@ -94,4 +94,6 @@ code claim was re-read. Results of that re-verification:
 
 ### Review
 
-Accepted: not yet.
+Accepted: yes (2026-10-03, "accept"), on the self-verification evidence. Not covered:
+the docs-only diff was never built or tested locally (pinned SDK absent, NuGet blocked),
+and acceptance does not call G4, which stays `pending`.
