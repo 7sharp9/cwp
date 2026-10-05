@@ -209,8 +209,8 @@ Scenarios are realised as replay-corpus entries (`content/replays/`, section
 - **Covered route adapts accepted order**: partial. Directional `Terrain.cover`
   drops the exposure below the threshold so the order is `Accepted` (the cover
   mitigation term), but there is no `Adapted` outcome or route recomputation
-  (stage 5 of `docs/04` section 12.5 is not built; it is a B-018 follow-up that
-  has not been filed).
+  (stage 5 of `docs/04` section 12.5 is not built, and no backlog item
+  owns it).
 - **Stale enemy report decays**: a fact in which a lost contact drops a
   confidence band after `StaleAfter` and expires with `ContactExpired` after
   `ExpireAfter`.

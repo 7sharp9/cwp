@@ -45,8 +45,8 @@ of a record, not proof that none exists (see section 4).
 | D-08 | minor | analysis | The client cannot open a session file; analysing a session needs the .NET SDK and this repository. | `docs/14` section 8 item 3; TASK-080 ledger | `render` accepts only the legacy `.cwlog` (recorded by TASK-080; not re-read, `unconfirmed`) | accept for G5 |
 | D-09 | minor | presentation | The weapon-range square (`WeaponRange = 7`) is 1232 x 616 px against a 1280 x 800 viewport with no zoom or pan, so its corners clip for most agents, and it is dimmer (alpha 0.45, 2 px) than the other markers. | TASK-074 ledger "Deviations" | measured by TASK-074 with a real screenshot; camera scale not re-checked since (`unconfirmed`) | accept for G5; check in the playtest whether the range reads |
 | D-10 | minor | tooling | `pending` commands get `Sequence = pending.Count`, which can repeat after a stale entry is removed. Delivery order is by list position and the recording re-indexes, so nothing is affected today. | TASK-080 ledger item 8 | `CommandDemoScene.fs:1756` | defer past G5 |
-| D-11 | minor | documentation | `PROJECT_STATE.yaml` does not parse as YAML: PyYAML fails at line 8, column 2906 ("mapping values are not allowed here"), inside the long `updated:` value. No tool reads it today. | TASK-077 and TASK-080 ledgers | re-run on the snapshot: `yaml.safe_load` raises the same error | defer past G5; a one-line quote would fix it |
 | D-12 | minor | documentation | `chokepoint-detour` prose disagrees between its two sources: `Corpus.fs:1235` says the agent reaches (4,0) "by tick 7", `content/replays/chokepoint-detour.md:3` says "by tick 6". Hashes are unaffected, but `corpus --regenerate` would rewrite the prose. Which tick is right was not checked. | found by this triage | both lines read | defer past G5 |
+| D-13 | minor | gameplay | Group `MoveTo` completion never fires for an agent that is not on the target cell. Appraisal resolves the order to the agent's formation slot, but `commitmentAndLocalAction` completes only when `Position = target`, so slot-holding agents stop at their slots with `Destination = None` and keep `Order` and `Disposition` indefinitely; no `CommitmentCompleted` is emitted and a queued follow-on order is never promoted. | found while checking `docs/04` section 12.6 | `Simulation.fs:1176` (compares `target`) against `Simulation.fs:972` (the appraisal fast path resolves the slot). Probe on the real Bridgehead content with enemies removed: three friendlies ordered as a group to (6,6); agent 0 completes at tick 9, agents 1 and 2 stand at (7,6) and (6,7) from ticks 12 and 13 with the order still set | repair after G4 triage if Dave wants group orders chained; otherwise defer past G5 |
 
 ## 3. Deliberate limitations (scope decisions, not defects)
 
@@ -80,6 +80,7 @@ could hide a blocker.
 
 | Defect | Fixed by |
 |---|---|
+| `PROJECT_STATE.yaml` did not parse as YAML (D-11) | rewritten as valid YAML in the docs cleanup |
 | Corpses blocked movement forever | TASK-066 |
 | Frozen movement retried forever | TASK-065 |
 | A solo order was pulled to a formation slot | TASK-067 |
@@ -104,14 +105,14 @@ place. It is not an open defect.
 
 ## 7. Counts and what is left for Dave
 
-Open defects: 0 blocker, 1 major (D-01), 11 minor. Unverified: 6 items.
+Open defects: 0 blocker, 1 major (D-01), 11 minor (D-11 fixed, D-13 added). Unverified: 6 items.
 
 Decisions for Dave:
 
 1. Accept or change the dispositions in section 2.
 2. Whether to select a test-build presentation task for D-04, D-05 and D-06.
 3. The neutral working title, if D-05 is to be fixed.
-4. Whether to repair D-11 and D-12 now or leave them.
+4. Whether to repair D-12 and D-13 now or leave them.
 5. When to run the `docs/14` section 2 checklist (U-01 to U-03), since a failure
    there would outrank everything in section 2.
 6. The G4 gate call itself.

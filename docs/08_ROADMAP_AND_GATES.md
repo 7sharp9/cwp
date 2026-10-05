@@ -88,8 +88,8 @@ A gate passes only when:
 - build grid, terrain, movement, reservations, and line of sight;
 - establish headless benchmark and allocation measurements.
 
-Tactical knowledge is not P2 work. Perception (B-015, the first consumer of
-`Sight.trace` / `Sight.visible`) is a P3 item, and section 6's P3 required work
+Tactical knowledge is not P2 work. Perception (B-015, a consumer of
+`Sight.visible`) is a P3 item, and section 6's P3 required work
 names "shared tactical knowledge" under B-015/B-016. No G2 evidence bullet
 exercises it, and G2 was declared passed on the evidence bullets alone.
 

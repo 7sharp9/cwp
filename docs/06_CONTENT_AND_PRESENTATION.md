@@ -60,7 +60,7 @@ Only add a field when a current task demonstrates that the vertical slice needs 
 type ObjectiveDefinition =
     | ReachArea of ObjectiveId * AreaId
     | HoldArea of ObjectiveId * AreaId * TickCount
-    | DestroyTarget of ObjectiveId * EntityId
+    | DestroyTarget of ObjectiveId * TargetId * TickCount
     | ExtractAgents of ObjectiveId * AgentSelection * AreaId
     | AllOf of ObjectiveId * ObjectiveDefinition array
     | Optional of ObjectiveDefinition

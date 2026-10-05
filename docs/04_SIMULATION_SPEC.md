@@ -29,8 +29,7 @@ enforces one eligibility rule: `IssuedAtTick` must lie in `[0, currentTick]`; a
 command issued in the future or before tick 0 is rejected
 (`CommandRejection.IssueTickOutOfRange`). A command issued on an earlier tick
 and delivered now is **accepted**: staleness is a tactical judgement for agent
-appraisal (backlog B-017), not a command-intake rule, so no give-up horizon is
-applied. Command scheduling and identity are **not** authoritative state:
+appraisal, not a command-intake rule, so no give-up horizon is applied. Command scheduling and identity are **not** authoritative state:
 `WorldState` holds no command history, and cross-tick `CommandId` uniqueness is
 a replay-log invariant (`ReplayError.DuplicateCommandIdInLog`, checked by
 `Replay.validate`).
@@ -348,9 +347,13 @@ starts an action (section 20): its intent is idle.
   that would change its contract, was not chosen.
 
 `AgentState.Route` (the followed path, cursor and cost) is a **non-canonical
-derived cache**: a pure deterministic function of `(Position, Destination,
-Terrain)` at every tick, so it is excluded from `Canonical.encode` (section
-17). `AgentState.Progress` and `AgentState.StalledTicks` are canonical state:
+derived cache**, excluded from `Canonical.encode` (section 17). A route found by
+the ordinary query is a function of `(Position, Destination, Terrain)`, but a
+detour route (above) also depends on where other agents were on the tick it was
+adopted, so a `Route` cannot be rebuilt from a canonical image alone. Two runs
+of the same inputs still produce identical routes, and replay always starts
+from tick 0 (sections 16 and 18), so the exclusion does not weaken the
+determinism contract. `AgentState.Progress` and `AgentState.StalledTicks` are canonical state:
 neither can be recomputed from `Position` alone, since `Position` does not
 change while an edge is in progress or an agent is frozen, so nothing else
 records how long. `AgentState.MoveSpeed` is static authored data (the
@@ -478,7 +481,8 @@ Fatigue, persistent personality dimensions, interpersonal relations, inventory g
   after entering a cell; `Destination: Cell option`; `StalledTicks`, the
   consecutive ticks the current movement has been frozen (section 12.7);
   `MoveSpeed`, static (section 8); and `Route`, the followed path, a derived
-  cache that Navigation recomputes from `(Position, Destination, Terrain)`.
+  cache that Navigation rebuilds whenever it no longer matches
+  `(Position, Destination)` (section 8).
 - **Visible contacts.** `VisibleContacts: AgentId[]` (TASK-026) holds the
   opposing-side agents this agent can currently see, rewritten from scratch
   each tick by the Perception phase (section 12.3). Like `Route`, it is a
@@ -607,8 +611,8 @@ One accept/reject event is emitted per (command, recipient) pair.
 
 `IssuedAtTick` is distinct from the delivery tick (section 2). It must be
 `>= 0` and not after the tick being processed. A stale (long-delayed) command
-is still accepted, since following an outdated order is an appraisal decision
-(B-017), not a validation one. "Unauthorised" is only the friendly/hostile-side
+is still accepted, since following an outdated order is an appraisal decision,
+not a validation one. "Unauthorised" is only the friendly/hostile-side
 check: there is no issuer identity or commander model.
 
 Intake writes no agent state. An accepted `(command, recipient)` is recorded as
@@ -850,10 +854,13 @@ TASK-045):
   `AppraisalConfig.SuppressionBandEnter` (500) and back to `false` at or below
   `SuppressionBandExit` (300);
 - threat-suppression-change (TASK-037): the identical band check, but across
-  every agent rather than only the appraising one, so a threat's flip
-  reappraises a *different* agent's order that names it (`docs/05` section 14;
-  `docs/07` section 8 step 6). Every agent's new band is computed before any
-  order is judged, so a later-id threat's flip is known to an earlier-id agent;
+  every agent rather than only the appraising one. When any agent's band flips,
+  every already-appraised, non-fulfilled order of every agent is re-judged, not
+  only an order that names the agent whose band flipped (`docs/05` section 14).
+  The motivating case is a threat suppressed by a `Suppress` order, which lets
+  another agent's `Refused` order be re-judged and `Accepted` (`docs/07`
+  section 8 step 6). Every agent's new band is computed before any order is
+  judged, so a later-id threat's flip is known to an earlier-id agent;
 - wounded: `AgentState.RecentlyWounded` is set. The flag is consumed here,
   cleared on every tick this phase processes the agent, whether or not it
   triggered a reappraisal.
@@ -942,7 +949,11 @@ correspondingly thin:
   `Order` and `Disposition`, or promotes the head of `OrderQueue` into `Order`
   with `Disposition = None`, and emits `CommitmentCompleted`. The promoted
   order is judged by the next tick's Appraisal, since Appraisal has already run
-  this tick, so a chained waypoint's next leg begins one tick later;
+  this tick, so a chained waypoint's next leg begins one tick later. Known
+  limitation (`docs/15` D-13): the test compares the position with the order's
+  own target, not the agent's formation slot, so a group `MoveTo` completes only
+  for the agent standing on the target cell; the others stop at their slots and
+  keep the order with `Destination = None`;
 - for `Assault` not yet fulfilled, the executor drives the `Destination`
   freeze through the ordinary Navigation pipeline: `AwaitingSupport` clears it,
   so Navigation does not move the agent, and `ApproachingStart` and
@@ -1030,8 +1041,7 @@ Chebyshev cell of range, minus `CoverMitigationPerLevel` (150) per
 geometry (`Appraisal.attackDirection`, which `Combat` reuses). One
 `RandomStream.next` draw decides the shot: it hits when `draw % 1000` is below
 the chance. `ShotFired(shooter, target, hit)` is emitted for every qualifying
-shot. This is the simulation's first real gameplay consumer of
-`WorldState.Random` (section 17). Ammunition is a firing gate applied by the
+shot. Combat is the only gameplay consumer of `WorldState.Random` (section 5). Ammunition is a firing gate applied by the
 phase, not a term in the hit-chance formula: `Combat.hitChance` and
 `Combat.chooseTarget` do not read it. A qualifying shot consumes one round
 (`Ammo.fire`), whatever the shooter's commitment.
@@ -1282,7 +1292,7 @@ A command can be syntactically valid but tactically refused by an agent. Command
   `PlayerIntent` and `ReceivedOrder.Intent` never represent it.
 
 `IssuedAtTick` is stored on the order as provenance; staleness of a
-long-delayed order is not yet appraised (deferred, B-021). `PlayerIntent`,
+long-delayed order is not appraised, and no backlog item owns it. `PlayerIntent`,
 `Urgency`, `RiskTolerance` and `QueueMode` live in `Domain.fs` so that
 `AgentState.Order` and `AgentState.PendingDelivery` can reference them.
 Issuer identity is not part of `PlayerCommand` (not modelled: one player);

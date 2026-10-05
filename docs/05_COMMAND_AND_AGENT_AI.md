@@ -241,8 +241,8 @@ contributes nothing, whatever suppressed it, whether an ordered `Suppress` or
 incidental automatic engagement (TASK-037, backlog B-030). The threat named in
 a `RouteTooExposed` reason is the highest-contributing one, ties broken by
 ascending id. Exposure, cover and suppression are the realised stage-3 terms.
-Known fire lanes and ally support are not (B-019's fire-lanes half, B-021's
-remaining triggers), and wound severity enters at stage 4.
+Known fire lanes and ally support are not built and no backlog item owns them,
+and wound severity enters at stage 4.
 
 ### Stage 4: resolve
 
@@ -283,8 +283,8 @@ Before refusal, attempt a small set of permitted adaptations:
 
 An adaptation must preserve the commander's broad intent. Otherwise it becomes a refusal with a suggested correction.
 
-Stage 5 is not built (B-018): there is no `Adapted` outcome and no route
-recomputation.
+Stage 5 is not built and no backlog item owns it: there is no `Adapted`
+outcome and no route recomputation.
 
 ## 6. Outcomes
 
@@ -302,12 +302,10 @@ Every non-trivial outcome includes one primary reason and optional supporting re
 The implemented type (TASK-028, backlog B-017) is the subset
 `Accepted | Refused of primary * supporting | Unable of primary * supporting`.
 `Refused` and `Unable` carry their `DecisionReason`s by construction, so the
-"one primary reason" rule holds without a side check. `Adapted` (stage 5) is a
-B-018 follow-up. `Delayed` (a `ResumeCondition` mechanism) was named for B-021
-by TASK-028 and TASK-030 and called a B-018 follow-up by TASK-037 and TASK-047;
-B-018 and B-021 are both closed without it, and no open backlog row carries it.
-Neither has a case, and `TacticalAdaptation` and `ResumeCondition` do not
-exist. Every appraisal, including `Accepted`, emits
+"one primary reason" rule holds without a side check. `Adapted` (stage 5) and
+`Delayed` (a `ResumeCondition` mechanism) are not built: neither has a case,
+`TacticalAdaptation` and `ResumeCondition` do not exist, and no open backlog
+row carries either (B-018 and B-021 closed without them). Every appraisal, including `Accepted`, emits
 one `OrderAppraised` event carrying the `OrderDisposition` (`docs/04` section
 14).
 
@@ -366,8 +364,8 @@ entirely empty). The doc's `ContactId` is `AgentId` in the code (there is no
 5, stage 1), not a `DecisionReason`, because an undelivered order never
 reaches appraisal. The rest (`RouteBlocked`, `HeavySuppression`,
 `MissingCapability`, `IssuerNotRecognised`, `ImmediateThreat`,
-`UnsupportedAssault`) arrive with the systems that can trigger them, namely
-B-021 (the remaining triggers), a capability model, and a commander-identity
+`UnsupportedAssault`) arrive with the systems that can trigger them, namely the
+remaining reappraisal triggers, a capability model, and a commander-identity
 and interrupt-priority model, none of which exist, rather than as speculative
 type machinery (`AGENTS.md`).
 

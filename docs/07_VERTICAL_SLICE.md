@@ -83,8 +83,8 @@ acceptance criterion 1 in section 9).
 - pathfinding and local cell reservation;
 - movement and formation slots;
 - hitscan small-arms combat (TASK-031, backlog B-019): automatic symmetric
-  engagement and a deterministic range- and cover-mitigated hit chance, the
-  simulation's first gameplay PRNG draw. Ammunition and weapon readiness
+  engagement and a deterministic range- and cover-mitigated hit chance with one
+  PRNG draw per shot. Ammunition and weapon readiness
   (TASK-047, backlog B-030 proper): `AgentState.Ammo` (a magazine plus
   reserve, automatic reload once empty, instant resupply on an authored
   `WorldState.ResupplyAreas` cell) gates every qualifying shot, `Suppress` and
@@ -251,15 +251,13 @@ Dave's and is not recorded here.
 
 ### Bridgehead evidence
 
-TASK-064 was the first task to run the mission content, `bridgehead.cwscenario`,
-inside the play scene rather than as a hand-built fixture. Criteria 3 and 7
-were not closed on it at first. Four later changes closed them: corpses stopped
-blocking movement (TASK-066), agents detour around a parked ally (TASK-070), a
-second ford and a second extraction cell were added (TASK-073), and the
-`Failed` direction was re-verified (TASK-075). TASK-077 then replaced the
-throwaway probes that had demonstrated all this with two committed corpus
-entries, built from the real content (embedded into `cwheadless`, seed
-20260920, the play scene's seed), driven only by `MoveTo` orders.
+The mission content, `bridgehead.cwscenario`, runs inside the play scene
+(TASK-064). Criteria 3 and 7 rest on the following behaviour: corpses do not
+block movement (TASK-066), agents detour around a parked ally (TASK-070), the
+map has a second ford and a second extraction cell (TASK-073), and the `Failed`
+direction is verified (TASK-075). Two committed corpus entries demonstrate it
+(TASK-077). They are built from the real content (embedded into `cwheadless`,
+seed 20260920, the play scene's seed) and driven only by `MoveTo` orders.
 
 `bridgehead-succeeded` reaches `Succeeded` at tick 215.
 
@@ -300,12 +298,9 @@ These are properties of the build as it stands, relevant to the G5 playtest.
 - **Each extraction cell holds one agent at a time.** An extracted agent stays
   on its cell, so later arrivals stall unless it steps off. The second cell
   doubles throughput; it does not remove the choreography.
-- **The two Bridgehead entries moved under later behaviour fixes** (a downed
-  agent no longer perceives, TASK-078; `ExtractAgents` needs at least one
-  extracted agent, TASK-079). Outcomes, refusals and deaths were unchanged;
-  only canonical state and, for `bridgehead-failed`, its completed-objectives
-  list moved. The re-pins are explained in `content/replays/CORPUS.md` and the
-  tasks' ledger entries.
+- **The Bridgehead entries depend on two rules**: a downed agent perceives
+  nothing (TASK-078), and `ExtractAgents` needs at least one extracted agent
+  (TASK-079). Corpus re-pins are explained in `content/replays/CORPUS.md`.
 
 The full record for each step is in the ledger entries for TASK-064, 066, 070,
 073, 075, 077, 078 and 079.
@@ -321,8 +316,6 @@ These are initial budgets and may be revised only with measured evidence.
 - no unbounded pathfinding or appraisal work in a single tick;
 - stable frame pacing during command preview and debug overlays;
 - headless execution at substantially faster than real time.
-
-Exact millisecond and allocation budgets should be set after TASK-003 establishes a benchmark harness.
 
 `bench/CommandoWar.Benchmarks/` is the headless performance and allocation
 harness (`docs/09` section 2.8; TASK-014, backlog B-013), and
