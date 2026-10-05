@@ -88,12 +88,10 @@ A gate passes only when:
 - build grid, terrain, movement, reservations, and line of sight;
 - establish headless benchmark and allocation measurements.
 
-**Resolved 2026-09-05:** this list previously also named "tactical knowledge."
-No G2 evidence bullet below exercises it, and Perception (B-015, the first
-consumer of `Sight.trace` / `Sight.visible`) is a P3 item, not P2 — section 6's
-P3 Required work already names "shared squad tactical knowledge" under
-B-015/B-016. Removed here as a forward-reference that belonged to P3, not a
-G2 blocker; G2 was declared passed on the evidence bullets alone.
+Tactical knowledge is not P2 work. Perception (B-015, the first consumer of
+`Sight.trace` / `Sight.visible`) is a P3 item, and section 6's P3 required work
+names "shared tactical knowledge" under B-015/B-016. No G2 evidence bullet
+exercises it, and G2 was declared passed on the evidence bullets alone.
 
 ### G2 evidence
 
@@ -110,7 +108,7 @@ G2 blocker; G2 was declared passed on the evidence bullets alone.
 
 - implement the five vertical-slice intents;
 - resolve issue-tick / submission-tick semantics (B-044) and the production
-  replay-command serialisation (B-045) — both are foundations of the command
+  replay-command serialisation (B-045); both are foundations of the command
   loop deferred by TASK-020 and must be settled before this gate;
 - implement communication and shared tactical knowledge;
 - implement explicit order appraisal and typed reasons;
@@ -121,18 +119,13 @@ G2 blocker; G2 was declared passed on the evidence bullets alone.
 - implement simple enemy hold-and-defend doctrine;
 - implement the canonical refusal sequence as a deterministic scenario test.
 
-**Resolved 2026-09-16:** "the five vertical-slice intents" (`docs/05` section
-4: Move, Hold, Suppress, Assault, Withdraw) is only partly built —
-`PlayerIntent` has `MoveTo` and `Suppress` (TASK-028, TASK-037's thin B-030
-slice); `Hold`, `Assault`, and `Withdraw` are B-030 proper, explicitly
-re-scoped to P4/G4 by TASK-037's own backlog row ("B-030 proper... stays
-P4"), confirmed with Dave at that time. No G3 evidence bullet below names or
-depends on the missing three intents — the canonical refusal test (the one
-evidence item that does depend on an intent, `Suppress`) is the
+Of the five intents (`docs/05` section 4), only `MoveTo` and `Suppress` are
+needed for G3. `Hold`, `Assault`, and `Withdraw` are B-030 proper, a P4/G4 item
+(TASK-037 pulled only the `Suppress` slice forward), confirmed with Dave; they
+are built (TASK-047). No G3 evidence bullet depends on them. The canonical
+refusal test, the one evidence item that depends on an intent, is the
 `canonical-refusal-and-correction` corpus entry (TASK-038), which needs only
-`MoveTo`/`Suppress`. Removed here as a forward-reference that belongs to P4,
-the same correction G2's "tactical knowledge" line received; G3 was declared
-passed on the evidence bullets alone.
+`MoveTo` and `Suppress`. G3 was declared passed on the evidence bullets alone.
 
 ### G3 evidence
 

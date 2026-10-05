@@ -62,18 +62,15 @@ Only these commands are required:
 
 Direct leader movement may use a separate immediate input command, but it must pass through the same authoritative simulation boundary.
 
-Realised as `PlayerIntent.MoveTo | Suppress | Hold | Assault | Withdraw`
-(`src/CommandoWar.Sim/Domain.fs`), each a bare `Cell` target except
-`Suppress`, which is `AgentId` — a specific known contact (TASK-037, a
-thin B-030 slice), not the "known or suspected threat area" this section's
-`SuppressArea` naming implies; no suspected-threat, id-less targeting model
-exists (`docs/05` section 4). `Hold`/`Assault`/`Withdraw` realised by
-TASK-047 (backlog B-030 proper) with real appraisal, a commitment, and an
-executor each (`docs/05` sections 4-5, 9-10); issuing them from
-`CommandDemoScene` (client input) stays a future client task, the
-`Suppress`-order precedent — this session's realisation is sim-side proof
-only (a real corpus regeneration, `SimulationTests` facts, no new client
-UI).
+The commands are `PlayerIntent.MoveTo | Suppress | Hold | Assault | Withdraw`
+(`src/CommandoWar.Sim/Domain.fs`). Each takes a bare `Cell` target except
+`Suppress`, which takes an `AgentId`: a specific known contact (TASK-037, a
+thin slice of backlog B-030), not the "known or suspected threat area" this
+section's `SuppressArea` naming implies. No suspected-threat, id-less targeting
+model exists (`docs/05` section 4). `Hold`, `Assault` and `Withdraw` (TASK-047,
+backlog B-030 proper) each have appraisal, a commitment and an executor
+(`docs/05` sections 4-5, 9-10). The Godot client issues all five (functional
+acceptance criterion 1 in section 9).
 
 ## 5. Required simulation systems
 
@@ -85,27 +82,29 @@ UI).
 - basic enemy perception;
 - pathfinding and local cell reservation;
 - movement and formation slots;
-- hitscan small-arms combat (realised by TASK-031, backlog B-019: automatic
-  symmetric engagement, a deterministic range- and cover-mitigated hit
-  chance, the simulation's first real gameplay PRNG draw). Ammunition and
-  weapon readiness realised by TASK-047 (backlog B-030 proper):
-  `AgentState.Ammo` (a magazine + reserve, automatic reload once empty,
-  instant resupply on an authored `WorldState.ResupplyAreas` cell) gates
-  every qualifying shot, `Suppress`/`Assault` alike; wound/death
-  consequence realised by TASK-045 (backlog B-031, below);
-- suppression (realised by TASK-032, backlog B-020: `Combat` raises the
-  target's `AgentState.Suppression`, cover-mitigated and independent of a
-  hit; `State consequences` decays it every tick. TASK-033, backlog B-021,
-  added the first consumer: a `SuppressionBand` hysteresis latch feeds a
-  discrete resolve-threshold penalty and a reappraisal trigger — still no
-  effect on movement or executor behaviour);
-- stress (realised by TASK-033, backlog B-021, partial: `AgentState.Stress`
-  rises from `VisibleContacts` — the one `docs/05` section 8 source with a
-  system behind it — and feeds the resolve threshold as a continuous drag;
-  casualty-, wound-, explosion-, and isolation-driven stress remain unbuilt),
-  discipline (static since TASK-028; stays static, B-021 confirmed no reason
-  to make it dynamic), and leader trust (unbuilt — `docs/05` section 8
-  leaves it "minimal" for the vertical slice);
+- hitscan small-arms combat (TASK-031, backlog B-019): automatic symmetric
+  engagement and a deterministic range- and cover-mitigated hit chance, the
+  simulation's first gameplay PRNG draw. Ammunition and weapon readiness
+  (TASK-047, backlog B-030 proper): `AgentState.Ammo` (a magazine plus
+  reserve, automatic reload once empty, instant resupply on an authored
+  `WorldState.ResupplyAreas` cell) gates every qualifying shot, `Suppress` and
+  `Assault` alike. Wound and death consequences (TASK-045, backlog B-031);
+- suppression (TASK-032, backlog B-020): `Combat` raises the target's
+  `AgentState.Suppression`, cover-mitigated and independent of a hit, and
+  `State consequences` decays it every tick. A `SuppressionBand` hysteresis
+  latch (TASK-033, backlog B-021) feeds a discrete resolve-threshold penalty
+  and a reappraisal trigger. A hostile contact's latch also zeroes its
+  route-exposure contribution (TASK-037) and releases an `Assault` commitment
+  from its `AwaitingSupport` stage (TASK-047): the assault holds within
+  `AssaultStartRange` of the target while a known threat within
+  `ThreatEngagementRange` of the target is not suppressed. Suppression does not
+  change movement speed or hit chance;
+- stress (TASK-033, backlog B-021, partial): `AgentState.Stress` rises from
+  `VisibleContacts`, the one `docs/05` section 8 source with a system behind
+  it, and feeds the resolve threshold as a continuous drag. Casualty-, wound-,
+  explosion- and isolation-driven stress are unbuilt. Discipline is static
+  (since TASK-028; B-021 found no reason to make it dynamic). Leader trust is
+  unbuilt: `docs/05` section 8 leaves it "minimal" for the vertical slice;
 - explicit order appraisal;
 - accepted, delayed, adapted, refused, and broken outcomes;
 - finite execution states;
@@ -129,34 +128,24 @@ UI).
 - mission completion and failure summary;
 - replay playback.
 
-### Realised by TASK-011 (developer overlay foundation, headless)
-
-The framework-neutral per-tick diagnostic model
-(`src/CommandoWar.Sim/Diagnostics.fs`, `DiagnosticFrame`) and its deterministic
-ASCII / SVG / HTML renderers (`src/CommandoWar.Headless/DiagnosticRender.fs`,
-driven by `cwheadless render`) give the developer overlay its data foundation
-before any client work. It covers the terrain grid, directional cover, agents
-and destinations, this-tick events, and the tick / state-hash / random-draw
-trio; perception, appraisal, commitment, and reservation state attach as
-`Overlay` cases when those systems land (B-009 to B-011, B-019). The HTML
+The developer overlay is carried by the framework-neutral per-tick diagnostic
+model (`src/CommandoWar.Sim/Diagnostics.fs`, `DiagnosticFrame`) and its
+deterministic ASCII, SVG and HTML renderers
+(`src/CommandoWar.Headless/DiagnosticRender.fs`, driven by `cwheadless render`;
+TASK-011). The frame covers the terrain grid, directional cover, agents and
+destinations, this-tick events, the tick / state-hash / random-draw trio, and
+`Overlay` cases for the tactical systems (`docs/06` section 11). The HTML
 scrubber is the headless form of "the developer overlay can explain any
-appraisal and major state transition" (functional acceptance criterion 11) for
-the systems that currently exist. The Godot overlay (B-029) renders the same
-frame.
+appraisal and major state transition" (functional acceptance criterion 11). The
+Godot developer overlay (TASK-043, backlog B-029) renders the same frame.
 
-### Realised by TASK-072 (backlog B-072): "tactical pause ... while issuing orders"
-
-This bullet's pause requirement was unbuilt as of the 2026-09-21
-charter-alignment review (only a manual `Space`-toggle and an automatic pause
-on `MissionOutcome` leaving `InProgress` existed). TASK-072 ties tactical
-pause to the moment it is actually needed for the charter's own "diagnose
-resistance" step (section 2): `CommandDemoScene`'s `stepOnce` auto-pauses the
-instant any agent's order is newly appraised `Refused`/`Unable`, alongside a
-floating per-agent label (`RenderShared.dispositionText`) at that agent's own
-cell, ungated from selection -- previously the order-status text rendered
-only for a single selected agent and nothing called attention to it at all.
-Implemented and self-verified 2026-09-21; status `review`, awaiting Dave's
-acceptance (`tasks/TASK-072-*.md`, `docs/11_BACKLOG.md` B-072 row).
+Tactical pause in `CommandDemoScene` is a manual `Space` toggle, an automatic
+pause when `MissionOutcome` leaves `InProgress`, and an automatic pause the
+instant any agent's order is newly appraised `Refused` or `Unable` (TASK-072,
+backlog B-072). The last is the point at which the charter's "diagnose
+resistance" step (`docs/00` section 2) needs it. A floating per-agent label
+(`RenderShared.dispositionText`) at that agent's own cell, not gated on
+selection, calls attention to the refusal.
 
 ## 7. Deliberate exclusions
 
@@ -194,55 +183,50 @@ The mission layout must reliably support this test sequence:
 
 This sequence must be testable headlessly before presentation polish begins.
 
-Partially realised by TASK-028 (backlog B-017): steps 1–3 land as the
-`exposed-approach` corpus entry — the player orders two soldiers across an
-approach past an observed machine-gun position, and the Appraisal phase
-`Refuses` the low-`Discipline` one with `DecisionReason.RouteTooExposed` (and
-`Accepts` the high-`Discipline` one — criterion 2). Step 7 ("the player
-reissues the original intent") is realised in isolation by TASK-030 (backlog
-B-018): the `reissued-order` corpus entry shows a superseding order taking
-over an in-progress commitment, though without the preceding suppress/reroute
-correction step 7 presupposes in the full sequence. TASK-032 (backlog B-020)
-landed the raw `AgentState.Suppression` value real fire now creates and
-decays; TASK-033 (backlog B-021, partial) landed the recalculation mechanism
-a *same-agent* trigger needs — the knowledge-change reappraisal trigger
-re-judges a `Refused` order once its blocking threat's contact expires.
+The sequence is realised end to end by the `canonical-refusal-and-correction`
+corpus entry (TASK-038, backlog B-023), a synthetic fixture, and on Bridgehead
+(section 9). In the fixture:
 
-Steps 5–6 are realised by TASK-037 (a thin B-030 slice, pulled forward as P3
-decision-support): a `Suppress` order (`PlayerIntent.Suppress of target:
-AgentId`) that a second fireteam can issue against the known machine-gun
-contact, whose `Suppressing` commitment holds position and keeps it under
-fire; once that contact's `AgentState.SuppressionBand` latches,
-`Appraisal.routeExposure` zeroes its contribution to every other agent's
-route exposure, and a new reappraisal trigger (any agent's `SuppressionBand`
-flipping, not only the appraising agent's own) re-judges the first agent's
-`Refused` order the same tick — step 5 ("the player orders another fireteam
-to suppress the machine-gun position") and step 6 ("tactical knowledge and
-exposure are recalculated") both proven end to end by the new
-`suppress-relieves-exposure` corpus entry. Enemy doctrine (B-022) was
-explicitly descoped by TASK-037 — suppress-likely-routes, seek-cover, and
-scripted fall-back are Hostile-side concerns TASK-037's player-issued order
-does not touch.
+- Steps 1 to 3: the player orders two soldiers across an approach past an
+  observed machine-gun position, and the Appraisal phase `Refuses` the
+  low-`Discipline` one with `DecisionReason.RouteTooExposed` and `Accepts` the
+  high-`Discipline` one (the `exposed-approach` corpus entry, TASK-028, backlog
+  B-017; functional acceptance criterion 2).
+- Step 4: `OrderAppraised` only ever carries a structured
+  `OrderDisposition` / `DecisionReason` (`Domain.fs`). No event or overlay emits
+  a raw numeric exposure or threshold value, and
+  `DiagnosticRender.reasonText` / `dispositionText` render it as named text
+  ("refused route-too-exposed threat-agent-2"), never a score. A test assertion
+  checks this.
+- Steps 5 and 6: a `Suppress` order (`PlayerIntent.Suppress of target:
+  AgentId`, TASK-037) that a second fireteam can issue against the known
+  machine-gun contact. Its `Suppressing` commitment holds position and keeps
+  the contact under fire. Once that contact's `AgentState.SuppressionBand`
+  latches, `Appraisal.routeExposure` zeroes its contribution to every other
+  agent's route exposure, and a reappraisal trigger (any agent's
+  `SuppressionBand` flipping, not only the appraising agent's own) re-judges
+  the first agent's `Refused` order the same tick (the
+  `suppress-relieves-exposure` corpus entry). A `Refused` order is also
+  re-judged once its blocking threat's contact expires (the knowledge-change
+  trigger, TASK-033, backlog B-021).
+- Step 7: the player reissues agent 0's identical `(11,3)` intent on tick 8,
+  once it is already mid-route under the automatic reappraisal. The
+  `reissued-order` corpus entry (TASK-030, backlog B-018) shows a superseding
+  order taking over an in-progress commitment in isolation.
+- Step 8: the reissued order is `Accepted` again at tick 8 with a fresh
+  `CommitmentEstablished`, and stays `Accepted` (or unappraised, on arrival)
+  through tick 13, never flipping back to `Refused`, including through one
+  extra reappraisal blip at tick 12.
 
-The full 8-step sequence is realised end to end by TASK-038 (backlog B-023)
-as the `canonical-refusal-and-correction` corpus entry: the
-`suppress-relieves-exposure` geometry, plus a step 7 reissue of agent 0's
-identical `(11,3)` intent on tick 8, once it is already mid-route under the
-automatic reappraisal. Step 4 needed no new mechanism: `OrderAppraised` only
-ever carries a structured `OrderDisposition`/`DecisionReason` (`Domain.fs`)
-— no event or overlay in the codebase emits a raw numeric exposure/threshold
-value, and `DiagnosticRender.reasonText`/`dispositionText` already render it
-as named text ("refused route-too-exposed threat-agent-2"), never a score;
-this task adds a test assertion turning that standing type-system guarantee
-into checked evidence. Step 8 is proven for its accepts-branch only: the
-reissued order is `Accepted` again at tick 8, with a fresh
-`CommitmentEstablished`, and stays `Accepted` (or unappraised, on arrival)
-through tick 13 — never flipping back to `Refused`, including through one
-extra reappraisal blip at tick 12. The literal "or adapts" half of step 8 is
-**not** realised: no `Adapted` `OrderDisposition` case exists (`Appraisal.fs`:
-"Stage 5 (safer adaptation) is deferred (B-018): no `Adapted` outcome, no
-route recomputation") — a separate, larger, not-yet-filed follow-up, deferred
-by Dave's explicit decision rather than silently dropped.
+Only the accepts branch of step 8 is realised. No `Adapted` `OrderDisposition`
+case exists (`Appraisal.fs`: "Stage 5 (safer adaptation) is deferred (B-018): no
+`Adapted` outcome, no route recomputation"). This is a deliberate limitation
+(L-01 in `docs/15_G4_DEFECT_TRIAGE.md`), deferred by Dave's explicit decision
+rather than silently dropped.
+
+Enemy doctrine (B-022) is outside this sequence: suppress-likely-routes,
+seek-cover and scripted fall-back are Hostile-side concerns that the
+player-issued `Suppress` order does not touch (L-02 in `docs/15`).
 
 ## 9. Functional acceptance criteria
 
@@ -340,22 +324,21 @@ These are initial budgets and may be revised only with measured evidence.
 
 Exact millisecond and allocation budgets should be set after TASK-003 establishes a benchmark harness.
 
-### Realised by TASK-014 (headless benchmark harness)
-
 `bench/CommandoWar.Benchmarks/` is the headless performance and allocation
-harness (`docs/09` section 2.8; backlog B-013), and
+harness (`docs/09` section 2.8; TASK-014, backlog B-013), and
 `content/benchmarks/BASELINE.md` is the committed baseline with a documented
-regeneration command. It covers the authoritative systems that exist today
-(empty tick, placeholder movement at 6 and ~50 agents, line-of-sight batch,
-pathfinding open/blocked/choke, canonical encode, state hash, replay run);
-50-agent perception, appraisal, and the full synthetic tick attach when
-B-015 / B-017 / B-019 land. The reference-machine baseline keeps every per-tick
-measurement at least ~36x inside the 5 ms budget with no map-size-proportional
-per-tick allocation, so the budgets in this section stand as written. Exact
-per-subsystem millisecond and allocation numbers are still a follow-up: set
-them once the real phases and the greybox map (B-025) exist and the harness is
-re-run against them. The 60 fps graphical budget and frame-pacing items remain
-untested (no client yet).
+regeneration command. It covers the empty tick, movement at 6 and about 50
+agents, a line-of-sight batch, pathfinding over open, blocked and choke maps,
+canonical encode, state hash and a replay run. 50-agent perception, appraisal,
+combat and the full synthetic tick are not yet in the harness, and the
+baseline (recorded 2026-09-04) predates those phases. On the reference machine
+it keeps every per-tick measurement at least about 36x inside the 5 ms budget
+with no map-size-proportional per-tick allocation, so the budgets in this
+section stand as written. Exact per-subsystem millisecond and allocation
+numbers are still a follow-up: set them once the harness is re-run against the
+real phases and the Bridgehead map. The 60 fps graphical budget and the
+frame-pacing items are untested and no measurement is committed
+(`docs/15_G4_DEFECT_TRIAGE.md` U-05).
 
 ## 11. External playtest gate
 

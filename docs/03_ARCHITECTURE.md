@@ -141,19 +141,35 @@ Every tick uses a visible, fixed order:
 
 Changing phase order is an architectural decision because it changes outcomes. Record it in an ADR and update replay fixtures.
 
-Realised so far (`src/CommandoWar.Sim/Simulation.fs`, `Phases.order`): step 1
-(TASK-020 / TASK-024), step 2 — "apply communication and order delivery" —
-TASK-027 / TASK-028: command intake records an accepted order as a pending
-order and the Communication phase delivers it — writes `AgentState.Order` to a
-recipient with `CommunicationAvailable = true`, or emits `OrderUndelivered` and
-drops it; steps 3–4 (TASK-026); step 5 — "appraise new or materially changed
-orders" — TASK-028: the Appraisal phase judges each delivered order
-(`Pathfinding` feasibility, then route exposure to known threats vs a
-Discipline-derived resolve threshold), emits `OrderAppraised` with a typed
-`OrderDisposition`, and on `Accepted` writes `AgentState.Destination`; steps
-7–8 (TASK-015 / TASK-017 / TASK-018 / TASK-022), step 13 (ongoing), step 14
-(TASK-003). Step 6 (commitments / finite executor) and steps 9–12 are still
-no-ops.
+All fourteen steps are implemented. `Phases.order`
+(`src/CommandoWar.Sim/Phases.fs`) lists eleven phases that cover them, and
+`Simulation.step` folds over that list:
+
+| Steps | Phase |
+|---|---|
+| 1 | `CommandIntake` |
+| 2 | `Communication` |
+| 3 | `Perception` |
+| 4 | `TacticalKnowledge` |
+| 5 | `Appraisal` |
+| 6 | `CommitmentAndLocalAction` |
+| 7 and 8 | `NavigationAndMovement` |
+| 9 | `Combat` |
+| 10 and 11 | `StateConsequences` |
+| 12 | `Mission` |
+| 13 and 14 | `Output` |
+
+The behaviour of each phase is specified in `docs/04_SIMULATION_SPEC.md`
+section 12. Command intake records an accepted order as a pending order. The
+Communication phase delivers it by writing `AgentState.Order` to a recipient
+with `CommunicationAvailable = true`, or emits `OrderUndelivered` and drops it.
+Appraisal then judges the delivered order and writes the destination on
+acceptance. Wounds and the suppression gain from a hit (step 10) are applied
+inside `Combat`; suppression decay, stress, death and incapacitation, and
+leadership state (step 11) are evaluated in `StateConsequences`. The interrupt
+table named in step 11 is specified in `docs/05_COMMAND_AND_AGENT_AI.md`
+section 11; `docs/04` section 12.6 places it in `CommitmentAndLocalAction`, and
+`docs/05` section 11 records which priorities have a live signal.
 
 ## 8. Module layout inside the simulation project
 

@@ -68,21 +68,25 @@ type ObjectiveDefinition =
 
 The bridge-demolition interaction may initially be represented as `ReachArea` followed by a fixed-duration plant action and `DestroyTarget`. Do not add a general interaction scripting language.
 
-### Realised by TASK-008
+The model is implemented in `src/CommandoWar.Sim/Scenario.fs`, inside the
+simulation library (`docs/03_ARCHITECTURE.md` section 8 lists `Scenario.fs`
+there), together with its one-pass validator and the content-format version
+constant (TASK-008). The pipeline is `RawScenario` (loosely typed authored
+input) -> `Scenario.validate` -> `Scenario` -> `World.ofScenario`. The
+content-format version is `ScenarioContent.Version` (currently 7), independent
+of the canonical-state and replay format versions; a scenario of any other
+version is rejected, not migrated (`docs/04` section 16). The optional authored
+terrain layer is described in section 4; see also `docs/04_SIMULATION_SPEC.md`
+sections 7, 9, and 21.
 
-The framework-neutral scenario model, its one-pass validator, and the
-content-format version constant are `src/CommandoWar.Sim/Scenario.fs`, inside
-the simulation library (`docs/03_ARCHITECTURE.md` section 8 lists `Scenario.fs`
-there). The pipeline is `RawScenario` (loosely typed authored input) ->
-`Scenario.validate` -> `Scenario` -> `World.ofScenario`. The content-format
-version is `ScenarioContent.Version` (currently 1), independent of the
-canonical-state and replay format versions. The objective algebra
-(`Objective`: `ReachArea` / `HoldArea` / `DestroyTarget` / `ExtractAgents` /
-`AllOf` / `Optional`) is a data-only type; evaluation is deferred (B-032).
-TASK-010 added the optional authored terrain layer (per-cell elevation,
-passability, movement cost, opacity, directional cover) and bumped
-`ScenarioContent.Version` to 2; see section 4 "Realised by TASK-010" and
-`docs/04_SIMULATION_SPEC.md` sections 7, 9, and 21.
+The objective algebra is `Objective` (`src/CommandoWar.Sim/Domain.fs`):
+`ReachArea`, `HoldArea`, `DestroyTarget`, `ExtractAgents`, `AllOf` and
+`Optional`. The Mission phase evaluates it (`docs/04` section 12.10; TASK-062,
+backlog B-032). `DestroyTarget` carries the fixed plant duration in ticks,
+authored through the `HoldTicks` column of a `"destroy"` `RawObjective`, which
+must be positive. `AllOf` has evaluation support but no authored form: no
+`RawObjective` builds one, and the scenario's mission is the implicit all-of of
+its `Objectives` array.
 
 ## 4. Map contract
 
@@ -103,39 +107,36 @@ The simulation uses a logical two-dimensional grid with an explicit level or ele
 
 Decorative layers must not silently affect movement, cover, or visibility.
 
-### Realised by TASK-010
-
 The authoritative side of the Terrain, Elevation, Low cover, and High
 occlusion rows is `src/CommandoWar.Sim/Terrain.fs` (`Terrain`, a dense
 row-major integer grid) plus the authored input path
 `RawScenario.TerrainLayer : RawTerrainLayer option` -> `Scenario.validate` ->
-`Scenario.Terrain`. A `RawTerrainCell` carries a class (`"passable"` /
-`"impassable"`), an elevation level, an entry cost, and the high-occlusion
+`Scenario.Terrain` (TASK-010). A `RawTerrainCell` carries a class (`"passable"`
+/ `"impassable"`), an elevation level, an entry cost, and the high-occlusion
 (`Opaque`) flag; a `RawCoverFeature` carries a cardinal direction and an
 integer low-cover level. Validation rejects a layer whose dimensions disagree
 with the map, an out-of-map or duplicated cell or cover feature, an unknown
 terrain or cover class, a negative elevation / cost / cover level, a passable
 cell whose entry cost falls outside
-`[Terrain.BaseMoveCost, Terrain.MaxMoveCost]` (TASK-021 — a cheaper step
-would break the pathfinding heuristic, a dearer one risks the blocked-cost
-sentinel and cost overflow; an impassable cell's cost stays ignored), and a
-deployment sitting on an impassable cell (docs/07 section 3, docs/03 section
-17). An absent layer is legal and means empty terrain. Traversal links,
-static-object gameplay data, and destruction state are later tasks (B-011,
-B-019).
+`[Terrain.BaseMoveCost, Terrain.MaxMoveCost]` (1 to 1000; a cheaper step would
+break the pathfinding heuristic, a dearer one risks the blocked-cost sentinel
+and cost overflow; an impassable cell's cost stays ignored), and a deployment
+sitting on an impassable cell (docs/07 section 3, docs/03 section 17). An
+absent layer is legal and means empty terrain.
 
-TASK-012 gave the High occlusion row its first consumer: `Sight`
-(`src/CommandoWar.Sim/Sight.fs`) reads `Terrain.opaque` and `Terrain.elevation`
-for deterministic point-to-point line of sight (`docs/04` section 9).
-
-TASK-013 gave the Terrain row's movement-class and movement-cost data their
-first consumer: `Pathfinding` (`src/CommandoWar.Sim/Pathfinding.fs`) reads
+`Sight` (`src/CommandoWar.Sim/Sight.fs`) reads `Terrain.opaque` and
+`Terrain.elevation` for deterministic point-to-point line of sight (`docs/04`
+section 9). `Pathfinding` (`src/CommandoWar.Sim/Pathfinding.fs`) reads
 `Terrain.passable` and `Terrain.moveCost` for a deterministic A* path query
-(`docs/04` section 8). Both modules are still authored-and-queried only, with
-no tick phase calling them (Perception, backlog B-015, is `Sight`'s first
-consumer; the Navigation and movement phase, backlog B-011, is `Pathfinding`'s).
-Movement execution, cell reservation, and dynamic replanning over the Terrain
-and Elevation rows (B-011) remain a later task.
+(`docs/04` section 8). Tick phases consume both: Perception, Appraisal and
+Combat use line of sight; Appraisal and Navigation and movement use
+pathfinding.
+
+Traversal links and destruction state are not built. A static object exists
+only as a `StaticTarget` (an id and a single cell), used as an objective
+target.
+
+The area and marker kinds are:
 
 - `FriendlySpawn`
 - `EnemySpawn`
@@ -158,26 +159,30 @@ The Godot spike should use:
 
 The adapter must fail with explicit field and object names when content is invalid. It may not pass Godot nodes, vectors, resources, or object references into the F# simulation.
 
-### Realised by TASK-060 (terrain layer, content-format half)
+The framework-neutral scenario file is the `.cwscenario` format
+(`src/CommandoWar.Sim/ScenarioFile.fs`; TASK-060, backlog B-024): a
+deterministic, line-based text grammar in the style of
+`ReplaySerialisation.fs` (not JSON, no serialisation library), matching the
+`.cwlog` / `.cwreplay` convention. The `cwheadless import <path>` command
+parses a file and runs it through `Scenario.validate`, exiting non-zero on
+invalid content.
 
-The framework-neutral scenario file this section anticipated is the new
-`.cwscenario` format (`src/CommandoWar.Sim/ScenarioFile.fs`) — a
-deterministic, line-based text grammar in the `ReplaySerialisation.fs`
-style (not JSON, no serialisation library, matching the `.cwlog`/
-`.cwreplay` convention already established for other content), plus a
-`cwheadless import <path>` validation command that parses a file and runs
-it through the existing `Scenario.validate`. `TileMapLayer` (this
-section's own first bullet) is now real: `art/terrain.tres` (the three
-TASK-041 placeholder sprites as atlas sources, Custom Data Layers for
-`Class`/`MoveCost`/`Opaque`/`Elevation`) plus a shared F# export function
-(`CwClientCore.TerrainAuthoring.exportScenario`, no Godot type crossing
-the ADR-0004 boundary) convert a painted `TileMapLayer` into a
-`.cwscenario` file. Terrain-layer authoring only — deployment/area/object
-markers ("nodes or resources for typed deployment and area markers",
-above) have no painting UI yet, and `RawCoverFeature` turned out not to
-fit a per-tile-type Custom Data model at all (a single tile carries one
-Custom Data set; cover is up to four independent per-direction values per
-cell) — both remain open follow-on work.
+The terrain layer is authored with a `TileMapLayer`: `art/terrain.tres` holds
+the three placeholder sprites (TASK-041) as atlas sources, with Custom Data
+Layers for `Class`, `MoveCost`, `Opaque` and `Elevation`, and a shared F#
+export function (`CwClientCore.TerrainAuthoring.exportScenario`; no Godot type
+crosses the ADR-0004 boundary) converts a painted `TileMapLayer` into a
+`.cwscenario` file. The reverse path, `TerrainAuthoring.importTerrainLayer`
+with `tools/ImportTerrainScript.cs` (TASK-061, backlog B-025), paints a
+`.cwscenario` file's terrain layer onto the `TileMapLayer`, so a hand-written
+draft can be adjusted in the editor.
+
+Only the terrain layer is paintable. Deployment, area and object markers
+("nodes or resources for typed deployment and area markers", above) have no
+painting UI and stay hand-authored text. `RawCoverFeature` does not fit the
+per-tile-type Custom Data model (a tile carries one Custom Data set, while
+cover is up to four independent per-direction values per cell), so cover is
+not paintable either.
 
 ## 6. Mibo and Tiled authoring path
 
@@ -292,17 +297,22 @@ Developer-facing:
 - last appraisal factors and selected reason;
 - simulation tick, state hash, and random draw counter.
 
-### Realised by TASK-011 (developer-facing foundation)
-
 The framework-neutral per-tick model behind the developer overlay is
-`src/CommandoWar.Sim/Diagnostics.fs`: `DiagnosticFrame` carries the terrain
-`GridLayer`s (elevation, passability, movement cost, opacity), directional
-cover `EdgeMarker`s, `AgentMarker`s (side, cell, destination), this-tick
-`EventMarker`s, an open `Overlay` DU for later systems (line of sight,
-pathfinding, reservation, fire line attach here), and the determinism trio
-(tick, state hash, random draw counter). `Diagnostics.frame` /
-`Diagnostics.frameOf` are pure observers: nothing in `Simulation.step` builds a
-frame and no frame feeds back (ADR-0002).
+`src/CommandoWar.Sim/Diagnostics.fs` (TASK-011, backlog B-012a).
+`DiagnosticFrame` carries the terrain `GridLayer`s (elevation, passability,
+movement cost, opacity), directional cover `EdgeMarker`s, `AgentMarker`s (id,
+side, cell, progress, destination, communication availability), this-tick
+`EventMarker`s, an open `Overlay` DU, and the determinism trio (tick, state
+hash, random draw counter). The `Overlay` cases cover line of sight, planned
+paths, reservations, obstructions, abandoned orders and reroutes, known and
+hostile-known contacts, undelivered and pending orders, order appraisal,
+commitments, fire lines, suppression, stress, order queues, vitals, squad
+leadership, ammunition, radio loss, formation slots, divergence and mission
+status, plus a generic labelled-cells case;
+`Diagnostics.fs` holds the full case list and says which cases `frame` and
+`frameOf` each produce. `Diagnostics.frame` / `Diagnostics.frameOf` are pure
+observers: nothing in `Simulation.step` builds a frame and no frame feeds back
+(ADR-0002).
 
 Deterministic renderers of that frame are
 `src/CommandoWar.Headless/DiagnosticRender.fs`: `Ascii` (coordinate-ruled
@@ -311,27 +321,36 @@ composite grid plus a cover grid, legend, agent roster, events line, footer),
 opaque, cover triangles, agents with destination lines), and `Html` (one SVG
 per tick with a slider to scrub a run). The `cwheadless render` verb drives
 them; golden outputs and their regeneration command are in
-`content/diagnostics/`. The Godot developer overlay (backlog B-029) becomes a
-third renderer of the same frame. Player-facing overlays (threat markers,
-cover/exposure preview, reason panel) remain out of scope here.
+`content/diagnostics/`.
 
-### Realised by TASK-029 (Godot frame renderer, first read-only slice)
+The Godot client renders the same frame in two places. The `F1` developer
+overlay of `CommandDemoScene` (TASK-043, backlog B-029) draws
+`Diagnostics.frame` / `frameOf` overlays over live input: cell coordinates,
+reservation, obstruction and abandoned-order markers, known-contact ghost
+markers beside the real agent, the selected agents' exposed cells, fire lines, a
+hover-driven `Sight.trace` ray and a legend. With a single agent selected, a
+developer HUD line adds that agent's commitment, suppression, stress, appraisal
+reason, exposed-cell count and ammunition. The tick, state hash and random-draw
+counter is part of the scene's always-visible HUD line, not of the overlay. The
+overlay omits discipline and trust values: trust has no backing state, and
+discipline has no `Overlay` case. Player-facing overlays are drawn by the same
+scene and are separate from the developer overlay; examples are order
+acknowledgement, disposition and refusal reasons (TASK-042, backlog B-028),
+known-threat markers with fog of war (TASK-051, backlog B-055) and a directional
+cover indicator (TASK-064, backlog B-035).
 
-The Godot `DiagnosticFrame` renderer named above (backlog B-029) has a first
-realisation: `src/CommandoWar.Client.Godot/scenes/AppraisalDemo.tscn` +
-`src/AppraisalDemoScene.cs`. It is **read-only and corpus-scoped** — it loads
-the committed `exposed-approach` corpus entry, builds its `DiagnosticFrame`
-sequence through `DiagnosticRender.runFrames`, and renders the authoritative
-state plus the `KnownContact` / `PlannedPath` / `OrderAppraisal` overlays with a
-tick slider and a tick / state-hash / format / random-draw HUD, mirroring the
-`DiagnosticRender.Svg` colours and glyphs. All non-trivial logic (corpus load,
-the frame sequence, the disposition → readable-text mapping, the flat view
-model) is in the framework-neutral F# helper
+`src/CommandoWar.Client.Godot/scenes/AppraisalDemo.tscn` +
+`src/AppraisalDemoScene.cs` (TASK-029) is a read-only, corpus-scoped renderer.
+It loads the committed `exposed-approach` corpus entry, builds its
+`DiagnosticFrame` sequence through `DiagnosticRender.runFrames`, and renders the
+authoritative state plus the `KnownContact` / `PlannedPath` / `OrderAppraisal`
+overlays with a tick slider and a tick / state-hash / format / random-draw HUD,
+mirroring the `DiagnosticRender.Svg` colours and glyphs. All non-trivial logic
+(corpus load, the frame sequence, the disposition to readable-text mapping, the
+flat view model) is in the framework-neutral F# helper
 `src/CommandoWar.Headless/AppraisalDemo.fs`; the C# scene is a thin renderer (a
 scoped deviation from ADR-0004's "F# client-core" rule for this disposable P3
-decision-support demo, not a precedent for the P4 client tasks). B-029 proper
-(P4) builds the full developer-overlay set over **live** input as part of the
-real F# client-core.
+decision-support demo, not a precedent for client work).
 
 ## 12. Content iteration metric
 

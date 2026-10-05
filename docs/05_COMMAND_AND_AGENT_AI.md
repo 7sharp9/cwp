@@ -1,7 +1,7 @@
 # Command and Agent AI Design
 
 Status: reduced vertical-slice design after adversarial review  
-Last revised: 2026-09-02
+Last revised: 2026-10-05 (rewritten as a current-state specification; per-task history is in the ledger)
 
 ## 1. Design objective
 
@@ -61,31 +61,36 @@ The squad stores reported contacts:
 
 The first implementation may share contacts instantly when communication is available. Private persistent beliefs are deferred.
 
-Realised by TASK-026 (backlog B-015): `Simulation.perception` and
-`Simulation.tacticalKnowledge` (`docs/04` sections 12.3, 12.4). An agent's
-current observations are `AgentState.VisibleContacts` (opposing agents within
-`PerceptionConfig.SightRange` and in `Sight.visible` line of sight); the squad
-tactical picture is `WorldState.TacticalKnowledge` — one array of
-`{ Contact; LastKnownCell; LastSeenTick; Confidence }`, shared instantly
-across every `Friendly` agent (there is no `SquadStore`), with confidence
-dropping a band after `StaleAfter` unseen ticks and the contact removed after
-`ExpireAfter`. Perception is symmetric (a `Hostile` agent's
+An agent's current observations are `AgentState.VisibleContacts`: the
+opposing-side agents within `PerceptionConfig.SightRange` Chebyshev cells and
+in `Sight.visible` line of sight (TASK-026, backlog B-015; `docs/04` sections
+12.3, 12.4). A non-`Alive` agent is neither observed nor an observer
+(TASK-055, TASK-078). Perception is symmetric: a `Hostile` agent's
 `VisibleContacts` is populated too, so combat can validate line of fire for
-both sides).
+both sides.
 
-Realised for the Hostile side by TASK-034 (backlog B-022, partial): the same
-Tactical-knowledge phase calls `Perception.mergeKnowledge` a second time,
-filtered to `Side = Hostile`, into a new `WorldState.HostileTacticalKnowledge`
-— the identical shape and staleness/expiry rules, symmetric to the friendly
-picture. Enemy doctrine *reacting* to this picture, and "suspected threat
-class or field of fire", stay B-022. Source and reporting agent are not yet
-stored for either picture (identity is always known at this stage). Private
-persistent beliefs and confidence divergence between squad members stay
-deferred (section 17).
+The squad tactical picture is `WorldState.TacticalKnowledge`, one array of
+`{ Contact; LastKnownCell; LastSeenTick; Confidence }`, shared instantly
+across every `Friendly` agent (there is no `SquadStore`). Confidence drops a
+band after `PerceptionConfig.StaleAfter` unseen ticks, and the contact is
+removed, emitting `ContactExpired`, after `ExpireAfter`.
+
+The Hostile side has an identical picture, `WorldState.HostileTacticalKnowledge`
+(TASK-034, backlog B-022, partial): the same Tactical-knowledge phase calls
+`Perception.mergeKnowledge` a second time, filtered to `Side = Hostile`, with
+the same staleness and expiry rules. Source and reporting agent are not stored
+for either picture (identity is always known). Enemy doctrine reacting to this
+picture, and the "suspected threat class or field of fire" field, stay with
+B-022. Private persistent beliefs and confidence divergence between squad
+members stay deferred (section 17).
 
 ## 4. Orders
 
 Orders express intent and leave limited tactical discretion.
+
+`PlayerIntent` (`Domain.fs`) has the cases `MoveTo`, `Suppress`, `Hold`,
+`Assault` and `Withdraw`, each taking a bare `Cell` except `Suppress`, which
+takes an `AgentId`.
 
 ### Move
 
@@ -96,93 +101,72 @@ Postures may begin as:
 - quick;
 - cautious.
 
+There is no separate movement posture in the simulation. An order carries a
+`RiskTolerance` (`Cautious`, `Standard`, `Aggressive`) and an `Urgency`
+(`Routine`, `Immediate`), which appraisal stage 4 reads (section 5).
+
 ### Hold
 
 Occupy and defend an area. The executor may choose nearby cover.
 
-Realised by TASK-047 (backlog B-030 proper): `PlayerIntent.Hold of area:
-Cell` — the `MoveTo` precedent, a bare `Cell`. "The executor may choose
-nearby cover" is real: stage 2 redirects through `Appraisal.bestCoverNear`
-(reusing the identical `cellPressure` threat-pressure function stage-3
-route exposure already sums), picking the lowest-pressure cell within
-`AppraisalConfig.HoldCoverSearchRadius` Chebyshev cells of `area` (including
-`area` itself), ties broken by nearest then ascending `(Y, X)`. No new
-`Commitment` case (`docs/05` section 9 below) — an accepted `Hold` writes a
-`Destination` exactly as `MoveTo` does, so it is already `Moving` while en
-route and falls to bare `Holding` on arrival, indistinguishable from an idle
-agent once there.
+`PlayerIntent.Hold of area: Cell` (TASK-047, backlog B-030). Stage 2 redirects
+through `Appraisal.bestCoverNear`, which picks the passable cell with the
+lowest summed threat pressure within `AppraisalConfig.HoldCoverSearchRadius`
+Chebyshev cells of `area` (including `area` itself). It reuses the
+`cellPressure` function that stage-3 route exposure sums. Ties are broken by
+nearest to `area`, then ascending `(Y, X)`; with no known threat near `area`
+it picks `area` itself. There is no `Commitment` case for Hold (section 9): an
+accepted `Hold` writes a `Destination` exactly as `MoveTo` does, so the agent
+is `Moving` while en route and falls to bare `Holding` on arrival,
+indistinguishable from an idle agent once there.
 
 ### Suppress
 
 Fire toward a known or suspected threat area to reduce enemy effectiveness and perceived route danger.
 
-Partially realised by TASK-037 (`PlayerIntent.Suppress of target: AgentId`, a
-thin B-030 slice): the "known threat, reduce perceived route danger" half
-only — it targets a specific contact already in the issuing agent's own
-tactical knowledge (never a bare area, and never a "suspected", id-less
-target — no suspected-threat model exists), and its only effect is zeroing
-that contact's contribution to *other* agents' stage-3 route exposure while
-it stays suppressed (section 5). "Reduce enemy effectiveness" beyond that —
-degraded accuracy, forced cover-seeking — is not modelled by any system yet.
+`PlayerIntent.Suppress of target: AgentId` (TASK-037, backlog B-030) covers
+the "known threat, reduce perceived route danger" half. It names a specific
+contact already in the issuing agent's own tactical knowledge. It is never a
+bare area and never a "suspected", id-less target, because no suspected-threat
+model exists. The `Suppressing` commitment holds position, and in the Combat
+phase it restricts the shooter's candidates to the named contact (still
+subject to that tick's `VisibleContacts`, weapon range and line of fire).
+While the named contact's own `AgentState.SuppressionBand` is latched, its
+contribution to other agents' stage-3 route exposure is zero (section 5).
+"Reduce enemy effectiveness" beyond that, such as degraded accuracy or forced
+cover-seeking, is not modelled by any system.
 
 ### Assault
 
 Close with and secure a target area. This is deliberately more demanding than Move and receives stricter appraisal.
 
-Realised by TASK-047 (backlog B-030 proper): `PlayerIntent.Assault of
-target: Cell`. "Deliberately more demanding ... stricter appraisal" is a
-flat `AppraisalConfig.AssaultResolvePenalty` subtracted from the stage-4
-threshold — a route a `MoveTo` order would Accept can Refuse as an
-Assault. Stage 2 also requires ammunition (`docs/05` section 8 below). The
-executor is a staged finite-state machine (`Commitment.AssaultStage`, the
-`docs/05` section 10 example realised for real): `ApproachingStart` (still
-closing distance) -> `AwaitingSupport` (within
-`AppraisalConfig.AssaultStartRange` of the target, a known unsuppressed
-threat still covers it — the executor freezes movement, no timeout: the
-player must suppress the threat, redirect, or accept the stall) ->
-`Advancing` (no blocking threat — the already-symmetric `Combat` phase
-engages anything visible along the way, "cross danger area" needs nothing
-extra) -> `ClearingThreat` (at the target, a known unsuppressed threat
-remains nearby — the agent holds while `Combat` fires) -> fulfilled once
-clear ("report complete", the existing `CommitmentCompleted` event).
+`PlayerIntent.Assault of target: Cell` (TASK-047, backlog B-030). The stricter
+appraisal is a flat `AppraisalConfig.AssaultResolvePenalty` subtracted from
+the stage-4 threshold, so a route a `MoveTo` order would accept can be refused
+as an Assault. Stage 2 also requires ammunition (section 5). The executor is a
+staged finite-state machine, `Commitment.AssaultStage` (section 10).
 
 ### Withdraw
 
 Break contact and move toward a safer destination. It may receive priority under high suppression.
 
-Realised by TASK-047 (backlog B-030 proper): `PlayerIntent.Withdraw of
-target: Cell`. "May receive priority" is read narrowly as *appraisal*
-priority, not a new automatic interrupt: a flat
-`AppraisalConfig.WithdrawResolveBonus` is added to the stage-4 threshold, so
-an agent breaking contact is less likely to refuse the very exposure it is
-retreating through. `Commitment.Withdrawing of WithdrawCommitment` is a
-distinct case (unlike `Hold`) since the bonus makes it a genuine behavioural
-difference, not just a label. No autonomous "start withdrawing under
-suppression without being ordered" — that is Hostile-doctrine-shaped work
-(B-022), out of scope for a player-issued order.
+`PlayerIntent.Withdraw of target: Cell` (TASK-047, backlog B-030). "May receive
+priority" is read narrowly as appraisal priority, not a new automatic
+interrupt: a flat `AppraisalConfig.WithdrawResolveBonus` is added to the
+stage-4 threshold, so an agent breaking contact is less likely to refuse the
+very exposure it is retreating through. `Commitment.Withdrawing of
+WithdrawCommitment` is a distinct case (unlike `Hold`) because the bonus makes
+it a real behavioural difference, not just a label. There is no autonomous
+start of a withdrawal under suppression without an order; that is
+Hostile-doctrine-shaped work (B-022), out of scope for a player-issued order.
 
 ## 5. Order appraisal
 
 Appraisal is staged, not one opaque weighted sum.
 
-Realised by TASK-028 (backlog B-017): `Simulation.appraisal` (`docs/04` section
-12.5) over the `Appraisal` leaf module. Stage 1 is guaranteed upstream (see
-below). Stage 2 is `Pathfinding.findWithin` for a `MoveTo` order, or (TASK-037)
-whether the named contact is known at all for a `Suppress` order. Stage 3 is
-route exposure to the *known* threats in `WorldState.TacticalKnowledge` —
-engagement range, line of sight from the threat's last-known cell, directional
-`Terrain.cover`, and (TASK-037, backlog B-030 thin slice) zeroed entirely for
-a threat whose own `AgentState.SuppressionBand` is latched — "suppression" is
-now the one stage-3 term fully realised alongside exposure; fire lanes and
-ally support otherwise, and wounds, are still open (B-019's fire-lanes half,
-B-021's remaining triggers). A `Suppress` order itself has no route and never
-reaches stage 3/4. Stage 4 compares that exposure to a threshold from
-`AgentState.Discipline`, the order's `RiskTolerance` / `Urgency`, and (TASK-033,
-backlog B-021) `AgentState.Stress` (a continuous drag) and `.SuppressionBand`
-(a discrete penalty) — trust is still not a stage-4 term (`docs/05` section 8
-leaves it "minimal" for the vertical slice). Stage 5 is deferred (B-018): no
-`Adapted` outcome. Every threshold is an integer literal in one
-`AppraisalConfig` module (section 15).
+It is implemented by `Simulation.appraisal` (`docs/04` section 12.5) over the
+`Appraisal` leaf module (TASK-028, backlog B-017). Stage 1 is guaranteed
+upstream of that module, and stage 5 is not built.
 
 ### Stage 1: comprehension and authority
 
@@ -190,15 +174,21 @@ leaves it "minimal" for the vertical slice). Stage 5 is deferred (B-018): no
 - Is the issuer authorised?
 - Is the target and intent understood?
 
-Realised so far: "Was the order received?" is now a real, inspectable fact
-(TASK-027, backlog B-016). The Communication phase (`docs/04` section 12.2)
-delivers an accepted order to a recipient with
-`AgentState.CommunicationAvailable = true` and emits `OrderUndelivered`
-(reason `UnableToCommunicate`) for one that cannot be reached — the
-`DecisionReason.UnableToCommunicate` an appraisal refusal / `Unable` outcome
-(backlog B-017) carries through unchanged. "Is the issuer authorised?" is the
-friendly/hostile-side check in command intake (TASK-020); a commander identity
-model is deferred.
+"Was the order received?" is an inspectable fact (TASK-027, backlog B-016).
+The Communication phase (`docs/04` section 12.2) delivers an accepted order to
+a recipient that can receive it and emits `OrderUndelivered`, with a
+`DeliveryFailure` reason, for one that cannot: `UnableToCommunicate` when
+`AgentState.CommunicationAvailable` is `false`, and `OutOfRange`, `Jammed` or
+`RadioDestroyed` (TASK-058, backlog B-016b) when the scenario authors a
+`Headquarters`. An undelivered order never reaches appraisal, so these are not
+`DecisionReason`s. "Is the issuer authorised?" is the friendly/hostile-side
+check in command intake (TASK-020), which rejects an order addressed to a
+`Hostile` agent (`UnauthorisedRecipient`). Intake also rejects an out-of-bounds
+target (`TargetOutOfBounds`) for every `Cell`-targeted intent (`MoveTo`, `Hold`,
+`Assault`, `Withdraw`); a `Suppress` target is an `AgentId`, not a cell, and
+whether the recipient knows that contact is appraisal's stage-2 check, never
+authoritative hostile state at intake (risk R-023). A commander identity model
+is deferred.
 
 ### Stage 2: physical feasibility
 
@@ -209,16 +199,21 @@ model is deferred.
 
 A failure here is normally a hard refusal or inability, not a morale check.
 
-"Is required ammunition ... available?" realised by TASK-047 (backlog B-030
-proper): `Unable(InsufficientAmmunition)` when a `Suppress`/`Assault`
-order's issuing agent's `AgentState.Ammo` is entirely empty (`Ready(0, 0)`)
-— checked only for those two intents, which explicitly plan to initiate
-fire; `MoveTo`/`Hold`/`Withdraw` never check it (an unarmed agent can still
-walk, hold ground, or retreat). A partial or mid-reload magazine still
-appraises normally — the agent may simply run dry mid-engagement, an
-emergent outcome, not a blocking one. "Is the agent alive, conscious, and
-mobile?" realised by TASK-045 (`Unable(CriticallyWounded)`); "a capability
-the agent lacks" remains unrealised — no capability model exists.
+A non-`Alive` agent is `Unable(CriticallyWounded)` whatever the order asks
+(TASK-045, backlog B-031), checked first, so stages 3 and 4 are reached only
+by `Alive` agents. For `Suppress` and `Assault` only, an agent whose
+`AgentState.Ammo` is entirely empty (`Ready(0, 0)`) is
+`Unable(InsufficientAmmunition)` (TASK-047, backlog B-030): these are the two
+intents that plan to initiate fire, while an unarmed agent can still walk,
+hold ground or retreat. A partial or mid-reload magazine appraises normally;
+running dry mid-engagement is an emergent outcome, not a blocking one. For
+`MoveTo`, `Hold`, `Withdraw` and `Assault`, `Pathfinding.findWithin` must find
+a route, otherwise the outcome is `Unable(NoKnownRoute)`; an order to the cell
+the agent already stands on is `Accepted` without a route. After the
+ammunition check, a `Suppress` order is `Unable(TargetNotKnown)` unless the
+named contact is in `WorldState.TacticalKnowledge` (TASK-037); this is its only
+remaining stage, since it has no route and never reaches stages 3 and 4. "A
+capability the agent lacks" is unrealised: no capability model exists.
 
 ### Stage 3: tactical viability
 
@@ -233,6 +228,22 @@ Estimate from known information:
 - target threat;
 - whether suppression or another prerequisite is active.
 
+Route exposure is summed over the route cells and the known threats in
+`WorldState.TacticalKnowledge`, never authoritative hostile state (risk
+R-023). A threat puts pressure on a cell only if the cell is within
+`AppraisalConfig.ThreatEngagementRange` Chebyshev cells of the threat's
+last-known cell and in `Sight.visible` line of sight from it. The pressure is
+`max 0 (ExposedCellWeight - cover * CoverMitigationPerLevel)`, where `cover` is
+the directional `Terrain.cover` on the edge the fire arrives from
+(`Appraisal.attackDirection`: the dominant axis of the offset wins, and the X
+axis breaks a tie). A threat whose own `AgentState.SuppressionBand` is latched
+contributes nothing, whatever suppressed it, whether an ordered `Suppress` or
+incidental automatic engagement (TASK-037, backlog B-030). The threat named in
+a `RouteTooExposed` reason is the highest-contributing one, ties broken by
+ascending id. Exposure, cover and suppression are the realised stage-3 terms.
+Known fire lanes and ally support are not (B-019's fire-lanes half, B-021's
+remaining triggers), and wound severity enters at stage 4.
+
 ### Stage 4: resolve
 
 Compare tactical pressure with a bounded resolve threshold derived from:
@@ -245,6 +256,21 @@ Compare tactical pressure with a bounded resolve threshold derived from:
 
 Personality modifies a decision near a threshold. It does not override physical impossibility.
 
+The threshold is `AppraisalConfig.BaseResolve` plus a per-point
+`Discipline` weight, plus a `RiskTolerance` modifier and an `Urgency`
+modifier, minus a continuous stress drag (`AgentState.Stress /
+StressDivisor`), a discrete penalty while `AgentState.SuppressionBand` is
+latched (`SuppressionBandPenalty`), and a continuous wound drag for an `Alive`
+agent, `(Agent.MaxHealth - health) / WoundDivisor` (TASK-033, backlog B-021;
+TASK-045). An `Assault` subtracts `AssaultResolvePenalty` and a `Withdraw` adds
+`WithdrawResolveBonus`. The result is floored at `0`, so a completely
+unexposed route is never refused for stress, suppression or wounds alone:
+those three terms only make an already-exposed route more likely to be
+refused.
+Exposure at or below the threshold is `Accepted`; above it the outcome is
+`Refused(RouteTooExposed topThreat)`. Trust is not a stage-4 term (section 8
+leaves it minimal for the vertical slice).
+
 ### Stage 5: safer adaptation
 
 Before refusal, attempt a small set of permitted adaptations:
@@ -256,6 +282,9 @@ Before refusal, attempt a small set of permitted adaptations:
 - maintain greater distance from a threat.
 
 An adaptation must preserve the commander's broad intent. Otherwise it becomes a refusal with a suggested correction.
+
+Stage 5 is not built (B-018): there is no `Adapted` outcome and no route
+recomputation.
 
 ## 6. Outcomes
 
@@ -270,14 +299,17 @@ type OrderDisposition =
 
 Every non-trivial outcome includes one primary reason and optional supporting reasons.
 
-Realised by TASK-028 (backlog B-017) as the subset
-`Accepted | Refused of primary * supporting | Unable of primary * supporting`
-in `CommandoWar.Sim` — `Refused` and `Unable` carry their `DecisionReason`s **by
-construction**, so the "one primary reason" rule holds without a side check.
-`Adapted` (stage 5) is B-018 and `Delayed` (a `ResumeCondition` mechanism) is
-B-021 — neither has a case yet, and `TacticalAdaptation` / `ResumeCondition` do
-not exist. Every appraisal, including `Accepted`, emits one `OrderAppraised`
-event carrying the `OrderDisposition` (`docs/04` section 14).
+The implemented type (TASK-028, backlog B-017) is the subset
+`Accepted | Refused of primary * supporting | Unable of primary * supporting`.
+`Refused` and `Unable` carry their `DecisionReason`s by construction, so the
+"one primary reason" rule holds without a side check. `Adapted` (stage 5) is a
+B-018 follow-up. `Delayed` (a `ResumeCondition` mechanism) was named for B-021
+by TASK-028 and TASK-030 and called a B-018 follow-up by TASK-037 and TASK-047;
+B-018 and B-021 are both closed without it, and no open backlog row carries it.
+Neither has a case, and `TacticalAdaptation` and `ResumeCondition` do not
+exist. Every appraisal, including `Accepted`, emits
+one `OrderAppraised` event carrying the `OrderDisposition` (`docs/04` section
+14).
 
 ### Accepted
 
@@ -323,22 +355,21 @@ type DecisionReason =
 
 Do not add prose-only reasons. UI text is derived from structured values.
 
-Realised by TASK-028 (backlog B-017) as the subset
-`NoKnownRoute | RouteTooExposed of threat: AgentId option`, extended by
-TASK-037 (backlog B-030 thin slice) with `TargetNotKnown` — a `Suppress`
-order naming a contact absent from the issuing agent's own tactical
-knowledge — by TASK-045 (backlog B-031) with `CriticallyWounded`, and by
-TASK-047 (backlog B-030 proper) with `InsufficientAmmunition` — a
-`Suppress`/`Assault` order (only; not `MoveTo`/`Hold`/`Withdraw`) from an
-agent whose `AgentState.Ammo` is entirely empty. The doc's `ContactId` is
-`AgentId` in the code (there is no `ContactId` type). `UnableToCommunicate`
-stays a `DeliveryFailure` case (TASK-027) — an undelivered order never
+The implemented subset (`Domain.fs`) is `NoKnownRoute | RouteTooExposed of
+threat: AgentId option` (TASK-028, backlog B-017), `TargetNotKnown` (TASK-037,
+backlog B-030: a `Suppress` order naming a contact absent from the issuing
+agent's own tactical knowledge), `CriticallyWounded` (TASK-045, backlog B-031)
+and `InsufficientAmmunition` (TASK-047, backlog B-030: a `Suppress` or
+`Assault` order, and only those, from an agent whose `AgentState.Ammo` is
+entirely empty). The doc's `ContactId` is `AgentId` in the code (there is no
+`ContactId` type). `UnableToCommunicate` is a `DeliveryFailure` case (section
+5, stage 1), not a `DecisionReason`, because an undelivered order never
 reaches appraisal. The rest (`RouteBlocked`, `HeavySuppression`,
 `MissingCapability`, `IssuerNotRecognised`, `ImmediateThreat`,
-`UnsupportedAssault`) arrive with the systems that can trigger them — B-021
-(the remaining triggers), a capability model, and a commander-identity /
-interrupt-priority model, none of which exist — rather than as speculative
-type machinery now (`AGENTS.md`).
+`UnsupportedAssault`) arrive with the systems that can trigger them, namely
+B-021 (the remaining triggers), a capability model, and a commander-identity
+and interrupt-priority model, none of which exist, rather than as speculative
+type machinery (`AGENTS.md`).
 
 ## 8. Minimal psychological model
 
@@ -346,32 +377,32 @@ type machinery now (`AGENTS.md`).
 
 Stable trait influencing willingness to maintain a valid commitment under pressure.
 
-Realised by TASK-028 (backlog B-017): `AgentState.Discipline`, a non-negative
-integer set once from `Deployment.Discipline` (default
-`AppraisalConfig.DisciplineDefault`) and read only by the stage-4 resolve
-threshold. Static authored data at this stage — dynamic discipline (and stress
-/ trust) is B-021.
+`AgentState.Discipline` is a non-negative integer set once from
+`Deployment.Discipline` (default `AppraisalConfig.DisciplineDefault`) and read
+only by the stage-4 resolve threshold (TASK-028, backlog B-017). It is static
+authored data; dynamic discipline and dynamic trust are not built (B-021
+records dynamic trust as unassigned future work and keeps `Discipline` static).
 
 ### Trust
 
 Slow-changing confidence in the current commander's judgement. The vertical slice may initialise trust and leave dynamic trust changes minimal.
 
+There is no trust field, and trust is not an appraisal input.
+
 ### Stress
 
 Accumulates through nearby casualties, wounds, isolation, explosions, and threat. Decays when safe.
 
-Realised by TASK-033 (backlog B-021), partially: of the five sources listed
-above, only "threat" has a system behind it today —
-`AgentState.VisibleContacts` (TASK-026). `AgentState.Stress`, an integer on
-the `0..1000` scale (the `Suppression` precedent), rises by
-`StressConfig.GainPerTick` every tick an agent has an opposing-side agent in
-`VisibleContacts`, and always decays by `StressConfig.DecayPerTick`, floored
-at `0` — both in the State consequences phase (`docs/04` section 12.9),
-since no other system produces stress yet. Read by the stage-4 resolve
-threshold as a continuous drag (`AppraisalConfig.StressDivisor`), overall
-floored at `0` so a completely unexposed route is never refused for stress
-alone. Casualty-, wound-, explosion-, and isolation-driven stress remain
-unrealised (B-031 and unassigned future work).
+Of these five sources only "threat" has a system behind it (TASK-033, backlog
+B-021). `AgentState.Stress` is an integer on the `0..1000` scale (the
+`Suppression` precedent). In the State consequences phase (`docs/04` section
+12.9) it rises by `StressConfig.GainPerTick` every tick the agent has an
+opposing-side agent in `AgentState.VisibleContacts`, then always decays by
+`StressConfig.DecayPerTick`, floored at `0`. Stage 4 reads it as a continuous
+drag (`AppraisalConfig.StressDivisor`), floored overall at `0` so a completely
+unexposed route is never refused for stress alone. Stress from nearby
+casualties, wounds, explosions and isolation is not built; a wounded agent's
+own health loss enters stage 4 directly instead.
 
 ### Suppression
 
@@ -379,23 +410,31 @@ Immediate effect of hostile fire and impacts. It reduces action effectiveness, r
 
 Wounds are represented separately as physical state.
 
-Realised by TASK-032 (backlog B-020): `AgentState.Suppression`, an integer
-on the `0..1000` scale (the `Contact.Confidence` precedent). The Combat
-phase (`docs/04` section 12.8) raises it on every qualifying shot —
-independent of a hit, mitigated by the same directional `Terrain.cover`
-geometry Combat uses for hit chance; the State consequences phase (section
-12.9) decays it every tick, unconditionally, floored at `0`. This is the
-"immediate effect of hostile fire" value only — "reduces action
-effectiveness" and "may trigger taking cover" are not realised by any
-system yet.
+`AgentState.Suppression` is an integer on the `0..1000` scale (the
+`Contact.Confidence` precedent; TASK-032, backlog B-020). The Combat phase
+(`docs/04` section 12.8) raises it on every qualifying shot, independent of a
+hit, mitigated by the same directional `Terrain.cover` geometry Combat uses for
+hit chance. The State consequences phase (section 12.9) decays it every tick,
+unconditionally, floored at `0`. This is the "immediate effect of hostile fire"
+value only: "reduces action effectiveness" and "may trigger taking cover" are
+not realised by any system.
 
-TASK-033 (backlog B-021) adds the first consumer: a hysteresis latch
-`AgentState.SuppressionBand` (`true` once `Suppression >=
-AppraisalConfig.SuppressionBandEnter`, back to `false` at `<=
-SuppressionBandExit`) drives both a discrete resolve-threshold penalty
-("raises assault pressure", read narrowly as appraisal resolve, not
-movement or executor speed) and the suppression-band reappraisal trigger
-(section 14) whenever it flips.
+Its consumer is a hysteresis latch, `AgentState.SuppressionBand` (TASK-033,
+backlog B-021): `true` once `Suppression >= AppraisalConfig.SuppressionBandEnter`,
+back to `false` at `<= SuppressionBandExit`. The latch drives a discrete
+stage-4 resolve-threshold penalty ("raises assault pressure", read narrowly as
+appraisal resolve, not movement or executor speed), the suppression-band
+reappraisal trigger (section 14) whenever it flips, and the zeroing of a
+latched threat's contribution to other agents' route exposure (section 5,
+stage 3).
+
+Wounds are `AgentState.Vitals` (TASK-045, backlog B-031): `Alive health`
+becomes `Incapacitated bleedOutRemaining` when a qualifying hit takes health to
+zero or below, never straight to `Dead`, and `Dead` when the countdown ends.
+Only a hit wounds, not a miss. There is no rescue, and health never
+regenerates. A wound enters appraisal as the stage-4 wound term, as
+`Unable(CriticallyWounded)` once the agent is not `Alive`, and as the wounded
+reappraisal trigger (section 14).
 
 ## 9. Commitment
 
@@ -420,39 +459,54 @@ The agent does not reselect its high-level goal every tick. It continues until:
 
 This prevents oscillation.
 
-Realised by TASK-030 (backlog B-018) as `Holding | Moving of MoveCommitment`
-in `CommandoWar.Sim`, extended by TASK-037 (backlog B-030 thin slice) with
-`Suppressing of SuppressCommitment` (`{ Command: CommandId; Target: AgentId }`
-— the exact shape this section names), and by TASK-047 (backlog B-030
-proper) with `Withdrawing of WithdrawCommitment` (the `MoveCommitment` shape)
-and `Assaulting of AssaultCommitment` (`{ Command: CommandId; Target: Cell;
-Stage: AssaultStage }` — `Stage` is this section's own finite-executor idea,
-below, realised as a pure per-tick derivation rather than a second stored
-field). `Hold` gets **no** `HoldCommitment` payload case, unlike this
-section's own sketch: an accepted `Hold` writes a `Destination` exactly as
-`MoveTo` does, so it already produces `Moving` while en route and falls to
-bare `Holding` on arrival — nothing behaviourally distinguishes an ordered
-hold from an idle agent once arrived, so a payload case would carry no
-information a diagnostic overlay cannot already read from `Order`/
-`Disposition` directly (`AGENTS.md` "do not build speculative type
-machinery"). A `Suppressing` commitment has no completed state of its own —
-it ends only by supersession, exactly like the "prevents oscillation" list
-above minus "completed". `Commitment` is **not** a stored `AgentState`
-field: it is a pure derived value (`Commitment.ofAgent : threats: Contact[]
--> suppressedThreats: AgentId[] -> position: Cell -> ReceivedOrder option ->
-OrderDisposition option -> Cell option -> Commitment`) recoverable from the
-already-canonical `Order` / `Disposition` / `Destination` plus already-
-canonical world context (`WorldState.TacticalKnowledge`, `AgentState.
-SuppressionBand`, needed only for `Assaulting`'s `Stage`) at every tick —
-the `AgentState.Route` precedent (`docs/04` section 17). "Continues until
-completed" and "superseded by a newer order" are realised (`CommitmentCompleted`
-/ `CommitmentEstablished` events, section 13); "invalidated by a material
-world change" and "delayed or refused after explicit reappraisal" are not —
-see section 11. "Interrupted by a higher-priority survival event" gained a
-second, `Assault`-scoped instance with TASK-047: `AwaitingSupport`
-(section 10) freezes the executor without an explicit interrupt-priority
-mechanism, since it is the order's own stage, not an external event pre-
-empting it.
+The implemented type (`CommandoWar.Sim`; TASK-030, backlog B-018, extended by
+TASK-037 and TASK-047, backlog B-030) is:
+
+```fsharp
+type Commitment =
+    | Holding
+    | Moving of MoveCommitment
+    | Suppressing of SuppressCommitment
+    | Withdrawing of WithdrawCommitment
+    | Assaulting of AssaultCommitment
+```
+
+`MoveCommitment` and `WithdrawCommitment` are `{ Command: CommandId; Target:
+Cell }`, `SuppressCommitment` is `{ Command: CommandId; Target: AgentId }`
+(the shape this section names), and `AssaultCommitment` is `{ Command:
+CommandId; Target: Cell; Stage: AssaultStage }`, where `Stage` is a pure
+per-tick derivation (section 10) rather than a second stored field. `Hold` has
+no `HoldCommitment` payload case, unlike the sketch above: an accepted `Hold`
+writes a `Destination` exactly as `MoveTo` does, so it already produces
+`Moving` while en route and falls to bare `Holding` on arrival. Nothing
+behaviourally distinguishes an ordered hold from an idle agent once arrived,
+so a payload case would carry no information a diagnostic overlay cannot
+already read from `Order` and `Disposition` (`AGENTS.md` "do not build
+speculative type machinery"). A `Suppressing` commitment has no completed
+state of its own; it ends only by supersession, which is the list above minus
+"completed".
+
+`Commitment` is not a stored `AgentState` field. It is a pure derived value,
+`Commitment.ofAgent : threats: Contact[] -> suppressedThreats: AgentId[] ->
+position: Cell -> ReceivedOrder option -> OrderDisposition option -> Cell
+option -> Commitment`, recoverable at every tick from the already-canonical
+`Order`, `Disposition` and `Destination` plus already-canonical world context
+(`WorldState.TacticalKnowledge` and `AgentState.SuppressionBand`, needed only
+for `Assaulting`'s `Stage`). This is the `AgentState.Route` precedent
+(`docs/04` section 17): storing it would duplicate state that can drift from
+its source fields. `Holding` is the result when there is no order, the order
+is `Refused` or `Unable`, or an `Accepted` order is already fulfilled.
+
+"Continues until completed" and "superseded by a newer order" are realised
+(`CommitmentCompleted` and `CommitmentEstablished` events, `docs/04` section
+12.6). Reappraisal on a section 14 trigger can turn an in-progress order into
+`Refused` or `Unable`, which clears its `Destination` and so ends the
+commitment (`Holding`); this is the realised form of "invalidated by a
+material world change" and "refused after explicit reappraisal". `Delayed` is
+not built (section 6). "Interrupted by a higher-priority survival event" is
+covered in section 11. An `Assault`'s `AwaitingSupport` stage (section 10)
+freezes the executor without any interrupt-priority mechanism, since it is the
+order's own stage rather than an external event pre-empting it.
 
 ## 10. Finite action executor
 
@@ -472,40 +526,45 @@ Acquire approach route
 
 Do not encode the whole game in one behaviour tree. Typed states and transitions are easier to test and explain.
 
-Realised for `Assault` by TASK-047 (backlog B-030 proper) as
-`Commitment.AssaultStage`, a leaner four-state cut of this example rather
-than a literal state-for-state port — several of the states above collapse
-onto systems that already exist rather than needing new ones:
+The executor for `Move` is correspondingly thin (TASK-030, backlog B-018),
+since `Simulation.navigationAndMovement` (`docs/04` section 12.7) already owns
+the physical stepping. `Simulation.commitmentAndLocalAction` establishes (a
+fresh `Accepted` order becomes `Moving`, and `CommitmentEstablished` is
+emitted), continues (unchanged, no event), and completes (the target is
+reached and `CommitmentCompleted` is emitted). On completion a queued order's
+head is promoted into `Order` with `Disposition = None`, to be judged by the
+next tick's Appraisal (TASK-044, backlog B-051). `Hold` and `Withdraw` use the
+same shape, `Hold` toward its `bestCoverNear` cell. A plain move has no
+intermediate states: there is no "wait for support" or "cross danger area"
+concept for it.
 
-- "acquire approach route" / "move to assault start" -> `ApproachingStart`
-  (ordinary `Pathfinding`-driven Navigation, unchanged);
-- "wait for required support, if any" -> `AwaitingSupport`: a known threat
-  contact near the target is not yet `SuppressionBand`-latched (the
-  identical hysteresis latch `Suppress`/TASK-037 already reads) — the
-  executor freezes `Destination` to `None` for as long as this holds, no
-  timeout;
-- "cross danger area" -> `Advancing`: needs no special handling at all, the
-  already-symmetric `Combat` phase engages any visible hostile along the
-  way exactly as it does for any other commitment;
-- "enter target area" / "clear immediate threat" -> `ClearingThreat`: at
-  the target with a known unsuppressed threat still nearby, the agent
-  holds while `Combat` fires;
-- "report complete" -> the existing `CommitmentCompleted` event once no
-  such threat remains, no new event type.
+`Assault` has a leaner four-state cut of the example above
+(`Commitment.AssaultStage`; TASK-047, backlog B-030), because several of its
+states collapse onto systems that already exist. The stage is a pure per-tick
+derivation from the agent's position, the target, `WorldState.TacticalKnowledge`
+and the `SuppressionBand` latch:
 
-`MoveTo`'s own executor (TASK-030) stays correspondingly thin, the
-precedent this cut follows: "there is no 'wait for support' or 'cross
-danger area' concept without suppression or a richer order vocabulary" is
-no longer true for `Assault` specifically, now that both exist.
-
-Realised by TASK-030 (backlog B-018) for `Move`, correspondingly thin since
-`Simulation.navigationAndMovement` (`docs/04` section 12.7) already owns the
-physical stepping: establish (a fresh `Accepted` order -> `Moving`, emit
-`CommitmentEstablished`), continue (unchanged, no event), complete (the
-target is reached -> `Holding`, emit `CommitmentCompleted`). No intermediate
-states like the assault example above — there is no "wait for support" or
-"cross danger area" concept without suppression (B-020) or a richer order
-vocabulary (B-030).
+- "acquire approach route" and "move to assault start" are `ApproachingStart`:
+  the agent is more than `AppraisalConfig.AssaultStartRange` Chebyshev cells
+  from the target, under ordinary `Pathfinding`-driven Navigation;
+- "wait for required support, if any" is `AwaitingSupport`: the agent is within
+  `AssaultStartRange` and a known threat contact within
+  `AppraisalConfig.ThreatEngagementRange` of the target is not
+  `SuppressionBand`-latched (the identical latch `Suppress` reads). The
+  executor freezes `Destination` to `None` for as long as this holds. There is
+  no timeout: the player must suppress the threat, redirect, or accept the
+  stall;
+- "cross danger area" is `Advancing`: no unsuppressed threat blocks, and
+  Navigation resumes. It needs no special handling, because the symmetric
+  `Combat` phase engages any visible hostile along the way as it does for any
+  other commitment;
+- "enter target area" and "clear immediate threat" are `ClearingThreat`: the
+  agent is at the target and a known unsuppressed threat contact lies within
+  `AppraisalConfig.AssaultClearRadius` of it. The agent holds while `Combat`
+  fires;
+- "report complete" is the existing `CommitmentCompleted` event, emitted once
+  the agent is at the target and no such threat remains. There is no new event
+  type.
 
 ## 11. Interrupts
 
@@ -521,18 +580,37 @@ Initial priority order:
 
 An interrupt emits an event and records whether the original commitment can resume.
 
-Realised by TASK-030 (backlog B-018): only priority 6 has a live signal
-today. A superseding order's `CommitmentEstablished` event is the complete
-trace — since `Commitment` is derived, not stored (section 9), there is
-nothing separate to report about the superseded commitment "ending", and no
-resume question arises (a superseded commitment cannot resume; a new order
-always takes precedence). Priorities 1–4 need combat/suppression state that
-does not exist (B-019/B-020). Priority 5 ("route invalidated") was already
-assigned to B-021 by TASK-028 (`docs/04` section 12.5): under static terrain
-an Appraisal-`Accepted` route cannot later become unreachable, so there is no
-live signal yet; a persistent stall from a live-but-unmoving obstruction
-needs a stall counter (new state), which is B-021's job. Priority 7 (normal
-commitment execution) is unchanged Navigation behaviour.
+Current coverage of the table:
+
+- Priority 1 has an effect but no record of whether the commitment can resume.
+  A non-`Alive` agent does not move, fire or start new actions (`docs/04`
+  section 20). The transition is reported by `AgentIncapacitated` and
+  `AgentDied` (TASK-045, backlog B-031). The wounded reappraisal trigger
+  (section 14) re-judges the agent's unfulfilled order as
+  `Unable(CriticallyWounded)` on the following tick, which clears its
+  `Destination`; the `Order` itself stays in place. An already-fulfilled order
+  is not re-judged.
+- Priorities 2 to 4 have no live signal. No explosion model exists, and
+  nothing interrupts a commitment on point-blank contact or heavy suppression:
+  Combat engages automatically for every commitment, and suppression reaches a
+  commitment only through appraisal (the `SuppressionBand` trigger, section
+  14).
+- Priority 5 has no interrupt of its own. Under static terrain an
+  Appraisal-`Accepted` route cannot later become unreachable (`docs/04` section
+  12.5). The live-obstruction case is handled inside Navigation: after
+  `StallAbandonTicks` (40) consecutive frozen ticks against the same route the
+  agent abandons its destination (`MovementAbandoned`, counted in
+  `AgentState.StalledTicks`; TASK-065, backlog B-065), and an agent obstructed
+  by a parked agent reroutes around it when an alternate route exists
+  (`MovementRerouted`, which keeps the destination; TASK-070, backlog B-069).
+  Abandonment clears `Destination` and `Route`. Neither records whether the
+  commitment can resume.
+- Priority 6 is live (TASK-030, backlog B-018). A superseding order's
+  `CommitmentEstablished` event is the complete trace: since `Commitment` is
+  derived, not stored (section 9), there is nothing separate to report about
+  the superseded commitment ending, and no resume question arises, because a
+  superseded commitment cannot resume and a new order always takes precedence.
+- Priority 7 is unchanged Navigation behaviour.
 
 ## 12. Enemy AI
 
@@ -549,33 +627,29 @@ Initial enemy doctrine:
 
 Do not build a symmetric enemy commander planner before the player command loop works.
 
-"Use the same ... combat rules" is realised by TASK-031 (backlog B-019):
-`Simulation.combat` is symmetric by construction — a hostile agent engages a
-visible friendly exactly as a friendly engages a visible hostile, same
-`Combat.hitChance` formula, same weapon range. "Engage visible targets" is
-therefore already true in the narrow mechanical sense; a hostile squad
-tactical picture and doctrine choosing *when* or *whether* to engage (the
-rest of this list) is B-022 — this task's automatic auto-engage is the
-mechanic that doctrine will eventually gate, not the doctrine itself.
+Status against that list:
 
-"Observe and report" is realised by TASK-034 (backlog B-022, partial):
-`WorldState.HostileTacticalKnowledge`, symmetric to the friendly squad's
-picture (section 3). The same task also proves the targeting half of "engage
-visible targets" implicitly bounds itself to observed positions —
-`Simulation.combat` already draws its candidates from a shooter's own
-same-tick `VisibleContacts`, never the stale-tolerant tactical-knowledge
-store, so a Hostile agent never fires on a friendly position it has since
-lost sight of (`docs/09` section 8). "Hold assigned area" stays true by
-omission (an unordered agent never moves). "Suppress likely routes", "seek
-adjacent cover under pressure", and "fall back only under a scenario-defined
-condition" — the doctrine that *decides* to move or fire a Hostile agent —
-remain open, explicitly descoped by TASK-037 (2026-09-16): they are all
-**Hostile-side** doctrine (the enemy proactively choosing to suppress or fall
-back without a player order), not the **player-issued** `Suppress` order
-TASK-037 built (section 4) — a `Suppress`-order-equivalent for Hostile AI,
-the first reactive-movement decision for an unordered agent (no design exists
-yet), and authored fallback conditions with `Withdraw` semantics,
-respectively, none built by any task to date.
+- "Engage visible targets": `Simulation.combat` is symmetric by construction
+  (TASK-031, backlog B-019). A hostile agent engages a visible friendly exactly
+  as a friendly engages a visible hostile, with the same `Combat.hitChance`
+  formula and weapon range. This is the mechanic doctrine will gate; doctrine
+  choosing when or whether to engage is B-022. Targeting is bounded to observed
+  positions: candidates are drawn from the shooter's own same-tick
+  `VisibleContacts`, never from the stale-tolerant tactical-knowledge store, so
+  a Hostile agent never fires on a friendly position it has since lost sight of
+  (TASK-034; `docs/09` section 8).
+- "Observe and report": `WorldState.HostileTacticalKnowledge`, symmetric to the
+  friendly squad's picture (section 3; TASK-034, backlog B-022, partial).
+- "Hold assigned area" is true by omission: an unordered agent never moves.
+- "Suppress likely routes", "seek adjacent cover under pressure", and "fall
+  back only under a scenario-defined condition" are not built. They are the
+  doctrine that decides to move or fire a Hostile agent, all Hostile-side (the
+  enemy proactively choosing to suppress or fall back without a player order),
+  as distinct from the player-issued `Suppress` order (section 4). TASK-037
+  explicitly descoped them (2026-09-16). They would need a
+  `Suppress`-order-equivalent for Hostile AI, the first reactive-movement
+  decision for an unordered agent (no design exists yet), and authored fallback
+  conditions with `Withdraw` semantics, respectively. They stay B-022.
 
 ## 13. Explanation surface
 
@@ -615,13 +689,14 @@ A structured record containing:
 
 The player-facing explanation must be derivable from the actual decision data, not generated independently.
 
-Realised so far (TASK-028, backlog B-017): the `OrderAppraised` event carries
-the full `OrderDisposition` (outcome + structured reasons), and the
-`Diagnostics` `OrderAppraisal` overlay carries the outcome plus the exposed
-route cells the stage-3 exposure sum found — enough for the headless developer
-overlay to explain any appraisal (`docs/07` section 9 criterion 11). A separate
-persisted trace record (appraisal version, every pressure and threshold term)
-is a later refinement.
+The `OrderAppraised` event carries the full `OrderDisposition` (outcome and
+structured reasons), and the `Diagnostics` `OrderAppraisal` overlay carries the
+outcome plus the exposed route cells the stage-3 sum found (TASK-028, backlog
+B-017). That is enough for the headless developer overlay to explain any
+appraisal (`docs/07` section 9 criterion 11). The Godot client derives its
+disposition and reason text from the same structured values (`RenderShared.fs`;
+TASK-042). A separate persisted trace record (appraisal version, every
+pressure and threshold term) is a later refinement.
 
 ## 14. Reappraisal triggers
 
@@ -636,40 +711,51 @@ Reappraise only when:
 - the route becomes blocked;
 - communication or leadership materially changes.
 
-Realised by TASK-028 (backlog B-017): **"a new order is received"** only — the
-Communication phase resets `AgentState.Disposition` to `None` when it writes a
-fresh `AgentState.Order`, and the Appraisal phase judges exactly the agents
-whose `Disposition` is `None`.
+An already-appraised order is not re-judged, and emits no event, unless a
+trigger fires. The Communication phase resets `AgentState.Disposition` to
+`None` when it writes a fresh `AgentState.Order`, and the Appraisal phase
+judges exactly the agents whose `Disposition` is `None`. Every other trigger
+below works the same way, by resetting an already-appraised order's
+`Disposition` inside the Appraisal phase (`docs/04` section 12.5), and each
+excludes a fulfilled order, because `commitmentAndLocalAction` needs to see it
+unchanged to recognise completion. The realised triggers are:
 
-Realised by TASK-033 (backlog B-021), two more: **knowledge-change** — any
-`ContactObserved` / `ContactExpired` event emitted earlier the same tick
-(Perception / Tactical-knowledge both run before Appraisal) resets every
-agent's already-appraised, non-fulfilled order, global rather than filtered
-to "was this agent's own route affected" (the R-023 "same observation
-contract" precedent: a broad, simple trigger over a precise, expensive one);
-and **suppression-band** — `AgentState.SuppressionBand` (the hysteresis latch
-over `AgentState.Suppression`, section 8) flipping this tick. Both are
-realised entirely inside the Appraisal phase (`docs/04` section 12.5), not a
-new phase slot, and both exclude a fulfilled order (`commitmentAndLocalAction`
-needs to see it unchanged to recognise completion).
+- **A new order is received** (TASK-028, backlog B-017).
+- **Knowledge-change** (TASK-033, backlog B-021): any `ContactObserved` or
+  `ContactExpired` event emitted earlier the same tick (Perception and
+  Tactical-knowledge both run before Appraisal) resets every agent's
+  already-appraised order. The scope is global rather than filtered to "was
+  this agent's own route affected" (the R-023 "same observation contract"
+  precedent: a broad, simple trigger over a precise, expensive one).
+- **Suppression-band** (TASK-033): the agent's own `AgentState.SuppressionBand`
+  (the hysteresis latch over `AgentState.Suppression`, section 8) flips this
+  tick.
+- **Threat-suppression-change** (TASK-037, backlog B-030): the identical
+  suppression-band flip, but checked across every agent rather than only the
+  appraising agent's own state. The scope is global, like knowledge-change: a
+  band flip on any agent re-judges every already-appraised, unfulfilled order,
+  not only one that names that agent. The case it exists for is a `Suppress`
+  order (or incidental automatic engagement) driving a different agent's known
+  threat into its `SuppressionBand`, which re-judges a `Refused` or `Unable`
+  order that names it. Stage 3's exposure zeroing is what changes the outcome;
+  this trigger is what notices to re-check.
+- **Wounded** (TASK-045, backlog B-031): `AgentState.RecentlyWounded` is a
+  one-shot flag, true for one tick after a qualifying hit reduces the agent's
+  health. It exists because Combat runs after Appraisal within a tick, so a
+  wound taken this tick cannot be seen by this tick's Appraisal. The following
+  tick's Appraisal consumes it whether or not it triggered a fresh appraisal.
 
-Realised by TASK-037 (backlog B-030 thin slice), a third: **threat-suppression-change**
-— the identical suppression-band flip, but checked globally across every
-agent rather than only the appraising agent's own state, so a `Suppress`
-order (or incidental automatic engagement) driving a *different* agent's
-known threat into its `SuppressionBand` re-judges a `Refused`/`Unable` order
-that names it (section 5 stage 3's exposure zeroing is what changes the
-outcome; this trigger is what notices to re-check). The same knowledge-change
-precedent, same phase, same fulfilled-order exclusion.
+Not built:
 
-**Exposure-band**, **wounded**, **support**, and **leadership** stay
-unrealised: exposure-band needs per-tick route-exposure tracking for every
-agent with a live order (a materially larger cut than TASK-033's); the other
-three need systems that do not exist (wound/casualty state, a
-support-commitment concept, a leadership entity — B-030 / B-031). "The route
-becomes blocked" cannot fire for an appraisal-`Accepted` order under static
-terrain (its route was verified at stage 2), so it too waits for a future
-persistent-obstruction handling.
+- **Exposure-band** needs per-tick route-exposure tracking for every agent with
+  a live order, a materially larger cut than the realised triggers.
+- **Support** (required support beginning or ending) and **communication or
+  leadership change** have no trigger. `AwaitingSupport` (section 10) is an
+  `Assault` stage, not a reappraisal trigger, and `LeadershipTransferred` is an
+  event only.
+- **The route becomes blocked** cannot fire for an appraisal-`Accepted` order
+  under static terrain (its route was verified at stage 2), so it waits for
+  future persistent-obstruction handling (see section 11, priority 5).
 
 This improves stability and makes decisions easier to trace.
 
@@ -682,24 +768,23 @@ This improves stability and makes decisions easier to trace.
 - Use hysteresis when entering and leaving panic, suppression, or delay states.
 - Treat random variation as a last resort and bound it so identical tactical situations remain broadly predictable.
 
-Realised by TASK-028 (backlog B-017): `AppraisalConfig`
-(`src/CommandoWar.Sim/Appraisal.fs`) is the one configuration structure — a
-`[<RequireQualifiedAccess>]` module of `[<Literal>]` integers (engagement
-range, per-cell exposure weight, cover mitigation, base resolve, and the
-Discipline / RiskTolerance / Urgency modifiers), the `PerceptionConfig`
-precedent. All appraisal arithmetic is integer; appraisal draws no randomness
-(B-019 combat spread stays the deterministic stream's first gameplay consumer).
+`AppraisalConfig` (`src/CommandoWar.Sim/Appraisal.fs`) is the one
+configuration structure for appraisal: a `[<RequireQualifiedAccess>]` module of
+`[<Literal>]` integers (engagement range, per-cell exposure weight, cover
+mitigation, base resolve, the Discipline / RiskTolerance / Urgency modifiers,
+the stress, suppression-band and wound terms, the Assault, Withdraw and Hold
+constants, and the formation-slot search radius), the `PerceptionConfig`
+precedent (TASK-028, backlog B-017). All appraisal arithmetic is integer, and
+appraisal draws no randomness. Other mechanisms keep their own config modules of
+the same shape (`PerceptionConfig`, `CombatConfig`, `StressConfig`,
+`SuppressionConfig`, `CasualtyConfig`, `AmmoConfig`, `CommsConfig`).
 
-Realised by TASK-033 (backlog B-021): hysteresis lands on the
-**suppression-band** trigger, not the exposure-band one this section
-originally anticipated — exposure-band stays deferred (needs per-tick
-route-exposure tracking, out of this task's cut), while suppression-band is
-fully buildable now on the already-canonical `AgentState.Suppression`
-(TASK-032). `AppraisalConfig.SuppressionBandEnter` (500) /
-`.SuppressionBandExit` (300) are the two-threshold latch; the gap between
-them (200) exceeds one `SuppressionConfig.DecayPerTick` (50) so a value
-sitting right at one boundary cannot cross it, and flip the latch, in a
-single tick of decay alone.
+Hysteresis is applied to the suppression band, not to the exposure band (which
+is not built, section 14). `AppraisalConfig.SuppressionBandEnter` (500) and
+`.SuppressionBandExit` (300) are the two-threshold latch. The gap between them
+(200) exceeds one `SuppressionConfig.DecayPerTick` (50), so a value sitting
+right at one boundary cannot cross it, and flip the latch, in a single tick of
+decay alone (TASK-033, backlog B-021).
 
 ## 16. Vertical-slice scenarios for tests
 
@@ -707,24 +792,25 @@ single tick of decay alone.
 
 An assault route crosses a known machine-gun lane. A low-discipline, suppressed soldier delays. After suppression begins, the order becomes acceptable.
 
-Partially realised by TASK-028 (backlog B-017): the `exposed-approach` corpus
-entry and the `SimulationTests` "exposed route ... Refused for a low-discipline
-agent" fact deliver the refusal half — a low-`Discipline` agent `Refused
-RouteTooExposed`, a high-`Discipline` one `Accepted` on the same order (the G3
-divergence, `docs/07` section 9 criterion 2). "Suppression makes it
-acceptable" (an ally suppressing the machine gun reduces the route's exposure
-— the opposite direction from TASK-033's `SuppressionBand`, which only ever
-makes an already-suppressed *soldier's own* resolve threshold harder to
-clear) is now realised by TASK-037: a `Suppress` order that reduces a
-threat's contribution to stage-3 exposure, proven end to end by the
-`suppress-relieves-exposure` corpus entry. `Delayed` (the soldier waits,
+Partially realised. The `exposed-approach` corpus entry and the
+`SimulationTests` "exposed route ... Refused for a low-discipline agent" fact
+deliver the refusal half: a low-`Discipline` agent is `Refused
+RouteTooExposed` and a high-`Discipline` one is `Accepted` on the same order
+(the G3 divergence, `docs/07` section 9 criterion 2; TASK-028, backlog B-017).
+"Suppression makes it acceptable" is realised by a `Suppress` order that zeroes
+a threat's contribution to stage-3 exposure, so an ally suppressing the machine
+gun reduces the route's exposure, proven end to end by the
+`suppress-relieves-exposure` corpus entry (TASK-037). That is the opposite
+direction from `SuppressionBand`, which only makes an already-suppressed
+soldier's own resolve threshold harder to clear. `Delayed` (the soldier waits,
 rather than simply becoming `Accepted` once the threat is suppressed) still
-needs the `Delayed` disposition (B-018 follow-up) — not built by any task to
-date.
+needs the `Delayed` disposition (section 6), which no task has built.
 
 ### Covered alternative
 
 The same target has a longer route behind walls. A cautious adaptation chooses it.
+
+Not realised: it needs stage-5 adaptation (section 5).
 
 ### Unknown threat
 
@@ -733,6 +819,8 @@ The squad has not observed the machine gun. An agent accepts based on current kn
 ### Physical inability
 
 A critically wounded agent reports unable rather than refused.
+
+Realised as `Unable(CriticallyWounded)` (TASK-045, backlog B-031).
 
 ### Lost communication
 
