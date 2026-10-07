@@ -1173,7 +1173,23 @@ module Simulation =
             | Some o, Some Accepted ->
                 match o.Intent with
                 | MoveTo target ->
-                    if a.Destination = None && a.Position = target then
+                    // A group order's agent stops on its formation slot, not
+                    // on `target` (D-13): complete against the same resolved
+                    // cell the Appraisal phase wrote to `Destination` and
+                    // tests in its `fulfilled` fast path. Appraisal and this
+                    // phase both run before Navigation moves anyone, so
+                    // `occupied` is the identical set in both.
+                    let arrivedAt =
+                        if o.AsGroup then
+                            let occupied =
+                                agents
+                                |> Array.choose (fun x -> if x.Id = a.Id then None else Some x.Position)
+
+                            Appraisal.resolveFormationTarget terrain occupied a.FormationOffset target
+                        else
+                            target
+
+                    if a.Destination = None && a.Position = arrivedAt then
                         completeOrder i a o.Command
                     elif Set.contains a.Id acceptedThisTick then
                         // Freshly accepted this tick: a commitment begins.

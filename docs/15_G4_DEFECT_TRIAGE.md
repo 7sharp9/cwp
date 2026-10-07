@@ -5,7 +5,7 @@ defects are triaged by severity" (`docs/08_ROADMAP_AND_GATES.md` section 7).
 **This document does not record G4 as passed.** The gate call is Dave's.
 Dispositions below are proposals for Dave, not decisions.
 
-Snapshot: 2026-09-30, at the TASK-080 acceptance commit (`a3607ac`).
+Snapshot: 2026-09-30, at the TASK-080 acceptance commit (`a3607ac`). Updated 2026-10-07: D-12 and D-13 fixed by TASK-082.
 
 ## 1. Scale and method
 
@@ -45,8 +45,6 @@ of a record, not proof that none exists (see section 4).
 | D-08 | minor | analysis | The client cannot open a session file; analysing a session needs the .NET SDK and this repository. | `docs/14` section 8 item 3; TASK-080 ledger | `render` accepts only the legacy `.cwlog` (recorded by TASK-080; not re-read, `unconfirmed`) | accept for G5 |
 | D-09 | minor | presentation | The weapon-range square (`WeaponRange = 7`) is 1232 x 616 px against a 1280 x 800 viewport with no zoom or pan, so its corners clip for most agents, and it is dimmer (alpha 0.45, 2 px) than the other markers. | TASK-074 ledger "Deviations" | measured by TASK-074 with a real screenshot; camera scale not re-checked since (`unconfirmed`) | accept for G5; check in the playtest whether the range reads |
 | D-10 | minor | tooling | `pending` commands get `Sequence = pending.Count`, which can repeat after a stale entry is removed. Delivery order is by list position and the recording re-indexes, so nothing is affected today. | TASK-080 ledger item 8 | `CommandDemoScene.fs:1756` | defer past G5 |
-| D-12 | minor | documentation | `chokepoint-detour` prose disagrees between its two sources: `Corpus.fs:1235` says the agent reaches (4,0) "by tick 7", `content/replays/chokepoint-detour.md:3` says "by tick 6". Hashes are unaffected, but `corpus --regenerate` would rewrite the prose. Which tick is right was not checked. | found by this triage | both lines read | defer past G5 |
-| D-13 | minor | gameplay | Group `MoveTo` completion never fires for an agent that is not on the target cell. Appraisal resolves the order to the agent's formation slot, but `commitmentAndLocalAction` completes only when `Position = target`, so slot-holding agents stop at their slots with `Destination = None` and keep `Order` and `Disposition` indefinitely; no `CommitmentCompleted` is emitted and a queued follow-on order is never promoted. | found while checking `docs/04` section 12.6 | `Simulation.fs:1176` (compares `target`) against `Simulation.fs:972` (the appraisal fast path resolves the slot). Probe on the real Bridgehead content with enemies removed: three friendlies ordered as a group to (6,6); agent 0 completes at tick 9, agents 1 and 2 stand at (7,6) and (6,7) from ticks 12 and 13 with the order still set | repair after G4 triage if Dave wants group orders chained; otherwise defer past G5 |
 
 ## 3. Deliberate limitations (scope decisions, not defects)
 
@@ -81,6 +79,8 @@ could hide a blocker.
 | Defect | Fixed by |
 |---|---|
 | `PROJECT_STATE.yaml` did not parse as YAML (D-11) | rewritten as valid YAML in the docs cleanup |
+| `chokepoint-detour` prose said tick 6 where the replay reaches (4,0) at tick 7 (D-12) | TASK-082 (prose corrected; `Corpus.fs` was right) |
+| Group `MoveTo` never completed for an agent holding a formation slot (D-13) | TASK-082 (`formation-slots` re-pinned) |
 | Corpses blocked movement forever | TASK-066 |
 | Frozen movement retried forever | TASK-065 |
 | A solo order was pulled to a formation slot | TASK-067 |
@@ -105,14 +105,19 @@ place. It is not an open defect.
 
 ## 7. Counts and what is left for Dave
 
-Open defects: 0 blocker, 1 major (D-01), 11 minor (D-11 fixed, D-13 added). Unverified: 6 items.
+Open defects: 0 blocker, 1 major (D-01), 9 minor (D-11, D-12 and D-13 fixed). Unverified: 6 items.
+
+D-12 and D-13 were repaired by TASK-082 on Dave's "fix all issues" (2026-10-07). The
+others were not: D-01, D-02 and D-03 need a design or gameplay decision, D-05 needs a
+working title, and D-04, D-06, D-07, D-09 and D-10 sit in Godot or client code that
+could not be built or run in that session. D-08 is a feature. The reasons are in
+`docs/ledger/2026-10-07-TASK-082-*.md`.
 
 Decisions for Dave:
 
 1. Accept or change the dispositions in section 2.
 2. Whether to select a test-build presentation task for D-04, D-05 and D-06.
 3. The neutral working title, if D-05 is to be fixed.
-4. Whether to repair D-12 and D-13 now or leave them.
-5. When to run the `docs/14` section 2 checklist (U-01 to U-03), since a failure
+4. When to run the `docs/14` section 2 checklist (U-01 to U-03), since a failure
    there would outrank everything in section 2.
-6. The G4 gate call itself.
+5. The G4 gate call itself.

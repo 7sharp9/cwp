@@ -949,11 +949,11 @@ correspondingly thin:
   `Order` and `Disposition`, or promotes the head of `OrderQueue` into `Order`
   with `Disposition = None`, and emits `CommitmentCompleted`. The promoted
   order is judged by the next tick's Appraisal, since Appraisal has already run
-  this tick, so a chained waypoint's next leg begins one tick later. Known
-  limitation (`docs/15` D-13): the test compares the position with the order's
-  own target, not the agent's formation slot, so a group `MoveTo` completes only
-  for the agent standing on the target cell; the others stop at their slots and
-  keep the order with `Destination = None`;
+  this tick, so a chained waypoint's next leg begins one tick later. For a
+  group `MoveTo` (`ReceivedOrder.AsGroup`) the target cell is the agent's own
+  formation slot, resolved by `Appraisal.resolveFormationTarget` over the other
+  agents' current positions, the same expression Appraisal's fulfilled check
+  uses; a solo `MoveTo` compares with the literal target;
 - for `Assault` not yet fulfilled, the executor drives the `Destination`
   freeze through the ordinary Navigation pipeline: `AwaitingSupport` clears it,
   so Navigation does not move the agent, and `ApproachingStart` and

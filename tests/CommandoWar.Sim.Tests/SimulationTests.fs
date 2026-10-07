@@ -995,6 +995,10 @@ let ``two jointly-ordered formationed agents through a shared chokepoint both re
     Assert.Equal({ X = 7; Y = 4 }, (agentOf b st).Position)
     Assert.Equal(None, (agentOf a st).Destination)
     Assert.Equal(None, (agentOf b st).Destination)
+    // D-13: a group MoveTo completes at the agent's own slot, not only on the
+    // clicked cell, so neither agent keeps the order once it has arrived.
+    Assert.True((agentOf a st).Order.IsNone, "agent a must complete its group MoveTo at its slot")
+    Assert.True((agentOf b st).Order.IsNone, "agent b must complete its group MoveTo at its slot")
 
 // --- Corpses vacate for movement (TASK-066, backlog B-066) --------------
 

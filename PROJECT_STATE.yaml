@@ -5,19 +5,26 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: "godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; reaffirmed 2026-09-19, see the ADR's note)"
-  updated: 2026-10-03
+  updated: 2026-10-07
 
 # Current state only. What was done, when, and with what evidence is recorded in
 # docs/12_PROGRESS_LEDGER.md (index) and docs/ledger/ (detail files); the work
 # items are in docs/11_BACKLOG.md and tasks/.
 active_work:
-  selected_task: TASK-081
-  task_file: tasks/TASK-081-G4-DEFECT-TRIAGE.md
+  selected_task: TASK-082
+  task_file: tasks/TASK-082-GROUP-MOVETO-COMPLETES-AT-SLOT.md
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-10-03
+  updated: 2026-10-07
   note: >-
+    TASK-082 (backlog B-081) is implemented and self-verified, status `review`,
+    not yet accepted. Selected by Dave ("fix all issues", 2026-10-07), it fixes
+    D-13 (group `MoveTo` never completes at a formation slot) and the D-12 prose
+    drift. Only `formation-slots` is re-pinned. `dotnet test` was not run (no
+    offline test packages). The other open defects in `docs/15` were not fixed:
+    they need a decision or client code that could not be built here.
+
     TASK-081 (backlog B-080, G4 known-defect triage) is implemented,
     self-verified and accepted by Dave (2026-10-03); status `done`. It adds
     `docs/15_G4_DEFECT_TRIAGE.md`: 12 open defects (1 major, 11 minor), 6
