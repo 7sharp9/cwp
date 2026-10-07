@@ -7,7 +7,7 @@
 `global.json` relaxed to `10.0.112` and `-p:NuGetAudit=false`; the repository's
 `global.json` was not touched. No xunit or FsCheck packages in the offline cache,
 so `dotnet test` could not run. No Godot.
-**Status change:** `none -> review` (selected by Dave: "fix all issues",
+**Status change:** `none -> review -> done` (selected by Dave: "fix all issues",
 2026-10-07)
 
 ### Scope decision
@@ -94,4 +94,4 @@ See the task file. The `dotnet test` criterion is unticked.
 
 ### Review
 
-Accepted: not yet.
+Accepted: yes (2026-10-07, "accept"), on the self-verification evidence. Not covered: `dotnet test` was never run locally and the edited xunit assertions were not compiled; the other open `docs/15` defects remain open; G4 stays `pending`.

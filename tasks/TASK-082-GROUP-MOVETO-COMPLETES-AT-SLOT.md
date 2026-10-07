@@ -1,6 +1,6 @@
 # TASK-082: Group MoveTo completes at the agent's formation slot
 
-Status: review (self-verified 2026-10-07; not yet accepted)
+Status: done (accepted by Dave 2026-10-07; self-verified 2026-10-07)
 Owner: coding agent
 Phase: P4
 Gate: G4 (defect repair; no evidence bullet depends on it); realises B-081
@@ -115,4 +115,4 @@ Use the reporting structure in `AGENTS.md`. Do not start or offer the next task.
 ## Review
 
 Detail, commands and unresolved concerns: `docs/ledger/2026-10-07-TASK-082-group-moveto-completes-at-slot.md`.
-Accepted: not yet.
+Accepted: yes (2026-10-07, "accept"), on the self-verification evidence. `dotnet test` was not run locally (offline packages unavailable) and the edited xunit assertions were not compiled, so acceptance does not cover them; G4 stays `pending`.

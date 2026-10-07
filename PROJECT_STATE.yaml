@@ -18,8 +18,8 @@ active_work:
   blockers: []
   updated: 2026-10-07
   note: >-
-    TASK-082 (backlog B-081) is implemented and self-verified, status `review`,
-    not yet accepted. Selected by Dave ("fix all issues", 2026-10-07), it fixes
+    TASK-082 (backlog B-081) is implemented, self-verified and accepted by Dave
+    (2026-10-07); status `done`. Selected by Dave ("fix all issues", 2026-10-07), it fixes
     D-13 (group `MoveTo` never completes at a formation slot) and the D-12 prose
     drift. Only `formation-slots` is re-pinned. `dotnet test` was not run (no
     offline test packages). The other open defects in `docs/15` were not fixed:
