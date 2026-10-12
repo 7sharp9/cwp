@@ -288,13 +288,17 @@ These are properties of the build as it stands, relevant to the G5 playtest.
   the demolition cell `(9,5)` at distance 4, so the machine gun alone is not
   the whole threat there. The viable approach engages both riflemen from cells
   off the objective. The game does not teach this (backlog B-070).
-- **Refusal arrives one tick after contact.** `Pathfinding` is deliberately
-  threat-blind, and a new contact is appraised the tick after it is observed,
-  while combat's own range check already fires on the contact tick. A single
-  order that runs deep into the depot therefore skips the stand-off band and is
-  refused too late; the stand-off refusal needs the two-step order above (halt
-  at the ford, then push). The same lag lets the `Failed` run kill agents that
-  were already refusing.
+- **A single deep order meets the enemy unwarned.** `Pathfinding` is
+  deliberately threat-blind and Perception reveals rifleman 102 only when line
+  of sight opens, at distance 6 from the ford, inside weapon range 7. A single
+  order that runs deep into the depot therefore skips the stand-off band: the
+  agent has no knowledge to refuse on, and the first exchange of fire happens on
+  the contact tick. Since TASK-083 the order is refused on that tick (a
+  reappraisal on the tick of first observation, `RouteTooExposed` naming 102)
+  and the agent stops advancing; before it, the same-tick reappraisal returned
+  `Accepted` because the route exposure was under the threshold, and the refusal
+  came only after hits had lowered it. The stand-off refusal before any shot
+  still needs the two-step order above (halt at the ford, then push).
 - **Each extraction cell holds one agent at a time.** An extracted agent stays
   on its cell, so later arrivals stall unless it steps off. The second cell
   doubles throughput; it does not remove the choreography.

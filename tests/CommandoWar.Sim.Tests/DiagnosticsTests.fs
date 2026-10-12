@@ -892,6 +892,32 @@ let ``frameOf derives divergent OrderAppraisal overlays for the exposed-approach
     Assert.Equal(golden "exposed-approach-tick-001.svg", DiagnosticRender.Svg tick1)
 
 [<Fact>]
+let ``frameOf shows the Discipline 6 agent refused once the hostile has it in range (TASK-083, byte-equal to the goldens)`` () =
+    let frames = exposedApproachFrames ()
+
+    // Tick 2: agent 1 stands at (3,5), Accepted. Tick 3: the hostile at
+    // (10,4) is 7 cells away, in line of sight and firing, and the route would
+    // close on it, so the order is Refused and agent 1 holds position.
+    let appraisalOf (frame: DiagnosticFrame) =
+        frame.Overlays
+        |> Array.tryPick (function
+            | OrderAppraisal(a, at, d, _) when AgentId.value a = 1 -> Some(at, d)
+            | _ -> None)
+
+    Assert.Equal(Some({ X = 3; Y = 5 }, Accepted), appraisalOf frames.[2])
+
+    match appraisalOf frames.[3] with
+    | Some(at, Refused(RouteTooExposed(Some t), _)) ->
+        Assert.Equal({ X = 3; Y = 5 }, at)
+        Assert.Equal(AgentId.ofInt 2, t)
+    | other -> Assert.Fail($"expected agent 1 Refused RouteTooExposed (Some agent 2) at (3,5), got {other}")
+
+    let tick3 = frames.[3]
+    Assert.Equal(1, tick3.Events |> Array.filter (fun e -> e.Kind = "order-appraised") |> Array.length)
+    Assert.Equal(golden "exposed-approach-tick-003.ascii.txt", DiagnosticRender.Ascii tick3)
+    Assert.Equal(golden "exposed-approach-tick-003.svg", DiagnosticRender.Svg tick3)
+
+[<Fact>]
 let ``frameOf shows blocked-goal's order as Unable at appraisal (byte-equal to the goldens)`` () =
     let entry = Corpus.all |> Array.find (fun e -> e.Name = "blocked-goal")
 

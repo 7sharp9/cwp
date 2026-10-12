@@ -1,6 +1,6 @@
 # TASK-083: A routine order does not advance on a threat that already has the agent in range
 
-Status: ready (drafted 2026-10-12; not selected)
+Status: review (implemented and self-verified 2026-10-12)
 Owner: coding agent
 Phase: P4
 Gate: G4 (defect repair; no evidence bullet depends on it); realises B-082
@@ -173,23 +173,27 @@ Stop and report to Dave, with the evidence, without weakening the rule, if:
 
 ## Acceptance criteria
 
-- [ ] In the un-staged repro, agent 5's order is `Refused (RouteTooExposed (Some
-      102))` on the tick 102 is first observed, and the agent makes no further
-      advance after that tick (probe against the real content, timeline
-      recorded).
-- [ ] The staged order is still refused at tick 6 before any shot.
-- [ ] Each decision in "Inputs and assumptions" has a focused test.
-- [ ] `canonical-refusal-and-correction` still shows refusal, correction by
-      suppression, and acceptance.
-- [ ] `bridgehead-succeeded` reaches `Succeeded` and `bridgehead-failed`
-      reaches `Failed`; every other moved corpus entry is explained.
-- [ ] A diagnostic golden covers the new refusal and is inspectable in the ASCII
-      or SVG render.
-- [ ] `Sim` and `Headless` build with zero warnings; `dotnet test` passes, or
-      its absence is stated.
-- [ ] No forbidden dependency or scope entered the change; `Canonical.FormatVersion`
-      is unchanged.
-- [ ] Required documentation was updated.
+- [x] In the un-staged repro, agent 5's order is `Refused (RouteTooExposed (Some
+      102))` on tick 9, the tick 102 is first observed, and the agent stays at
+      `(7,9)` (probe against the real content; timeline in the ledger).
+- [x] The staged order is still refused at tick 6 before any shot (corpus event
+      diff: nothing before tick 139 in `bridgehead-succeeded` moved).
+- [x] Each decision in "Inputs and assumptions" has a focused test (8 facts in
+      `SimulationTests.fs`, all passing in the stand-in run).
+- [x] `canonical-refusal-and-correction` is byte-identical (corpus check).
+- [x] `bridgehead-succeeded` still reaches `Succeeded` at tick 215 and
+      `bridgehead-failed` `Failed` at tick 84; the three moved entries are
+      explained in the ledger.
+- [x] A diagnostic golden covers the new refusal:
+      `content/diagnostics/exposed-approach-tick-003.*`, with a
+      `DiagnosticsTests` fact.
+- [x] `Sim`, `Headless` and Godot Core build with zero warnings.
+- [ ] `dotnet test` passes. **Not run**: xunit and FsCheck are not in the offline
+      package cache. A stand-in run of 11 test files gave pass=383, fail=0; CI
+      is the check.
+- [x] No forbidden dependency or scope entered the change;
+      `Canonical.FormatVersion` is unchanged.
+- [x] Required documentation was updated.
 
 ## Required verification
 
@@ -254,4 +258,5 @@ Use the reporting structure in `AGENTS.md`. Do not start or offer the next task.
 
 ## Review
 
-Not yet implemented.
+Detail, commands and unresolved concerns: `docs/ledger/2026-10-12-TASK-083-no-advance-under-fire.md`.
+Accepted: not yet. Read concern 1 before accepting: the rule also stops a high-discipline agent that knowingly accepted an exposed route (the `exposed-approach` Discipline 6 agent halts at tick 3). `dotnet test` was not run locally.

@@ -813,6 +813,23 @@ section 5):
   `SuppressionBand`, and `Vitals` are read at the top of the tick, before this
   tick's Combat and State consequences change them. `<=` gives `Accepted`;
   over gives `Refused` with `DecisionReason.RouteTooExposed`;
+- **the closing-threat rule** (TASK-083, backlog B-082) applies to `MoveTo`
+  only, after the threshold test: an order at or under the threshold is still
+  `Refused(RouteTooExposed (Some t))` when a known threat `t` is already firing
+  on the agent's current cell and some route cell that is itself exposed to `t`
+  is strictly nearer to `t` (Chebyshev) than the current cell. "Firing on" is
+  the stage-3 pressure test applied to the current cell (`t` unsuppressed,
+  within `ThreatEngagementRange`, in line of sight, and the cell not fully
+  covered). The nearest such threat, ties by ascending id, is named. An
+  `Immediate` urgency or an `Aggressive` risk tolerance skips the rule. A route
+  that retreats, sidesteps, or closes only through fully covered cells is not
+  matched, and a route with no exposed cell never is, so the rule cannot refuse
+  a safe route. It is stateless and runs on every appraisal, so the existing
+  triggers (section 12.5, `docs/05` section 14) re-judge it: a knowledge change
+  on the tick a threat is first observed inside the agent's range refuses the
+  order that tick, before the agent steps again, and suppressing the threat or
+  its contact expiring accepts it again. `Hold`, `Assault`, `Withdraw` and
+  `Suppress` never apply it;
 - **stage 5** (safer adaptation) remains deferred (a TASK-030 follow-up, no
   B-item number assigned yet): there is no `Adapted` outcome and no route
   recomputation. It needs a second, separate exposure-aware route-search

@@ -244,6 +244,22 @@ ascending id. Exposure, cover and suppression are the realised stage-3 terms.
 Known fire lanes and ally support are not built and no backlog item owns them,
 and wound severity enters at stage 4.
 
+A `MoveTo` order also meets the closing-threat rule (TASK-083, backlog B-082),
+which is the stage-3 reaction to being shot at. It does not depend on the
+threshold: a route at or under it is still refused when a known threat is
+already firing on the agent's current cell (the pressure test above, applied to
+that cell) and some exposed route cell is strictly nearer to that threat. The
+nearest such threat is named in the `RouteTooExposed` reason. The rule exists
+because Perception reveals a threat only when line of sight opens, which on
+broken ground can be inside weapon range, so an agent that accepted an order
+on current knowledge would otherwise keep advancing until wounds and stress
+lowered its threshold. A retreating or sidestepping route, a suppressed threat,
+and an `Immediate` or `Aggressive` order are not affected. The rule applies to
+every discipline, because it is a statement about advancing on a threat that
+is firing, not about how much exposure an agent tolerates; a high-discipline
+agent that accepted a known exposed route will therefore also stop once the
+threat has it in range, until the threat is suppressed.
+
 ### Stage 4: resolve
 
 Compare tactical pressure with a bounded resolve threshold derived from:
@@ -588,11 +604,15 @@ Current coverage of the table:
   `Unable(CriticallyWounded)` on the following tick, which clears its
   `Destination`; the `Order` itself stays in place. An already-fulfilled order
   is not re-judged.
-- Priorities 2 to 4 have no live signal. No explosion model exists, and
-  nothing interrupts a commitment on point-blank contact or heavy suppression:
+- Priorities 2 to 4 have no interrupt of their own. No explosion model exists.
   Combat engages automatically for every commitment, and suppression reaches a
   commitment only through appraisal (the `SuppressionBand` trigger, section
-  14).
+  14). Priority 3 has an effect through appraisal rather than the interrupt
+  table: when a `MoveTo` agent comes under fire from a known threat that its
+  route would close on, the closing-threat rule (section 5, TASK-083) refuses
+  the order on that tick, which clears its `Destination`. Nothing records
+  whether the commitment can resume; the order is simply re-judged on the next
+  trigger.
 - Priority 5 has no interrupt of its own. Under static terrain an
   Appraisal-`Accepted` route cannot later become unreachable (`docs/04` section
   12.5). The live-obstruction case is handled inside Navigation: after
@@ -813,6 +833,8 @@ Not realised: it needs stage-5 adaptation (section 5).
 ### Unknown threat
 
 The squad has not observed the machine gun. An agent accepts based on current knowledge, then reacts when fired upon. The explanation distinguishes bad information from arbitrary behaviour.
+
+Realised for `MoveTo` (TASK-083, backlog B-082): the order is `Accepted` while the threat is unknown, and on the tick the threat is first observed inside its range the closing-threat rule (section 5) refuses it with `RouteTooExposed` naming that threat, and the agent stops advancing. The refusal does not prevent the first exchange of fire, which Combat resolves on the same tick.
 
 ### Physical inability
 

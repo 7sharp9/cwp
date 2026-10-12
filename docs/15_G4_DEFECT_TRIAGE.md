@@ -35,7 +35,6 @@ of a record, not proof that none exists (see section 4).
 
 | ID | Severity | Category | Defect | Source | Evidence it is open | Proposed disposition |
 |---|---|---|---|---|---|---|
-| D-01 | major | balance / comprehension | Pathfinding is threat-blind and a new contact is reappraised one tick after it is observed, so a single un-staged deep `MoveTo` on Bridgehead can be shot before the refusal lands. A staged two-step order avoids it. | TASK-073 ledger "Deviations"; TASK-075 ledger (probe 6) | `Appraisal.fs:21-22`: stage 2 is `Pathfinding.findWithin`, no exposure input. Both tasks reproduced the late refusal against the real pipeline. | accept for G5; this is the main thing the playtest should observe against R-001 |
 | D-02 | minor | gameplay | An `Extracted` agent stays `Alive` and keeps its cell, and an extraction cell holds one agent, so a further survivor ordered to an occupied extraction cell stalls to `MovementAbandoned`. Two extraction cells mitigate it. | TASK-073 ledger; B-071 row | `Simulation.fs:1574` (`occupantOf` excludes only non-`Alive`), `Simulation.fs:2199` (`Extracted` is a sticky flag, position untouched) | accept for G5 |
 | D-03 | minor | gameplay | Reappraisal fires on any `ContactObserved` / `ContactExpired`, including events in the hostile picture, so a hostile noticing a friendly reappraises friendly orders. No outcome changes are known. | TASK-078 ledger finding 2 | recorded by TASK-078 as observation only; not re-read (`unconfirmed`) | defer past G5 |
 | D-04 | minor | presentation | The HUD status line always shows tick, 64-bit state hash, random draws and agent count. Testers may ask what it means, and the facilitator must not answer. | `docs/14` section 8 item 1 | `CommandDemoScene.fs:1597` | fix before G5 (Dave's presentation call) |
@@ -58,6 +57,7 @@ Recorded so a tester finding is not mistaken for a regression.
 | L-04 | No slow motion while issuing orders; pause and the auto-pause on refusal exist. | `docs/07` section 6 |
 | L-05 | Bridgehead is the only mission. Reaching `Succeeded` needs both depot riflemen engaged from off-objective cells, and a refusal needs a staged order. Discoverability by a first-time player is untested. | `docs/07` section 9; B-071 |
 | L-06 | Risks R-001, R-024 and R-025 (refusal feels arbitrary, obedient-soldier strategy, explanation shows numbers not causes) cannot be judged before G5. | `docs/10` |
+| L-07 | A threat that Perception reveals only at weapon range cannot be refused against in advance: an order is accepted on current knowledge, refused on the tick the threat is first observed inside its range (the closing-threat rule, D-01), and the first exchange of fire still happens on that tick. The rule applies to every discipline, so a high-discipline agent that knowingly accepted an exposed route also stops once the threat has it in range, until the threat is suppressed or the order is `Immediate` or `Aggressive`. | `docs/05` section 5; TASK-083 |
 
 ## 4. Unverified in this environment
 
@@ -94,8 +94,11 @@ could hide a blocker.
 | A dead or incapacitated observer kept perceiving | TASK-078 |
 | `ExtractAgents` completed with nobody extracted | TASK-079 |
 | No weapon-range display | TASK-074 (see D-09 for what remains) |
+| D-01: a single un-staged deep `MoveTo` on Bridgehead was accepted on the tick the machine-gun rifleman came into view and refused only after hits (tick 12, not tick 9) | TASK-083: refused on the contact tick and the agent stops; see L-07 for what remains |
 
 ## 6. Correction to an earlier record
+
+The D-01 text recorded by TASK-073, TASK-075 and the first version of this document attributed the late refusal to "threat-blind pathing and a one-tick reappraisal lag". Neither was the cause: the threat is unknown until line of sight opens at weapon range, so pathing has nothing to avoid, and the reappraisal runs on the observation tick (Perception and Tactical knowledge precede Appraisal). It returned `Accepted` there because the exposure was under the discipline-3 threshold. Corrected by TASK-083; `docs/07` section 9 now describes the real mechanism.
 
 `docs/ledger/2026-09-29-TASK-079-*.md` finding 1 says scenario validation does
 not reject an `ExtractAgents` id that names no agent. It does:
@@ -105,13 +108,13 @@ place. It is not an open defect.
 
 ## 7. Counts and what is left for Dave
 
-Open defects: 0 blocker, 1 major (D-01), 9 minor (D-11, D-12 and D-13 fixed). Unverified: 6 items.
+Open defects: 0 blocker, 0 major, 9 minor (D-01, D-11, D-12 and D-13 fixed). Deliberate limitations: 7 (L-07 added by D-01's repair). Unverified: 6 items.
 
 D-12 and D-13 were repaired by TASK-082 on Dave's "fix all issues" (2026-10-07). The
-others were not: D-01, D-02 and D-03 need a design or gameplay decision, D-05 needs a
+others were not: D-02 and D-03 need a design or gameplay decision, D-05 needs a
 working title, and D-04, D-06, D-07, D-09 and D-10 sit in Godot or client code that
 could not be built or run in that session. D-08 is a feature. The reasons are in
-`docs/ledger/2026-10-07-TASK-082-*.md`.
+`docs/ledger/2026-10-07-TASK-082-*.md`. D-01 was repaired by TASK-083 on Dave's request (2026-10-12), by a first-contact rule rather than the threat-aware pathing first asked for, which a probe showed cannot change the case.
 
 Decisions for Dave:
 

@@ -2792,8 +2792,10 @@ let ``Suppress and Assault orders from an unarmed agent are Unable InsufficientA
     let assault = stepWith [| Command.assault (CommandId.ofInt 1) 0L (agent 0) { X = 7; Y = 0 } |] w
     Assert.Equal(Some(Unable(InsufficientAmmunition, [||])), dispositionOf (agent 0) assault)
 
-    // MoveTo/Hold/Withdraw are unaffected: an unarmed agent can still walk.
-    let move = stepWith [| cmd 1 (agent 0) { X = 3; Y = 0 } |] w
+    // MoveTo/Hold/Withdraw are unaffected: an unarmed agent can still walk. The
+    // route runs south, away from the adjacent hostile, so it does not close on
+    // it (TASK-083): a route past the hostile would be refused as RouteTooExposed.
+    let move = stepWith [| cmd 1 (agent 0) { X = 0; Y = 4 } |] w
     Assert.Equal(Some Accepted, dispositionOf (agent 0) move)
 
 // --- Communication range, delay, jamming, and radio-destroyed (TASK-058, backlog B-016b) ----
@@ -3256,3 +3258,157 @@ let ``every Friendly agent going non-Alive with FailOnFriendlyForceEliminated re
     let r2 = stepIdle r.State
     Assert.Equal(Failed, r2.State.MissionOutcome)
     Assert.DoesNotContain(bodies r2, fun b -> b = MissionFailed)
+
+// --- No advance under fire (TASK-083, backlog B-082) ---------------------
+
+/// `Appraisal.appraise` for one agent at `from` on an open 16 x 16 grid
+/// against the given known threats. Discipline 3, no stress, full health.
+let private appraiseUnderFire
+    (threats: Contact[])
+    (suppressed: AgentId[])
+    (intent: PlayerIntent)
+    (risk: RiskTolerance)
+    (urgency: Urgency)
+    (from: Cell)
+    : OrderDisposition =
+    let b: GridBounds = { Width = 16; Height = 16 }
+
+    let order: ReceivedOrder =
+        { Command = CommandId.ofInt 1
+          Intent = intent
+          IssuedAtTick = 0L
+          Urgency = urgency
+          RiskTolerance = risk
+          AsGroup = false }
+
+    fst (
+        Appraisal.appraise
+            (Terrain.empty b)
+            threats
+            suppressed
+            AppraisalConfig.DisciplineDefault
+            0
+            false
+            (Alive Agent.MaxHealth)
+            (Ready(Agent.MagazineSize, Agent.ReserveStart))
+            [||]
+            None
+            order
+            from
+            (b.Width * b.Height)
+    )
+
+/// A threat at (10,5). From (3,5) the agent is 7 cells away, in line of sight,
+/// so it is under fire; a route east to (5,5) crosses 3 exposed cells (30
+/// pressure), well under the default threshold of 65.
+let private firingThreat: Contact =
+    { Contact = agent 9
+      LastKnownCell = { X = 10; Y = 5 }
+      LastSeenTick = 0L
+      Confidence = PerceptionConfig.ConfidenceFull }
+
+let private underFireAt: Cell = { X = 3; Y = 5 }
+
+[<Fact>]
+let ``a routine MoveTo that closes on a threat already firing on the agent is refused although under the threshold`` () =
+    match appraiseUnderFire [| firingThreat |] [||] (MoveTo { X = 5; Y = 5 }) Standard Routine underFireAt with
+    | Refused(RouteTooExposed(Some threat), _) -> Assert.Equal(agent 9, threat)
+    | other -> Assert.Fail($"expected Refused (RouteTooExposed (Some agent 9)), got {other}")
+
+[<Fact>]
+let ``the same route is accepted before the agent is in range, or when it does not close on the threat`` () =
+    // Distance 9: not yet in engagement range, so not under fire; the route's
+    // exposed stretch is under the threshold.
+    Assert.Equal(
+        Accepted,
+        appraiseUnderFire [| firingThreat |] [||] (MoveTo { X = 5; Y = 5 }) Standard Routine { X = 1; Y = 5 }
+    )
+
+    // Retreat and sidestep: no route cell is nearer to the threat than (3,5).
+    Assert.Equal(Accepted, appraiseUnderFire [| firingThreat |] [||] (MoveTo { X = 0; Y = 5 }) Standard Routine underFireAt)
+    Assert.Equal(Accepted, appraiseUnderFire [| firingThreat |] [||] (MoveTo { X = 3; Y = 9 }) Standard Routine underFireAt)
+
+[<Fact>]
+let ``Immediate urgency and Aggressive risk tolerance press on under fire; Cautious does not`` () =
+    let order risk urgency =
+        appraiseUnderFire [| firingThreat |] [||] (MoveTo { X = 5; Y = 5 }) risk urgency underFireAt
+
+    Assert.Equal(Accepted, order Standard Immediate)
+    Assert.Equal(Accepted, order Aggressive Routine)
+
+    match order Cautious Routine with
+    | Refused(RouteTooExposed _, _) -> ()
+    | other -> Assert.Fail($"expected Refused, got {other}")
+
+[<Fact>]
+let ``suppressing the threat reverses the refusal`` () =
+    Assert.Equal(
+        Accepted,
+        appraiseUnderFire [| firingThreat |] [| agent 9 |] (MoveTo { X = 5; Y = 5 }) Standard Routine underFireAt
+    )
+
+[<Fact>]
+let ``the nearest of two threats firing on the agent is named`` () =
+    let nearer = { firingThreat with Contact = agent 8; LastKnownCell = { X = 9; Y = 5 } }
+
+    match appraiseUnderFire [| firingThreat; nearer |] [||] (MoveTo { X = 5; Y = 5 }) Standard Routine underFireAt with
+    | Refused(RouteTooExposed(Some threat), _) -> Assert.Equal(agent 8, threat)
+    | other -> Assert.Fail($"expected Refused naming agent 8, got {other}")
+
+[<Fact>]
+let ``Hold, Assault, Withdraw and Suppress are not subject to the closing-threat rule`` () =
+    let at intent = appraiseUnderFire [| firingThreat |] [||] intent Standard Routine underFireAt
+
+    Assert.Equal(Accepted, at (Hold { X = 5; Y = 5 }))
+    Assert.Equal(Accepted, at (Assault { X = 5; Y = 5 }))
+    Assert.Equal(Accepted, at (Withdraw { X = 5; Y = 5 }))
+    Assert.Equal(Accepted, at (Suppress(agent 9)))
+
+[<Fact>]
+let ``an agent whose first sight of a threat is already inside its range is refused on that tick and does not advance`` () =
+    // A column of opaque cells at x = 6 hides the hostile at (10,5) from the
+    // agent walking east along row 8 until it reaches (6,8), 4 cells away.
+    let b: GridBounds = { Width = 16; Height = 12 }
+
+    let wall =
+        Terrain.build
+            b
+            [| for y in 3..7 ->
+                   { Cell = { X = 6; Y = y }
+                     Movement = Passable
+                     Elevation = 0
+                     MoveCost = Terrain.BaseMoveCost
+                     Opaque = true } |]
+            [||]
+
+    let w = perceptionWorld b [ 0, { X = 0; Y = 8 } ] [ 1, { X = 10; Y = 5 } ] wall
+    let tick1 = stepWith [| cmd 1 (agent 0) { X = 9; Y = 8 } |] w
+    Assert.Equal(Some Accepted, dispositionOf (agent 0) tick1)
+
+    let mutable st = tick1.State
+    let mutable contactTick = 0L
+
+    while contactTick = 0L && st.Tick < 20L do
+        let r = stepIdle st
+        st <- r.State
+
+        if bodies r |> Array.exists (function ContactObserved(o, _, _) -> o = agent 0 | _ -> false) then
+            contactTick <- st.Tick
+            // Refused on the contact tick itself, before the agent steps again.
+            Assert.Equal(Some(Refused(RouteTooExposed(Some(agent 1)), [||])), dispositionOf (agent 0) r)
+            Assert.Equal(None, (agentOf (agent 0) st).Destination)
+
+    Assert.NotEqual(0L, contactTick)
+    let heldAt = (agentOf (agent 0) st).Position
+
+    for _ in 1..3 do
+        st <- (stepIdle st).State
+
+    Assert.Equal(heldAt, (agentOf (agent 0) st).Position)
+
+[<Fact>]
+let ``the closing-threat refusal is deterministic across repeated runs`` () =
+    let run () =
+        appraiseUnderFire [| firingThreat |] [||] (MoveTo { X = 5; Y = 5 }) Standard Routine underFireAt
+
+    Assert.Equal(run (), run ())

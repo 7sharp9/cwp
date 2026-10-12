@@ -139,6 +139,22 @@ byte-identical: `bridgehead-succeeded` really extracts its agents, and no
 other entry ends with an extraction objective and a fully downed squad.
 `Canonical.FormatVersion` does not move.
 
+**Re-pinned by TASK-083** (a `MoveTo` does not advance on a threat already
+firing on the agent, backlog B-082): three entries, each from the first tick
+an agent comes under fire while its order is still `Accepted` and its route
+closes on the threat: `exposed-approach` (tick 3, agent 1 refused at `(3,5)`
+and resumed on tick 5 when the hostile's suppression band latched; 48 -> 45
+events), `bridgehead-succeeded` (tick 139, agent 5's closing push to `(12,9)`
+held for three ticks on a stale contact of the downed rifleman 102, then
+resumed; 470 -> 469 events) and `bridgehead-failed` (tick 28, agent 5 held at
+`(7,9)` instead of walking on; 361 -> 358 events). **Mission outcomes, final
+ticks and deaths are unchanged**: `bridgehead-succeeded` still reaches
+`Succeeded` at tick 215 and `bridgehead-failed` still reaches `Failed` at tick
+84, and the stand-off refusal at tick 6 and the acceptance at tick 83 are
+unmoved. The other 19 entries, including `canonical-refusal-and-correction`
+and `suppress-relieves-exposure`, are byte-identical.
+`Canonical.FormatVersion` does not move.
+
 ## Production replay-command format (TASK-025, backlog B-045)
 
 `envelope-full.cwreplay` is the first committed replay in the **production
