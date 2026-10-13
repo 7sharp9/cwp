@@ -1,6 +1,6 @@
 # TASK-083: A routine order does not advance on a threat that already has the agent in range
 
-Status: review (implemented and self-verified 2026-10-12)
+Status: done (accepted by Dave 2026-10-13; self-verified 2026-10-12; CI green)
 Owner: coding agent
 Phase: P4
 Gate: G4 (defect repair; no evidence bullet depends on it); realises B-082
@@ -188,9 +188,10 @@ Stop and report to Dave, with the evidence, without weakening the rule, if:
       `content/diagnostics/exposed-approach-tick-003.*`, with a
       `DiagnosticsTests` fact.
 - [x] `Sim`, `Headless` and Godot Core build with zero warnings.
-- [ ] `dotnet test` passes. **Not run**: xunit and FsCheck are not in the offline
-      package cache. A stand-in run of 11 test files gave pass=383, fail=0; CI
-      is the check.
+- [x] `dotnet test` passes. Not run locally (xunit and FsCheck are not in the
+      offline package cache; a stand-in run of 11 test files gave pass=383,
+      fail=0). CI run 37 on `f7d157b`: 438 passed, 0 failed, corpus `OK - all 22
+      entries match`.
 - [x] No forbidden dependency or scope entered the change;
       `Canonical.FormatVersion` is unchanged.
 - [x] Required documentation was updated.
@@ -259,4 +260,4 @@ Use the reporting structure in `AGENTS.md`. Do not start or offer the next task.
 ## Review
 
 Detail, commands and unresolved concerns: `docs/ledger/2026-10-12-TASK-083-no-advance-under-fire.md`.
-Accepted: not yet. Read concern 1 before accepting: the rule also stops a high-discipline agent that knowingly accepted an exposed route (the `exposed-approach` Discipline 6 agent halts at tick 3). `dotnet test` was not run locally.
+Accepted: yes (2026-10-13, "accept TASK-083"), on the self-verification and CI evidence (438 tests, corpus match). Concern 1 stands as accepted behaviour: the rule also stops a high-discipline agent that knowingly accepted an exposed route (the `exposed-approach` Discipline 6 agent halts at tick 3); `docs/15` L-07 records it. G4 stays `pending`.
