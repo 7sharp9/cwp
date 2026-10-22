@@ -1,6 +1,6 @@
 # Replay corpus entry: blocked-goal
 
-One friendly agent at (1,4) ordered to (5,4), a passable cell ringed by impassable cells. Pathfinding returns NoPath, so the executor emits MovementBlocked and clears the destination; the remaining ticks are rest (the agent does not retry).
+One friendly agent at (1,4) ordered to (5,4), a passable cell ringed by impassable cells. Pathfinding returns NoPath, so Appraisal returns Unable(NoKnownRoute) on tick 1 and no Destination is written; the remaining ticks are rest (the agent does not retry).
 
 Regenerate every corpus hash table from the repository root:
 

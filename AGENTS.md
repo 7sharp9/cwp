@@ -78,12 +78,29 @@ Before reporting completion:
 
 Do not claim success for tests that were not run.
 
+The commands CI runs (`.github/workflows/ci.yml`, authoritative) are:
+
+```text
+dotnet restore CommandoWar.slnx
+dotnet build CommandoWar.slnx -c Release --no-restore      # 0 warnings, 0 errors
+dotnet test CommandoWar.slnx -c Release --no-build
+dotnet run --project src/CommandoWar.Headless -c Release --no-build -- corpus
+dotnet run --project src/CommandoWar.Headless -c Release --no-build -- fixture
+```
+
+`corpus --regenerate` rewrites `content/replays/`; run it only for a change that
+moves behaviour on purpose, then list every file that moved and why. The
+working tree must be unchanged after the verbs run. If the pinned SDK or the
+test packages are unavailable, build from a scratch copy, never edit
+`global.json`, and report which checks did not run; CI then decides.
+
 ## Required documentation update
 
 Every completed task must update:
 
 - its own task file;
-- the matching row in `docs/11_BACKLOG.md`;
+- the matching row in `docs/11_BACKLOG.md` (what the item is and its status);
+- the specification or reference document that owns any behaviour it changed;
 - `PROJECT_STATE.yaml` if the active task, phase, gate, or decision changed;
 - `docs/12_PROGRESS_LEDGER.md`: add a row to the index table, and add a detail
   file under `docs/ledger/` (named `YYYY-MM-DD-<ID>-<slug>.md`, keeping the
@@ -91,6 +108,17 @@ Every completed task must update:
   concerns. Refresh the index "Pinned facts" block if any pinned value changed.
 
 Update an ADR only when the task explicitly makes or supersedes a decision.
+
+## Documentation voice
+
+Only the history documents may read like a diary: `docs/12_PROGRESS_LEDGER.md`,
+`docs/ledger/`, `tasks/`, and git. Everything else (`PROJECT_STATE.yaml`,
+`docs/00` to `docs/11`, `docs/14`, `docs/15`, the READMEs, `content/replays/CORPUS.md`)
+states what is true now, in present tense, and is edited in place when the
+system changes. Do not append "realised by", "re-pinned by", "was previously",
+dates of acceptance, test counts or verification narrative to them; that
+belongs in the task's ledger detail file. A provenance tag such as `(TASK-045)`
+is enough to find the record. Plain prose, no em dashes.
 
 ## Required final report
 

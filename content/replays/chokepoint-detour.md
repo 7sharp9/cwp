@@ -1,6 +1,6 @@
 # Replay corpus entry: chokepoint-detour
 
-The identical setup to stalled-order-abandoned, but on open terrain (no wall) -- one friendly agent at (0,0) ordered east to (4,0), a second idle, permanently, at (2,0) (TASK-070, backlog B-069; docs/10 R-010, the live-agent chokepoint jam TASK-066/067/068 each independently found and left open). A genuine alternate route exists, so agent 0 detours around agent 1 (MovementRerouted) instead of stalling toward eventual abandonment, and reaches (4,0) for real by tick 6.
+The identical setup to stalled-order-abandoned, but on open terrain (no wall) -- one friendly agent at (0,0) ordered east to (4,0), a second idle, permanently, at (2,0) (TASK-070, backlog B-069; docs/10 R-010, the live-agent chokepoint jam TASK-066/067/068 each independently found and left open). A genuine alternate route exists, so agent 0 detours around agent 1 (MovementRerouted) instead of stalling toward eventual abandonment, and reaches (4,0) for real by tick 7.
 
 Regenerate every corpus hash table from the repository root:
 

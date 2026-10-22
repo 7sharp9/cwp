@@ -27,6 +27,10 @@ namespace CommandoWar.Sim
 ///   * **Stage 3 (tactical viability)** — route exposure to the *known*
 ///     threats in `WorldState.TacticalKnowledge` (never authoritative hostile
 ///     state, risk R-023). `routeExposure` below.
+///     A `MoveTo` order also meets `closingThreat` (TASK-083, backlog B-082):
+///     under the threshold or not, it is refused when a known threat is
+///     already firing on the agent's current cell and some exposed route cell
+///     is strictly nearer to it (`Immediate` / `Aggressive` orders skip it).
 ///   * **Stage 4 (resolve)** — compare the exposure to a bounded threshold
 ///     from `Discipline` + the order's `RiskTolerance` / `Urgency`
 ///     (`resolveThreshold`). `<=` -> `Accepted`; over -> `Refused
@@ -278,6 +282,40 @@ module Appraisal =
 
         total, top
 
+    /// The nearest known threat (ties broken by ascending id) that is firing on
+    /// `fromCell` right now and that `routeCells` would close on (TASK-083,
+    /// backlog B-082; `docs/05` sections 5 and 11). "Firing on" reuses
+    /// `cellPressure`: the threat is unsuppressed, and `fromCell` is within
+    /// `ThreatEngagementRange`, in line of sight, and not fully covered. "Close
+    /// on" means some route cell that is itself exposed to that threat is
+    /// strictly nearer to it (Chebyshev) than `fromCell`. A route that retreats,
+    /// sidesteps, or only closes through fully covered cells is not matched, and
+    /// a route with no exposed cell never is, so this cannot refuse a safe route.
+    let private closingThreat
+        (terrain: Terrain)
+        (threats: Contact[])
+        (suppressedThreats: AgentId[])
+        (fromCell: Cell)
+        (routeCells: Cell[])
+        : AgentId option =
+        threats
+        |> Array.choose (fun t ->
+            if cellPressure terrain suppressedThreats t fromCell > 0 then
+                let here = Perception.chebyshev t.LastKnownCell fromCell
+
+                let closes =
+                    routeCells
+                    |> Array.exists (fun c ->
+                        Perception.chebyshev t.LastKnownCell c < here
+                        && cellPressure terrain suppressedThreats t c > 0)
+
+                if closes then Some(here, t.Contact) else None
+            else
+                None)
+        |> Array.sort
+        |> Array.tryHead
+        |> Option.map snd
+
     /// The route cells that carry non-zero pressure from at least one known,
     /// currently-unsuppressed threat — the "exposed stretch" a diagnostic
     /// overlay highlights.
@@ -472,7 +510,7 @@ module Appraisal =
             // `Withdraw` pass `target` through unchanged; `Hold` redirects
             // through `bestCoverNear`; `Assault`'s ammo check happens before
             // this is ever called.
-            let moveLike (target: Cell) (thresholdAdjust: int) =
+            let moveLike (target: Cell) (thresholdAdjust: int) (checkClosing: bool) =
                 if fromCell = target then
                     Accepted, [||]
                 else
@@ -484,10 +522,20 @@ module Appraisal =
                         let threshold =
                             max 0 (resolveThreshold discipline stress suppressed vitals order + thresholdAdjust)
 
-                        if exposure <= threshold then
-                            Accepted, exposed
-                        else
+                        if exposure > threshold then
                             Refused(RouteTooExposed topThreat, [||]), exposed
+                        else
+                            // TASK-083 (backlog B-082): a route that is under the
+                            // threshold is still refused when it would advance on
+                            // a threat that already has the agent in its sights.
+                            match
+                                (if checkClosing then
+                                     closingThreat terrain threats suppressedThreats fromCell cells
+                                 else
+                                     None)
+                            with
+                            | Some threat -> Refused(RouteTooExposed(Some threat), [||]), exposed
+                            | None -> Accepted, exposed
                     | Found _
                     | NoPath
                     | BudgetExhausted _
@@ -501,14 +549,18 @@ module Appraisal =
                     else
                         target
 
-                moveLike resolved 0
-            | Hold area -> moveLike (bestCoverNear terrain threats suppressedThreats area) 0
-            | Withdraw target -> moveLike target AppraisalConfig.WithdrawResolveBonus
+                // `Immediate` urgency and `Aggressive` risk tolerance press on
+                // under fire (`docs/05` section 5); the closing-threat rule is
+                // for every other `MoveTo`.
+                let pressOn = order.Urgency = Immediate || order.RiskTolerance = Aggressive
+                moveLike resolved 0 (not pressOn)
+            | Hold area -> moveLike (bestCoverNear terrain threats suppressedThreats area) 0 false
+            | Withdraw target -> moveLike target AppraisalConfig.WithdrawResolveBonus false
             | Assault target ->
                 if noAmmo then
                     Unable(InsufficientAmmunition, [||]), [||]
                 else
-                    moveLike target (-AppraisalConfig.AssaultResolvePenalty)
+                    moveLike target (-AppraisalConfig.AssaultResolvePenalty) false
             | Suppress target ->
                 if noAmmo then
                     Unable(InsufficientAmmunition, [||]), [||]

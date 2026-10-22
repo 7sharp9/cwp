@@ -7,17 +7,13 @@
 # RiskTolerance = aggressive, issued on tick 1 and delivered on tick 2.
 #
 # Initial state: the shared spike fixture (Setup.sixAgentWorld, 32 x 32,
-# seed 20260902) — resolved by name from Corpus.all, not serialised.
+# seed 20260902): resolved by name from Corpus.all, not serialised.
 #
-# canonical 15 and every hash below were re-pinned by TASK-067 (backlog
-# B-067; Canonical.FormatVersion 14 -> 15, ReceivedOrder.AsGroup added).
-# This entry's one command addresses three recipients (3, 4, 5) with a
-# genuine Command.moveToMany, but none of them authors a FormationOffset
-# (Setup.sixAgentWorld has no formation), so AsGroup being true or false
-# makes no difference to the resolved target either way: the byte-layout
-# change is the only difference, the 24 ticks and 78 domain events are
-# unchanged. Prior re-pin: TASK-065 (Canonical.FormatVersion 13 -> 14,
-# AgentState.StalledTicks added).
+# canonical 15. This entry's one command addresses three recipients (3, 4, 5)
+# with a genuine Command.moveToMany, but none of them authors a
+# FormationOffset (Setup.sixAgentWorld has no formation), so
+# ReceivedOrder.AsGroup makes no difference to the resolved target. The run is
+# 24 ticks and 78 domain events.
 version 1
 seed 20260902
 ticks 24

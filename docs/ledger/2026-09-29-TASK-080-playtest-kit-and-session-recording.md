@@ -101,4 +101,8 @@ Local, from a copy of the tree without `global.json`, `-p:NuGetAudit=false`:
 ### Review
 
 - Reviewer: Dave
-- Accepted: not yet (status `review`)
+- Accepted: yes (2026-09-30, "accept"), on the self-verification and CI evidence
+  (run 36580095236: build 0/0, `dotnet test` 429/429, `corpus` 22/22). Not
+  covered by the acceptance: the Godot export was never built or launched, and
+  the Godot-side changes were not run; the `docs/14` section 2 checklist is
+  Dave's, and the task's "Not verified here" criterion stays unticked.

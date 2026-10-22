@@ -12,7 +12,7 @@ tick 84
   6 ..S++++++@@Go.o...
   7 ...SS+++##++++++G.
   8 .....+++##++..###X
-  9 .......@@++..X###.
+  9 .......@+++..X###.
  10 ..................
  11 ........##........
 
@@ -39,11 +39,11 @@ movement-cost > base at: (10,4)=3 (12,4)=3 (14,5)=3 (17,5)=3 (12,6)=3 (14,6)=3 (
 
 agents:
   agent 0  friendly  (8,5)  at rest  progress 1
-  agent 1  friendly  (7,9)  at rest  progress 1
+  agent 1  friendly  (7,9)  at rest
   agent 2  friendly  (10,6)  at rest
   agent 3  friendly  (9,6)  at rest
   agent 4  friendly  (9,5)  at rest  progress 1
-  agent 5  friendly  (8,9)  at rest
+  agent 5  friendly  (7,9)  at rest
   agent 100  hostile   (11,5)  at rest
   agent 101  hostile   (13,2)  at rest
   agent 102  hostile   (13,9)  at rest
@@ -64,13 +64,13 @@ overlays:
   order appraisal (10,6): agent 2  unable critically-wounded
   order appraisal (9,6): agent 3  refused route-too-exposed threat-agent-102
   order appraisal (9,5): agent 4  unable critically-wounded
-  order appraisal (8,9): agent 5  unable critically-wounded
+  order appraisal (7,9): agent 5  unable critically-wounded
   commitment (8,5): agent 0  holding
   commitment (7,9): agent 1  holding
   commitment (10,6): agent 2  holding
   commitment (9,6): agent 3  holding
   commitment (9,5): agent 4  holding
-  commitment (8,9): agent 5  holding
+  commitment (7,9): agent 5  holding
   commitment (11,5): agent 100  holding
   commitment (13,2): agent 101  holding
   commitment (13,9): agent 102  holding
@@ -87,13 +87,13 @@ overlays:
   hostile known contact (7,9): agent 1  confidence 750  seen tick 41
   hostile known contact (9,6): agent 3  confidence 1000  seen tick 84
   hostile known contact (9,5): agent 4  confidence 1000  seen tick 81
-  hostile known contact (8,9): agent 5  confidence 750  seen tick 34
+  hostile known contact (7,9): agent 5  confidence 750  seen tick 34
   vitals (8,5): agent 0  dead
   vitals (7,9): agent 1  incapacitated (bleeding out, 16 tick(s))
   vitals (10,6): agent 2  dead
   vitals (9,6): agent 3  incapacitated (bleeding out, 59 tick(s))
   vitals (9,5): agent 4  incapacitated (bleeding out, 56 tick(s))
-  vitals (8,9): agent 5  incapacitated (bleeding out, 9 tick(s))
+  vitals (7,9): agent 5  incapacitated (bleeding out, 9 tick(s))
   vitals (11,5): agent 100  dead
   vitals (13,2): agent 101  alive 650/1000
   vitals (13,9): agent 102  incapacitated (bleeding out, 56 tick(s))
@@ -105,7 +105,7 @@ overlays:
   ammo (10,6): agent 2  ammo 24/reserve 90
   ammo (9,6): agent 3  ammo 25/reserve 90
   ammo (9,5): agent 4  ammo 27/reserve 90
-  ammo (8,9): agent 5  ammo 23/reserve 90
+  ammo (7,9): agent 5  ammo 23/reserve 90
   ammo (11,5): agent 100  ammo 24/reserve 90
   ammo (13,2): agent 101  ammo 24/reserve 90
   ammo (13,9): agent 102  ammo 12/reserve 90
@@ -113,4 +113,4 @@ overlays:
 
 events: shot-fired-miss; shot-fired-hit; agent-incapacitated@(9,6); leadership-transferred; squad-failure; mission-failed
 
-tick 84 | hash 0xC05F39B3078F5E5E (format 15) | draws 60 | agents 11 | cover-edges 7 | events 6
+tick 84 | hash 0xC89000A517F24643 (format 15) | draws 60 | agents 11 | cover-edges 7 | events 6

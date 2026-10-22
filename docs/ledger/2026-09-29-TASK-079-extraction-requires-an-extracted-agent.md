@@ -61,10 +61,11 @@ Local, from a copy of the tree without `global.json`, `-p:NuGetAudit=false`:
 ### Findings (not fixed)
 
 1. `SpecificAgents` naming an id with no agent counts as satisfied but not as
-   extracted. Scenario validation does not reject such an id and no authored
-   content uses one; with the new rule an objective whose only listed ids are
-   unknown never completes (previously it completed vacuously). Recorded, not
-   changed.
+   extracted. ~~Scenario validation does not reject such an id~~ **Correction
+   (TASK-081, 2026-09-30): this was wrong.** `Scenario.fs` reports
+   `ExtractionSelectsUnknownAgent` for such an id and `ScenarioTests.fs:339`
+   asserts it, so the case cannot reach the simulation from validated content.
+   No authored content uses one. Not an open defect.
 2. The stand-in suite excludes `DeterminismPropertyTests`, `ReplayTests`,
    `ScenarioFileTests` (FsCheck) and `BenchmarkTests`; those run only on CI.
 3. TASK-077's remaining findings stand: `chokepoint-detour` description drift

@@ -574,8 +574,9 @@ let private cmdFixture () : int =
 /// Runs, or regenerates, the committed replay corpus (`content/replays/`,
 /// TASK-016). `corpus` replays every entry, checks it reproduces its own
 /// hashes on a second independent run, then compares the per-tick hashes to
-/// the committed table, printing a divergence report and exiting non-zero on
-/// the first mismatch. `corpus --regenerate` rewrites every table instead.
+/// the committed table, printing a divergence report for every entry that
+/// differs and exiting non-zero. `corpus --regenerate` rewrites every table
+/// instead.
 let private cmdCorpus (args: string list) : int =
     let mutable dir = Corpus.DefaultDir
     let mutable regenerate = false

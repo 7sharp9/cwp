@@ -17,8 +17,8 @@ See `content/replays/CORPUS.md`.
 | Initial state | Corpus formation-slots scenario (8 x 8, seed 20260904, 2 friendlies, 1 formation) |
 | Tick count | 12 |
 | Initial hash (tick 0) | `0xC16CF876AC742EE2` |
-| Final hash (tick 12) | `0x2C1E10709A627773` |
-| Domain events | 25 |
+| Final hash (tick 12) | `0x9450DCBFE2DD9C8D` |
+| Domain events | 27 |
 
 ## Per-tick authoritative state hash
 
@@ -32,7 +32,7 @@ See `content/replays/CORPUS.md`.
 |    6 | `0x8098D5F49FEA48C4` |
 |    7 | `0x3A8CCA2E6CF627C9` |
 |    8 | `0x7FD6346020E896C8` |
-|    9 | `0x4BEAF2C215700B94` |
-|   10 | `0x503EEFF95995777D` |
-|   11 | `0xEFB4DC796670949A` |
-|   12 | `0x2C1E10709A627773` |
+|    9 | `0x1AF0FFCDD24E52B0` |
+|   10 | `0x85ECE9B028E1452F` |
+|   11 | `0x23EF32DDEACB2168` |
+|   12 | `0x9450DCBFE2DD9C8D` |

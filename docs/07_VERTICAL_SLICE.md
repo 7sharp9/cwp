@@ -62,18 +62,15 @@ Only these commands are required:
 
 Direct leader movement may use a separate immediate input command, but it must pass through the same authoritative simulation boundary.
 
-Realised as `PlayerIntent.MoveTo | Suppress | Hold | Assault | Withdraw`
-(`src/CommandoWar.Sim/Domain.fs`), each a bare `Cell` target except
-`Suppress`, which is `AgentId` — a specific known contact (TASK-037, a
-thin B-030 slice), not the "known or suspected threat area" this section's
-`SuppressArea` naming implies; no suspected-threat, id-less targeting model
-exists (`docs/05` section 4). `Hold`/`Assault`/`Withdraw` realised by
-TASK-047 (backlog B-030 proper) with real appraisal, a commitment, and an
-executor each (`docs/05` sections 4-5, 9-10); issuing them from
-`CommandDemoScene` (client input) stays a future client task, the
-`Suppress`-order precedent — this session's realisation is sim-side proof
-only (a real corpus regeneration, `SimulationTests` facts, no new client
-UI).
+The commands are `PlayerIntent.MoveTo | Suppress | Hold | Assault | Withdraw`
+(`src/CommandoWar.Sim/Domain.fs`). Each takes a bare `Cell` target except
+`Suppress`, which takes an `AgentId`: a specific known contact (TASK-037, a
+thin slice of backlog B-030), not the "known or suspected threat area" this
+section's `SuppressArea` naming implies. No suspected-threat, id-less targeting
+model exists (`docs/05` section 4). `Hold`, `Assault` and `Withdraw` (TASK-047,
+backlog B-030 proper) each have appraisal, a commitment and an executor
+(`docs/05` sections 4-5, 9-10). The Godot client issues all five (functional
+acceptance criterion 1 in section 9).
 
 ## 5. Required simulation systems
 
@@ -85,27 +82,29 @@ UI).
 - basic enemy perception;
 - pathfinding and local cell reservation;
 - movement and formation slots;
-- hitscan small-arms combat (realised by TASK-031, backlog B-019: automatic
-  symmetric engagement, a deterministic range- and cover-mitigated hit
-  chance, the simulation's first real gameplay PRNG draw). Ammunition and
-  weapon readiness realised by TASK-047 (backlog B-030 proper):
-  `AgentState.Ammo` (a magazine + reserve, automatic reload once empty,
-  instant resupply on an authored `WorldState.ResupplyAreas` cell) gates
-  every qualifying shot, `Suppress`/`Assault` alike; wound/death
-  consequence realised by TASK-045 (backlog B-031, below);
-- suppression (realised by TASK-032, backlog B-020: `Combat` raises the
-  target's `AgentState.Suppression`, cover-mitigated and independent of a
-  hit; `State consequences` decays it every tick. TASK-033, backlog B-021,
-  added the first consumer: a `SuppressionBand` hysteresis latch feeds a
-  discrete resolve-threshold penalty and a reappraisal trigger — still no
-  effect on movement or executor behaviour);
-- stress (realised by TASK-033, backlog B-021, partial: `AgentState.Stress`
-  rises from `VisibleContacts` — the one `docs/05` section 8 source with a
-  system behind it — and feeds the resolve threshold as a continuous drag;
-  casualty-, wound-, explosion-, and isolation-driven stress remain unbuilt),
-  discipline (static since TASK-028; stays static, B-021 confirmed no reason
-  to make it dynamic), and leader trust (unbuilt — `docs/05` section 8
-  leaves it "minimal" for the vertical slice);
+- hitscan small-arms combat (TASK-031, backlog B-019): automatic symmetric
+  engagement and a deterministic range- and cover-mitigated hit chance with one
+  PRNG draw per shot. Ammunition and weapon readiness
+  (TASK-047, backlog B-030 proper): `AgentState.Ammo` (a magazine plus
+  reserve, automatic reload once empty, instant resupply on an authored
+  `WorldState.ResupplyAreas` cell) gates every qualifying shot, `Suppress` and
+  `Assault` alike. Wound and death consequences (TASK-045, backlog B-031);
+- suppression (TASK-032, backlog B-020): `Combat` raises the target's
+  `AgentState.Suppression`, cover-mitigated and independent of a hit, and
+  `State consequences` decays it every tick. A `SuppressionBand` hysteresis
+  latch (TASK-033, backlog B-021) feeds a discrete resolve-threshold penalty
+  and a reappraisal trigger. A hostile contact's latch also zeroes its
+  route-exposure contribution (TASK-037) and releases an `Assault` commitment
+  from its `AwaitingSupport` stage (TASK-047): the assault holds within
+  `AssaultStartRange` of the target while a known threat within
+  `ThreatEngagementRange` of the target is not suppressed. Suppression does not
+  change movement speed or hit chance;
+- stress (TASK-033, backlog B-021, partial): `AgentState.Stress` rises from
+  `VisibleContacts`, the one `docs/05` section 8 source with a system behind
+  it, and feeds the resolve threshold as a continuous drag. Casualty-, wound-,
+  explosion- and isolation-driven stress are unbuilt. Discipline is static
+  (B-021 found no reason to make it dynamic). Leader trust is
+  unbuilt: `docs/05` section 8 leaves it "minimal" for the vertical slice;
 - explicit order appraisal;
 - accepted, delayed, adapted, refused, and broken outcomes;
 - finite execution states;
@@ -129,34 +128,24 @@ UI).
 - mission completion and failure summary;
 - replay playback.
 
-### Realised by TASK-011 (developer overlay foundation, headless)
-
-The framework-neutral per-tick diagnostic model
-(`src/CommandoWar.Sim/Diagnostics.fs`, `DiagnosticFrame`) and its deterministic
-ASCII / SVG / HTML renderers (`src/CommandoWar.Headless/DiagnosticRender.fs`,
-driven by `cwheadless render`) give the developer overlay its data foundation
-before any client work. It covers the terrain grid, directional cover, agents
-and destinations, this-tick events, and the tick / state-hash / random-draw
-trio; perception, appraisal, commitment, and reservation state attach as
-`Overlay` cases when those systems land (B-009 to B-011, B-019). The HTML
+The developer overlay is carried by the framework-neutral per-tick diagnostic
+model (`src/CommandoWar.Sim/Diagnostics.fs`, `DiagnosticFrame`) and its
+deterministic ASCII, SVG and HTML renderers
+(`src/CommandoWar.Headless/DiagnosticRender.fs`, driven by `cwheadless render`;
+TASK-011). The frame covers the terrain grid, directional cover, agents and
+destinations, this-tick events, the tick / state-hash / random-draw trio, and
+`Overlay` cases for the tactical systems (`docs/06` section 11). The HTML
 scrubber is the headless form of "the developer overlay can explain any
-appraisal and major state transition" (functional acceptance criterion 11) for
-the systems that currently exist. The Godot overlay (B-029) renders the same
-frame.
+appraisal and major state transition" (functional acceptance criterion 11). The
+Godot developer overlay (TASK-043, backlog B-029) renders the same frame.
 
-### Realised by TASK-072 (backlog B-072): "tactical pause ... while issuing orders"
-
-This bullet's pause requirement was unbuilt as of the 2026-09-21
-charter-alignment review (only a manual `Space`-toggle and an automatic pause
-on `MissionOutcome` leaving `InProgress` existed). TASK-072 ties tactical
-pause to the moment it is actually needed for the charter's own "diagnose
-resistance" step (section 2): `CommandDemoScene`'s `stepOnce` auto-pauses the
-instant any agent's order is newly appraised `Refused`/`Unable`, alongside a
-floating per-agent label (`RenderShared.dispositionText`) at that agent's own
-cell, ungated from selection -- previously the order-status text rendered
-only for a single selected agent and nothing called attention to it at all.
-Implemented and self-verified 2026-09-21; status `review`, awaiting Dave's
-acceptance (`tasks/TASK-072-*.md`, `docs/11_BACKLOG.md` B-072 row).
+Tactical pause in `CommandDemoScene` is a manual `Space` toggle, an automatic
+pause when `MissionOutcome` leaves `InProgress`, and an automatic pause the
+instant any agent's order is newly appraised `Refused` or `Unable` (TASK-072,
+backlog B-072). The last is the point at which the charter's "diagnose
+resistance" step (`docs/00` section 2) needs it. A floating per-agent label
+(`RenderShared.dispositionText`) at that agent's own cell, not gated on
+selection, calls attention to the refusal.
 
 ## 7. Deliberate exclusions
 
@@ -194,314 +183,130 @@ The mission layout must reliably support this test sequence:
 
 This sequence must be testable headlessly before presentation polish begins.
 
-Partially realised by TASK-028 (backlog B-017): steps 1–3 land as the
-`exposed-approach` corpus entry — the player orders two soldiers across an
-approach past an observed machine-gun position, and the Appraisal phase
-`Refuses` the low-`Discipline` one with `DecisionReason.RouteTooExposed` (and
-`Accepts` the high-`Discipline` one — criterion 2). Step 7 ("the player
-reissues the original intent") is realised in isolation by TASK-030 (backlog
-B-018): the `reissued-order` corpus entry shows a superseding order taking
-over an in-progress commitment, though without the preceding suppress/reroute
-correction step 7 presupposes in the full sequence. TASK-032 (backlog B-020)
-landed the raw `AgentState.Suppression` value real fire now creates and
-decays; TASK-033 (backlog B-021, partial) landed the recalculation mechanism
-a *same-agent* trigger needs — the knowledge-change reappraisal trigger
-re-judges a `Refused` order once its blocking threat's contact expires.
+The sequence is realised end to end by the `canonical-refusal-and-correction`
+corpus entry (TASK-038, backlog B-023), a synthetic fixture, and on Bridgehead
+(section 9). In the fixture:
 
-Steps 5–6 are realised by TASK-037 (a thin B-030 slice, pulled forward as P3
-decision-support): a `Suppress` order (`PlayerIntent.Suppress of target:
-AgentId`) that a second fireteam can issue against the known machine-gun
-contact, whose `Suppressing` commitment holds position and keeps it under
-fire; once that contact's `AgentState.SuppressionBand` latches,
-`Appraisal.routeExposure` zeroes its contribution to every other agent's
-route exposure, and a new reappraisal trigger (any agent's `SuppressionBand`
-flipping, not only the appraising agent's own) re-judges the first agent's
-`Refused` order the same tick — step 5 ("the player orders another fireteam
-to suppress the machine-gun position") and step 6 ("tactical knowledge and
-exposure are recalculated") both proven end to end by the new
-`suppress-relieves-exposure` corpus entry. Enemy doctrine (B-022) was
-explicitly descoped by TASK-037 — suppress-likely-routes, seek-cover, and
-scripted fall-back are Hostile-side concerns TASK-037's player-issued order
-does not touch.
+- Steps 1 to 3: the player orders two soldiers across an approach past an
+  observed machine-gun position, and the Appraisal phase `Refuses` the
+  low-`Discipline` one with `DecisionReason.RouteTooExposed` and `Accepts` the
+  high-`Discipline` one (the `exposed-approach` corpus entry, TASK-028, backlog
+  B-017; functional acceptance criterion 2).
+- Step 4: `OrderAppraised` only ever carries a structured
+  `OrderDisposition` / `DecisionReason` (`Domain.fs`). No event or overlay emits
+  a raw numeric exposure or threshold value, and
+  `DiagnosticRender.reasonText` / `dispositionText` render it as named text
+  ("refused route-too-exposed threat-agent-2"), never a score. A test assertion
+  checks this.
+- Steps 5 and 6: a `Suppress` order (`PlayerIntent.Suppress of target:
+  AgentId`, TASK-037) that a second fireteam can issue against the known
+  machine-gun contact. Its `Suppressing` commitment holds position and keeps
+  the contact under fire. Once that contact's `AgentState.SuppressionBand`
+  latches, `Appraisal.routeExposure` zeroes its contribution to every other
+  agent's route exposure, and a reappraisal trigger (any agent's
+  `SuppressionBand` flipping, not only the appraising agent's own) re-judges
+  the first agent's `Refused` order the same tick (the
+  `suppress-relieves-exposure` corpus entry). A `Refused` order is also
+  re-judged once its blocking threat's contact expires (the knowledge-change
+  trigger, TASK-033, backlog B-021).
+- Step 7: the player reissues agent 0's identical `(11,3)` intent on tick 8,
+  once it is already mid-route under the automatic reappraisal. The
+  `reissued-order` corpus entry (TASK-030, backlog B-018) shows a superseding
+  order taking over an in-progress commitment in isolation.
+- Step 8: the reissued order is `Accepted` again at tick 8 with a fresh
+  `CommitmentEstablished`, and stays `Accepted` (or unappraised, on arrival)
+  through tick 13, never flipping back to `Refused`, including through one
+  extra reappraisal blip at tick 12.
 
-The full 8-step sequence is realised end to end by TASK-038 (backlog B-023)
-as the `canonical-refusal-and-correction` corpus entry: the
-`suppress-relieves-exposure` geometry, plus a step 7 reissue of agent 0's
-identical `(11,3)` intent on tick 8, once it is already mid-route under the
-automatic reappraisal. Step 4 needed no new mechanism: `OrderAppraised` only
-ever carries a structured `OrderDisposition`/`DecisionReason` (`Domain.fs`)
-— no event or overlay in the codebase emits a raw numeric exposure/threshold
-value, and `DiagnosticRender.reasonText`/`dispositionText` already render it
-as named text ("refused route-too-exposed threat-agent-2"), never a score;
-this task adds a test assertion turning that standing type-system guarantee
-into checked evidence. Step 8 is proven for its accepts-branch only: the
-reissued order is `Accepted` again at tick 8, with a fresh
-`CommitmentEstablished`, and stays `Accepted` (or unappraised, on arrival)
-through tick 13 — never flipping back to `Refused`, including through one
-extra reappraisal blip at tick 12. The literal "or adapts" half of step 8 is
-**not** realised: no `Adapted` `OrderDisposition` case exists (`Appraisal.fs`:
-"Stage 5 (safer adaptation) is deferred (B-018): no `Adapted` outcome, no
-route recomputation") — a separate, larger, not-yet-filed follow-up, deferred
-by Dave's explicit decision rather than silently dropped.
+Only the accepts branch of step 8 is realised. No `Adapted` `OrderDisposition`
+case exists (`Appraisal.fs`: "Stage 5 (safer adaptation) is deferred (B-018): no
+`Adapted` outcome, no route recomputation"). This is a deliberate limitation
+(L-01 in `docs/15_G4_DEFECT_TRIAGE.md`), deferred by Dave's explicit decision
+rather than silently dropped.
+
+Enemy doctrine (B-022) is outside this sequence: suppress-likely-routes,
+seek-cover and scripted fall-back are Hostile-side concerns that the
+player-issued `Suppress` order does not touch (L-02 in `docs/15`).
 
 ## 9. Functional acceptance criteria
 
-The slice is feature-complete only when:
+The slice is feature-complete only when all twelve criteria below hold. Every
+one is recorded as met. The gate decision itself (G4) is Dave's and is not
+recorded here.
 
-1. Every required command can be issued and resolved.
-2. At least two soldiers can appraise the same order differently for traceable reasons.
-3. The canonical refusal sequence passes with a fixed scenario and seed.
-4. A player action can predictably change an appraisal outcome.
-5. Enemy decisions use perceived or reported information rather than authoritative player positions.
-6. Leader death transfers command according to an explicit rule.
-7. The mission can succeed and fail without developer intervention.
-8. Invalid content fails before the simulation begins with actionable diagnostics.
-9. A recorded command stream reproduces the same final authoritative state under the stated determinism contract.
-10. The headless runner can execute the mission scenario repeatedly without a graphical client.
-11. The developer overlay can explain any appraisal and major state transition.
-12. Placeholder-art play is understandable before final visual production.
+| # | Criterion | Status and evidence |
+|---|---|---|
+| 1 | Every required command can be issued and resolved. | Met. Move, Hold, Assault, Withdraw and Suppress are issued through the Godot client (TASK-048 for the order-mode HUD, TASK-064 for the Suppress icon) and resolved by the simulation. |
+| 2 | At least two soldiers can appraise the same order differently for traceable reasons. | Met. The `exposed-approach` corpus entry: two agents, same route, one refuses (`RouteTooExposed`) and one accepts, by discipline alone. |
+| 3 | The canonical refusal sequence passes with a fixed scenario and seed. | Met on a synthetic fixture (`canonical-refusal-and-correction`, TASK-038) and on Bridgehead (`bridgehead-succeeded`, tick 6). See "Bridgehead evidence" below. |
+| 4 | A player action can predictably change an appraisal outcome. | Met. Suppressing the threat reverses a refusal in the synthetic fixture; on Bridgehead the same standing order is reappraised `Accepted` at tick 83 once rifleman 102 is down. |
+| 5 | Enemy decisions use perceived or reported information rather than authoritative player positions. | Met (TASK-034): hostiles act on their own side's tactical picture, and a hostile never fires at a friendly it has not observed. |
+| 6 | Leader death transfers command according to an explicit rule. | Met (TASK-045); the `casualties-succession-and-squad-failure` corpus entry traces it. |
+| 7 | The mission can succeed and fail without developer intervention. | Met in both directions on the real Bridgehead content, by `MoveTo` orders only: `bridgehead-succeeded` and `bridgehead-failed`. See below. |
+| 8 | Invalid content fails before the simulation begins with actionable diagnostics. | Met. `Scenario.validate` returns typed errors, and `cwheadless import` exits non-zero on invalid content (TASK-060). |
+| 9 | A recorded command stream reproduces the same final authoritative state under the stated determinism contract. | Met. The replay corpus, checked by `cwheadless corpus` and `CorpusTests` on every build, includes both Bridgehead missions. |
+| 10 | The headless runner can execute the mission scenario repeatedly without a graphical client. | Met. `cwheadless` replays and renders the mission without any client. |
+| 11 | The developer overlay can explain any appraisal and major state transition. | Met. The diagnostic frame carries appraisal reasons and state overlays (TASK-011, TASK-043). |
+| 12 | Placeholder-art play is understandable before final visual production. | Met in the sense the project can test internally (TASK-041, TASK-064). Whether it is understandable to someone who did not build it is the G5 external playtest. |
 
-### Realised (and partially not) by TASK-064 (backlog B-035)
+### Bridgehead evidence
 
-TASK-064 is the first task to run the mission content this section
-describes -- `bridgehead.cwscenario` -- inside the actual play scene
-(`CommandDemoScene`) rather than as a headless import check or a separate
-hand-built fixture. `IClientScene.Ready` gained a `scenarioContentPath`
-parameter; `CommandDemoScene` now parses/validates/builds the world from
-the real file (the `DemoScenario.fs` pipeline shape) instead of loading
-`DemoScenario`. It also added the client's missing `Suppress` order-mode
-icon (section 4's fifth required command had no HUD path at all before
-this task, B-059's own backlog text having said so outright) and rewrote
-`CommandDemoScene`'s scripted self-check against real Bridgehead
-coordinates, reaching a genuine, reproducible, casualty-free
-neutralisation of the machine-gun team through the real click path
-(`0xB99E7F74EA1C3CDE` at tick 90).
+The mission content, `bridgehead.cwscenario`, runs inside the play scene
+(TASK-064). Criteria 3 and 7 rest on the following behaviour: corpses do not
+block movement (TASK-066), agents detour around a parked ally (TASK-070), the
+map has a second ford and a second extraction cell (TASK-073), and the `Failed`
+direction is verified (TASK-075). Two committed corpus entries demonstrate it
+(TASK-077). They are built from the real content (embedded into `cwheadless`,
+seed 20260920, the play scene's seed) and driven only by `MoveTo` orders.
 
-Criteria 1, 2, 4, 5, 6, 8, 9, 10, 11, and 12 are met -- some newly
-demonstrated on Bridgehead itself (1, 4, 9, 12), the rest via existing
-evidence this task confirmed still holds (2, 5, 6, 8, 10, 11). **Criteria 3
-and 7 are not closed on Bridgehead**, despite extensive investigation (a
-series of temporary `dotnet fsi` probes, removed after use): every
-Bridgehead `MoveTo` order tested was `Accepted` outright, since no contact
-with the machine gun exists until an agent is already inside its own
-engagement range (no intermediate "spotted but not yet fired on" cell
-exists on this map) -- so criterion 3's canonical refusal sequence, though
-proven end to end on a separate fixture (TASK-038), was never triggered on
-Bridgehead itself; and criterion 7 (mission succeeds/fails without
-developer intervention) was not reached in either direction -- a full
-`Succeeded` run was blocked by an apparent additional threat covering the
-`bridge-charge` target cell itself, and a full `Failed` run turned out to
-be geometrically capped well short of all six friendly agents by the
-bridge's own two-lane chokepoint. See `tasks/TASK-064-INTEGRATE-AND-VERIFY-
-VERTICAL-SLICE.md` for the full record and the two concrete mechanism
-findings behind this (a corpse permanently blocking a cell; the
-target-cell threat). **Accepted by Dave (2026-09-20, via `AskUserQuestion`)
-as a known, tracked gap** rather than pursued further -- no Bridgehead map
-rebalance and no corpse-occupancy fix were made; TASK-064 was accepted with
-this gap on record.
+`bridgehead-succeeded` reaches `Succeeded` at tick 215.
 
-### Criterion 7 (`Succeeded` direction): met, with caveat -- update 2026-09-21
+- The machine gun falls to a bridge push by tick 71, with no friendly loss.
+- Agent 5 halts at the ford stand-off cell `(5,9)`, from which rifleman 102 at
+  `(13,9)` is visible at Chebyshev distance 8, outside weapon range 7. At tick
+  6 it is ordered on to `(12,9)` and refused (`RouteTooExposed`) before any
+  shot is fired.
+- Riflemen 101 and 102 are engaged from `(10,5)`, `(10,6)` and `(11,6)`, at
+  the cost of two friendly agents. At tick 83, with 102 down, the same standing
+  order for agent 5 is reappraised `Accepted`.
+- The charge is planted on `(9,5)` for the ten-tick demolition window
+  (complete at tick 160), then the four survivors extract through both
+  extraction cells.
 
-Continuing the investigation rather than leaving it as an accepted gap:
-TASK-064's "apparent additional threat covering the `bridge-charge` target
-cell" is now identified. Tracing `Sight.fs`'s exact integer supercover walk
-by hand, then confirming with a temporary `dotnet fsi` probe against the
-built `CommandoWar.Sim.dll` (removed after use, not committed), found that
-depot rifleman `AgentId 102` at `(13,9)` has a fully clear, unobstructed
-diagonal line of sight to `(9,5)` -- Chebyshev distance 4, well inside
-`CombatConfig.WeaponRange` (7). Rifleman `101` is blocked by the crate at
-`(10,4)`; riflemen `103`/`104` are out of weapon range at distance 8. This
-is legitimate defense-in-depth (confirmed with Dave via `AskUserQuestion`),
-not a bug -- the machine gun alone was never the whole threat picture at
-that cell.
+`bridgehead-failed` reaches `Failed` at tick 84 from one six-agent frontal
+charge. `Failed` fires when every friendly agent has left `Alive`; an
+incapacitated agent already counts as eliminated.
 
-A companion LOS-matrix probe found `(10,5)`/`(10,6)`/`(11,6)` also have
-mutual line of sight and range with rifleman `102` (and `(10,5)` with
-rifleman `101` too), while `(9,6)`/`(8,5)`/`(8,6)` do not -- a real approach
-exists that engages both riflemen from cells other than the exposed
-objective cell itself. Proved end to end by driving the real
-`ScenarioFile.parse -> Scenario.validate -> World.ofScenario ->
-Simulation.step` pipeline directly (`CommandDemoScene`'s own pipeline, not
-the Godot client): TASK-064's known-good casualty-free machine-gun-team
-neutralisation, then a push to `(10,5)`/`(10,6)`/`(11,6)` to fight
-riflemen `101`/`102` there (both end `Dead`, at the cost of two friendly
-deaths -- agents 2 and 3, **not** casualty-free), then planting on the
-now-genuinely-uncontested `(9,5)` for the 10-tick demolition window
-(`ObjectiveId 2` completes clean, zero further fire), then extraction.
-`WorldState.MissionOutcome` reached `Succeeded` for the first time ever
-demonstrated on real Bridgehead.
+Diagnostic goldens in `content/diagnostics/bridgehead-*` pin the refusal frame
+and both outcome frames.
 
-Extraction itself surfaced a second, previously-undiscovered gap, not
-predicted going in: sending every survivor to the single authored
-extraction cell `(1,9)` at once jams exactly like the corpse/parked-agent
-family (B-065/B-066/B-069) -- the first arrival (sticky extraction,
-TASK-062) never vacates the cell, and TASK-070's chokepoint detour cannot
-help here, since it reroutes *around* a parked blocker's cell, not *onto*
-it when the blocker's cell IS the mover's own destination; every later
-agent stalls and hits `MovementAbandoned`. Worked around in the probe by
-shepherding survivors through the cell one at a time, moving each off
-again immediately after -- this reached `Succeeded` for real, but nothing
-in the client UI explains why a second agent sent to extraction silently
-stops short. Filed as new backlog row B-071, folded into B-070's
-usability-review scope rather than fixed unilaterally here.
+### What the evidence does and does not show
 
-**Criterion 7 is therefore marked met, with caveat, for the `Succeeded`
-direction**: the mission can succeed on Bridgehead without developer
-intervention, but only via a specific tactical approach (engage both
-riflemen from cells off the objective, not just the machine gun) and a
-non-obvious extraction choreography (one survivor through the cell at a
-time) that the game does not currently teach or explain -- consistent with
-B-070's own "no refined user experience" framing. The `Failed` direction
-was not re-attempted this round and remains as TASK-064 left it (capped
-short of all six friendly agents by the bridge's own two-lane chokepoint,
-not re-verified against TASK-066/070's fixes). Criterion 3 (canonical
-refusal) remains genuinely unclosed: the entire ~610-tick `Succeeded` run
-above produced zero `OrderAppraised(Refused | Unable)` events, confirming
-TASK-064's original finding still holds -- every threat on this map is
-only ever in contact once an agent is already inside its own engagement
-range, so no ordinary `MoveTo` order is ever appraised as a refusal here.
+These are properties of the build as it stands, relevant to the G5 playtest.
 
-See `docs/11_BACKLOG.md` rows B-070 (usability/gameplay-design review) and
-B-071 (this investigation's full record) for detail.
+- **The mission is winnable only by a specific approach.** Rifleman 102 covers
+  the demolition cell `(9,5)` at distance 4, so the machine gun alone is not
+  the whole threat there. The viable approach engages both riflemen from cells
+  off the objective. The game does not teach this (backlog B-070).
+- **A single deep order meets the enemy unwarned.** `Pathfinding` is
+  deliberately threat-blind and Perception reveals rifleman 102 only when line
+  of sight opens, at distance 6 from the ford, inside weapon range 7. A single
+  order that runs deep into the depot therefore skips the stand-off band: the
+  agent has no knowledge to refuse on. The order is refused on the contact tick
+  (the knowledge-change reappraisal, `RouteTooExposed` naming 102, from the
+  closing-threat rule in `docs/05` section 5) and the agent stops advancing,
+  but the first exchange of fire happens on that same tick. The stand-off
+  refusal before any shot needs the two-step order above (halt at the ford,
+  then push).
+- **Each extraction cell holds one agent at a time.** An extracted agent stays
+  on its cell, so later arrivals stall unless it steps off. The second cell
+  doubles throughput; it does not remove the choreography.
+- **The Bridgehead entries depend on two rules**: a downed agent perceives
+  nothing (TASK-078), and `ExtractAgents` needs at least one extracted agent
+  (TASK-079). Corpus re-pins are explained in `content/replays/CORPUS.md`.
 
-### Criterion 3 (canonical refusal): closed on Bridgehead -- update 2026-09-21
-
-A same-day charter-alignment review (not this investigation) found this
-row's own "no ordinary `MoveTo` order is ever appraised as a refusal here"
-claim too strong: a direct probe driving `Simulation.step` against real
-Bridgehead under a broader, non-curated push (not the specific `Succeeded`
-sequence above) triggered a real `Refused(RouteTooExposed(Some AgentId
-102))`. The underlying reason both readings are true at once: contact and
-engagement range coincided everywhere on the map as authored, so refusal was
-*reachable* but not *reliable or player-predictable* -- a soldier could be
-refused and shot at almost the same moment, with no cell offering a genuine
-stand-off between "threat known" and "threat in range."
-
-A tactical-game-design-expert review traced the exact mechanism: `Sight.fs`
-blocks line of sight through any intermediate cell whose elevation exceeds
-both endpoints', and the original bridge deck (elevation 1 against
-elevation-0 banks) acts as a berm -- every west-bank cell had zero LOS to any
-east-bank threat until standing on the deck itself, at which point any
-visible threat was already inside `CombatConfig.WeaponRange` (7). A full map
-scan found exactly two genuine stand-off cells anywhere, both unreachable
-dead ends. TASK-073 (backlog B-073) fixed this at the content level, not the
-mechanism level (which TASK-038's separate synthetic fixture already proved
-correct): a second, non-elevated ford south of the existing deck gives a
-friendly agent approaching along it clear LOS to rifleman 102 at Chebyshev
-distance exactly 8 (`AppraisalConfig.ThreatEngagementRange`), outside weapon
-range, before it is possible to close to contact. Implemented and
-self-verified 2026-09-21, independently re-verified by the orchestrating
-session against the real `Simulation.step` pipeline: an agent halted at the
-ford establishes contact, and a follow-up order pushing deeper is refused
-(`RouteTooExposed`) before a single shot is fired -- the canonical-refusal
-shape (section 8, steps 1-4) demonstrated on Bridgehead's own real content
-for the first time, not only on TASK-038's separate fixture.
-
-**Criterion 3 is therefore marked met on Bridgehead**, via a two-step order
-(halt at the stand-off cell to establish contact, then push closer) rather
-than a single direct order -- a genuine tactical choice the redesigned
-geometry now supports, not previously possible at all. Status `review`,
-awaiting Dave's acceptance (`tasks/TASK-073-*.md`, `docs/11_BACKLOG.md`
-B-073 row). The same task also added a second `extraction-area` cell,
-resolving B-071's extraction-jam finding at its source (see that row).
-
-### Criterion 7 (`Failed` direction): met -- update 2026-09-22
-
-TASK-075 re-verified the `Failed` direction the "Criterion 7 (`Succeeded`
-direction)" update above left open ("not re-attempted this round"), against
-TASK-066 (corpse no longer blocks movement), TASK-070 (chokepoint detour),
-and TASK-073's (second ford/extraction cell) combined fixes. `Simulation.fs`
-line 2273-2274 (`mission`) confirms the exact trigger from the code directly:
-`friendlyForceEliminated = s.Rules.FailOnFriendlyForceEliminated && not
-(agents |> Array.exists (fun a -> a.Side = Friendly && Casualty.isAlive
-a.Vitals))` -- `MissionOutcome <- Failed` fires the tick every Friendly
-agent's `Vitals` leaves `Alive` (an `Incapacitated` bleed-out counts as
-eliminated for this purpose, `Casualty.isAlive` returning `false` for it,
-not only literal `Dead`), independent of objective or extraction state, as
-the task file's own "Inputs and assumptions" expected.
-
-A temporary `dotnet fsi` probe (several iterations, removed after use, this
-session's own precedent) drove the real `ScenarioFile.parse ->
-Scenario.validate -> World.ofScenario -> Simulation.step` pipeline directly
-against unmodified `bridgehead.cwscenario` (seed `20260920UL`, the
-`CommandDemoScene` precedent): a single simultaneous six-agent `MoveTo` push
-(Standard/Routine, no cover or suppression tactics) toward the machine gun
-and riflemen 101/102's approach lanes killed the machine gun (tick 71) and
-rifleman 102 (tick 78) at the cost of four of six friendlies (agents 0, 3,
-4, 5 -- dead by tick 183), leaving agents 1 and 2 alive and, like TASK-064's
-original finding, safely outside riflemen 103 (`(17,3)`)/104 (`(17,8)`)'s
-combined engagement zone. A second, ordinary `MoveTo` order (still
-Standard/Routine -- no envelope tuning needed) sending each survivor
-directly onto the two remaining riflemen's own cells reached
-`MissionOutcome = Failed` at **tick 416**
-(`content/diagnostics`-style `DiagnosticRender.Svg` evidence:
-`docs/evidence/task-075-bridgehead-failed-direction.png`, state hash
-`0xE76F42B2E1AE4237`). This **is** a genuine `RouteTooExposed` refusal
-cycle, not a bypass of it: contact with 103/104 is established mid-route at
-tick 413, and the very next reappraisal (tick 414) does emit
-`Refused(RouteTooExposed(Some AgentId 103|104))` for both agents -- but by
-then `Pathfinding`'s threat-blind shortest route has already put them
-within weapon range the same tick contact fires, so `Combat`'s own
-independent within-range check lands the fatal hit before the refusal can
-turn them back. This is the identical one-tick contact/reappraisal lag
-TASK-073 already found and documented for a single un-staged `MoveTo` order
-into the depot ("Pathfinding is deliberately threat-blind... a one-tick lag
-between a new contact being observed and the Appraisal phase's reappraisal
-reacting to it... Combat's own independent within-range check already fires
-that same tick"), now confirmed to apply symmetrically in the `Failed`
-direction as well as the `Succeeded` one. A parallel branch re-run with the
-identical order upgraded to `RiskTolerance.Aggressive`/`Urgency.Immediate`
-(both ordinary command-envelope options, not a mechanism change) reaches the
-exact same tick-416 outcome with the order staying `Accepted` throughout --
-confirming the escalation is not actually load-bearing here, only the
-staged sequencing (broad push first, then a direct second order once the
-two remaining threats' defenses are thinned) is.
-
-**Criterion 7 is therefore marked met for the `Failed` direction as well**:
-`MissionOutcome` can reach `Failed` on Bridgehead's real content without
-developer intervention, through entirely ordinary, legitimate `MoveTo`
-orders in a deliberate two-stage sequence -- no map or content edit was
-needed (Central decision's precondition for one was never met: no genuinely
-unreachable safe pocket exists, since a route into 103/104's engagement zone
-is always reachable, just briefly defended by a one-tick-late refusal). Both
-`Succeeded` and `Failed` are now demonstrated end to end on real Bridgehead
-content, closing docs/07 section 9's last open half of criterion 7. No
-`content/scenarios/bridgehead.cwscenario` change was made or needed; the
-file is byte-identical to the TASK-073 state. See
-`docs/ledger/2026-09-22-TASK-075-bridgehead-failed-direction-verification.md`
-for the full tick-by-tick record and the probe transcripts' findings.
-
-### Committed replay evidence for criteria 3, 4, and 7 -- update 2026-09-27
-
-Every Bridgehead demonstration above was a temporary `dotnet fsi` probe,
-removed after use, so nothing in the build would have noticed a later change
-that made the mission unwinnable or unlosable. TASK-077 (backlog B-077) pins
-both directions as replay-corpus entries built from the real
-`content/scenarios/bridgehead.cwscenario` (embedded into `cwheadless`, seed
-20260920, the `CommandDemoScene` seed), each driven by `MoveTo` orders only
-and re-verified by `cwheadless corpus` and `CorpusTests` on every build:
-
-- `bridgehead-succeeded` reaches `Succeeded` at tick 215 and contains
-  criterion 3's shape (agent 5 refused at the ford stand-off cell at tick 6,
-  zero shots fired) and criterion 4's (the same standing order reappraised
-  `Accepted` at tick 83, once rifleman 102 is down).
-- `bridgehead-failed` reaches `Failed` at tick 84 from one six-agent frontal
-  charge.
-
-Diagnostic goldens (`content/diagnostics/bridgehead-*`) pin the refusal frame
-and both outcome frames. The schedules differ from the earlier probes' (the
-`Succeeded` run now uses both extraction cells and ends at tick 215 rather
-than ~610; the `Failed` run is a single wave rather than TASK-075's two), but
-the outcomes and the criteria they evidence are the same. Two defects found
-while building them (a non-alive agent still perceives; the extraction
-objective completes vacuously when the whole squad is down) are recorded in
-`tasks/TASK-077-*.md` for G4 triage. The first is fixed by TASK-078 (a
-non-`Alive` observer perceives nothing); both Bridgehead entries re-pin under
-it with their outcomes, refusals, and deaths unchanged. The second is fixed by
-TASK-079 (an `ExtractAgents` objective needs at least one required agent
-actually extracted): only `bridgehead-failed` moves, from tick 84, and its
-`CompletedObjectives` at `Failed` is now `1` rather than `1,3`; the outcome
-and tick are unchanged.
+The full record for each step is in the ledger entries for TASK-064, 066, 070,
+073, 075, 077, 078 and 079.
 
 ## 10. Performance budgets
 
@@ -515,24 +320,21 @@ These are initial budgets and may be revised only with measured evidence.
 - stable frame pacing during command preview and debug overlays;
 - headless execution at substantially faster than real time.
 
-Exact millisecond and allocation budgets should be set after TASK-003 establishes a benchmark harness.
-
-### Realised by TASK-014 (headless benchmark harness)
-
 `bench/CommandoWar.Benchmarks/` is the headless performance and allocation
-harness (`docs/09` section 2.8; backlog B-013), and
+harness (`docs/09` section 2.8; TASK-014, backlog B-013), and
 `content/benchmarks/BASELINE.md` is the committed baseline with a documented
-regeneration command. It covers the authoritative systems that exist today
-(empty tick, placeholder movement at 6 and ~50 agents, line-of-sight batch,
-pathfinding open/blocked/choke, canonical encode, state hash, replay run);
-50-agent perception, appraisal, and the full synthetic tick attach when
-B-015 / B-017 / B-019 land. The reference-machine baseline keeps every per-tick
-measurement at least ~36x inside the 5 ms budget with no map-size-proportional
-per-tick allocation, so the budgets in this section stand as written. Exact
-per-subsystem millisecond and allocation numbers are still a follow-up: set
-them once the real phases and the greybox map (B-025) exist and the harness is
-re-run against them. The 60 fps graphical budget and frame-pacing items remain
-untested (no client yet).
+regeneration command. It covers the empty tick, movement at 6 and about 50
+agents, a line-of-sight batch, pathfinding over open, blocked and choke maps,
+canonical encode, state hash and a replay run. 50-agent perception, appraisal,
+combat and the full synthetic tick are not yet in the harness, and the
+baseline (recorded 2026-09-04) predates those phases. On the reference machine
+it keeps every per-tick measurement at least about 36x inside the 5 ms budget
+with no map-size-proportional per-tick allocation, so the budgets in this
+section stand as written. Exact per-subsystem millisecond and allocation
+numbers are still a follow-up: set them once the harness is re-run against the
+real phases and the Bridgehead map. The 60 fps graphical budget and the
+frame-pacing items are untested and no measurement is committed
+(`docs/15_G4_DEFECT_TRIAGE.md` U-05).
 
 ## 11. External playtest gate
 
