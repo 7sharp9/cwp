@@ -36,7 +36,6 @@ of a record, not proof that none exists (see section 4).
 
 | ID | Severity | Category | Defect | Source | Evidence it is open | Proposed disposition |
 |---|---|---|---|---|---|---|
-| D-02 | minor | gameplay | An `Extracted` agent stays `Alive` and keeps its cell, and an extraction cell holds one agent, so a further survivor ordered to an occupied extraction cell stalls to `MovementAbandoned`. Two extraction cells mitigate it. | TASK-073 ledger; B-071 row | `Simulation.fs:1574` (`occupantOf` excludes only non-`Alive`), `Simulation.fs:2199` (`Extracted` is a sticky flag, position untouched) | fix next session (B-083); it needs a spec invariant change, see the B-083 row |
 | D-03 | minor | gameplay | Reappraisal fires on any `ContactObserved` / `ContactExpired`, including events in the hostile picture, so a hostile noticing a friendly reappraises friendly orders. No outcome changes are known. | TASK-078 ledger finding 2 | recorded by TASK-078 as observation only; not re-read (`unconfirmed`) | defer past G5 |
 | D-04 | minor | presentation | The HUD status line always shows tick, 64-bit state hash, random draws and agent count. Testers may ask what it means, and the facilitator must not answer. | `docs/14` section 8 item 1 | `CommandDemoScene.fs:1597` | fix before G5 (Dave's presentation call) |
 | D-05 | minor | presentation | The window and project title reads "CommandoWar Godot Spike" and is visible to participants. Public title and branding are out of scope under `AGENTS.md`. | `docs/14` section 8 item 2 | `project.godot:13` | Dave decides; fix before G5 only if a neutral working title is chosen |
@@ -59,6 +58,7 @@ Recorded so a tester finding is not mistaken for a regression.
 | L-05 | Bridgehead is the only mission. Reaching `Succeeded` needs both depot riflemen engaged from off-objective cells, and a refusal needs a staged order. Discoverability by a first-time player is untested. | `docs/07` section 9; B-071 |
 | L-06 | Risks R-001, R-024 and R-025 (refusal feels arbitrary, obedient-soldier strategy, explanation shows numbers not causes) cannot be judged before G5. | `docs/10` |
 | L-07 | A threat that Perception reveals only at weapon range cannot be refused against in advance: an order is accepted on current knowledge, refused on the tick the threat is first observed inside its range (the closing-threat rule, D-01), and the first exchange of fire still happens on that tick. The rule applies to every discipline, so a high-discipline agent that knowingly accepted an exposed route also stops once the threat has it in range, until the threat is suppressed or the order is `Immediate` or `Aggressive`. | `docs/05` section 5; TASK-083 |
+| L-08 | An `Extracted` agent is out of play but keeps its last `Order`, `Destination`, `Route` and `Position` as inert state, so the diagnostic frame can still draw a planned path or a "moving" commitment for it, and `Casualty.currentLeader` can still name it. An agent whose route crosses an extraction cell is extracted there and stops, with its destination unreached. | TASK-084 |
 
 ## 4. Unverified in this environment
 
@@ -74,6 +74,7 @@ could hide a blocker.
 | U-04 | Raw mouse gestures: rubber-band multi-select (TASK-068) and replay scrubber drag (TASK-071); TASK-072's windowed screenshot criterion is unticked. | Accepted on probe evidence; no windowed session recorded for them (`unconfirmed` for the current build). |
 | U-05 | The 60 fps and frame-pacing budgets in `docs/07` section 10. | The text still says "no client yet". A stable 60 fps was seen once by a temporary diagnostic in TASK-069 that was removed; nothing is committed. |
 | U-06 | "The mission can be completed from a clean build without developer commands" (G4 evidence). | `bridgehead-succeeded` proves a `MoveTo`-only replay reaches `Succeeded`; a human doing it in the exported build is U-01. |
+| U-07 | How the Godot client draws extracted agents that share a cell, and what a player sees when an order to an extracted agent is rejected `RecipientExtracted`. | Compiles only under the Godot SDK; never run (TASK-084 built Godot Core only). |
 
 ## 5. Excluded: recorded and since fixed
 
@@ -95,15 +96,16 @@ could hide a blocker.
 | A dead or incapacitated observer kept perceiving | TASK-078 |
 | `ExtractAgents` completed with nobody extracted | TASK-079 |
 | No weapon-range display | TASK-074 (see D-09 for what remains) |
+| D-02: an `Extracted` agent stayed `Alive` on its extraction cell and blocked later survivors, which stalled to `MovementAbandoned` | TASK-084: extracted agents leave play and hold no cell; see L-08 for what remains |
 | D-01: a single un-staged deep `MoveTo` on Bridgehead kept advancing after the machine-gun rifleman came into view and was refused only after hits | TASK-083: refused on the contact tick and the agent stops; see L-07 for what remains |
 
 ## 6. Counts and what is left for Dave
 
-Open defects: 0 blocker, 0 major, 9 minor. Deliberate limitations: 7.
-Unverified: 6 items.
+Open defects: 0 blocker, 0 major, 8 minor. Deliberate limitations: 8.
+Unverified: 7 items.
 
 The open defects wait on a decision or on client code that needs the Godot
-SDK to build: D-02 and D-03 change gameplay semantics, D-05 needs a working
+SDK to build: D-03 changes gameplay semantics, D-05 needs a working
 title, D-04, D-06, D-07, D-09 and D-10 are Godot or client code, and D-08 is a
 feature.
 

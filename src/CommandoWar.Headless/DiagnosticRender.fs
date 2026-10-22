@@ -180,6 +180,7 @@ module DiagnosticRender =
                 | AgentAmmo _
                 | Divergence _
                 | AgentRadioLost _
+                | AgentOutOfPlay _
                 | AgentPendingDelivery _
                 | AgentFormationSlot _
                 | MissionStatus _ -> None)
@@ -222,6 +223,7 @@ module DiagnosticRender =
                 | AgentAmmo _
                 | Divergence _
                 | AgentRadioLost _
+                | AgentOutOfPlay _
                 | AgentPendingDelivery _
                 | AgentFormationSlot _
                 | MissionStatus _ -> None)
@@ -523,6 +525,8 @@ module DiagnosticRender =
                     line (sprintf "  DIVERGED: first differing section %s%s" section who)
                 | AgentRadioLost(agent, at) ->
                     line (sprintf "  radio lost %s: agent %d" (cellText at) (AgentId.value agent))
+                | AgentOutOfPlay(agent, at) ->
+                    line (sprintf "  out of play %s: agent %d  extracted" (cellText at) (AgentId.value agent))
                 | AgentPendingDelivery(agent, at, command, dueTick) ->
                     line (
                         sprintf
@@ -1235,6 +1239,17 @@ module DiagnosticRender =
                     sprintf
                         "  <rect x=\"%d\" y=\"%d\" width=\"8\" height=\"8\" fill=\"none\" stroke=\"#0F766E\" stroke-width=\"2\" transform=\"rotate(45 %d %d)\"/>"
                         (rx - 4) (ry - 4) rx ry
+                )
+            | AgentOutOfPlay(_, at) ->
+                // Extracted (TASK-084, backlog B-083): a dashed green square
+                // inset in the cell, drawn around the agent's own circle. The
+                // agent no longer holds the cell, so another agent in play
+                // may stand there too and the square tells the two apart.
+                line (
+                    sprintf
+                        "  <rect x=\"%d\" y=\"%d\" width=\"12\" height=\"12\" fill=\"none\" stroke=\"#2F855A\" stroke-width=\"1\" stroke-dasharray=\"3,2\"/>"
+                        (at.X * s + mid - 6)
+                        (at.Y * s + mid - 6)
                 )
             | MissionStatus _ -> () // footer-only, the Divergence precedent (no single cell to anchor on)
 

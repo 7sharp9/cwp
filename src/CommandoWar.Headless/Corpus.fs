@@ -947,11 +947,10 @@ module Corpus =
               75L, 2, 11, 6
               // Plant the charge.
               150L, 1, 9, 5
-              // Extract through both cells, stepping off before the next pair arrives.
+              // Extract through both cells; an extracted agent leaves play, so the
+              // next pair enters the cells the first pair extracted on.
               165L, 1, 4, 9
               165L, 3, 1, 9
-              195L, 1, 5, 8
-              195L, 3, 2, 8
               196L, 2, 4, 9
               196L, 5, 1, 9 ]
 

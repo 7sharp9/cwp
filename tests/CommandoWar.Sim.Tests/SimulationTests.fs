@@ -3412,3 +3412,179 @@ let ``the closing-threat refusal is deterministic across repeated runs`` () =
         appraiseUnderFire [| firingThreat |] [||] (MoveTo { X = 5; Y = 5 }) Standard Routine underFireAt
 
     Assert.Equal(run (), run ())
+
+// --- Extracted agents leave play (TASK-084, backlog B-083) -----------------
+
+let private extractionCell: Cell = { X = 5; Y = 5 }
+
+let private extractionArea: Area =
+    { Id = AreaId.ofString "exfil"; Cell = extractionCell }
+
+/// Two friendlies in an open 10 x 10 world with one extraction cell and no
+/// objective, so the mission stays `InProgress` and the phase keeps running.
+let private extractionWorld (agents: AgentState list) : WorldState =
+    missionWorld [||] [||] [| extractionArea |] [||] noFailRules agents
+
+[<Fact>]
+let ``a second survivor can enter an extraction cell an extracted agent stands on`` () =
+    let first = Agent.create (agent 0) Friendly extractionCell
+    let second = Agent.create (agent 1) Friendly { X = 5; Y = 2 }
+    let r1 = stepIdle (extractionWorld [ first; second ])
+    Assert.True((agentOf (agent 0) r1.State).Extracted)
+
+    let mutable st = (stepWith [| cmd 1 (agent 1) extractionCell |] r1.State).State
+    let mutable sawAbandoned = false
+
+    for _ in 1..60 do
+        let r = stepIdle st
+        sawAbandoned <- sawAbandoned || (bodies r |> Array.exists (function MovementAbandoned _ -> true | _ -> false))
+        st <- r.State
+
+    Assert.False(sawAbandoned, "an extracted agent must not block the extraction cell")
+    Assert.Equal(extractionCell, (agentOf (agent 1) st).Position)
+    Assert.True((agentOf (agent 1) st).Extracted)
+
+let private extracted (id: AgentId) (st: WorldState) : WorldState =
+    { st with Agents = st.Agents |> Array.map (fun a -> if a.Id = id then { a with Extracted = true } else a) }
+
+[<Fact>]
+let ``an Extracted agent perceives nothing and is perceived by no enemy, so nobody fires`` () =
+    let b: GridBounds = { Width = 16; Height = 8 }
+    let w = perceptionWorld b [ 0, { X = 1; Y = 1 } ] [ 1, { X = 6; Y = 1 } ] (Terrain.empty b)
+
+    // Control: an agent still in play is seen by the hostile and they trade fire.
+    let control = stepIdle w
+    Assert.Equal<AgentId[]>([| agent 1 |], (agentOf (agent 0) control.State).VisibleContacts)
+    Assert.Equal<AgentId[]>([| agent 0 |], (agentOf (agent 1) control.State).VisibleContacts)
+    Assert.NotEmpty(shotsFiredIn control)
+
+    let r = stepIdle (extracted (agent 0) w)
+    Assert.Empty((agentOf (agent 0) r.State).VisibleContacts)
+    Assert.Empty((agentOf (agent 1) r.State).VisibleContacts)
+    Assert.Empty(shotsFiredIn r)
+    Assert.Equal(0UL, r.State.Random.Draws)
+
+[<Fact>]
+let ``an Extracted agent never moves, whatever its Destination`` () =
+    let a = { Agent.create (agent 0) Friendly { X = 0; Y = 0 } with Extracted = true; Destination = Some { X = 5; Y = 0 } }
+    let mutable st = worldOf [ a ]
+
+    for _ in 1..5 do
+        st <- (stepIdle st).State
+
+    Assert.Equal({ X = 0; Y = 0 }, (agentOf (agent 0) st).Position)
+
+[<Fact>]
+let ``a lone Extracted agent still counts as alive, so the squad is not eliminated and keeps its leader`` () =
+    let a = Agent.create (agent 0) Friendly extractionCell
+    let w = missionWorld [||] [||] [| extractionArea |] [||] { FailOnFriendlyForceEliminated = true } [ a ]
+
+    let r = stepIdle w
+    Assert.True((agentOf (agent 0) r.State).Extracted)
+    Assert.Equal(InProgress, r.State.MissionOutcome)
+    Assert.Equal(Some(agent 0), Casualty.currentLeader r.State.Agents)
+    Assert.False(Casualty.inPlay (agentOf (agent 0) r.State))
+
+[<Fact>]
+let ``an agent reaching an extraction cell still counts there on its arrival tick, and no longer after`` () =
+    let reach = ReachArea(ObjectiveId.ofInt 1, extractionArea.Id)
+    let hold = HoldArea(ObjectiveId.ofInt 2, extractionArea.Id, 3)
+    let a = Agent.create (agent 0) Friendly extractionCell
+    let w = missionWorld [| reach; hold |] [||] [| extractionArea |] [||] noFailRules [ a ]
+
+    // Arrival tick: extracted this tick, yet its presence on the cell counts.
+    let r1 = stepIdle w
+    Assert.True((agentOf (agent 0) r1.State).Extracted)
+    Assert.Equal<ObjectiveId[]>([| ObjectiveId.ofInt 1 |], r1.State.CompletedObjectives)
+    Assert.Equal<(ObjectiveId * int)[]>([| ObjectiveId.ofInt 2, 1 |], r1.State.ObjectiveProgress)
+
+    // From the next tick it is out of play: the occupancy counter resets.
+    let r2 = stepIdle r1.State
+    Assert.Empty(r2.State.ObjectiveProgress)
+    Assert.DoesNotContain(ObjectiveId.ofInt 2, r2.State.CompletedObjectives)
+
+[<Fact>]
+let ``a command addressed to an Extracted agent is rejected RecipientExtracted, and a co-recipient still accepts`` () =
+    let w = extracted (agent 0) (worldOf [ Agent.create (agent 0) Friendly { X = 0; Y = 0 }; Agent.create (agent 1) Friendly { X = 0; Y = 1 } ])
+    let order = Command.moveToMany (CommandId.ofInt 1) 0L [ agent 0; agent 1 ] { X = 4; Y = 4 } Routine Standard
+    let r = stepWith [| order |] w
+
+    Assert.Contains(CommandRejected(CommandId.ofInt 1, RecipientExtracted(agent 0)), bodies r)
+    Assert.DoesNotContain(CommandAccepted(CommandId.ofInt 1, agent 0, { X = 4; Y = 4 }), bodies r)
+    Assert.Equal(None, (agentOf (agent 0) r.State).Order)
+    Assert.Contains(CommandAccepted(CommandId.ofInt 1, agent 1, { X = 4; Y = 4 }), bodies r)
+
+[<Fact>]
+let ``a cancel addressed to an Extracted agent is rejected RecipientExtracted`` () =
+    let w = extracted (agent 0) (worldOf [ Agent.create (agent 0) Friendly { X = 0; Y = 0 } ])
+    let r = stepWith [| Command.cancel (CommandId.ofInt 2) 0L (agent 0) (CommandId.ofInt 1) |] w
+
+    Assert.Contains(CommandRejected(CommandId.ofInt 2, RecipientExtracted(agent 0)), bodies r)
+
+[<Fact>]
+let ``an Extracted agent's cell does not displace a formation slot`` () =
+    // Slot (5,5) is held by an extracted agent: it holds no cell, so the slot
+    // is taken as is instead of being redirected to the nearest free cell.
+    let slotted (id: int) (at: Cell) (offset: Cell) =
+        { Agent.create (agent id) Friendly at with FormationOffset = Some offset }
+
+    let w =
+        worldOf [ slotted 0 { X = 0; Y = 0 } { X = 1; Y = 0 }
+                  Agent.create (agent 1) Friendly { X = 5; Y = 5 }
+                  slotted 2 { X = 0; Y = 1 } { X = -1; Y = 0 } ]
+
+    let order = Command.moveToMany (CommandId.ofInt 1) 0L [ agent 0; agent 2 ] { X = 4; Y = 5 } Routine Standard
+
+    let held = stepWith [| order |] w
+    Assert.NotEqual(Some { X = 5; Y = 5 }, (agentOf (agent 0) held.State).Destination)
+
+    let r = stepWith [| order |] (extracted (agent 1) w)
+    Assert.Equal(Some { X = 5; Y = 5 }, (agentOf (agent 0) r.State).Destination)
+    Assert.Equal(Some { X = 3; Y = 5 }, (agentOf (agent 2) r.State).Destination)
+
+[<Fact>]
+let ``extracted agents leave play deterministically across repeated runs`` () =
+    let run () =
+        let first = Agent.create (agent 0) Friendly extractionCell
+        let second = Agent.create (agent 1) Friendly { X = 5; Y = 2 }
+        let mutable st = (stepIdle (extractionWorld [ first; second ])).State
+        st <- (stepWith [| cmd 1 (agent 1) extractionCell |] st).State
+
+        for _ in 1..10 do
+            st <- (stepIdle st).State
+
+        Hashing.hash st
+
+    Assert.Equal(run (), run ())
+
+[<Fact>]
+let ``a detour may pass through the cell of an Extracted agent, which is not a parked blocker`` () =
+    // Two-row corridor (rows 0 and 1 open). Agent 1 is parked on the route at
+    // (2,0), so agent 0's only way round is through (2,1), where an extracted
+    // agent stands. An extracted agent holds no cell, so that detour exists.
+    let walls =
+        Terrain.build
+            bounds
+            [| for x in 0 .. bounds.Width - 1 do
+                   for y in 2 .. bounds.Height - 1 ->
+                       { Cell = { X = x; Y = y }
+                         Movement = Impassable
+                         Elevation = 0
+                         MoveCost = 0
+                         Opaque = false } |]
+            [||]
+
+    let w =
+        { occWorld [ { X = 0; Y = 0 }; { X = 2; Y = 0 }; { X = 2; Y = 1 } ] with Terrain = walls }
+        |> extracted (agent 2)
+
+    let mutable st = (stepWith [| cmd 1 (agent 0) { X = 4; Y = 0 } |] w).State
+    let mutable sawAbandoned = false
+
+    for _ in 1..30 do
+        let r = stepIdle st
+        sawAbandoned <- sawAbandoned || (bodies r |> Array.exists (function MovementAbandoned _ -> true | _ -> false))
+        st <- r.State
+
+    Assert.False(sawAbandoned)
+    Assert.Equal({ X = 4; Y = 0 }, (agentOf (agent 0) st).Position)

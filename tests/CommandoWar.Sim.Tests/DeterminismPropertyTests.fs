@@ -192,7 +192,9 @@ let ``after every tick of every generated case, distinct live agents hold distin
         | Ok outcome ->
             outcome.TickStates
             |> Array.forall (fun state ->
-                let cells = state.Agents |> Array.map (fun a -> a.Position)
+                // An agent that has left play by extraction holds no cell
+                // (TASK-084); the generated cases author no extraction area.
+                let cells = state.Agents |> Array.filter Casualty.inPlay |> Array.map (fun a -> a.Position)
                 Array.length (Array.distinct cells) = Array.length cells))
 
 // --- property 3: pathfinding correctness on random terrain ---------------

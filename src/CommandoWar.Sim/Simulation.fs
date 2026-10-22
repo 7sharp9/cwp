@@ -322,7 +322,7 @@ module Simulation =
     //   3. per-recipient checks in ascending AgentId order regardless of
     //      authoring order (stable entity ordering): unknown agent
     //      (UnknownAgent) -> hostile-side agent (UnauthorisedRecipient) ->
-    //      accept. CommandAccepted is emitted here, at acceptance, BEFORE the
+    //      extracted agent (RecipientExtracted, TASK-084) -> accept. CommandAccepted is emitted here, at acceptance, BEFORE the
     //      destination reaches the agent, per 12.1.
     //
     // TASK-027 (backlog B-016): command intake no longer writes
@@ -420,6 +420,8 @@ module Simulation =
                                     | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
                                     | Some idx when agents.[idx].Side = Hostile ->
                                         emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
+                                    | Some idx when agents.[idx].Extracted ->
+                                        emit (CommandRejected(cmd.Id, RecipientExtracted recipient)) s
                                     | Some idx ->
                                         // CommandAccepted's Cell reports the
                                         // move-shaped target, or (Suppress
@@ -458,6 +460,8 @@ module Simulation =
                                     | None -> emit (CommandRejected(cmd.Id, UnknownAgent recipient)) s
                                     | Some idx when agents.[idx].Side = Hostile ->
                                         emit (CommandRejected(cmd.Id, UnauthorisedRecipient recipient)) s
+                                    | Some idx when agents.[idx].Extracted ->
+                                        emit (CommandRejected(cmd.Id, RecipientExtracted recipient)) s
                                     | Some idx when not (holdsCommand agents.[idx] target) ->
                                         emit (CommandRejected(cmd.Id, UnknownTargetCommand(recipient, target))) s
                                     | Some idx ->
@@ -932,9 +936,11 @@ module Simulation =
             // resolution (`Appraisal.resolveFormationTarget`'s occupancy
             // check). `Position` does not change within this phase (only
             // Navigation, later, mutates it), so this is stable regardless
-            // of how far the loop has progressed.
+            // of how far the loop has progressed. An extracted agent holds no
+            // cell (TASK-084, backlog B-083); a corpse still counts here.
             let occupied =
-                agents |> Array.choose (fun x -> if x.Id = a.Id then None else Some x.Position)
+                agents
+                |> Array.choose (fun x -> if x.Id = a.Id || x.Extracted then None else Some x.Position)
 
             match a.Order with
             | None -> agents.[i] <- { a with SuppressionBand = newBand; RecentlyWounded = false }
@@ -1183,7 +1189,7 @@ module Simulation =
                         if o.AsGroup then
                             let occupied =
                                 agents
-                                |> Array.choose (fun x -> if x.Id = a.Id then None else Some x.Position)
+                                |> Array.choose (fun x -> if x.Id = a.Id || x.Extracted then None else Some x.Position)
 
                             Appraisal.resolveFormationTarget terrain occupied a.FormationOffset target
                         else
@@ -1486,7 +1492,10 @@ module Simulation =
                 // (left as-is, not cleared: nothing reads it while non-Alive,
                 // the "an undelivered order does not clear a Destination it
                 // didn't produce" idiom).
-                if not (Casualty.isAlive a.Vitals) then
+                //
+                // TASK-084 (backlog B-083): an extracted agent is out of play
+                // and never moves either, whatever its `Destination`.
+                if not (Casualty.inPlay a) then
                     Idle
                 else
                     match a.Destination with
@@ -1586,11 +1595,14 @@ module Simulation =
         // changes what OTHER agents may enter, never what the corpse itself
         // does. `Pathfinding.fs` has no occupancy concept at all and needs
         // none for this: a live agent simply treats the corpse's cell as
-        // free, the same as any other passable cell.
+        // free, the same as any other passable cell. An `Extracted` agent is
+        // excluded for the same reason (TASK-084, backlog B-083): it is
+        // `Idle` for good and holds no cell, so a later survivor may enter the
+        // extraction cell it stands on.
         let occupantOf: Map<Cell, int> =
             agents
             |> Array.mapi (fun i a -> i, a)
-            |> Array.choose (fun (i, a) -> if Casualty.isAlive a.Vitals then Some(a.Position, i) else None)
+            |> Array.choose (fun (i, a) -> if Casualty.inPlay a then Some(a.Position, i) else None)
             |> Map.ofArray
 
         // Every currently `Alive` agent's cell that holds no active order at
@@ -1605,7 +1617,7 @@ module Simulation =
         // iteration order) explicit rather than incidental.
         let parkedCells: Cell[] =
             s.Agents
-            |> Array.choose (fun a -> if Casualty.isAlive a.Vitals && a.Destination.IsNone then Some a.Position else None)
+            |> Array.choose (fun a -> if Casualty.inPlay a && a.Destination.IsNone then Some a.Position else None)
 
         // TASK-076 (backlog B-076): every `Advancing` agent's own already-
         // computed next cell (Pass 1's `intents`, fixed before Pass 3 runs,
@@ -2202,6 +2214,12 @@ module Simulation =
             let extractionCells = s.ExtractionAreas |> Array.map (fun a -> a.Cell)
             let extractedNow = ResizeArray<AgentId>()
 
+            // Objective occupancy reads this snapshot, taken before step (1)
+            // flags anyone (TASK-084, backlog B-083): an agent that reaches an
+            // extraction cell this tick still counts there on this tick, and
+            // from the next tick on, being out of play, it no longer does.
+            let presentAtStart = s.Agents |> Array.filter Casualty.inPlay
+
             let agents =
                 s.Agents
                 |> Array.map (fun a ->
@@ -2223,8 +2241,8 @@ module Simulation =
 
             let agentsById = agents |> Array.map (fun a -> a.Id, a) |> Map.ofArray
 
-            let anyAliveFriendlyAt (cell: Cell) : bool =
-                agents |> Array.exists (fun a -> a.Side = Friendly && Casualty.isAlive a.Vitals && a.Position = cell)
+            let anyFriendlyInPlayAt (cell: Cell) : bool =
+                presentAtStart |> Array.exists (fun a -> a.Side = Friendly && a.Position = cell)
 
             // Resolves against `ObjectiveAreas ++ ExtractionAreas` only. An
             // objective authored to reference a `ResupplyAreas` id (the
@@ -2265,7 +2283,7 @@ module Simulation =
             // ever carries genuinely nonzero in-progress occupancy.
             let advanceOccupancy (id: ObjectiveId) (cell: Cell) (ticks: int) =
                 let soFar = progressById |> Map.tryFind id |> Option.defaultValue 0
-                let soFar' = if anyAliveFriendlyAt cell then soFar + 1 else 0
+                let soFar' = if anyFriendlyInPlayAt cell then soFar + 1 else 0
 
                 if soFar' >= ticks then
                     markCompleted id
@@ -2279,7 +2297,7 @@ module Simulation =
                     match o with
                     | ReachArea(_, area) ->
                         match areaCell area with
-                        | Some cell when anyAliveFriendlyAt cell -> markCompleted id
+                        | Some cell when anyFriendlyInPlayAt cell -> markCompleted id
                         | _ -> ()
                     | HoldArea(_, area, ticks) ->
                         areaCell area |> Option.iter (fun cell -> advanceOccupancy id cell ticks)

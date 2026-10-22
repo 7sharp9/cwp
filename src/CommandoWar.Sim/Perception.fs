@@ -108,15 +108,18 @@ module Perception =
     /// A non-`Alive` `observer` sees nothing (TASK-078, backlog B-078):
     /// otherwise a corpse kept refreshing its side's shared picture at full
     /// `Confidence` for as long as an enemy stayed in its line of sight.
+    /// An `Extracted` agent is out of play (TASK-084, backlog B-083): it
+    /// neither observes nor is observed, and an existing contact on it ages
+    /// out through the ordinary bands.
     let visibleContactsFor (terrain: Terrain) (observer: AgentState) (agents: AgentState[]) : AgentId[] =
-        if not (Casualty.isAlive observer.Vitals) then
+        if not (Casualty.inPlay observer) then
             [||]
         else
             agents
             |> Array.choose (fun other ->
                 if
                     other.Side <> observer.Side
-                    && Casualty.isAlive other.Vitals
+                    && Casualty.inPlay other
                     && chebyshev observer.Position other.Position <= PerceptionConfig.SightRange
                     && Sight.visible terrain observer.Position other.Position
                 then

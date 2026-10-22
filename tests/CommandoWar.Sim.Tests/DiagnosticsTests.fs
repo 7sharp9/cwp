@@ -439,6 +439,7 @@ let ``frameOf derives a Reserved overlay for the converging-routes entry's conte
         | AgentAmmo _
         | Divergence _
         | AgentRadioLost _
+        | AgentOutOfPlay _
         | AgentPendingDelivery _
         | AgentFormationSlot _
         | MissionStatus _ -> None) with
@@ -496,6 +497,7 @@ let ``frameOf derives an AgentFormationSlot overlay per formationed agent for th
             | AgentAmmo _
             | Divergence _
             | AgentRadioLost _
+            | AgentOutOfPlay _
             | AgentPendingDelivery _
             | MissionStatus _ -> None)
         |> Array.sortBy fst
@@ -573,6 +575,7 @@ let ``frameOf derives an Obstructed overlay for the swap-standoff entry's blocke
             | AgentAmmo _
             | Divergence _
             | AgentRadioLost _
+            | AgentOutOfPlay _
             | AgentPendingDelivery _
             | AgentFormationSlot _
             | MissionStatus _ -> None)
@@ -624,6 +627,7 @@ let ``frameOf derives an Abandoned overlay for the stalled-order-abandoned entry
         | AgentAmmo _
         | Divergence _
         | AgentRadioLost _
+        | AgentOutOfPlay _
         | AgentPendingDelivery _
         | AgentFormationSlot _
         | MissionStatus _ -> None) with
@@ -680,6 +684,7 @@ let ``frameOf derives a Rerouted overlay for the chokepoint-detour entry's detou
         | AgentAmmo _
         | Divergence _
         | AgentRadioLost _
+        | AgentOutOfPlay _
         | AgentPendingDelivery _
         | AgentFormationSlot _
         | MissionStatus _ -> None) with
@@ -748,6 +753,7 @@ let ``frameOf derives a KnownContact overlay for the perception-contact entry's 
             | AgentAmmo _
             | Divergence _
             | AgentRadioLost _
+            | AgentOutOfPlay _
             | AgentPendingDelivery _
             | AgentFormationSlot _
             | MissionStatus _ -> None)
@@ -840,6 +846,7 @@ let ``frameOf derives an UndeliveredOrder overlay for the lost-comms entry's dro
             | AgentAmmo _
             | Divergence _
             | AgentRadioLost _
+            | AgentOutOfPlay _
             | AgentPendingDelivery _
             | AgentFormationSlot _
             | MissionStatus _ -> None)
@@ -1525,6 +1532,7 @@ let ``Diagnostics.frame renders a radio-destroyed and an in-flight-order agent v
         quiet.Overlays,
         (function
         | AgentRadioLost _
+        | AgentOutOfPlay _
         | AgentPendingDelivery _ -> true
         | _ -> false)
     )
@@ -1557,6 +1565,9 @@ let ``frameOf derives an in-progress MissionStatus overlay while the demolition-
         Assert.Equal<(ObjectiveId * int)[]>([| ObjectiveId.ofInt 1, 1 |], inProgress)
     | None -> Assert.Fail($"expected one MissionStatus overlay, got {tick3.Overlays}")
 
+    // Sparse: nobody has extracted yet, so no AgentOutOfPlay overlay (TASK-084).
+    Assert.DoesNotContain(tick3.Overlays, (function AgentOutOfPlay _ -> true | _ -> false))
+
     Assert.Equal(golden "demolition-success-tick-003.ascii.txt", DiagnosticRender.Ascii tick3)
     Assert.Equal(golden "demolition-success-tick-003.svg", DiagnosticRender.Svg tick3)
 
@@ -1584,6 +1595,8 @@ let ``frameOf derives a Succeeded MissionStatus overlay once the demolition-succ
     | None -> Assert.Fail($"expected one MissionStatus overlay, got {tick14.Overlays}")
 
     Assert.Contains(tick14.Events, fun (e: EventMarker) -> e.Kind = "mission-succeeded")
+    // The extracted agent is shown out of play on the extraction cell (TASK-084).
+    Assert.Contains(AgentOutOfPlay(AgentId.ofInt 0, { X = 10; Y = 0 }), tick14.Overlays)
 
     Assert.Equal(golden "demolition-success-tick-014.ascii.txt", DiagnosticRender.Ascii tick14)
     Assert.Equal(golden "demolition-success-tick-014.svg", DiagnosticRender.Svg tick14)
@@ -1639,6 +1652,19 @@ let ``bridgehead-succeeded reaches MissionOutcome Succeeded at tick 215 (byte-eq
     assertMissionStatus InProgress [| ObjectiveId.ofInt 2 |] frames.[214]
     assertMissionStatus Succeeded [| ObjectiveId.ofInt 2; ObjectiveId.ofInt 3 |] tick215
     Assert.Contains(tick215.Events, fun (e: EventMarker) -> e.Kind = "mission-succeeded")
+
+    // Agents 1, 2 and 5 are all out of play on the extraction cell (4,9), and
+    // agent 3 on (1,9): extracted agents share a cell (TASK-084, backlog B-083).
+    let outOfPlay =
+        tick215.Overlays
+        |> Array.choose (function
+            | AgentOutOfPlay(a, at) -> Some(AgentId.value a, at)
+            | _ -> None)
+
+    Assert.Equal<(int * Cell)[]>(
+        [| 1, { X = 4; Y = 9 }; 2, { X = 4; Y = 9 }; 3, { X = 1; Y = 9 }; 5, { X = 4; Y = 9 } |],
+        outOfPlay
+    )
 
     Assert.Equal(golden "bridgehead-succeeded-tick-215.ascii.txt", DiagnosticRender.Ascii tick215)
     Assert.Equal(golden "bridgehead-succeeded-tick-215.svg", DiagnosticRender.Svg tick215)

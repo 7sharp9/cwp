@@ -11,20 +11,23 @@ project:
 # docs/12_PROGRESS_LEDGER.md (index) and docs/ledger/ (detail files); the work
 # items are in docs/11_BACKLOG.md and tasks/.
 active_work:
-  selected_task: TASK-083
-  task_file: tasks/TASK-083-NO-ADVANCE-UNDER-FIRE.md
+  selected_task: TASK-084
+  task_file: tasks/TASK-084-EXTRACTED-AGENTS-LEAVE-PLAY.md
   owner: Dave
   blocked: false
   blockers: []
   updated: 2026-10-22
   note: >-
-    No task is active. The last task, TASK-083 (backlog B-082), is `done`.
+    TASK-084 (backlog B-083, extracted agents leave play) is in `review`. It
+    is self-verified and not yet accepted: CI has not run it, and Dave may
+    overrule its Decision 4 (a command-intake `RecipientExtracted` rejection
+    instead of a new refusal reason).
 
     The G4 gate is `pending` and the call is Dave's. All twelve criteria in
     `docs/07` section 9 are met, replay evidence for a completed mission is in
     the corpus (`bridgehead-succeeded`), and the known defects are triaged in
-    `docs/15_G4_DEFECT_TRIAGE.md`: no blocker, no major, 9 minor, 7 deliberate
-    limitations and 6 items never verified in the build environment. No blocker
+    `docs/15_G4_DEFECT_TRIAGE.md`: no blocker, no major, 8 minor, 8 deliberate
+    limitations and 7 items never verified in the build environment. No blocker
     is recorded, which is not proof that none exists, because the exported
     build, host content lookup and session recording have never been run.
 
@@ -32,12 +35,6 @@ active_work:
     `docs/14` section 2 checklist is open and is Dave's to run. Every remaining
     open item in `docs/15` is a decision for Dave (`docs/15` section 6) or needs
     the Godot SDK, which the cloud container does not have.
-
-    Next: D-02 (backlog B-083, extracted agents leave play). It is `proposed`;
-    the draft is `tasks/TASK-084-EXTRACTED-AGENTS-LEAVE-PLAY.md`. It changes
-    the `docs/04` section 20 cell invariant, so Dave accepts it before it is
-    selected, and decides its Decision 4 (the refusal reason for an order to an
-    extracted agent, which may bump `Canonical.FormatVersion`).
 
     CI is the authoritative test run: the container has no xunit or FsCheck
     packages, so `dotnet test` runs only on GitHub Actions.

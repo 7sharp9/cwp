@@ -91,6 +91,14 @@ module Casualty =
         | Incapacitated _
         | Dead -> false
 
+    /// Whether an agent is physically present on the map: `Alive` and not yet
+    /// `Extracted` (TASK-084, backlog B-083). An extracted agent keeps its
+    /// `Position` but holds no cell, moves, perceives, is perceived, fires and
+    /// is targeted by nobody. Readers that mean "counts as alive" (the
+    /// squad-eliminated checks, `currentLeader`, `ExtractAgents`) keep
+    /// `isAlive`: an extracted agent is still a surviving member of the squad.
+    let inPlay (a: AgentState) : bool = isAlive a.Vitals && not a.Extracted
+
     /// The current squad leader (TASK-045, backlog B-031; `docs/05` section
     /// 17's "a simple replacement rule"): the lowest-`AgentId` `Alive`
     /// `Friendly` agent, or `None` if every friendly is down. A pure derived

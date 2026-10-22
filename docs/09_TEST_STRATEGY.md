@@ -36,7 +36,8 @@ These areas are covered by focused facts over `Simulation.step` in
 **Command validation (TASK-020, backlog B-014; `docs/04` section 12.1).** A
 multi-recipient accept emits one `CommandAccepted` per recipient in ascending
 `AgentId` order. A `Hostile`-side recipient is rejected `UnauthorisedRecipient`
-while a `Friendly` co-recipient still accepts. An empty `Recipients` list is
+while a `Friendly` co-recipient still accepts; an `Extracted` recipient is
+rejected `RecipientExtracted` the same way. An empty `Recipients` list is
 rejected `EmptyRecipients`. A repeated recipient is rejected
 `DuplicateRecipient` as a whole command. Two same-tick commands sharing a
 `CommandId` are both rejected `DuplicateCommandId`, with a byte-identical result

@@ -340,6 +340,10 @@ module AppraisalDemo =
                         (CommandId.value command)
                         dueTick
                 )
+            | AgentOutOfPlay(agent, at) ->
+                // TASK-084: not yet surfaced in this disposable P3 demo (it
+                // predates the task); no agent extracts in the committed frame.
+                unhandled.Add(sprintf "out of play agent %d (%d,%d)" (AgentId.value agent) at.X at.Y)
             | AgentFormationSlot(agent, at, resolved) ->
                 // TASK-059: not yet surfaced in this disposable P3 demo (it
                 // predates the task); exposed-approach authors no formation,
