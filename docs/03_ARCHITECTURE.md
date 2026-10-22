@@ -46,8 +46,8 @@ Do not split further before a task proves the need.
 src/
   CommandoWar.Sim/             F# authoritative simulation library
   CommandoWar.Headless/        F# CLI and replay runner
-  CommandoWar.Client.Godot/    disposable framework spike
-  CommandoWar.Client.Mibo/     disposable framework spike
+  CommandoWar.Client.Godot/    production client (C# host, F# client core)
+  CommandoWar.Client.Mibo/     retained spike evidence only (ADR-0003)
 
 tests/
   CommandoWar.Sim.Tests/       unit, property, scenario, replay tests
