@@ -1,6 +1,6 @@
 # Replay corpus entry: bridgehead-failed
 
-The real Bridgehead mission (content/scenarios/bridgehead.cwscenario, seed 20260920) played to MissionOutcome = Failed with ordinary MoveTo orders only (TASK-077, backlog B-077): one reckless six-agent frontal charge at tick 1 toward (16,4)/(10,6)/(11,6)/(16,7)/(13,2)/(10,5). Several orders are Refused (RouteTooExposed) once threats become known, but those agents are already inside weapon range; every friendly is down by tick 84 and MissionFailed fires. The extraction objective (id 3) also reports complete that tick, vacuously, since no friendly is alive to extract -- current behaviour, recorded as a defect in TASK-077.
+The real Bridgehead mission (content/scenarios/bridgehead.cwscenario, seed 20260920) played to MissionOutcome = Failed with ordinary MoveTo orders only (TASK-077, backlog B-077): one reckless six-agent frontal charge at tick 1 toward (16,4)/(10,6)/(11,6)/(16,7)/(13,2)/(10,5). Several orders are Refused (RouteTooExposed) once threats become known, but those agents are already inside weapon range; every friendly is down by tick 84 and MissionFailed fires. The extraction objective (id 3) stays incomplete: an ExtractAgents objective needs at least one agent extracted (backlog B-079).
 
 Regenerate every corpus hash table from the repository root:
 

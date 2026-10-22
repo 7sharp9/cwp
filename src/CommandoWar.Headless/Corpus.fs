@@ -25,11 +25,11 @@ open CommandoWar.Sim
 ///
 /// This module is an OBSERVER over `Replay` / `Divergence`, exactly as
 /// `DiagnosticRender` is over `Diagnostics`: it adds no authoritative state and
-/// nothing in `Simulation.step` references it. The non-fixture entries' initial
-/// states are focused `RawScenario` vectors (the `PathDemo` / `LosDemo`
+/// nothing in `Simulation.step` references it. Most non-fixture entries'
+/// initial states are focused `RawScenario` vectors (the `PathDemo` / `LosDemo`
 /// precedent), validated through `Scenario.validate` and instantiated through
-/// `World.ofScenario`; they are not authoritative game content and need no
-/// on-disk format (backlog B-024).
+/// `World.ofScenario`; the `bridgehead-*` entries load the real
+/// `bridgehead.cwscenario` content embedded in `cwheadless`.
 [<RequireQualifiedAccess>]
 module Corpus =
 
@@ -65,8 +65,9 @@ module Corpus =
 
     // --- shared fixture builder (TASK-036, backlog B-049) ------------------
 
-    /// Deterministic seed for the eleven builder-authored scenarios. No
-    /// gameplay phase draws from the stream; the value only has to be stable.
+    /// Deterministic seed for the builder-authored scenarios (every entry
+    /// except `spike-fixture` and the `bridgehead-*` entries). The value only
+    /// has to be stable.
     [<Literal>]
     let private Seed = 20260904UL
 
@@ -104,14 +105,14 @@ module Corpus =
           Discipline: int
           CommunicationAvailable: bool
           /// References `StandardUnitType` (TASK-049, backlog B-058) for
-          /// every entry here: none of the 16 committed corpus entries needs
-          /// a non-default movement speed, so this builder authors one
+          /// every entry here: no builder-authored entry needs a
+          /// non-default movement speed, so this builder authors one
           /// implicit unit type and never varies it (the `DemoScenario`
           /// precedent is where a slower speed actually matters).
           UnitType: string
           /// References a `ScenarioSpec.Formations` entry (TASK-059,
           /// backlog B-011d), or blank for every agent that is not in a
-          /// formation -- every one of the 16 pre-existing entries.
+          /// formation.
           FormationId: string
           /// The index into the referenced formation's slot offsets.
           /// Ignored when `FormationId` is blank.
@@ -969,7 +970,7 @@ module Corpus =
         [| { Name = "spike-fixture"
              Description =
                "The framework-spike shared fixture (Setup.sixAgentWorld, 32 x 32, seed 20260902): agent 3 is "
-               + "ordered to (20,14) at tick 1. Mirrors content/fixtures/spike-fixture.cwlog and SPIKE-FIXTURE.md; "
+               + "ordered to (20,14) at tick 1. Mirrors content/replays/spike-fixture.cwlog and content/fixtures/SPIKE-FIXTURE.md; "
                + "CorpusTests cross-checks this table against Fixture.run () so it is not an independent re-pin."
              InitialStateNote = "Fixture.initialState () (Setup.sixAgentWorld, 32 x 32, seed 20260902)"
              InitialState = Fixture.initialState
@@ -987,8 +988,8 @@ module Corpus =
            { Name = "blocked-goal"
              Description =
                "One friendly agent at (1,4) ordered to (5,4), a passable cell ringed by impassable cells. "
-               + "Pathfinding returns NoPath, so the executor emits MovementBlocked and clears the destination; "
-               + "the remaining ticks are rest (the agent does not retry)."
+               + "Pathfinding returns NoPath, so Appraisal returns Unable(NoKnownRoute) on tick 1 and no Destination "
+               + "is written; the remaining ticks are rest (the agent does not retry)."
              InitialStateNote = "Corpus blocked-goal scenario (8 x 8, seed 20260904)"
              InitialState = fun () -> worldOfSpec blockedGoalSpec
              TickCount = 5L
@@ -1034,21 +1035,17 @@ module Corpus =
            { Name = "perception-contact"
              Description =
                "One friendly agent at (1,5) ordered east to (9,5); a stationary hostile agent 1 at (9,1) behind an "
-               + "opaque impassable wall at x=6, rows 0..3. The hostile is inside PerceptionConfig.SightRange from "
-               + "the start but line of sight is blocked; once the friendly clears the wall the Perception phase "
-               + "emits ContactObserved and the Tactical-knowledge phase adds the contact to the shared squad "
-               + "picture (WorldState.TacticalKnowledge). The first corpus entry with an "
-               + "enemy deployment (TASK-026, backlog B-015; the 'Unknown threat' shape, docs/05 section 16). The "
-               + "order is issued on tick 1, before the contact is known, so it is Accepted at appraisal and not "
-               + "re-judged when the contact appears (TASK-028; reappraisal on a knowledge change is B-021). "
-               + "Re-pinned by TASK-045 (backlog B-031; Canonical.FormatVersion 9 -> 10, AgentState.Vitals added): "
-               + "the same wall gap that opens line of sight for ContactObserved also brings both agents into "
-               + "CombatConfig.WeaponRange, so Combat (phase 8, after Perception) engages the same tick and both "
-               + "take real fire -- the friendly is Incapacitated by tick 8, and since it is the squad's only "
-               + "agent, leadership transfers to None the same tick (LeadershipTransferred). The entry's own "
-               + "subject, ContactObserved/KnownContact at tick 5, is unaffected (Perception always runs before "
-               + "Combat); the tick-5 golden simply gains the friendly's already-wounded AgentVitals entry "
-               + "alongside it, from that same tick's own combat."
+               + "opaque impassable wall at x=6, rows 0..3. The hostile is inside PerceptionConfig.SightRange from the "
+               + "start but line of sight is blocked; once the friendly clears the wall the Perception phase emits "
+               + "ContactObserved and the Tactical-knowledge phase adds the contact to the shared squad picture "
+               + "(WorldState.TacticalKnowledge). The entry with an enemy deployment and the 'Unknown threat' shape "
+               + "(docs/05 section 16; TASK-026). The order is issued on tick 1, before the contact is known, so it is "
+               + "Accepted at appraisal; the knowledge change reappraises it on tick 5 (still Accepted) and again "
+               + "after each wound. The same wall gap that opens line of sight also brings both agents into "
+               + "CombatConfig.WeaponRange, so Combat (after Perception) engages the same tick and both take real "
+               + "fire: the friendly is Incapacitated by tick 8, and since it is the squad's only agent, leadership "
+               + "transfers to None the same tick (LeadershipTransferred). The tick-5 golden shows ContactObserved and "
+               + "KnownContact together with the friendly's already-wounded AgentVitals."
              InitialStateNote = "Corpus perception-contact scenario (12 x 8, seed 20260904, 1 friendly + 1 hostile)"
              InitialState = fun () -> worldOfSpec perceptionContactSpec
              TickCount = 14L
@@ -1057,11 +1054,11 @@ module Corpus =
              Description =
                "One friendly agent 0 at (1,4) with CommunicationAvailable = false (an authored comms blackout), "
                + "ordered east to (6,4) on tick 1. Command intake accepts the order (CommandAccepted), but the "
-               + "Communication phase cannot reach the recipient, so it emits OrderUndelivered and drops the order: "
-               + "no Destination is written and the agent never moves. The 'Lost communication' vertical-slice "
-               + "scenario (docs/05 section 16; TASK-027, backlog B-016). Because the order is dropped, no "
-               + "AgentState.Order is written and the Appraisal phase (TASK-028) never runs on it: this is the one "
-               + "entry with no OrderAppraised event."
+               + "Communication phase cannot reach the recipient, so it emits OrderUndelivered and drops the order: no "
+               + "Destination is written and the agent never moves. The 'Lost communication' vertical-slice scenario "
+               + "(docs/05 section 16; TASK-027, backlog B-016). Because the order is dropped, no AgentState.Order is "
+               + "written and the Appraisal phase never runs on it: this is the only entry that accepts an order and "
+               + "never appraises it."
              InitialStateNote = "Corpus lost-comms scenario (8 x 8, seed 20260904, 1 friendly, comms blackout)"
              InitialState = fun () -> worldOfSpec lostCommsSpec
              TickCount = 4L
@@ -1071,18 +1068,15 @@ module Corpus =
                "Two friendlies ordered along the same exposed approach past a stationary hostile (a machine-gun "
                + "position) the squad sees from the start: agent 0 (Discipline 1) at (1,3) -> (11,3), agent 1 "
                + "(Discipline 6) at (1,5) -> (11,5), both on tick 1, both routes the same distance past the known "
-               + "threat at (10,4). The divergence is discipline alone: on tick 1 the Appraisal phase (12.5) "
-               + "Refuses agent 0's order (RouteTooExposed, no Destination, it never moves) and Accepts agent 1's "
-               + "(Destination written, it walks the approach). The G3 evidence scenario (docs/07 section 9 "
-               + "criterion 2; TASK-028, backlog B-017; Canonical.FormatVersion 4). Re-pinned by TASK-045 (backlog "
-               + "B-031; Canonical.FormatVersion 9 -> 10, AgentState.Vitals added): not behaviour-neutral past "
-               + "tick 1 -- agent 1, walking its Accepted route, closes within combat range of the stationary "
-               + "hostile and both trade real fire. Re-pinned by TASK-083 (backlog B-082): agent 1 is Refused on "
-               + "tick 3 (RouteTooExposed, hostile 2) once the hostile has it in range and the route would close "
-               + "on it, and stops at (3,5); on tick 5 the hostile's SuppressionBand latches, both orders are "
-               + "reappraised Accepted, agent 1 steps once and is incapacitated (tick 5), the hostile follows "
-               + "(tick 7), and agent 0 (Refused until tick 5) then walks the approach. The tick-1 divergence this "
-               + "entry exists to prove happens before any shot is fired and is unaffected."
+               + "threat at (10,4). The divergence is discipline alone: on tick 1 the Appraisal phase (12.5) Refuses "
+               + "agent 0's order (RouteTooExposed, no Destination, it never moves) and Accepts agent 1's (Destination "
+               + "written, it walks the approach). The G3 evidence scenario (docs/07 section 9 criterion 2; TASK-028, "
+               + "backlog B-017). The tick-1 divergence happens before any shot is fired. Afterwards agent 1 closes "
+               + "within combat range of the stationary hostile and both trade real fire: agent 1 is Refused on tick 3 "
+               + "(RouteTooExposed, hostile 2) once the hostile has it in range and the route would close on it (the "
+               + "closing-threat rule, backlog B-082), and stops at (3,5); on tick 5 the hostile's SuppressionBand "
+               + "latches, both orders are reappraised Accepted, agent 1 steps once and is incapacitated (tick 5), the "
+               + "hostile follows (tick 7), and agent 0 (Refused until tick 5) then walks the approach."
              InitialStateNote =
                "Corpus exposed-approach scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / 6 + 1 hostile)"
              InitialState = fun () -> worldOfSpec exposedApproachSpec
@@ -1093,19 +1087,13 @@ module Corpus =
                "The exposed-approach geometry (friendly 0, Discipline 1, at (1,3) -> (11,3), hostile 2 at (10,4)) "
                + "plus a second friendly at (10,1) given a Suppress order against hostile 2 on the same tick 1. "
                + "Friendly 0 is Refused RouteTooExposed at tick 1, exactly as in exposed-approach; friendly 1's "
-               + "Suppressing commitment keeps hostile 2 under fire every tick, and by tick 6 (worst case: every "
-               + "shot a miss) hostile 2's SuppressionBand latches, the new threat-suppression-change reappraisal "
+               + "Suppressing commitment keeps hostile 2 under fire every tick, and by tick 6 even in the worst case "
+               + "(every shot a miss) hostile 2's SuppressionBand latches, the threat-suppression-change reappraisal "
                + "trigger fires, Appraisal.routeExposure zeroes hostile 2's contribution, and friendly 0's order "
-               + "reappraises Accepted and starts walking. Proves docs/07 section 8 steps 5-6 end to end (TASK-037, "
-               + "a thin B-030 slice pulled forward as P3 decision-support; docs/07 section 9 criterion 4, 'a "
-               + "player action can predictably change an appraisal outcome'; Canonical.FormatVersion 8). "
-               + "Re-pinned by TASK-045 (backlog B-031; Canonical.FormatVersion 9 -> 10, AgentState.Vitals added): "
-               + "friendly 1 and hostile 2 trade real fire at close range and both take genuine wound consequences "
-               + "-- the exposed-approach re-pin note's own analysis applies here identically (same geometry). The "
-               + "docs/07 section 8 steps 5-6 mechanic this entry proves is unaffected: hostile 2's own "
-               + "Suppression/SuppressionBand still latches from incoming fire regardless of which friendly lands "
-               + "it, still zeroes its route-exposure contribution, and friendly 0's order still reappraises "
-               + "Accepted."
+               + "reappraises Accepted and starts walking. Proves docs/07 section 8 steps 5-6 end to end (TASK-037; "
+               + "docs/07 section 9 criterion 4, 'a player action can predictably change an appraisal outcome'). "
+               + "Friendly 1 and hostile 2 also trade real fire at close range and both take wounds; hostile 2's "
+               + "SuppressionBand latches from incoming fire whichever friendly lands it."
              InitialStateNote =
                "Corpus suppress-relieves-exposure scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile)"
              InitialState = fun () -> worldOfSpec suppressRelievesExposureSpec
@@ -1117,20 +1105,16 @@ module Corpus =
                + "Discipline 1, at (1,3) -> (11,3), hostile 2 at (10,4), friendly 1 at (10,1) suppressing hostile 2) "
                + "plus a reissue of friendly 0's original (11,3) order on tick 8, once it is already mid-route under "
                + "the automatic reappraisal. Steps 1-3: friendly 0 is Refused RouteTooExposed threat-agent-2 at tick "
-               + "1. Step 4: the refusal's DecisionReason is a named, structured reason, never a raw score. Steps "
-               + "5-6: friendly 1's Suppressing order latches hostile 2's SuppressionBand, Appraisal.routeExposure "
-               + "zeroes its contribution, and friendly 0's order reappraises Accepted at tick 4. Step 7: the player "
-               + "reissues the identical (11,3) intent at tick 8. Step 8: it is Accepted again, with a fresh "
-               + "CommitmentEstablished and no event for the superseded commitment -- consistent with the automatic "
-               + "reappraisal's earlier Accepted (the Adapted/stage-5 half of 'accepts or adapts' is out of scope, "
-               + "no such disposition exists yet). G3's headline evidence item (docs/07 section 9; TASK-038, "
-               + "backlog B-023). Re-pinned by TASK-045 (backlog B-031; Canonical.FormatVersion 9 -> 10, "
-               + "AgentState.Vitals added): the same friendly-1/hostile-2 close-range fire as "
-               + "suppress-relieves-exposure now wounds both -- friendly 1 is Incapacitated by tick 4 (its own "
-               + "Suppressing order then appraises Unable(CriticallyWounded)), hostile 2 follows at tick 5. Steps "
-               + "1-4 and 7-8 (the reissue, the fresh CommitmentEstablished, arrival at tick 13) are unaffected: "
-               + "hostile 2's Suppression/SuppressionBand still latches from either friendly's fire, still zeroes "
-               + "its contribution for friendly 0 (steps 5-6), and friendly 0 stays Alive and unwounded throughout."
+               + "1. Step 4: the refusal's DecisionReason is a named, structured reason, never a raw score. Steps 5-6: "
+               + "friendly 1's Suppressing order latches hostile 2's SuppressionBand, Appraisal.routeExposure zeroes "
+               + "its contribution, and friendly 0's order reappraises Accepted at tick 4. Step 7: the player reissues "
+               + "the identical (11,3) intent at tick 8. Step 8: it is Accepted again, with a fresh "
+               + "CommitmentEstablished and no event for the superseded commitment. The Adapted (stage 5) half of "
+               + "'accepts or adapts' is not built. G3's headline evidence item (docs/07 section 9; TASK-038, backlog "
+               + "B-023). Friendly 1 is Incapacitated by tick 4 (its Suppressing order then appraises "
+               + "Unable(CriticallyWounded)) and hostile 2 follows at tick 5; hostile 2's SuppressionBand still "
+               + "latches from either friendly's fire. Friendly 0 takes one hit on tick 5 and stays Alive (650/1000 "
+               + "health) and arrives at (11,3) at tick 13."
              InitialStateNote =
                "Corpus canonical-refusal-and-correction scenario (12 x 8, seed 20260904, 2 friendlies Discipline 1 / default + 1 hostile)"
              InitialState = fun () -> worldOfSpec canonicalRefusalAndCorrectionSpec
@@ -1217,9 +1201,8 @@ module Corpus =
              Description =
                "One friendly agent at (0,0) ordered east to (4,0); a second friendly agent sits idle, "
                + "permanently, on the only route at (2,0), row y=1 walled off the full map width so no "
-               + "detour exists (TASK-065, backlog B-065; walled TASK-070, backlog B-069, so it keeps "
-               + "demonstrating genuine abandonment once open terrain would otherwise let agent 0 detour -- "
-               + "see chokepoint-detour below). Agent 0 advances to (1,0) on tick 1, then freezes every tick "
+               + "detour exists (TASK-065, backlog B-065; the wall keeps the entry demonstrating genuine "
+               + "abandonment, where open terrain would let agent 0 detour; see chokepoint-detour). Agent 0 advances to (1,0) on tick 1, then freezes every tick "
                + "against the stationary occupant (MovementObstructed) -- swap-standoff's own single-sided "
                + "case, but genuinely permanent. Run long enough to reach Simulation.StallAbandonTicks (40): "
                + "at tick 41 the order is abandoned outright (MovementAbandoned), Destination/Route clear, "
@@ -1259,11 +1242,10 @@ module Corpus =
              Description =
                "The real Bridgehead mission (content/scenarios/bridgehead.cwscenario, seed 20260920) played to "
                + "MissionOutcome = Failed with ordinary MoveTo orders only (TASK-077, backlog B-077): one reckless "
-               + "six-agent frontal charge at tick 1 toward (16,4)/(10,6)/(11,6)/(16,7)/(13,2)/(10,5). Several "
-               + "orders are Refused (RouteTooExposed) once threats become known, but those agents are already "
-               + "inside weapon range; every friendly is down by tick 84 and MissionFailed fires. The extraction "
-               + "objective (id 3) also reports complete that tick, vacuously, since no friendly is alive to "
-               + "extract -- current behaviour, recorded as a defect in TASK-077."
+               + "six-agent frontal charge at tick 1 toward (16,4)/(10,6)/(11,6)/(16,7)/(13,2)/(10,5). Several orders "
+               + "are Refused (RouteTooExposed) once threats become known, but those agents are already inside weapon "
+               + "range; every friendly is down by tick 84 and MissionFailed fires. The extraction objective (id 3) "
+               + "stays incomplete: an ExtractAgents objective needs at least one agent extracted (backlog B-079)."
              InitialStateNote = "content/scenarios/bridgehead.cwscenario (18 x 12, seed 20260920, 6 friendlies + 5 hostiles)"
              InitialState = bridgeheadInitialState
              TickCount = 86L

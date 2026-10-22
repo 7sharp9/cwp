@@ -1,6 +1,6 @@
 # Replay corpus entry: envelope-full
 
-The first committed replay in the production replay-command format
+A committed replay in the production replay-command format
 (`src/CommandoWar.Sim/ReplaySerialisation.fs`, replay-command format v1,
 TASK-025 / backlog B-045). It carries a full accepted-command envelope the
 legacy `.cwlog` cannot express: a three-recipient `MoveTo` (agents 3, 4, 5),
@@ -30,90 +30,11 @@ See `content/replays/CORPUS.md`.
 | Final hash (tick 24) | `0xA99BAC28A2BF7296` |
 | Domain events | 78 |
 
-_Re-pinned by TASK-028 (`Canonical.FormatVersion` 3 -> 4, `AgentState.Order` /
-`AgentState.Disposition` sections). The spike fixture is enemy-free, so all
-three recipients Accept at appraisal: the tick count (24) is unchanged and the
-only behaviour change is one `OrderAppraised` event per recipient
-(72 -> 75 domain events)._
-
-_Domain event count only, updated by TASK-030 (backlog B-018): the new
-`commitmentAndLocalAction` phase emits one `CommitmentEstablished` per
-recipient when its order is Accepted (75 -> 78); all three recipients are
-still mid-route at tick 24, so no `CommitmentCompleted` fires. No hash on this
-table moved — `Commitment` is a derived value, not canonical state (Decision
-B), and `Canonical.FormatVersion` stays 4._
-
-_Re-pinned by TASK-032 (backlog B-020; `Canonical.FormatVersion` 4 -> 5,
-`AgentState.Suppression` added). The spike fixture is enemy-free, so
-`Suppression` stays 0 at every checkpoint: the tick count (24) and domain
-event count (78) are unchanged, a byte-layout-only re-pin._
-
-_Re-pinned by TASK-033 (backlog B-021; `Canonical.FormatVersion` 5 -> 6,
-`AgentState.SuppressionBand` / `AgentState.Stress` added). The spike fixture
-is enemy-free, so `SuppressionBand` stays `false` and `Stress` stays 0 at
-every checkpoint: the tick count (24) and domain event count (78) are
-unchanged, a byte-layout-only re-pin._
-
-_Re-pinned by TASK-034 (backlog B-022, partial; `Canonical.FormatVersion` 6 ->
-7, `WorldState.HostileTacticalKnowledge` added). The spike fixture has zero
-enemy deployments, so the new section is empty at every checkpoint: the tick
-count (24) and domain event count (78) are unchanged, a byte-layout-only
-re-pin._
-
-_Re-pinned by TASK-037 (a thin B-030 slice; `Canonical.FormatVersion` 7 -> 8,
-`PlayerIntent.Suppress` / `DecisionReason.TargetNotKnown` added inside the
-already-canonical `Order` / `Disposition` sections). This entry's one command
-is a `MoveTo`, so the byte-layout change is the only difference: the tick
-count (24) and domain event count (78) are unchanged._
-
-_Re-pinned by TASK-044 (backlog B-051; `Canonical.FormatVersion` 8 -> 9,
-`AgentState.OrderQueue` added to `writeAgent`). This entry's one command is a
-Replace-mode `MoveTo` with an always-empty `OrderQueue`, so the byte-layout
-change is the only difference: the tick count (24) and domain event count
-(78) are unchanged._
-
-_Re-pinned by TASK-045 (backlog B-031; `Canonical.FormatVersion` 9 -> 10,
-`AgentState.Vitals` added). This entry's one command has no combat anywhere
-near it, so every agent stays `Alive` at full health throughout: the
-byte-layout change is the only difference, the tick count (24) and domain
-event count (78) are unchanged._
-
-_Re-pinned by TASK-047 (backlog B-030 proper; `Canonical.FormatVersion` 10
--> 11, `AgentState.Ammo` added and three new `PlayerIntent` cases). This
-entry's one command is a `MoveTo` with no combat anywhere near it, so no
-shot is ever fired and every agent's ammo stays at its full default
-throughout: the byte-layout change is the only difference, the tick count
-(24) and domain event count (78) are unchanged._
-
-_Re-pinned by TASK-058 (backlog B-016b; `Canonical.FormatVersion` 11 -> 12,
-`AgentState.RadioDestroyed` / `.PendingDelivery` added). This entry's
-initial state authors no `Headquarters`, so the whole range/delay/jamming/
-radio-destroyed feature set stays inert for it: the byte-layout change is
-the only difference, the tick count (24) and domain event count (78) are
-unchanged._
-
-_Re-pinned by TASK-062 (backlog B-032; `Canonical.FormatVersion` 12 -> 13,
-`AgentState.Extracted` / `WorldState.MissionOutcome` / `.CompletedObjectives`
-/ `.ObjectiveProgress` added). This entry's initial state (`Setup.
-sixAgentWorld`) authors no `Objectives`, so the whole demolition/extraction/
-mission-outcome feature set stays inert for it (`MissionOutcome` stays
-`InProgress` the entire run): the byte-layout change is the only
-difference, the tick count (24) and domain event count (78) are unchanged._
-
-_Re-pinned by TASK-065 (backlog B-065; `Canonical.FormatVersion` 13 -> 14,
-`AgentState.StalledTicks` added). This entry's one command is an ordinary
-`MoveTo` with no rival agent and no occupied route cell anywhere near it,
-so the new counter stays 0 at every checkpoint: the byte-layout change is
-the only difference, the tick count (24) and domain event count (78) are
-unchanged._
-
-_Re-pinned by TASK-067 (backlog B-067; `Canonical.FormatVersion` 14 -> 15,
-`ReceivedOrder.AsGroup` added). This entry's one command already addresses
-three recipients (agents 3, 4, 5) via `Command.moveToMany`, but none of
-them authors a `FormationOffset` (the shared spike fixture has no
-formation), so `AsGroup` being `true` makes no difference to the resolved
-target: the byte-layout change is the only difference, the tick count (24)
-and domain event count (78) are unchanged._
+The one command addresses three recipients (agents 3, 4, 5) through
+`Command.moveToMany`, but none of them authors a `FormationOffset` (the shared
+spike fixture has no formation), so `ReceivedOrder.AsGroup` makes no difference
+to the resolved target. The fixture is enemy-free, so all three recipients
+Accept at appraisal.
 
 ## Per-tick authoritative state hash
 
