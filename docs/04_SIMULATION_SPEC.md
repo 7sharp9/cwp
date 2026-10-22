@@ -22,8 +22,7 @@ B-044). `RecordedCommand.Tick` (`Replay.fs`) is the **delivery tick**: the tick
 whose command-intake phase consumes the command, owned by whoever schedules the
 run (the headless runner, the replay runner, a client command queue).
 `PlayerCommand.IssuedAtTick` is **when the commander issued the order**:
-envelope provenance and a future appraisal input (`docs/05` section 5 stage 4 /
-section 14), replayed verbatim. The two are not constrained equal; the legacy
+envelope provenance that appraisal does not read (see below), replayed verbatim. The two are not constrained equal; the legacy
 `.cwlog` fixture format collapses them to its single tick field. Command intake
 enforces one eligibility rule: `IssuedAtTick` must lie in `[0, currentTick]`; a
 command issued in the future or before tick 0 is rejected
