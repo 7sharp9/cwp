@@ -33,6 +33,12 @@ active_work:
     open item in `docs/15` is a decision for Dave (`docs/15` section 6) or needs
     the Godot SDK, which the cloud container does not have.
 
+    Next: D-02 (backlog B-083, extracted agents leave play). It is `proposed`;
+    the draft is `tasks/TASK-084-EXTRACTED-AGENTS-LEAVE-PLAY.md`. It changes
+    the `docs/04` section 20 cell invariant, so Dave accepts it before it is
+    selected, and decides its Decision 4 (the refusal reason for an order to an
+    extracted agent, which may bump `Canonical.FormatVersion`).
+
     CI is the authoritative test run: the container has no xunit or FsCheck
     packages, so `dotnet test` runs only on GitHub Actions.
 
