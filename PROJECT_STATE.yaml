@@ -33,6 +33,10 @@ active_work:
     open item in `docs/15` is a decision for Dave (`docs/15` section 6) or needs
     the Godot SDK, which the cloud container does not have.
 
+    Next session: D-02 (backlog B-083, extracted agents leave play). It is
+    `proposed`, has no task file yet, and changes the `docs/04` section 20 cell
+    invariant, so draft the task and get it accepted first.
+
     CI is the authoritative test run: the container has no xunit or FsCheck
     packages, so `dotnet test` runs only on GitHub Actions.
 
