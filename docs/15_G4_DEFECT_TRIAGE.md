@@ -5,7 +5,8 @@ defects are triaged by severity" (`docs/08_ROADMAP_AND_GATES.md` section 7).
 **This document does not record G4 as passed.** The gate call is Dave's.
 Dispositions below are proposals for Dave, not decisions.
 
-Snapshot: 2026-09-30, at the TASK-080 acceptance commit (`a3607ac`). Updated 2026-10-07: D-12 and D-13 fixed by TASK-082.
+Code references were read on the TASK-080 acceptance commit (`a3607ac`) unless
+an entry says otherwise. The defects fixed since are listed in section 5.
 
 ## 1. Scale and method
 
@@ -61,8 +62,8 @@ Recorded so a tester finding is not mistaken for a regression.
 
 ## 4. Unverified in this environment
 
-Not triaged as defects: they could not be exercised in the session that wrote
-this list (no Godot editor, no export templates, no pinned SDK). Each one
+Not triaged as defects: they have not been exercised in the build environment
+used for triage (no Godot editor, no export templates, no pinned SDK). Each one
 could hide a blocker.
 
 | ID | Item | Why unverified |
@@ -94,27 +95,17 @@ could hide a blocker.
 | A dead or incapacitated observer kept perceiving | TASK-078 |
 | `ExtractAgents` completed with nobody extracted | TASK-079 |
 | No weapon-range display | TASK-074 (see D-09 for what remains) |
-| D-01: a single un-staged deep `MoveTo` on Bridgehead was accepted on the tick the machine-gun rifleman came into view and refused only after hits (tick 12, not tick 9) | TASK-083: refused on the contact tick and the agent stops; see L-07 for what remains |
+| D-01: a single un-staged deep `MoveTo` on Bridgehead kept advancing after the machine-gun rifleman came into view and was refused only after hits | TASK-083: refused on the contact tick and the agent stops; see L-07 for what remains |
 
-## 6. Correction to an earlier record
+## 6. Counts and what is left for Dave
 
-The D-01 text recorded by TASK-073, TASK-075 and the first version of this document attributed the late refusal to "threat-blind pathing and a one-tick reappraisal lag". Neither was the cause: the threat is unknown until line of sight opens at weapon range, so pathing has nothing to avoid, and the reappraisal runs on the observation tick (Perception and Tactical knowledge precede Appraisal). It returned `Accepted` there because the exposure was under the discipline-3 threshold. Corrected by TASK-083; `docs/07` section 9 now describes the real mechanism.
+Open defects: 0 blocker, 0 major, 9 minor. Deliberate limitations: 7.
+Unverified: 6 items.
 
-`docs/ledger/2026-09-29-TASK-079-*.md` finding 1 says scenario validation does
-not reject an `ExtractAgents` id that names no agent. It does:
-`Scenario.fs:680` reports `ExtractionSelectsUnknownAgent`, and
-`ScenarioTests.fs:339` asserts it. The finding was wrong and is corrected in
-place. It is not an open defect.
-
-## 7. Counts and what is left for Dave
-
-Open defects: 0 blocker, 0 major, 9 minor (D-01, D-11, D-12 and D-13 fixed). Deliberate limitations: 7 (L-07 added by D-01's repair). Unverified: 6 items.
-
-D-12 and D-13 were repaired by TASK-082 on Dave's "fix all issues" (2026-10-07). The
-others were not: D-02 and D-03 need a design or gameplay decision, D-05 needs a
-working title, and D-04, D-06, D-07, D-09 and D-10 sit in Godot or client code that
-could not be built or run in that session. D-08 is a feature. The reasons are in
-`docs/ledger/2026-10-07-TASK-082-*.md`. D-01 was repaired by TASK-083 on Dave's request (2026-10-12), by a first-contact rule rather than the threat-aware pathing first asked for, which a probe showed cannot change the case.
+The open defects wait on a decision or on client code that needs the Godot
+SDK to build: D-02 and D-03 change gameplay semantics, D-05 needs a working
+title, D-04, D-06, D-07, D-09 and D-10 are Godot or client code, and D-08 is a
+feature.
 
 Decisions for Dave:
 

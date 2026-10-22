@@ -663,8 +663,8 @@ Status against that list:
   back only under a scenario-defined condition" are not built. They are the
   doctrine that decides to move or fire a Hostile agent, all Hostile-side (the
   enemy proactively choosing to suppress or fall back without a player order),
-  as distinct from the player-issued `Suppress` order (section 4). TASK-037
-  explicitly descoped them (2026-09-16). They would need a
+  as distinct from the player-issued `Suppress` order (section 4). They are
+  descoped. They would need a
   `Suppress`-order-equivalent for Hostile AI, the first reactive-movement
   decision for an unordered agent (no design exists yet), and authored fallback
   conditions with `Withdraw` semantics, respectively. They stay B-022.
@@ -834,7 +834,7 @@ Not realised: it needs stage-5 adaptation (section 5).
 
 The squad has not observed the machine gun. An agent accepts based on current knowledge, then reacts when fired upon. The explanation distinguishes bad information from arbitrary behaviour.
 
-Realised for `MoveTo` (TASK-083, backlog B-082): the order is `Accepted` while the threat is unknown, and on the tick the threat is first observed inside its range the closing-threat rule (section 5) refuses it with `RouteTooExposed` naming that threat, and the agent stops advancing. The refusal does not prevent the first exchange of fire, which Combat resolves on the same tick.
+For `MoveTo` (TASK-083, backlog B-082), the order is `Accepted` while the threat is unknown, and on the tick the threat is first observed inside its range the closing-threat rule (section 5) refuses it with `RouteTooExposed` naming that threat, and the agent stops advancing. The refusal does not prevent the first exchange of fire, which Combat resolves on the same tick.
 
 ### Physical inability
 

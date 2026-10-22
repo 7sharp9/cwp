@@ -103,7 +103,7 @@ acceptance criterion 1 in section 9).
   `VisibleContacts`, the one `docs/05` section 8 source with a system behind
   it, and feeds the resolve threshold as a continuous drag. Casualty-, wound-,
   explosion- and isolation-driven stress are unbuilt. Discipline is static
-  (since TASK-028; B-021 found no reason to make it dynamic). Leader trust is
+  (B-021 found no reason to make it dynamic). Leader trust is
   unbuilt: `docs/05` section 8 leaves it "minimal" for the vertical slice;
 - explicit order appraisal;
 - accepted, delayed, adapted, refused, and broken outcomes;
@@ -230,9 +230,9 @@ player-issued `Suppress` order does not touch (L-02 in `docs/15`).
 
 ## 9. Functional acceptance criteria
 
-The slice is feature-complete only when all twelve criteria below hold. As of
-2026-10-02 every one is recorded as met. The gate decision itself (G4) is
-Dave's and is not recorded here.
+The slice is feature-complete only when all twelve criteria below hold. Every
+one is recorded as met. The gate decision itself (G4) is Dave's and is not
+recorded here.
 
 | # | Criterion | Status and evidence |
 |---|---|---|
@@ -292,13 +292,12 @@ These are properties of the build as it stands, relevant to the G5 playtest.
   deliberately threat-blind and Perception reveals rifleman 102 only when line
   of sight opens, at distance 6 from the ford, inside weapon range 7. A single
   order that runs deep into the depot therefore skips the stand-off band: the
-  agent has no knowledge to refuse on, and the first exchange of fire happens on
-  the contact tick. Since TASK-083 the order is refused on that tick (a
-  reappraisal on the tick of first observation, `RouteTooExposed` naming 102)
-  and the agent stops advancing; before it, the same-tick reappraisal returned
-  `Accepted` because the route exposure was under the threshold, and the refusal
-  came only after hits had lowered it. The stand-off refusal before any shot
-  still needs the two-step order above (halt at the ford, then push).
+  agent has no knowledge to refuse on. The order is refused on the contact tick
+  (the knowledge-change reappraisal, `RouteTooExposed` naming 102, from the
+  closing-threat rule in `docs/05` section 5) and the agent stops advancing,
+  but the first exchange of fire happens on that same tick. The stand-off
+  refusal before any shot needs the two-step order above (halt at the ford,
+  then push).
 - **Each extraction cell holds one agent at a time.** An extracted agent stays
   on its cell, so later arrivals stall unless it steps off. The second cell
   doubles throughput; it does not remove the choreography.

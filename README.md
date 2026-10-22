@@ -59,26 +59,22 @@ When files conflict, an accepted ADR overrides an older design document. The con
 
 Use `tasks/CODING_AGENT_PROMPT.md` to start an implementation session.
 
-## Immediate sequence
+## Current position
 
-P0 through P2 are complete and gates G0, G1, and G2 have passed: the repository
-baseline, the framework-neutral simulation skeleton, the determinism harness,
-both framework spikes, ADR-0001 (Godot selected), and the deterministic core
-(terrain, line of sight, pathfinding, movement, same-tick reservation, sub-cell
-progress, replay corpus, benchmarks, determinism property tests) are all done.
-See `docs/12_PROGRESS_LEDGER.md` for the task-by-task record.
-
-Current position, the active gate (G3), and the next task are in
-`PROJECT_STATE.yaml` and `docs/11_BACKLOG.md`. Client and presentation work
-belongs to P4 and must not begin before G3 passes.
+The phase, the gate (G4, pending), and the selected task are in
+`PROJECT_STATE.yaml`; the work items are in `docs/11_BACKLOG.md`; the
+task-by-task record is `docs/12_PROGRESS_LEDGER.md`. Gates G0 to G3 have passed.
+The simulation, the headless command loop, the replay corpus and a playable
+Bridgehead mission in the Godot client exist. The first external playtest (G5)
+needs an exported build and the `docs/14` playtest kit.
 
 ## Architectural position
 
 The simulation is an ordinary F# library with no dependency on Godot, MonoGame, raylib, Mibo, rendering, audio, or an editor. A client submits typed commands and receives domain events plus a render snapshot.
 
-The framework spike (TASK-004 Godot, TASK-005 Mibo) built two disposable
-presentation hosts over the same simulation. ADR-0001 selected Godot .NET through
-a thin C# adapter; the Mibo host is retained as spike evidence only. Mibo 5.x is
+ADR-0001 selected Godot .NET through a thin C# adapter, with the client logic
+in F# (ADR-0004). The Mibo host (`src/CommandoWar.Client.Mibo`) is retained as
+spike evidence only. Mibo 5.x is
 recorded as a reconsideration option (ADR-0003 2026-09-06 amendment), not an
 active route.
 
@@ -105,7 +101,7 @@ A technically sophisticated simulation without that player experience is not suc
 
 ## Repository baseline
 
-Established by TASK-001. The repository is a standard .NET solution.
+The repository is a standard .NET solution.
 
 | Concern | Value |
 |---|---|
@@ -113,7 +109,11 @@ Established by TASK-001. The repository is a standard .NET solution.
 | Pinned SDK | .NET SDK `10.0.303` via `global.json` (`rollForward: latestPatch`) |
 | Target framework | `net10.0` (installed and LTS; supported to November 2028) |
 | Simulation library | `src/CommandoWar.Sim/` (F#, no host or framework dependency) |
-| Tests | `tests/CommandoWar.Sim.Tests/` (F#, xUnit) |
+| Headless runner | `src/CommandoWar.Headless/` (`cwheadless`: step, replay, corpus, render, import) |
+| Tests | `tests/CommandoWar.Sim.Tests/` (F#, xUnit, FsCheck) |
+| Benchmarks | `bench/CommandoWar.Benchmarks/` (BenchmarkDotNet) |
+| Godot client | `src/CommandoWar.Client.Godot/` (not in the solution; see its README) |
+| CI | `.github/workflows/ci.yml` (restore, build, test, corpus, fixture) |
 
 The graphical framework is Godot .NET (ADR-0001, accepted 2026-09-03). The
 simulation library itself has no framework dependency.

@@ -5,7 +5,7 @@ project:
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
   framework_decision: "godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; reaffirmed 2026-09-19, see the ADR's note)"
-  updated: 2026-10-07
+  updated: 2026-10-22
 
 # Current state only. What was done, when, and with what evidence is recorded in
 # docs/12_PROGRESS_LEDGER.md (index) and docs/ledger/ (detail files); the work
@@ -16,41 +16,25 @@ active_work:
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-10-13
+  updated: 2026-10-22
   note: >-
-    TASK-083 (backlog B-082) is implemented, self-verified and accepted by Dave
-    (2026-10-13); status `done`. It makes a routine `MoveTo` refuse to advance on a
-    known threat that already has the agent in range, which repairs D-01 in
-    `docs/15`. CI run 37 on `f7d157b` passed 438 tests and all 22 corpus entries.
-    Three corpus entries moved (`exposed-approach`, `bridgehead-succeeded`,
-    `bridgehead-failed`); mission outcomes, final ticks and deaths did not. The
-    rule also halts a high-discipline agent that knowingly accepted the route
-    (`docs/15` L-07), accepted as behaviour. No further task is selected: every remaining
-    open item is a decision for Dave or a human-run step (`docs/15` section 7).
-
-    TASK-082 (backlog B-081) is implemented, self-verified and accepted by Dave
-    (2026-10-07); status `done`. Selected by Dave ("fix all issues", 2026-10-07), it fixes
-    D-13 (group `MoveTo` never completes at a formation slot) and the D-12 prose
-    drift. Only `formation-slots` is re-pinned. `dotnet test` was not run (no
-    offline test packages). The other open defects in `docs/15` were not fixed:
-    they need a decision or client code that could not be built here.
-
-    TASK-081 (backlog B-080, G4 known-defect triage) is implemented,
-    self-verified and accepted by Dave (2026-10-03); status `done`. It adds
-    `docs/15_G4_DEFECT_TRIAGE.md`: 12 open defects (1 major, 11 minor), 6
-    deliberate limitations and 6 items never verified in the build
-    environment. No blocker is recorded, which is not proof that none exists,
-    because the exported build, host content lookup and session recording have
-    never been run. The decisions it leaves to Dave are in `docs/15` section 7.
-    The change is docs-only (no source, test, content or CI path) and was not
-    built or tested locally, since the pinned SDK and NuGet were unavailable.
+    No task is active. The last task, TASK-083 (backlog B-082), is `done`.
 
     The G4 gate is `pending` and the call is Dave's. All twelve criteria in
-    `docs/07` section 9 are recorded as met, replay evidence for a completed
-    mission is committed (TASK-077), and TASK-081 supplies the "known defects
-    are triaged by severity" bullet. Still outstanding: the playtest build has
-    never been exported or launched, so the `docs/14` section 2 checklist is
-    open and is Dave's to run.
+    `docs/07` section 9 are met, replay evidence for a completed mission is in
+    the corpus (`bridgehead-succeeded`), and the known defects are triaged in
+    `docs/15_G4_DEFECT_TRIAGE.md`: no blocker, no major, 9 minor, 7 deliberate
+    limitations and 6 items never verified in the build environment. No blocker
+    is recorded, which is not proof that none exists, because the exported
+    build, host content lookup and session recording have never been run.
+
+    Outstanding: the playtest build has never been exported or launched, so the
+    `docs/14` section 2 checklist is open and is Dave's to run. Every remaining
+    open item in `docs/15` is a decision for Dave (`docs/15` section 6) or needs
+    the Godot SDK, which the cloud container does not have.
+
+    CI is the authoritative test run: the container has no xunit or FsCheck
+    packages, so `dotnet test` runs only on GitHub Actions.
 
 sources_of_truth:
   product: docs/00_PROJECT_CHARTER.md

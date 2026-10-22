@@ -705,9 +705,9 @@ type WorldState =
     { Tick: int64
       Bounds: GridBounds
       /// The authoritative per-cell terrain grid (elevation, passability,
-      /// movement cost, opacity, directional cover). Authored and queryable
-      /// but not yet consumed: no tick phase reads it (backlog B-009 to
-      /// B-011). It is immutable within a run at this stage and is
+      /// movement cost, opacity, directional cover). Read by Perception,
+      /// Appraisal, Navigation and Combat through `Sight` and `Pathfinding`.
+      /// It is immutable within a run and is
       /// deliberately excluded from `Canonical.encode` and the state hash
       /// (docs/04_SIMULATION_SPEC.md section 17; ADR-0002 amendment).
       Terrain: Terrain

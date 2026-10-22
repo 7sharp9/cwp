@@ -10,14 +10,10 @@ namespace CommandoWar.Sim
 /// `Terrain` (opacity and elevation) and two `Cell`s. Integer-only: an integer
 /// supercover grid walk, no floating point, no `System.Math` on doubles.
 ///
-/// NOTHING in `Simulation.step` or any tick phase calls this module yet. It is
-/// authored and queryable but not consumed, exactly as `Terrain` (TASK-010)
-/// and the `Objective` algebra (TASK-008) are. The first consumer is
-/// Perception (phase 12.3, backlog B-015), which clears visibility each tick
-/// and re-derives visible contacts by tracing sight between agents.
-///
-/// Because it is a leaf that nothing authoritative references, it moves no
-/// pinned fixture hash and does not touch `Canonical.encode`.
+/// Perception (`docs/04` section 12.3) re-derives visible contacts with
+/// `Sight.visible` each tick, Appraisal uses it for route exposure, and Combat
+/// uses it for the line of fire. It holds no state, so it adds nothing to
+/// `Canonical.encode`.
 ///
 /// ## Algorithm
 ///
