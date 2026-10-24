@@ -17,7 +17,5 @@ command 75 2 10 75 routine standard corpus 2 move 11 6
 command 150 0 11 150 routine standard corpus 1 move 9 5
 command 165 0 12 165 routine standard corpus 1 move 4 9
 command 165 1 13 165 routine standard corpus 3 move 1 9
-command 195 0 14 195 routine standard corpus 1 move 5 8
-command 195 1 15 195 routine standard corpus 3 move 2 8
-command 196 0 16 196 routine standard corpus 2 move 4 9
-command 196 1 17 196 routine standard corpus 5 move 1 9
+command 196 0 14 196 routine standard corpus 2 move 4 9
+command 196 1 15 196 routine standard corpus 5 move 1 9

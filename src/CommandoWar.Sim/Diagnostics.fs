@@ -374,6 +374,16 @@ type Overlay =
     /// state, so both `Diagnostics.frame` and `.frameOf` derive it
     /// identically.
     | MissionStatus of outcome: MissionOutcome * completed: ObjectiveId[] * inProgress: (ObjectiveId * int)[]
+    /// An agent that has left play by extraction (TASK-084, backlog B-083;
+    /// `AgentState.Extracted`): `agent` at `at`, the extraction cell it stands
+    /// on, still counted `Alive` for the mission but holding no cell, moving,
+    /// seeing, being seen or firing, so it may share `at` with an agent that is
+    /// in play. Named apart from the `EventBody.AgentExtracted` transition
+    /// event (the `AgentRadioLost` precedent): this is standing state. The
+    /// `AgentSuppression`/`AgentRadioLost` sparse shape: emitted only for an
+    /// agent with `Extracted = true`, ascending by agent id. Standing
+    /// canonical state, so both `Diagnostics.frame` and `.frameOf` derive it.
+    | AgentOutOfPlay of agent: AgentId * at: Cell
 
 /// A framework-neutral snapshot of authoritative spatial and tactical state
 /// for one tick, plus the determinism trio (tick, state hash, random draw
@@ -457,6 +467,8 @@ module Diagnostics =
             { Kind = "command-rejected"; Cells = [| target |]; Agents = [||] }
         | CommandRejected(_, UnknownTargetCommand(recipient, _)) ->
             { Kind = "command-rejected"; Cells = [||]; Agents = [| recipient |] }
+        | CommandRejected(_, RecipientExtracted agent) ->
+            { Kind = "command-rejected"; Cells = [||]; Agents = [| agent |] }
         | OrderUndelivered(_, recipient, _) -> { Kind = "order-undelivered"; Cells = [||]; Agents = [| recipient |] }
         | OrderDelivered(_, recipient) -> { Kind = "order-delivered"; Cells = [||]; Agents = [| recipient |] }
         | OrderQueued(_, recipient) -> { Kind = "order-queued"; Cells = [||]; Agents = [| recipient |] }
@@ -703,6 +715,13 @@ module Diagnostics =
             | Some(order, _, dueTick) -> Some(AgentPendingDelivery(a.Id, a.Position, order.Command, dueTick))
             | None -> None)
 
+    /// An `AgentOutOfPlay` overlay per `Extracted` agent (TASK-084, backlog
+    /// B-083), ascending by agent id -- the `AgentRadioLost` sparse shape.
+    let private agentOutOfPlayOverlays (world: WorldState) : Overlay[] =
+        world.Agents
+        |> Array.sortBy (fun a -> a.Id)
+        |> Array.choose (fun a -> if a.Extracted then Some(AgentOutOfPlay(a.Id, a.Position)) else None)
+
     /// A `MissionStatus` overlay summarising `WorldState.MissionOutcome`/
     /// `.CompletedObjectives`/`.ObjectiveProgress` (TASK-062, backlog B-032)
     /// -- see the `Overlay.MissionStatus` case's own doc comment for the
@@ -745,6 +764,7 @@ module Diagnostics =
                agentRadioDestroyedOverlays world
                agentPendingDeliveryOverlays world
                formationSlotOverlays world
+               agentOutOfPlayOverlays world
                missionOverlay world |]
             |> Array.concat
           Hash = Hashing.hash world
@@ -1073,5 +1093,6 @@ module Diagnostics =
                       agentRadioDestroyedOverlays result.State
                       agentPendingDeliveryOverlays result.State
                       formationSlotOverlays result.State
+                      agentOutOfPlayOverlays result.State
                       missionOverlay result.State ]
             Hash = result.StateHash }

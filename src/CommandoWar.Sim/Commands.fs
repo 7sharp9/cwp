@@ -118,6 +118,13 @@ type CommandRejection =
     /// — the `UnknownAgent` precedent, one rejection per (command,
     /// recipient) pair.
     | UnknownTargetCommand of recipient: AgentId * target: CommandId
+    /// Ineligible (TASK-084, backlog B-083): `agent` is `Extracted`, so it is
+    /// out of play and can act on nothing. Per-recipient rejection, for an
+    /// order and for a cancel alike, checked against the start-of-tick
+    /// `WorldState.Agents` snapshot (the `UnauthorisedRecipient` precedent). A
+    /// command event only: nothing in `WorldState` holds it, so the canonical
+    /// image is unchanged.
+    | RecipientExtracted of agent: AgentId
 
 [<RequireQualifiedAccess>]
 module Command =

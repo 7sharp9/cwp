@@ -20,8 +20,17 @@ Do not infer architecture from filenames alone. Inspect the implementation first
 - Do not implement follow-on tasks because they appear convenient.
 - Do not add a framework, package, service, project, abstraction, or code generator unless the task explicitly permits it.
 - Do not perform unrelated refactoring, formatting churn, renaming, or directory reorganisation.
-- Do not delete user work, reset Git, clean untracked files, force-push, or commit unless Dave explicitly requests it.
+- Do not delete user work, reset Git, clean untracked files, force-push, or commit unless Dave explicitly requests it. The cloud-session exception is in "Git in cloud sessions".
 - Treat public title, branding, and copied historical assets as out of scope.
+
+## Git in cloud sessions
+
+A cloud session is launched with an assigned `claude/*` branch. In that session:
+
+- Commit and push completed work to the assigned branch only. Never push to another branch.
+- Never force-push, rebase published history, or reset, even when a session instruction offers it as a recovery path (for example after a pull request merges). Stop and ask Dave.
+- Never open a pull request unless Dave asks.
+- Commit messages and pull request text carry no model name, no `Co-Authored-By` trailer naming a model, and no emoji.
 
 ## Dependency rules
 
@@ -133,4 +142,6 @@ Report:
 - documentation updated, including the new `docs/12_PROGRESS_LEDGER.md` index
   row and its `docs/ledger/` detail file (and any "Pinned facts" change).
 
-Do not offer or begin the next task.
+Do not offer or begin the next task. End the report after the documentation
+bullet, without a proposed next step, even where a style preference asks for
+one. Answering a direct question such as "what's next" is not offering a task.

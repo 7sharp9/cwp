@@ -275,7 +275,10 @@ starts an action (section 20): its intent is idle.
     would otherwise block its cell forever (TASK-066, backlog B-066), and it
     can never itself be a mover, so the exclusion changes only what other
     agents may enter. `Pathfinding` has no occupancy concept and needs none
-    for this: a live agent treats a corpse's cell as free.
+    for this: a live agent treats a corpse's cell as free. An `Extracted`
+    agent is not an occupant either (TASK-084, backlog B-083): it is `Idle`
+    for good and out of play, so a later survivor may enter the extraction
+    cell it stands on.
   - *Vacation chain.* Let `M0` be the completing agents that did not lose a
     rival contest (at most one per target cell) and `occupant(c)` the unique
     agent whose pre-tick `Position` is `c`. An agent `a in M0` may move iff the
@@ -546,7 +549,10 @@ Fatigue, persistent personality dimensions, interpersonal relations, inventory g
   constants.
 - **Mission.** `Extracted: bool` (TASK-062, backlog B-032) records that the
   agent, if `Friendly`, has ever been `Alive` on an authored extraction cell
-  and stays `true` afterwards (section 12.10).
+  and stays `true` afterwards (section 12.10). An extracted agent is out of
+  play (TASK-084): it keeps its `Position` but holds no cell and takes no part
+  in movement, perception or combat, while still counting `Alive` for the
+  mission, the squad-eliminated check and leadership.
 - **Formation.** `FormationOffset: Cell option` is static authored data
   (`Deployment.FormationOffset`, resolved from `Scenario.Formations`),
   `None` for an unformationed agent (section 12.5).
@@ -599,8 +605,9 @@ Then, in order:
   2), because intake never reads authoritative hostile state (risk R-023). A
   `Cancel` has no target cell;
 - each recipient is then checked in ascending `AgentId` order: `UnknownAgent`,
-  then `UnauthorisedRecipient` for a `Hostile`-side agent, then, for a
-  `Cancel`, `UnknownTargetCommand` when the named command is not the
+  then `UnauthorisedRecipient` for a `Hostile`-side agent, then
+  `RecipientExtracted` for an `Extracted` agent (an order and a cancel alike,
+  TASK-084), then, for a `Cancel`, `UnknownTargetCommand` when the named command is not the
   recipient's active `Order`, a member of its `OrderQueue`, or its in-flight
   `PendingDelivery`. That last check reads the start-of-tick agent array, so a
   same-tick batch cannot see its own not-yet-applied effects. Otherwise
@@ -708,7 +715,9 @@ section 12). A non-`Alive` agent sees nothing and is never seen (TASK-055,
 backlog B-062; TASK-078, backlog B-078). A corpse stays in `WorldState.Agents`,
 so without this rule it would stay visible at full confidence indefinitely;
 excluding it lets an existing contact on it age and expire through the section
-12.4 bands.
+12.4 bands. An `Extracted` agent is out of play and is treated the same way
+(TASK-084, backlog B-083), so an enemy's contact on it also ages out and no
+one fires at it.
 
 A `ContactObserved` event is emitted only when a contact *enters* an
 observer's visibility (a new sighting), not every tick it stays visible
@@ -902,7 +911,8 @@ coordinated group move, and a solo order goes exactly where ordered. For a
 group order to an unformationed agent (`AgentState.FormationOffset = None`) the
 literal cell is also used. For a formationed agent the literal cell is treated
 as the formation's anchor, and the agent aims for the anchor plus its own
-authored slot offset. If that cell is blocked or occupied by another agent, the
+authored slot offset. If that cell is blocked or occupied by another agent (an
+`Extracted` agent holds no cell and does not count, TASK-084), the
 target is redirected to the nearest passable, in-bounds cell not occupied by
 another agent within `AppraisalConfig.FormationSlotSearchRadius` (2) Chebyshev
 cells, ties broken by nearest to the exact offset cell and then ascending
@@ -998,14 +1008,17 @@ Navigation's abandonment of the order (12.7), not an interrupt here.
 
 `Simulation.navigationAndMovement` (TASK-015, TASK-017, TASK-018, TASK-022,
 TASK-049, TASK-065, TASK-070) computes or repairs a `Pathfinding` path per
-agent with a destination. A non-`Alive` agent never moves (section 20). The
+agent with a destination. A non-`Alive` or `Extracted` agent never moves
+(section 20). The
 phase resolves same-tick contention over a shared next cell in stable order
 (fewest remaining route steps among agents that would complete the edge this
 tick, ties broken by ascending agent id), then resolves the vacation chain so
 no mover enters a cell a stationary agent still holds (swaps and rotation
 cycles blocked, follow chains advanced only when they clear). A non-`Alive`
 agent's cell does not count as occupied, since a corpse never vacates
-(TASK-066, backlog B-066). It advances `AgentState.Progress` by
+(TASK-066, backlog B-066), and neither does an `Extracted` agent's (TASK-084,
+backlog B-083), which also does not block another agent's same-tick detour as
+a parked agent would. It advances `AgentState.Progress` by
 `Terrain.BaseMoveCost` per tick toward the next cell's `Terrain.moveCost`
 threshold and enters the cell once reached; the completion comparison is scaled
 per agent by `AgentState.MoveSpeed` against `Agent.MoveSpeedDefault` (2)
@@ -1203,7 +1216,10 @@ to the whole mission.
   `WorldState.ExtractionAreas` cell, emitting `AgentExtracted` once, on the
   transition); then the scenario's `Objectives` algebra is resolved
   recursively, bottom-up (`AllOf`'s own completion depends on its parts'):
-  `ReachArea` completes the instant a qualifying agent occupies its area;
+  `ReachArea` completes the instant a qualifying agent occupies its area (a
+  qualifying occupant is a Friendly agent that was in play when this phase
+  began, so an agent reaching an extraction cell still counts there on its
+  arrival tick and no longer from the next, TASK-084);
   `HoldArea`/`DestroyTarget` advance a per-objective consecutive-tick
   occupancy counter (`WorldState.ObjectiveProgress`, the `Suppression`/
   `Stress` decay shape: reset to 0, not sticky, on a tick with no
@@ -1694,12 +1710,17 @@ per-query budget; no tighter per-tick pathfinding budget is set.
 
 At minimum:
 
-- one live agent has one authoritative position, enforced pairwise: the
-  Navigation and movement phase never places two live agents on the same cell
-  (vacation-chain resolution, TASK-022), and `World.create` / `World.ofScenario`
-  reject a cell-sharing construction (`WorldError.AgentsShareCell`);
-- dead or incapacitated agents do not start new actions;
-- an order references existing recipients at acceptance time;
+- one agent in play (`Alive` and not `Extracted`) has one authoritative
+  position, enforced pairwise: the Navigation and movement phase never places
+  two agents in play on the same cell (vacation-chain resolution, TASK-022),
+  and `World.create` / `World.ofScenario` reject a cell-sharing construction
+  (`WorldError.AgentsShareCell`). An `Extracted` agent keeps its last
+  `Position` but holds no cell, so it may share one with an agent in play
+  (TASK-084);
+- dead or incapacitated agents do not start new actions, and an extracted
+  agent starts none either;
+- an order references existing recipients at acceptance time, and an
+  `Extracted` recipient is rejected `RecipientExtracted`;
 - a path contains traversable adjacent cells;
 - ammunition cannot become negative;
 - mission completion is emitted at most once;

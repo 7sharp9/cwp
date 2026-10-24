@@ -298,12 +298,14 @@ These are properties of the build as it stands, relevant to the G5 playtest.
   but the first exchange of fire happens on that same tick. The stand-off
   refusal before any shot needs the two-step order above (halt at the ford,
   then push).
-- **Each extraction cell holds one agent at a time.** An extracted agent stays
-  on its cell, so later arrivals stall unless it steps off. The second cell
-  doubles throughput; it does not remove the choreography.
-- **The Bridgehead entries depend on two rules**: a downed agent perceives
-  nothing (TASK-078), and `ExtractAgents` needs at least one extracted agent
-  (TASK-079). Corpus re-pins are explained in `content/replays/CORPUS.md`.
+- **An extracted agent leaves play** (TASK-084). It holds no cell, so any
+  number of survivors can extract on the same cell and nobody steps off. An
+  agent whose route merely crosses an extraction cell is extracted there and
+  stops: in `bridgehead-succeeded` agent 5, ordered to `(1,9)`, is extracted
+  at `(4,9)`.
+- **The Bridgehead entries depend on three rules**: a downed agent perceives
+  nothing (TASK-078), `ExtractAgents` needs at least one extracted agent
+  (TASK-079), and an extracted agent leaves play (TASK-084). Corpus re-pins are explained in `content/replays/CORPUS.md`.
 
 The full record for each step is in the ledger entries for TASK-064, 066, 070,
 073, 075, 077, 078 and 079.

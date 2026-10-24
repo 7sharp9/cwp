@@ -1,7 +1,7 @@
 # TASK-084: Extracted agents leave play
 
-Status: proposed (draft for Dave; not selected, nothing implemented)  
-Owner: unassigned  
+Status: review (selected 2026-10-22; self-verified; CI pending)  
+Owner: coding agent  
 Phase: P4  
 Gate: G4 (defect repair; no evidence bullet depends on it); realises B-083  
 Size: M
@@ -93,28 +93,22 @@ Design decisions made here (Dave may amend them before selection):
    check" as an `inPlay` site. Mission step (1) sets `Extracted` before step
    (2) evaluates occupancy, so a plain `inPlay` filter in `anyAliveFriendlyAt`
    would discount the agent on its arrival tick and could break a `ReachArea` or
-   `HoldArea` authored on an extraction cell. Proposal: evaluate occupancy over
+   `HoldArea` authored on an extraction cell. Settled: evaluate occupancy over
    the pre-extraction snapshot (`s.Agents` before step 1) filtered by `inPlay`,
    so the arrival tick still counts and every later tick does not. A `HoldArea`
    on an extraction cell therefore resets once its holder extracts. If the
    assumption above holds (no content does this) the difference is only in
    tests.
-4. **Orders to an extracted agent.** Today such an order would be appraised
-   `Accepted` and then never executed (Navigation makes the agent `Idle`),
-   which is a silent stall and contradicts the "explicit errors for invalid
-   commands" rule. Proposal: `Appraisal.appraise` returns `Unable` for an
-   extracted agent before the intent logic, next to the existing non-`Alive`
-   check. `Unable(CriticallyWounded, ...)` would be a false explanation, so this
-   needs a typed reason. `DecisionReason` is canonically encoded and mapped in
-   the renderers (`Canonical.fs`, `DiagnosticRender.fs`, `RenderShared.fs`,
-   `AppraisalDemo.fs`), so a new case bumps `Canonical.FormatVersion` (15) and
-   probably moves every corpus hash. **This is the one decision I want Dave to
-   make before selection:** (a) add the reason and bump the version (correct,
-   widest diff), or (b) leave orders to extracted agents accepted-and-inert and
-   record it as a limitation in `docs/15` (smallest diff, keeps a silent
-   stall). Recommendation: (a), in its own commit within the task, so the
-   version bump and the regenerated corpus can be reviewed apart from the
-   behaviour change.
+4. **Orders to an extracted agent.** Settled as a command-intake rejection:
+   `CommandRejection.RecipientExtracted` for an order and for a cancel alike,
+   per recipient, after `UnauthorisedRecipient` (the `docs/04` section 13
+   order). The draft offered a new `DecisionReason` with a
+   `Canonical.FormatVersion` bump (a) or an accepted-and-inert order (b).
+   Both were dropped: a typed reason held in `AgentState.Disposition` would
+   bump the version and move every pinned hash for a case no existing state
+   holds, and an inert order is a silent stall. A rejection is an event
+   only, so the canonical image is unchanged and the order never reaches
+   appraisal, matching `UnknownAgent` and `UnauthorisedRecipient`.
 5. **Leadership.** `currentLeader` is unchanged: an extracted leader stays the
    leader. Nothing in the simulation requires the leader to be in play. Noted
    as a limitation in `docs/15` rather than fixed here.
@@ -126,12 +120,14 @@ Design decisions made here (Dave may amend them before selection):
 
 - `Casualty.fs`: `inPlay`.
 - `Simulation.fs`: switch the "physically present" sites to `inPlay`:
-  Appraisal `occupied` sets (two), Navigation `intents`, `occupantOf`,
-  `parkedCells`, Combat shooter and the two candidate lookups, Mission
-  occupancy per Decision 3.
+  Appraisal `occupied` sets (two, which skip `Extracted` only, Decision 6),
+  Navigation `intents`, `occupantOf`, `parkedCells`, Mission occupancy per
+  Decision 3, and the `RecipientExtracted` arms in `commandIntake`. Combat is
+  not changed: `VisibleContacts` is rebuilt from `inPlay` agents every tick, so
+  an extracted agent is never a shooter or a candidate there.
 - `Perception.fs`: `visibleContactsFor` observer and target tests.
-- `Appraisal.fs`, `Domain.fs`, `Canonical.fs` and the renderers only for
-  Decision 4(a).
+- `Commands.fs` (`CommandRejection.RecipientExtracted`) and the matching
+  `Diagnostics.fs` event marker.
 - `Diagnostics.fs` (`DiagnosticFrame`): a sparse overlay marking extracted
   agents' cells, rendered by `CommandoWar.Headless` only, plus a golden under
   `content/diagnostics/` (AGENTS.md diagnostics rule).
@@ -140,8 +136,9 @@ Design decisions made here (Dave may amend them before selection):
 - `Corpus.fs`: remove the step-off orders at ticks 195 and 196 from
   `bridgeheadSucceededCommands`, and regenerate affected entries.
 - Documentation: `docs/04` section 20 (invariant) and the Mission and
-  Navigation text, `docs/05` section 4 if Decision 4(a), `docs/07`, `docs/15`
-  (D-02 repaired; leadership limitation), `content/replays/CORPUS.md`.
+  Navigation text and the section 13 rejection order, `docs/05` section 5,
+  `docs/09`, `docs/07`, `docs/15` (D-02 repaired; the L-08 limitation),
+  `content/replays/CORPUS.md`, `content/diagnostics/README.md`.
 
 ## Forbidden scope
 
@@ -151,7 +148,8 @@ Design decisions made here (Dave may amend them before selection):
   meaning of `ExtractAgents` and `MissionOutcome`.
 - Changing corpse behaviour (Decision 6), Pathfinding, Combat resolution,
   PRNG draws, or map content.
-- A `Canonical.FormatVersion` bump unless Dave accepts Decision 4(a).
+- A `Canonical.FormatVersion` bump, a new `DecisionReason`, or a change to
+  `Appraisal.appraise`.
 - Client changes. The Godot client reads `Extracted` directly and keeps
   drawing the agent where it left play; verifying that needs the Godot SDK,
   which the container does not have, so it goes to `docs/15` as an unverified
@@ -166,7 +164,7 @@ Design decisions made here (Dave may amend them before selection):
    check.
 2. Add `Casualty.inPlay` and switch each listed site. Keep the diff to those
    sites; do not widen a site that reads "counts as alive".
-3. Apply Decision 4 as Dave decides.
+3. Add `RecipientExtracted` to command intake (Decision 4).
 4. Write the focused tests: stall repaired; an extracted agent is not
    perceived by an enemy in sight and does not fire at one; an in-play agent
    can enter an extracted agent's cell and share it; an extracted agent still
@@ -188,28 +186,37 @@ Stop and report to Dave, with the evidence, if:
 - the stall does not reproduce as described;
 - `bridgehead-succeeded` cannot reach `Succeeded` once the step-off orders are
   removed, or its outcome changes;
-- an entry other than the Bridgehead and extraction entries moves while Decision
-  4(b) is in force, or every entry moves under 4(a) for a reason other than the
-  version byte;
+- an entry other than `bridgehead-succeeded` moves;
 - the change needs an `AgentState` or `WorldState` field.
 
 ## Acceptance criteria
 
-- [ ] With one extraction cell, a second survivor ordered there after the first
-      has extracted reaches it, with no `MovementAbandoned` (focused test).
-- [ ] Each site in "Allowed scope" has a test that fails without its change.
-- [ ] Extracted agents still count for `ExtractAgents`, mission success, the
-      squad-eliminated check and leadership (tests).
-- [ ] The `docs/04` section 20 invariant is restated for agents in play, and
-      property 2b matches it.
-- [ ] `bridgehead-succeeded` still reaches `Succeeded` with the step-off orders
-      removed; every moved corpus entry and golden is listed with its reason.
-- [ ] A diagnostic golden shows extracted agents in the ASCII and SVG renders.
-- [ ] `Sim`, `Headless` build with zero warnings; `dotnet test` passes (CI is
-      authoritative when xunit and FsCheck are unavailable locally).
-- [ ] `Canonical.FormatVersion` is unchanged unless Decision 4(a) was accepted.
-- [ ] No forbidden dependency or scope entered the change.
-- [ ] Required documentation was updated.
+- [x] With one extraction cell, a second survivor ordered there after the first
+      has extracted reaches it, with no `MovementAbandoned` (`a second survivor
+      can enter an extraction cell an extracted agent stands on`). Before: agent
+      1 obstructed at tick 4, `MovementAbandoned` at tick 43; after:
+      `MovementCompleted` and `AgentExtracted` at tick 4.
+- [x] Each site in "Allowed scope" has a test that fails without its change
+      (mutation check: each site reverted alone in a scratch copy; the ledger
+      lists the failing fact per site).
+- [x] Extracted agents still count for `ExtractAgents`, mission success, the
+      squad-eliminated check and leadership (`a lone Extracted agent still
+      counts as alive ...`; the existing `ExtractAgents` facts).
+- [x] The `docs/04` section 20 invariant is restated for agents in play, and
+      property 2b matches it (edited; FsCheck is unavailable here, so CI
+      compiles and runs it).
+- [x] `bridgehead-succeeded` still reaches `Succeeded` at tick 215 with the
+      step-off orders removed; the one moved corpus entry and the two moved
+      goldens are listed with their reasons in the ledger.
+- [x] A diagnostic golden shows extracted agents in the ASCII and SVG renders:
+      `bridgehead-succeeded-tick-215.*` (three agents out of play on `(4,9)`)
+      and `demolition-success-tick-014.*`, with `DiagnosticsTests` assertions.
+- [x] `Sim`, `Headless` and Godot Core build with zero warnings; stand-in test
+      run 393 passed, 0 failed. `dotnet test` was not run (no xunit or FsCheck
+      offline); CI is authoritative.
+- [x] `Canonical.FormatVersion` is unchanged (15).
+- [x] No forbidden dependency or scope entered the change.
+- [x] Required documentation was updated.
 
 ## Required verification
 
@@ -229,15 +236,17 @@ and goldens with reasons, the Decision 4 outcome, and any unresolved concern:
 
 ## Expected files
 
-- `src/CommandoWar.Sim/Casualty.fs`, `Simulation.fs`, `Perception.fs`,
-  `Diagnostics.fs`; `Appraisal.fs`, `Domain.fs`, `Canonical.fs` only for 4(a)
-- `src/CommandoWar.Headless/Corpus.fs`, `DiagnosticRender.fs`
+- `src/CommandoWar.Sim/Casualty.fs`, `Commands.fs`, `Simulation.fs`,
+  `Perception.fs`, `Diagnostics.fs`
+- `src/CommandoWar.Headless/Corpus.fs`, `DiagnosticRender.fs`,
+  `AppraisalDemo.fs`
 - `tests/CommandoWar.Sim.Tests/` (simulation, perception, diagnostics, property
   tests)
 - moved files under `content/replays/` and `content/diagnostics/`
-- `docs/04_SIMULATION_SPEC.md`, `docs/07_VERTICAL_SLICE.md`,
-  `docs/15_G4_DEFECT_TRIAGE.md`, `content/replays/CORPUS.md`, and
-  `docs/05_COMMAND_AND_AGENT_AI.md` for 4(a)
+- `docs/04_SIMULATION_SPEC.md`, `docs/05_COMMAND_AND_AGENT_AI.md`,
+  `docs/07_VERTICAL_SLICE.md`, `docs/09_TEST_STRATEGY.md`,
+  `docs/15_G4_DEFECT_TRIAGE.md`, `content/replays/CORPUS.md`,
+  `content/diagnostics/README.md`
 - this task file, `docs/11_BACKLOG.md`, `docs/12_PROGRESS_LEDGER.md`, a new
   ledger detail file, `PROJECT_STATE.yaml`
 
@@ -252,9 +261,6 @@ if the acceptance evidence holds.
   in play" hold distinct cells. Any other reader of agent positions that is not
   on the list shares the cell with an extracted agent without knowing. Step 2
   must grep for every use of `Position` across agents, not just the sites above.
-- **Decision 4(a) blast radius.** A version bump may move every corpus entry and
-  every golden. That is mechanical but makes review harder, hence the separate
-  commit.
 - **Unverified in the client.** The Godot rendering of an extracted agent that
   shares a cell with an in-play agent has not been seen; it goes to `docs/15`.
 - **Stale contacts.** Enemy knowledge of an agent that has just extracted
@@ -265,9 +271,18 @@ if the acceptance evidence holds.
 ## Rollback or removal
 
 Revert `inPlay` and its call sites, the overlay, the tests, the Bridgehead script
-change, and the regenerated corpus and goldens. If Decision 4(a) was taken,
-revert the version bump with them. Nothing else depends on the change.
+change, the `RecipientExtracted` arms, and the regenerated corpus and goldens.
+Nothing else depends on the change.
 
 ## Completion report
 
 Use the reporting structure in `AGENTS.md`. Do not start or offer the next task.
+
+## Review
+
+Detail, commands and unresolved concerns: `docs/ledger/2026-10-22-TASK-084-extracted-agents-leave-play.md`.
+Accepted: not yet. The task was selected on 2026-10-22 with Decision 4 left to the
+agent; the agent replaced both drafted options with the command-intake rejection
+(Decision 4 above), which Dave may overrule. `dotnet test` has not run (CI is
+authoritative). One consequence to confirm: an agent whose route crosses an
+extraction cell is extracted there and stops (`docs/15` L-08).

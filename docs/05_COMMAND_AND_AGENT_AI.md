@@ -183,7 +183,9 @@ a recipient that can receive it and emits `OrderUndelivered`, with a
 `Headquarters`. An undelivered order never reaches appraisal, so these are not
 `DecisionReason`s. "Is the issuer authorised?" is the friendly/hostile-side
 check in command intake (TASK-020), which rejects an order addressed to a
-`Hostile` agent (`UnauthorisedRecipient`). Intake also rejects an out-of-bounds
+`Hostile` agent (`UnauthorisedRecipient`) and one addressed to an `Extracted`
+agent, which is out of play (`RecipientExtracted`, TASK-084). Intake also
+rejects an out-of-bounds
 target (`TargetOutOfBounds`) for every `Cell`-targeted intent (`MoveTo`, `Hold`,
 `Assault`, `Withdraw`); a `Suppress` target is an `AgentId`, not a cell, and
 whether the recipient knows that contact is appraisal's stage-2 check, never
