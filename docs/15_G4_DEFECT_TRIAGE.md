@@ -82,7 +82,7 @@ could hide a blocker.
 |---|---|
 | `PROJECT_STATE.yaml` did not parse as YAML (D-11) | rewritten as valid YAML in the docs cleanup |
 | `chokepoint-detour` prose said tick 6 where the replay reaches (4,0) at tick 7 (D-12) | TASK-082 (prose corrected; `Corpus.fs` was right) |
-| Group `MoveTo` never completed for an agent holding a formation slot (D-13) | TASK-082 (`formation-slots` re-pinned) |
+| Group `MoveTo` never completed for an agent holding a formation slot (D-13) | TASK-082 |
 | Corpses blocked movement forever | TASK-066 |
 | Frozen movement retried forever | TASK-065 |
 | A solo order was pulled to a formation slot | TASK-067 |

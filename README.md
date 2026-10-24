@@ -2,7 +2,7 @@
 
 Status: discovery / architecture validation (current phase and gate: `PROJECT_STATE.yaml`)  
 Public title: not selected  
-Framework: Godot .NET client over a framework-independent F# simulation (ADR-0001, accepted 2026-09-03)  
+Framework: Godot .NET client over a framework-independent F# simulation (ADR-0001)  
 Current phase, gate, and selected task: see `PROJECT_STATE.yaml`
 
 ## Purpose
@@ -115,7 +115,7 @@ The repository is a standard .NET solution.
 | Godot client | `src/CommandoWar.Client.Godot/` (not in the solution; see its README) |
 | CI | `.github/workflows/ci.yml` (restore, build, test, corpus, fixture) |
 
-The graphical framework is Godot .NET (ADR-0001, accepted 2026-09-03). The
+The graphical framework is Godot .NET (ADR-0001). The
 simulation library itself has no framework dependency.
 
 ### Restore, build, and test

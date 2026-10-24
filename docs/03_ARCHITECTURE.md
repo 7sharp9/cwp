@@ -1,7 +1,6 @@
 # Architecture
 
-Status: baseline; framework-neutral core accepted by ADR-0002  
-Last revised: 2026-09-03 (section 14: Godot client boundary, ADR-0004)
+Status: baseline; framework-neutral core accepted by ADR-0002
 
 ## 1. Architectural objective
 
@@ -306,7 +305,7 @@ If Mibo wins, its classic HeadlessRunner may host this loop. `CommandoWar.Sim` s
 
 ## 14. Godot host
 
-Selected by ADR-0001 (accepted 2026-09-03). Client structure fixed by ADR-0004.
+Selected by ADR-0001. Client structure fixed by ADR-0004.
 
 - The client is a thin C# shim per scene entry point over an F# client-core
   library. The shim (the scene root) holds `[Export]` refs and editor

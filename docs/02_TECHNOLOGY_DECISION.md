@@ -1,7 +1,7 @@
 # Technology Decision: Godot, MonoGame, raylib, and Mibo
 
-Status: decided; see ADR-0001 (accepted 2026-09-03)  
-Evidence date: 2026-09-02; decision date: 2026-09-03
+Status: decided; see ADR-0001  
+Evidence date: 2026-09-02
 
 ## Decision summary
 

@@ -1,6 +1,6 @@
 # TASK-084: Extracted agents leave play
 
-Status: review (selected 2026-10-22; self-verified; CI pending)  
+Status: done (selected 2026-10-22; merged to main; CI passed on the merged commits)  
 Owner: coding agent  
 Phase: P4  
 Gate: G4 (defect repair; no evidence bullet depends on it); realises B-083  

@@ -1,8 +1,7 @@
 # Project Charter
 
 Status: baseline proposal  
-Owner: Dave  
-Last revised: 2026-09-02
+Owner: Dave
 
 ## 1. Product hypothesis
 

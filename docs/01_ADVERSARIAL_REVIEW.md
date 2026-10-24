@@ -1,8 +1,7 @@
 # Adversarial Review
 
 Status: completed against the initial architecture proposal  
-Review posture: assume the project fails unless each load-bearing claim earns its place  
-Last revised: 2026-09-02
+Review posture: assume the project fails unless each load-bearing claim earns its place
 
 ## Executive verdict
 

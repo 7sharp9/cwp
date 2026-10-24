@@ -1,7 +1,6 @@
 # Command and Agent AI Design
 
-Status: reduced vertical-slice design after adversarial review  
-Last revised: 2026-10-05 (rewritten as a current-state specification; per-task history is in the ledger)
+Status: reduced vertical-slice design after adversarial review
 
 ## 1. Design objective
 

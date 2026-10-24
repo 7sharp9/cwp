@@ -1,7 +1,6 @@
 # Authoritative Simulation Specification
 
-Status: baseline for tasks after TASK-002  
-Last revised: 2026-10-05 (rewritten as a current-state specification; per-task history is in the ledger)
+Status: baseline for tasks after TASK-002
 
 ## 1. Scope
 
@@ -1218,8 +1217,8 @@ to the whole mission.
   recursively, bottom-up (`AllOf`'s own completion depends on its parts'):
   `ReachArea` completes the instant a qualifying agent occupies its area (a
   qualifying occupant is a Friendly agent that was in play when this phase
-  began, so an agent reaching an extraction cell still counts there on its
-  arrival tick and no longer from the next, TASK-084);
+  began, so an agent reaching an extraction cell counts there on its arrival
+  tick only, TASK-084);
   `HoldArea`/`DestroyTarget` advance a per-objective consecutive-tick
   occupancy counter (`WorldState.ObjectiveProgress`, the `Suppression`/
   `Stress` decay shape: reset to 0, not sticky, on a tick with no

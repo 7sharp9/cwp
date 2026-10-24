@@ -7,7 +7,7 @@
 repository (`global.json` relaxed in the copy only). No xunit or FsCheck packages
 in the offline cache, so `dotnet test` could not run; the test files were compiled
 and run against a stand-in `Xunit` module (below). No Godot editor.
-**Status change:** `proposed -> ready -> active -> review` (selected 2026-10-22)
+**Status change:** `proposed -> ready -> active -> review -> done` (selected 2026-10-22; merged to main, CI passed on the merged commits)
 
 ### Origin
 

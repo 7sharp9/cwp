@@ -624,8 +624,8 @@ done
 It requires a real GPU-backed window (not `--headless`, the same constraint
 `--screenshot`/`--screenshot-mission` have), because `GetViewport()?.
 GetTexture()?.GetImage()` returns nothing without one. The filmstrip out to
-tick 400 is how the corpse-blocking gap (B-066) and the live-agent
-chokepoint jam (B-067, B-069) were found.
+tick 400 exposes corpse blocking (B-066) and live-agent chokepoint jams
+(B-067, B-069).
 
 ### A dead agent's corpse stops blocking movement (TASK-066, backlog B-066)
 
@@ -654,7 +654,7 @@ redirected to formation slots.
 `CommandDemoDrive.runScriptedSelfCheck`'s six-agent Bridgehead sequence
 targets, for each agent, the cell the formation redirect would have
 resolved (computed with `Appraisal.resolveFormationTarget` against the real
-scenario), because its orders are single-recipient and no longer redirect.
+scenario), because its orders are single-recipient and so do not redirect.
 Its outcome is "no friendly casualties, machine gun neutralised". Agents
 that share a target cell (0, 1 and 5 at `(8,5)`; 2 and 4 at `(8,6)`) cannot
 all reach it, so several end the run short of their target, the live-agent

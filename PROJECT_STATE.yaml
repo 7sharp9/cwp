@@ -4,24 +4,22 @@ project:
   status: discovery
   current_phase: P4_playable_integration
   current_gate: G4_vertical_slice_feature_complete
-  framework_decision: "godot_dotnet_fsharp_sim (ADR-0001, accepted 2026-09-03; reaffirmed 2026-09-19, see the ADR's note)"
-  updated: 2026-10-22
+  framework_decision: "godot_dotnet_fsharp_sim (ADR-0001; see the ADR's note on the Mibo 5.x reconsideration)"
+  updated: 2026-10-24
 
 # Current state only. What was done, when, and with what evidence is recorded in
 # docs/12_PROGRESS_LEDGER.md (index) and docs/ledger/ (detail files); the work
 # items are in docs/11_BACKLOG.md and tasks/.
 active_work:
-  selected_task: TASK-084
-  task_file: tasks/TASK-084-EXTRACTED-AGENTS-LEAVE-PLAY.md
+  selected_task: null
+  task_file: null
   owner: Dave
   blocked: false
   blockers: []
-  updated: 2026-10-22
+  updated: 2026-10-24
   note: >-
-    TASK-084 (backlog B-083, extracted agents leave play) is in `review`. It
-    is self-verified and not yet accepted: CI has not run it, and Dave may
-    overrule its Decision 4 (a command-intake `RecipientExtracted` rejection
-    instead of a new refusal reason).
+    No task is selected. The last task, TASK-084 (backlog B-083, extracted
+    agents leave play), is done.
 
     The G4 gate is `pending` and the call is Dave's. All twelve criteria in
     `docs/07` section 9 are met, replay evidence for a completed mission is in
